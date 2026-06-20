@@ -1,0 +1,68 @@
+# SwiftLint configuration for Editor Ajar.
+# Stability and clarity over cleverness. Rules here are enforced in CI (ADR-0012).
+
+included:
+  - Sources
+  - Tests
+  - Benchmarks
+
+excluded:
+  - .build
+  - app/EditorAjar/Generated
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - force_unwrapping          # force-unwrap is a crash; the core must never crash (NFR: stability)
+  - implicitly_unwrapped_optional
+  - overridden_super_call
+  - prohibited_super_call
+  - redundant_nil_coalescing
+  - sorted_imports
+  - toggle_bool
+  - unowned_variable_capture
+  - weak_delegate
+
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+# Hard ceilings. The headless core (AjarCore) holds the strictest budgets.
+force_cast: error
+force_try: error
+force_unwrapping: error
+
+line_length:
+  warning: 100
+  error: 140
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 500
+  error: 800
+
+type_body_length:
+  warning: 300
+  error: 450
+
+function_body_length:
+  warning: 60
+  error: 100
+
+cyclomatic_complexity:
+  warning: 12
+  error: 20
+
+identifier_name:
+  min_length: 2
+  excluded: [id, x, y, z, w, r, g, b, a, dt, t, fp, eq]
+
+custom_rules:
+  no_print_in_core:
+    name: "No print() in AjarCore"
+    regex: "\\bprint\\("
+    match_kinds: [identifier]
+    message: "Use the Logger; print() is forbidden in the headless core."
+    severity: warning

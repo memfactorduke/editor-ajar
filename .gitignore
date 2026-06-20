@@ -1,0 +1,50 @@
+# ── Swift / SwiftPM ──────────────────────────────────────────────
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# ── Xcode ────────────────────────────────────────────────────────
+DerivedData/
+build/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ── macOS ────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# ── Tooling / caches ─────────────────────────────────────────────
+*.log
+.swiftlint-cache/
+fastlane/report.xml
+fastlane/Preview.html
+
+# ── Editor Ajar artifacts ────────────────────────────────────────
+# Render/proxy caches and benchmark output are large + machine-local.
+/.ajar-cache/
+/Benchmarks/results/
+/Tests/Fixtures/_actual/     # rendered frames produced during a test run
+/Tests/Fixtures/_diff/       # golden-vs-actual diff images
+*.ajarproxy
+
+# Large media must never be committed. Keep tiny fixtures only.
+/Tests/Fixtures/media/*.mov
+/Tests/Fixtures/media/*.mp4
+/Tests/Fixtures/media/*.wav
+!/Tests/Fixtures/media/.gitkeep
+
+# ── Secrets / local config ───────────────────────────────────────
+.env
+*.local
+secrets.json

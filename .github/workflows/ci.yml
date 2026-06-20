@@ -1,0 +1,70 @@
+# Editor Ajar — Continuous Integration (ADR-0011).
+# Ordered quality gates: a change is merge-eligible only when these pass. Visual (golden-frame)
+# and performance (benchmark) gates are added with the render harness at ROADMAP M2; their
+# placeholders below document the intended pipeline.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test (macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      # ADR-0005: the headless core must not depend on UI/GPU/AV frameworks. Enforced here so
+      # architectural drift fails CI rather than rotting silently.
+      - name: Enforce AjarCore dependency rule (ADR-0005)
+        run: |
+          if grep -REn "^[[:space:]]*import +(AppKit|SwiftUI|UIKit|Metal|MetalKit|MetalFX|AVFoundation|AVFAudio|CoreImage)" Sources/AjarCore; then
+            echo "::error::AjarCore must not import UI/GPU/AV frameworks (ADR-0005)."
+            exit 1
+          fi
+          echo "OK: AjarCore is free of UI/GPU/AV imports."
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  lint:
+    name: Lint & format
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure SwiftLint
+        run: command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
+
+      - name: SwiftLint
+        run: swiftlint --strict
+
+      - name: swift-format (best effort until toolchain pinned)
+        run: |
+          if command -v swift-format >/dev/null 2>&1; then
+            swift-format lint --recursive Sources Tests
+          else
+            echo "swift-format not found on runner; skipping (TODO: pin toolchain)."
+          fi
+
+  # ── Forthcoming gates (wired at ROADMAP M2, per docs/TESTING.md §5) ─────────────────────────
+  # golden-frame:
+  #   GPU-capable runner → `ajar golden <suite>` compared to Tests/Fixtures/golden within tolerance.
+  # benchmarks:
+  #   reference machine → `ajar bench ...` vs. baseline; fail on regression beyond the noise band.
+  # sanitizers:
+  #   `swift test --sanitize=thread` and `--sanitize=address` (NFR-STAB-004).
