@@ -185,7 +185,7 @@ final class EditReducerInvariantTests: XCTestCase {
     }
 }
 
-private struct EditCommandCase {
+struct EditCommandCase {
     let project: Project
     let command: EditCommand
 }
@@ -229,6 +229,7 @@ private func makeCoreClipCommandCases(
 ) throws -> [EditCommandCase] {
     try makePlacementClipCommandCases(fixture: fixture, seed: seed)
         + makeReplaceAndThreePointCommandCases(fixture: fixture, seed: seed)
+        + makeTrimClipCommandCases(fixture: fixture, seed: seed)
 }
 
 private func makePlacementClipCommandCases(

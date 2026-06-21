@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` trim reducer commands for blade, ripple trim, roll, slip, slide,
+  ripple-delete, and lift with undo coverage for FR-TL-004/005/012.
 - `AjarCore` edit reducer commands for insert, overwrite, append, replace-source, and
   three-point edits with undo coverage for FR-TL-003/012.
 - macOS app XCUITest smoke target and CI job for the ROADMAP M2 launch/play gate
