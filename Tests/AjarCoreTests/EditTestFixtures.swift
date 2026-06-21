@@ -14,6 +14,17 @@ struct EditFixture {
     let mediaID: UUID
 }
 
+struct LinkedEditFixture {
+    let project: Project
+    let sequenceID: UUID
+    let videoTrackID: UUID
+    let audioTrackID: UUID
+    let videoClipID: UUID
+    let audioClipID: UUID
+    let mediaID: UUID
+    let linkGroupID: UUID
+}
+
 func makeEditFixture(seed: Int) throws -> EditFixture {
     let base = seed * 1_000
     let mediaID = try editUUID(base + 1)
@@ -50,6 +61,59 @@ func makeEditFixture(seed: Int) throws -> EditFixture {
     )
 }
 
+func makeLinkedEditFixture(seed: Int, linked: Bool = true) throws -> LinkedEditFixture {
+    let base = seed * 1_000
+    let mediaID = try editUUID(base + 1)
+    let sequenceID = try editUUID(base + 2)
+    let videoTrackID = try editUUID(base + 3)
+    let audioTrackID = try editUUID(base + 4)
+    let videoClipID = try editUUID(base + 5)
+    let audioClipID = try editUUID(base + 6)
+    let linkGroupID = try editUUID(base + 7)
+    let media = try makeEditMediaRef(id: mediaID)
+    let clipLinkGroupID = linked ? linkGroupID : nil
+    let videoClip = try makeEditClip(
+        id: videoClipID,
+        mediaID: mediaID,
+        startFrame: 0,
+        linkGroupID: clipLinkGroupID
+    )
+    let audioClip = try makeEditClip(
+        id: audioClipID,
+        mediaID: mediaID,
+        startFrame: 0,
+        kind: .audio,
+        linkGroupID: clipLinkGroupID
+    )
+    let videoTrack = Track(id: videoTrackID, kind: .video, items: [.clip(videoClip)])
+    let audioTrack = Track(id: audioTrackID, kind: .audio, items: [.clip(audioClip)])
+    let sequence = Sequence(
+        id: sequenceID,
+        name: "Linked Sequence \(seed)",
+        videoTracks: [videoTrack],
+        audioTracks: [audioTrack],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+    let project = Project(
+        schemaVersion: 1,
+        settings: try makeEditSettings(),
+        mediaPool: [media],
+        sequences: [sequence]
+    )
+
+    return LinkedEditFixture(
+        project: project,
+        sequenceID: sequenceID,
+        videoTrackID: videoTrackID,
+        audioTrackID: audioTrackID,
+        videoClipID: videoClipID,
+        audioClipID: audioClipID,
+        mediaID: mediaID,
+        linkGroupID: linkGroupID
+    )
+}
+
 func makeEditMediaRef(id: UUID) throws -> MediaRef {
     MediaRef(
         id: id,
@@ -73,7 +137,8 @@ func makeEditClip(
     mediaID: UUID,
     startFrame: Int64,
     durationFrames: Int64 = 10,
-    kind: TrackKind = .video
+    kind: TrackKind = .video,
+    linkGroupID: UUID? = nil
 ) throws -> Clip {
     Clip(
         id: id,
@@ -81,7 +146,8 @@ func makeEditClip(
         sourceRange: try editRange(startFrame: 0, durationFrames: durationFrames),
         timelineRange: try editRange(startFrame: startFrame, durationFrames: durationFrames),
         kind: kind,
-        name: "Clip \(id.uuidString)"
+        name: "Clip \(id.uuidString)",
+        linkGroupID: linkGroupID
     )
 }
 
@@ -110,6 +176,22 @@ func projectTrack(_ project: Project, fixture: EditFixture) throws -> Track {
     return try XCTUnwrap(sequence.videoTracks.first { $0.id == fixture.videoTrackID })
 }
 
+func projectTrack(
+    _ trackID: UUID,
+    in project: Project,
+    sequenceID: UUID? = nil
+) throws -> Track {
+    let sequence: Sequence
+    if let sequenceID {
+        sequence = try XCTUnwrap(project.sequences.first { $0.id == sequenceID })
+    } else {
+        sequence = try XCTUnwrap(project.sequences.first)
+    }
+    return try XCTUnwrap(
+        (sequence.videoTracks + sequence.audioTracks).first { $0.id == trackID }
+    )
+}
+
 func clip(_ clipID: UUID, in track: Track) -> Clip? {
     for item in track.items {
         if case .clip(let clip) = item, clip.id == clipID {
@@ -125,6 +207,20 @@ func requiredClip(
     fixture: EditFixture
 ) throws -> Clip {
     try XCTUnwrap(clip(clipID, in: try projectTrack(project, fixture: fixture)))
+}
+
+func requiredClip(
+    _ clipID: UUID,
+    trackID: UUID,
+    in project: Project,
+    sequenceID: UUID? = nil
+) throws -> Clip {
+    try XCTUnwrap(
+        clip(
+            clipID,
+            in: try projectTrack(trackID, in: project, sequenceID: sequenceID)
+        )
+    )
 }
 
 func replacingVideoItems(

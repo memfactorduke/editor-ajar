@@ -17,6 +17,7 @@ extension EditReducer {
         let clipID: UUID
         let sourceRange: TimeRange
         let timelineRange: TimeRange
+        let linkedClipEditMode: LinkedClipEditMode
     }
 
     struct RollEdit {
@@ -32,6 +33,7 @@ extension EditReducer {
         let trackID: UUID
         let clipID: UUID
         let sourceRange: TimeRange
+        let linkedClipEditMode: LinkedClipEditMode
     }
 
     struct SlideClipEdit {
@@ -39,6 +41,7 @@ extension EditReducer {
         let trackID: UUID
         let clipID: UUID
         let timelineRange: TimeRange
+        let linkedClipEditMode: LinkedClipEditMode
     }
 
     struct RollClipSelection {
@@ -95,7 +98,7 @@ extension EditReducer {
         }
     }
 
-    static func rippleTrimClip(
+    static func rippleTrimClipWithoutLinkedPartners(
         _ edit: RippleTrimClipEdit,
         in project: Project
     ) throws -> Project {
@@ -226,7 +229,10 @@ extension EditReducer {
         )
     }
 
-    static func slipClip(_ edit: SlipClipEdit, in project: Project) throws -> Project {
+    static func slipClipWithoutLinkedPartners(
+        _ edit: SlipClipEdit,
+        in project: Project
+    ) throws -> Project {
         try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
             var items = track.items
             guard
@@ -250,7 +256,10 @@ extension EditReducer {
         }
     }
 
-    static func slideClip(_ edit: SlideClipEdit, in project: Project) throws -> Project {
+    static func slideClipWithoutLinkedPartners(
+        _ edit: SlideClipEdit,
+        in project: Project
+    ) throws -> Project {
         try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
             var items = track.items
             guard

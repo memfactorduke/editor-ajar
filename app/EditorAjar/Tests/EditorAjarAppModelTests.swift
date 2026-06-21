@@ -250,6 +250,92 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(model.timelineSnappingEnabled)
     }
 
+    func testFRTL009AppLinkedMoveAndMomentaryUnlinkRouteThroughEditHistory() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let selection = try sampleLinkedSelection(in: model)
+
+        XCTAssertEqual(selection.videoClip.linkGroupID, selection.audioClip.linkGroupID)
+        model.selectClip(
+            trackID: selection.videoTrackID,
+            clipID: selection.videoClip.id,
+            mode: .replace
+        )
+        XCTAssertTrue(model.selectedClipIsLinked)
+
+        XCTAssertTrue(model.moveSelectedClip(toStartFrame: 12, linkedClipEditMode: .linked))
+        let linkedMoveSelection = try sampleLinkedSelection(in: model)
+        try assertFrameRange(
+            linkedMoveSelection.videoClip.timelineRange,
+            startFrame: 12,
+            durationFrames: 90,
+            frameRate: linkedMoveSelection.frameRate
+        )
+        try assertFrameRange(
+            linkedMoveSelection.audioClip.timelineRange,
+            startFrame: 12,
+            durationFrames: 90,
+            frameRate: linkedMoveSelection.frameRate
+        )
+
+        model.undo()
+        XCTAssertTrue(model.moveSelectedClip(toStartFrame: 12, linkedClipEditMode: .unlinked))
+        let unlinkedMoveSelection = try sampleLinkedSelection(in: model)
+        try assertFrameRange(
+            unlinkedMoveSelection.videoClip.timelineRange,
+            startFrame: 12,
+            durationFrames: 90,
+            frameRate: unlinkedMoveSelection.frameRate
+        )
+        try assertFrameRange(
+            unlinkedMoveSelection.audioClip.timelineRange,
+            startFrame: 0,
+            durationFrames: 90,
+            frameRate: unlinkedMoveSelection.frameRate
+        )
+    }
+
+    func testFRTL009AppTrimAndDetachAudioRouteThroughEditHistory() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let selection = try sampleLinkedSelection(in: model)
+
+        model.selectClip(
+            trackID: selection.videoTrackID,
+            clipID: selection.videoClip.id,
+            mode: .replace
+        )
+        XCTAssertTrue(
+            model.trimSelectedClip(
+                sourceStartFrame: 4,
+                timelineStartFrame: 4,
+                durationFrames: 70,
+                linkedClipEditMode: .linked
+            )
+        )
+        let trimmedSelection = try sampleLinkedSelection(in: model)
+        try assertFrameRange(
+            trimmedSelection.videoClip.sourceRange,
+            startFrame: 4,
+            durationFrames: 70,
+            frameRate: trimmedSelection.frameRate
+        )
+        try assertFrameRange(
+            trimmedSelection.audioClip.sourceRange,
+            startFrame: 4,
+            durationFrames: 70,
+            frameRate: trimmedSelection.frameRate
+        )
+
+        XCTAssertTrue(model.detachAudioForSelectedClip())
+        let detachedSelection = try sampleLinkedSelection(in: model)
+        XCTAssertNil(detachedSelection.videoClip.linkGroupID)
+        XCTAssertNil(detachedSelection.audioClip.linkGroupID)
+
+        model.undo()
+        let relinkedSelection = try sampleLinkedSelection(in: model)
+        XCTAssertEqual(relinkedSelection.videoClip.linkGroupID, selection.videoClip.linkGroupID)
+        XCTAssertEqual(relinkedSelection.audioClip.linkGroupID, selection.audioClip.linkGroupID)
+    }
+
     func testFRTL008AppMarkerActionsRouteThroughEditHistoryAndUndo() throws {
         let model = EditorAjarAppModel()
         let initialMarkerCount = model.activeSequence?.markers.count ?? 0
@@ -456,4 +542,58 @@ final class EditorAjarAppModelTests: XCTestCase {
         )
         return directoryURL.appendingPathComponent(name, isDirectory: true)
     }
+
+    private func sampleLinkedSelection(
+        in model: EditorAjarAppModel
+    ) throws -> SampleLinkedSelection {
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+        let audioTrack = try XCTUnwrap(sequence.audioTracks.first)
+        return SampleLinkedSelection(
+            frameRate: sequence.timebase,
+            videoTrackID: videoTrack.id,
+            audioTrackID: audioTrack.id,
+            videoClip: try firstClip(in: videoTrack),
+            audioClip: try firstClip(in: audioTrack)
+        )
+    }
+
+    private func firstClip(in track: Track) throws -> Clip {
+        for item in track.items {
+            if case .clip(let clip) = item {
+                return clip
+            }
+        }
+        return try XCTUnwrap(nil)
+    }
+
+    private func assertFrameRange(
+        _ range: TimeRange,
+        startFrame: Int64,
+        durationFrames: Int64,
+        frameRate: FrameRate,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        XCTAssertEqual(
+            try range.start.frameIndex(at: frameRate, rounding: .nearestOrAwayFromZero),
+            startFrame,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            try range.duration.frameIndex(at: frameRate, rounding: .nearestOrAwayFromZero),
+            durationFrames,
+            file: file,
+            line: line
+        )
+    }
+}
+
+private struct SampleLinkedSelection {
+    let frameRate: FrameRate
+    let videoTrackID: UUID
+    let audioTrackID: UUID
+    let videoClip: Clip
+    let audioClip: Clip
 }

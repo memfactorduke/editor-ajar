@@ -43,6 +43,12 @@ struct EditorAjarApp: App {
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(model.selectedMarker == nil)
             }
+            CommandMenu("Clip") {
+                Button("Detach Audio") {
+                    model.detachAudioForSelectedClip()
+                }
+                .disabled(!model.selectedClipIsLinked)
+            }
         }
     }
 }

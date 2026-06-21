@@ -13,12 +13,20 @@ extension EditReducer {
         let index: Int
     }
 
+    struct ClipLocation {
+        let reference: ClipReference
+        let trackLocation: TrackLocation
+        let itemIndex: Int
+        let clip: Clip
+    }
+
     struct MoveClipEdit {
         let clipID: UUID
         let sequenceID: UUID
         let sourceTrackID: UUID
         let destinationTrackID: UUID
         let timelineRange: TimeRange
+        let linkedClipEditMode: LinkedClipEditMode
     }
 
     struct TrimClipEdit {
@@ -27,6 +35,7 @@ extension EditReducer {
         let trackID: UUID
         let sourceRange: TimeRange
         let timelineRange: TimeRange
+        let linkedClipEditMode: LinkedClipEditMode
     }
 
     struct TrackStateEdit {
@@ -68,7 +77,7 @@ extension EditReducer {
         }
     }
 
-    static func moveClip(
+    static func moveClipWithoutLinkedPartners(
         _ edit: MoveClipEdit,
         in project: Project
     ) throws -> Project {
@@ -122,7 +131,7 @@ extension EditReducer {
         }
     }
 
-    static func trimClip(
+    static func trimClipWithoutLinkedPartners(
         _ edit: TrimClipEdit,
         in project: Project
     ) throws -> Project {
@@ -387,7 +396,8 @@ extension EditReducer {
         source: ClipSource? = nil,
         sourceRange: TimeRange? = nil,
         timelineRange: TimeRange? = nil,
-        name: String? = nil
+        name: String? = nil,
+        linkGroupID: UUID?? = nil
     ) -> Clip {
         Clip(
             id: clip.id,
@@ -395,7 +405,8 @@ extension EditReducer {
             sourceRange: sourceRange ?? clip.sourceRange,
             timelineRange: timelineRange ?? clip.timelineRange,
             kind: clip.kind,
-            name: name ?? clip.name
+            name: name ?? clip.name,
+            linkGroupID: linkGroupID ?? clip.linkGroupID
         )
     }
 }

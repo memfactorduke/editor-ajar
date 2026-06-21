@@ -2,6 +2,15 @@
 
 import Foundation
 
+/// Whether an edit should propagate through linked clip groups.
+public enum LinkedClipEditMode: String, Codable, Equatable, Sendable {
+    /// Apply the same compatible edit to linked partner clips.
+    case linked
+
+    /// Edit only the addressed clip, used by momentary unlink gestures.
+    case unlinked
+}
+
 /// Optional track-state fields changed by `EditCommand.setTrackState`.
 public struct TrackStatePatch: Codable, Equatable, Sendable {
     /// Replacement enabled state, or `nil` to leave it unchanged.
@@ -89,7 +98,8 @@ public enum EditCommand: Codable, Equatable, Sendable {
         trackID: UUID,
         clipID: UUID,
         sourceRange: TimeRange,
-        timelineRange: TimeRange
+        timelineRange: TimeRange,
+        linkedClipEditMode: LinkedClipEditMode = .linked
     )
 
     /// Moves the shared edit point between two adjacent clips.
@@ -106,7 +116,8 @@ public enum EditCommand: Codable, Equatable, Sendable {
         sequenceID: UUID,
         trackID: UUID,
         clipID: UUID,
-        sourceRange: TimeRange
+        sourceRange: TimeRange,
+        linkedClipEditMode: LinkedClipEditMode = .linked
     )
 
     /// Moves a clip while adjusting the neighboring items to preserve the outer span.
@@ -114,7 +125,8 @@ public enum EditCommand: Codable, Equatable, Sendable {
         sequenceID: UUID,
         trackID: UUID,
         clipID: UUID,
-        timelineRange: TimeRange
+        timelineRange: TimeRange,
+        linkedClipEditMode: LinkedClipEditMode = .linked
     )
 
     /// Removes a clip and shifts later items left by the removed duration.
@@ -136,7 +148,8 @@ public enum EditCommand: Codable, Equatable, Sendable {
         sourceTrackID: UUID,
         clipID: UUID,
         destinationTrackID: UUID,
-        timelineRange: TimeRange
+        timelineRange: TimeRange,
+        linkedClipEditMode: LinkedClipEditMode = .linked
     )
 
     /// Updates a clip's source and timeline ranges.
@@ -145,7 +158,8 @@ public enum EditCommand: Codable, Equatable, Sendable {
         trackID: UUID,
         clipID: UUID,
         sourceRange: TimeRange,
-        timelineRange: TimeRange
+        timelineRange: TimeRange,
+        linkedClipEditMode: LinkedClipEditMode = .linked
     )
 
     /// Adds a video or audio track to a sequence.
@@ -165,6 +179,12 @@ public enum EditCommand: Codable, Equatable, Sendable {
 
     /// Updates an existing marker.
     case updateMarker(sequenceID: UUID, marker: Marker)
+
+    /// Assigns a shared link group to video/audio clips.
+    case linkClips(sequenceID: UUID, linkGroupID: UUID, clips: [ClipReference])
+
+    /// Removes a shared link group from every clip in a sequence.
+    case unlinkClips(sequenceID: UUID, linkGroupID: UUID)
 
     /// Replaces project-wide settings.
     case setProjectSettings(ProjectSettings)
@@ -189,6 +209,9 @@ public enum EditReducerError: Error, Equatable, Sendable {
 
     /// The command would create duplicate marker IDs inside a sequence.
     case duplicateMarkerID(sequenceID: UUID, markerID: UUID)
+
+    /// The command references a missing link group.
+    case linkGroupNotFound(sequenceID: UUID, linkGroupID: UUID)
 
     /// The command's requested edit is not valid for the current timeline state.
     case invalidEdit(EditCommandValidationError)
@@ -220,6 +243,18 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// Slide needs both a previous and next item to adjust.
     case slideRequiresNeighbors(clipID: UUID)
+
+    /// Linking requires at least two distinct clips.
+    case linkRequiresAtLeastTwoClips(linkGroupID: UUID)
+
+    /// A link group must include at least one video clip and one audio clip.
+    case linkRequiresVideoAndAudio(linkGroupID: UUID)
+
+    /// The same clip was included more than once in a link command.
+    case duplicateClipLinkReference(trackID: UUID, clipID: UUID)
+
+    /// A clip is already assigned to a different link group.
+    case clipAlreadyLinked(clipID: UUID, linkGroupID: UUID)
 }
 
 /// Pure reducer entry point required by ADR-0008.
@@ -260,6 +295,19 @@ extension EditReducer {
             return try removeMarker(markerID: markerID, sequenceID: sequenceID, from: project)
         case .updateMarker(let sequenceID, let marker):
             return try updateMarker(marker, sequenceID: sequenceID, in: project)
+        case .linkClips(let sequenceID, let linkGroupID, let clips):
+            return try linkClips(
+                sequenceID: sequenceID,
+                linkGroupID: linkGroupID,
+                clips: clips,
+                in: project
+            )
+        case .unlinkClips(let sequenceID, let linkGroupID):
+            return try unlinkClips(
+                sequenceID: sequenceID,
+                linkGroupID: linkGroupID,
+                in: project
+            )
         case .setProjectSettings(let settings):
             return Project(
                 schemaVersion: project.schemaVersion,

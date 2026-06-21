@@ -122,7 +122,8 @@ extension EditReducer {
             let sourceTrackID,
             let clipID,
             let destinationTrackID,
-            let timelineRange
+            let timelineRange,
+            let linkedClipEditMode
         ):
             return try moveClip(
                 MoveClipEdit(
@@ -130,18 +131,27 @@ extension EditReducer {
                     sequenceID: sequenceID,
                     sourceTrackID: sourceTrackID,
                     destinationTrackID: destinationTrackID,
-                    timelineRange: timelineRange
+                    timelineRange: timelineRange,
+                    linkedClipEditMode: linkedClipEditMode
                 ),
                 in: project
             )
-        case .trimClip(let sequenceID, let trackID, let clipID, let sourceRange, let timelineRange):
+        case .trimClip(
+            let sequenceID,
+            let trackID,
+            let clipID,
+            let sourceRange,
+            let timelineRange,
+            let linkedClipEditMode
+        ):
             return try trimClip(
                 TrimClipEdit(
                     clipID: clipID,
                     sequenceID: sequenceID,
                     trackID: trackID,
                     sourceRange: sourceRange,
-                    timelineRange: timelineRange
+                    timelineRange: timelineRange,
+                    linkedClipEditMode: linkedClipEditMode
                 ),
                 in: project
             )

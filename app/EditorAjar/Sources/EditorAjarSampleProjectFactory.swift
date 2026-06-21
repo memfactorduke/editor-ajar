@@ -23,6 +23,8 @@ enum EditorAjarSampleProjectFactory {
         let duration = try frameRate.duration(ofFrames: frameCount)
         let mediaID = try uuid("00000000-0000-0000-0000-000000000025")
         let clipID = try uuid("00000000-0000-0000-0000-000000000125")
+        let audioClipID = try uuid("00000000-0000-0000-0000-000000000126")
+        let linkGroupID = try uuid("00000000-0000-0000-0000-000000000127")
         let media = MediaRef(
             id: mediaID,
             sourceURL: mediaURL,
@@ -44,9 +46,18 @@ enum EditorAjarSampleProjectFactory {
             sourceRange: try TimeRange(start: .zero, duration: duration),
             timelineRange: try TimeRange(start: .zero, duration: duration),
             kind: .video,
-            name: "Sample Playback Clip"
+            name: "Sample Playback Clip",
+            linkGroupID: linkGroupID
         )
-        let audioRange = try TimeRange(start: .zero, duration: duration)
+        let audioClip = Clip(
+            id: audioClipID,
+            source: .media(id: mediaID),
+            sourceRange: try TimeRange(start: .zero, duration: duration),
+            timelineRange: try TimeRange(start: .zero, duration: duration),
+            kind: .audio,
+            name: "Sample Playback Audio",
+            linkGroupID: linkGroupID
+        )
         let sequence = Sequence(
             id: try uuid("00000000-0000-0000-0000-000000000225"),
             name: "Sample Playback Sequence",
@@ -68,7 +79,7 @@ enum EditorAjarSampleProjectFactory {
                 Track(
                     id: try uuid("00000000-0000-0000-0000-000000000425"),
                     kind: .audio,
-                    items: [.gap(audioRange)]
+                    items: [.clip(audioClip)]
                 ),
                 Track(
                     id: try uuid("00000000-0000-0000-0000-000000000426"),

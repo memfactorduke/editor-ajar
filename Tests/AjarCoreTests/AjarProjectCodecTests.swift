@@ -86,6 +86,23 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(marker.note, "")
         XCTAssertEqual(marker.anchor, .timeline)
     }
+
+    func testFRTL009ClipLinkGroupRoundTripsThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 140)
+        let package = try AjarProjectCodec.encode(project)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+        let audioClip = try XCTUnwrap(clip(in: sequence.audioTracks.first))
+
+        XCTAssertNotNil(videoClip.linkGroupID)
+        XCTAssertEqual(videoClip.linkGroupID, audioClip.linkGroupID)
+    }
 }
 
 final class AjarProjectCodecVersioningTests: XCTestCase {
@@ -248,19 +265,22 @@ private func projectJSONWithoutMarkerDetailFields(_ projectJSON: Data) throws ->
 private func makeCodecProject(seed: Int, schemaVersion: Int = 1) throws -> Project {
     let firstMediaID = try codecUUID(seed * 1_000 + 1)
     let secondMediaID = try codecUUID(seed * 1_000 + 2)
-    let sequenceID = try codecUUID(seed * 1_000 + 3)
     let videoTrackID = try codecUUID(seed * 1_000 + 4)
     let audioTrackID = try codecUUID(seed * 1_000 + 5)
     let firstClipID = try codecUUID(seed * 1_000 + 6)
     let secondClipID = try codecUUID(seed * 1_000 + 7)
-    var mediaPool: [MediaRef] = []
-    mediaPool.append(try makeCodecMediaRef(id: firstMediaID, seed: seed))
-    mediaPool.append(try makeCodecMediaRef(id: secondMediaID, seed: seed + 1))
+    let linkGroupID = try codecUUID(seed * 1_000 + 9)
+    let mediaPool = try makeCodecMediaPool(
+        seed: seed,
+        firstMediaID: firstMediaID,
+        secondMediaID: secondMediaID
+    )
     let firstClip = TimelineItem.clip(
         try makeCodecClip(
             id: firstClipID,
             mediaID: firstMediaID,
-            startFrame: 0
+            startFrame: 0,
+            linkGroupID: linkGroupID
         )
     )
     let secondClip = TimelineItem.clip(
@@ -275,7 +295,12 @@ private func makeCodecProject(seed: Int, schemaVersion: Int = 1) throws -> Proje
         kind: .video,
         items: [firstClip, secondClip]
     )
-    let audioTrack = Track(id: audioTrackID, kind: .audio, items: [])
+    let audioTrack = try makeCodecLinkedAudioTrack(
+        id: audioTrackID,
+        clipID: try codecUUID(seed * 1_000 + 10),
+        mediaID: firstMediaID,
+        linkGroupID: linkGroupID
+    )
     let marker = Marker(
         id: try codecUUID(seed * 1_000 + 8),
         time: try codecTime(4),
@@ -285,7 +310,7 @@ private func makeCodecProject(seed: Int, schemaVersion: Int = 1) throws -> Proje
         anchor: .clip(trackID: videoTrackID, clipID: firstClipID)
     )
     let sequence = Sequence(
-        id: sequenceID,
+        id: try codecUUID(seed * 1_000 + 3),
         name: "Codec Sequence \(seed)",
         videoTracks: [videoTrack],
         audioTracks: [audioTrack],
@@ -298,6 +323,40 @@ private func makeCodecProject(seed: Int, schemaVersion: Int = 1) throws -> Proje
         settings: try makeCodecSettings(),
         mediaPool: mediaPool,
         sequences: [sequence]
+    )
+}
+
+private func makeCodecMediaPool(
+    seed: Int,
+    firstMediaID: UUID,
+    secondMediaID: UUID
+) throws -> [MediaRef] {
+    [
+        try makeCodecMediaRef(id: firstMediaID, seed: seed),
+        try makeCodecMediaRef(id: secondMediaID, seed: seed + 1)
+    ]
+}
+
+private func makeCodecLinkedAudioTrack(
+    id: UUID,
+    clipID: UUID,
+    mediaID: UUID,
+    linkGroupID: UUID
+) throws -> Track {
+    Track(
+        id: id,
+        kind: .audio,
+        items: [
+            .clip(
+                try makeCodecClip(
+                    id: clipID,
+                    mediaID: mediaID,
+                    startFrame: 0,
+                    kind: .audio,
+                    linkGroupID: linkGroupID
+                )
+            )
+        ]
     )
 }
 
@@ -332,16 +391,31 @@ private func makeCodecMediaRef(id: UUID, seed: Int) throws -> MediaRef {
 private func makeCodecClip(
     id: UUID,
     mediaID: UUID,
-    startFrame: Int64
+    startFrame: Int64,
+    kind: TrackKind = .video,
+    linkGroupID: UUID? = nil
 ) throws -> Clip {
     Clip(
         id: id,
         source: .media(id: mediaID),
         sourceRange: try codecRange(startFrame: 0, durationFrames: 10),
         timelineRange: try codecRange(startFrame: startFrame, durationFrames: 10),
-        kind: .video,
-        name: "Codec Clip \(id.uuidString)"
+        kind: kind,
+        name: "Codec Clip \(id.uuidString)",
+        linkGroupID: linkGroupID
     )
+}
+
+private func clip(in track: Track?) -> Clip? {
+    guard let track else {
+        return nil
+    }
+    for item in track.items {
+        if case .clip(let clip) = item {
+            return clip
+        }
+    }
+    return nil
 }
 
 private func codecRange(startFrame: Int64, durationFrames: Int64) throws -> TimeRange {

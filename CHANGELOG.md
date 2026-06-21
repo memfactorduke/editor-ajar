@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Linked A/V clip groups in `AjarCore`, including undoable link/unlink commands, linked
+  move/trim propagation, momentary unlink edit mode, `.ajar` codec coverage, and macOS detach
+  audio controls for FR-TL-009.
 - Named, colored, note-bearing timeline and clip markers with undoable reducer commands, pure
   next/previous navigation, codec compatibility, and macOS timeline/inspector controls for
   FR-TL-008 and FR-PLAY-002.

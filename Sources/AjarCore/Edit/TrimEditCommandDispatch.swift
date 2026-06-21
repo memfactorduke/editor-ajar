@@ -72,7 +72,8 @@ extension EditReducer {
                 let trackID,
                 let clipID,
                 let sourceRange,
-                let range
+                let range,
+                let linkedClipEditMode
             ) = command
         else {
             throw EditReducerError.validationFailed([])
@@ -83,7 +84,8 @@ extension EditReducer {
                 trackID: trackID,
                 clipID: clipID,
                 sourceRange: sourceRange,
-                timelineRange: range
+                timelineRange: range,
+                linkedClipEditMode: linkedClipEditMode
             ),
             in: project
         )
@@ -121,7 +123,13 @@ extension EditReducer {
         to project: Project
     ) throws -> Project {
         guard
-            case .slipClip(let sequenceID, let trackID, let clipID, let sourceRange) = command
+            case .slipClip(
+                let sequenceID,
+                let trackID,
+                let clipID,
+                let sourceRange,
+                let linkedClipEditMode
+            ) = command
         else {
             throw EditReducerError.validationFailed([])
         }
@@ -130,7 +138,8 @@ extension EditReducer {
                 sequenceID: sequenceID,
                 trackID: trackID,
                 clipID: clipID,
-                sourceRange: sourceRange
+                sourceRange: sourceRange,
+                linkedClipEditMode: linkedClipEditMode
             ),
             in: project
         )
@@ -141,7 +150,13 @@ extension EditReducer {
         to project: Project
     ) throws -> Project {
         guard
-            case .slideClip(let sequenceID, let trackID, let clipID, let timelineRange) = command
+            case .slideClip(
+                let sequenceID,
+                let trackID,
+                let clipID,
+                let timelineRange,
+                let linkedClipEditMode
+            ) = command
         else {
             throw EditReducerError.validationFailed([])
         }
@@ -150,7 +165,8 @@ extension EditReducer {
                 sequenceID: sequenceID,
                 trackID: trackID,
                 clipID: clipID,
-                timelineRange: timelineRange
+                timelineRange: timelineRange,
+                linkedClipEditMode: linkedClipEditMode
             ),
             in: project
         )
