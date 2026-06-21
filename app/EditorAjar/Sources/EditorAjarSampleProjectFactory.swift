@@ -46,6 +46,7 @@ enum EditorAjarSampleProjectFactory {
             kind: .video,
             name: "Sample Playback Clip"
         )
+        let audioRange = try TimeRange(start: .zero, duration: duration)
         let sequence = Sequence(
             id: try uuid("00000000-0000-0000-0000-000000000225"),
             name: "Sample Playback Sequence",
@@ -54,13 +55,26 @@ enum EditorAjarSampleProjectFactory {
                     id: try uuid("00000000-0000-0000-0000-000000000325"),
                     kind: .video,
                     items: [.clip(clip)]
+                ),
+                Track(
+                    id: try uuid("00000000-0000-0000-0000-000000000326"),
+                    kind: .video,
+                    items: [],
+                    enabled: true,
+                    hidden: false
                 )
             ],
             audioTracks: [
                 Track(
                     id: try uuid("00000000-0000-0000-0000-000000000425"),
                     kind: .audio,
-                    items: []
+                    items: [.gap(audioRange)]
+                ),
+                Track(
+                    id: try uuid("00000000-0000-0000-0000-000000000426"),
+                    kind: .audio,
+                    items: [],
+                    muted: true
                 )
             ],
             markers: [],

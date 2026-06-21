@@ -82,11 +82,55 @@ final class MetalRenderExecutorTests: XCTestCase {
         XCTAssertFalse(frame.cacheHit)
         XCTAssertEqual(try readBGRA8(texture: frame.texture, device: device), [0, 0, 0, 0])
     }
+
+    func testFRTL002CompositesInputsInOrderSoLaterSourcesRenderOnTop() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeTwoClipGraph()
+        let bottomTexture = try makeCVMetalTextureFixture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgra: [255, 0, 0, 255]
+        )
+        let topTexture = try makeCVMetalTextureFixture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgra: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let provider = ClipTextureProvider(
+            textures: [
+                try testUUID(TestIDs.bottomClip): bottomTexture.texture,
+                try testUUID(TestIDs.topClip): topTexture.texture
+            ]
+        )
+
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(
+                pixelDimensions: PixelDimensions(width: 1, height: 1)
+            ),
+            sourceProvider: provider
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertEqual(
+            provider.requestedClipIDs,
+            [try testUUID(TestIDs.bottomClip), try testUUID(TestIDs.topClip)]
+        )
+        XCTAssertEqual(try readBGRA8(texture: frame.texture, device: device), [0, 0, 255, 255])
+    }
 }
 
 private enum TestIDs {
     static let media = "00000000-0000-0000-0000-000000000017"
     static let clip = "00000000-0000-0000-0000-000000000117"
+    static let bottomMedia = "00000000-0000-0000-0000-000000000018"
+    static let topMedia = "00000000-0000-0000-0000-000000000019"
+    static let bottomClip = "00000000-0000-0000-0000-000000000118"
+    static let topClip = "00000000-0000-0000-0000-000000000119"
 }
 
 private final class CountingSourceTextureProvider: RenderSourceTextureProvider {
@@ -100,6 +144,23 @@ private final class CountingSourceTextureProvider: RenderSourceTextureProvider {
     func texture(for source: RenderSourceNode) throws -> MTLTexture {
         requestCount += 1
         return sourceTexture
+    }
+}
+
+private final class ClipTextureProvider: RenderSourceTextureProvider {
+    private let textures: [UUID: MTLTexture]
+    private(set) var requestedClipIDs: [UUID] = []
+
+    init(textures: [UUID: MTLTexture]) {
+        self.textures = textures
+    }
+
+    func texture(for source: RenderSourceNode) throws -> MTLTexture {
+        requestedClipIDs.append(source.clipID)
+        guard let texture = textures[source.clipID] else {
+            throw TestTextureError.metalTextureUnavailable
+        }
+        return texture
     }
 }
 
@@ -181,6 +242,75 @@ private func makeSingleClipGraph() throws -> RenderGraph {
     )
 
     return try buildRenderGraph(for: sequence, at: try time(0), in: project)
+}
+
+private func makeTwoClipGraph() throws -> RenderGraph {
+    let bottomMediaID = try testUUID(TestIDs.bottomMedia)
+    let topMediaID = try testUUID(TestIDs.topMedia)
+    let bottomClip = try makeRenderClip(
+        id: try testUUID(TestIDs.bottomClip),
+        mediaID: bottomMediaID
+    )
+    let topClip = try makeRenderClip(
+        id: try testUUID(TestIDs.topClip),
+        mediaID: topMediaID
+    )
+    let sequence = Sequence(
+        id: UUID(),
+        name: "Composite",
+        videoTracks: [
+            Track(id: UUID(), kind: .video, items: [.clip(bottomClip)]),
+            Track(id: UUID(), kind: .video, items: [.clip(topClip)])
+        ],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+    let project = Project(
+        schemaVersion: 1,
+        settings: ProjectSettings(
+            frameRate: try FrameRate(frames: 24),
+            resolution: PixelDimensions(width: 1, height: 1),
+            colorSpace: .rec709,
+            audioSampleRate: 48_000
+        ),
+        mediaPool: [
+            try makeRenderMedia(id: bottomMediaID),
+            try makeRenderMedia(id: topMediaID)
+        ],
+        sequences: [sequence]
+    )
+
+    return try buildRenderGraph(for: sequence, at: try time(0), in: project)
+}
+
+private func makeRenderMedia(id: UUID) throws -> MediaRef {
+    MediaRef(
+        id: id,
+        sourceURL: URL(fileURLWithPath: "/media/\(id.uuidString).mov"),
+        contentHash: ContentHash.sha256(data: Data(id.uuidString.utf8)),
+        metadata: MediaMetadata(
+            codecID: "h264",
+            pixelDimensions: PixelDimensions(width: 1, height: 1),
+            frameRate: try FrameRate(frames: 24),
+            duration: try time(24),
+            colorSpace: .rec709,
+            audioChannelLayout: nil,
+            isVariableFrameRate: false,
+            conformedFrameRate: nil
+        )
+    )
+}
+
+private func makeRenderClip(id: UUID, mediaID: UUID) throws -> Clip {
+    Clip(
+        id: id,
+        source: .media(id: mediaID),
+        sourceRange: try range(startFrame: 0, durationFrames: 24),
+        timelineRange: try range(startFrame: 0, durationFrames: 24),
+        kind: .video,
+        name: "Synthetic"
+    )
 }
 
 private func makeTransparentGraph() throws -> RenderGraph {

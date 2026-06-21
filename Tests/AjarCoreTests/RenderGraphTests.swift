@@ -127,6 +127,93 @@ final class RenderGraphTests: XCTestCase {
         XCTAssertEqual(payload.background, .transparent)
     }
 
+    func testFRTL002CompositeInputOrderFollowsVideoTrackStackingBottomToTop() throws {
+        let bottomMediaID = try uuid(70)
+        let topMediaID = try uuid(71)
+        let bottomClipID = try uuid(72)
+        let topClipID = try uuid(73)
+        let bottomClip = try makeClip(id: bottomClipID, mediaID: bottomMediaID)
+        let topClip = try makeClip(id: topClipID, mediaID: topMediaID)
+        let sequence = try makeEmptySequence(
+            id: try uuid(74),
+            videoTracks: [
+                Track(
+                    id: try uuid(75),
+                    kind: .video,
+                    items: [.clip(bottomClip)]
+                ),
+                Track(
+                    id: try uuid(76),
+                    kind: .video,
+                    items: [.clip(topClip)]
+                )
+            ]
+        )
+        let project = try makeProject(
+            mediaPool: [makeMediaRef(id: bottomMediaID), makeMediaRef(id: topMediaID)],
+            sequences: [sequence]
+        )
+
+        let graph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+
+        XCTAssertEqual(graph.nodes.count, 3)
+        XCTAssertEqual(
+            graph.outputNode?.inputIDs.map(\.rawValue),
+            [
+                "source:\(bottomClipID.uuidString)",
+                "source:\(topClipID.uuidString)"
+            ]
+        )
+    }
+
+    func testFRTL001FRTL002HiddenAndDisabledTracksAreOmittedFromComposite() throws {
+        let visibleMediaID = try uuid(80)
+        let hiddenMediaID = try uuid(81)
+        let disabledMediaID = try uuid(82)
+        let visibleClipID = try uuid(83)
+        let visibleClip = try makeClip(id: visibleClipID, mediaID: visibleMediaID)
+        let hiddenClip = try makeClip(id: try uuid(84), mediaID: hiddenMediaID)
+        let disabledClip = try makeClip(id: try uuid(85), mediaID: disabledMediaID)
+        let sequence = try makeEmptySequence(
+            id: try uuid(86),
+            videoTracks: [
+                Track(
+                    id: try uuid(87),
+                    kind: .video,
+                    items: [.clip(visibleClip)]
+                ),
+                Track(
+                    id: try uuid(88),
+                    kind: .video,
+                    items: [.clip(hiddenClip)],
+                    hidden: true
+                ),
+                Track(
+                    id: try uuid(89),
+                    kind: .video,
+                    items: [.clip(disabledClip)],
+                    enabled: false
+                )
+            ]
+        )
+        let project = try makeProject(
+            mediaPool: [
+                makeMediaRef(id: visibleMediaID),
+                makeMediaRef(id: hiddenMediaID),
+                makeMediaRef(id: disabledMediaID)
+            ],
+            sequences: [sequence]
+        )
+
+        let graph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+
+        XCTAssertEqual(graph.nodes.count, 2)
+        XCTAssertEqual(
+            graph.outputNode?.inputIDs,
+            [RenderNodeID(rawValue: "source:\(visibleClipID.uuidString)")]
+        )
+    }
+
     func testNFRSTAB003MissingMediaReturnsTypedRenderGraphError() throws {
         let missingMediaID = try uuid(50)
         let clipID = try uuid(51)

@@ -50,18 +50,11 @@ public enum RenderGraphBuilder {
         in project: Project
     ) throws -> RenderGraph {
         let candidates = try activeMediaClips(in: sequence, at: time)
-        guard let candidate = candidates.first else {
+        guard !candidates.isEmpty else {
             return try transparentGraph()
         }
 
-        guard candidates.count == 1 else {
-            throw RenderGraphBuildError.multipleActiveVideoClips(
-                time: time,
-                clipIDs: candidates.map(\.clip.id)
-            )
-        }
-
-        return try graph(for: candidate.clip, at: time, in: project)
+        return try graph(for: candidates.map(\.clip), at: time, in: project)
     }
 
     private struct ActiveClipCandidate {
@@ -99,10 +92,26 @@ public enum RenderGraphBuilder {
     }
 
     private static func graph(
-        for clip: Clip,
+        for clips: [Clip],
         at time: RationalTime,
         in project: Project
     ) throws -> RenderGraph {
+        let sourceNodes = try clips.map { clip in
+            try sourceNode(for: clip, at: time, in: project)
+        }
+        let compositeNode = try RenderNodeFactory.makeCompositeNode(inputs: sourceNodes)
+
+        return RenderGraph(
+            nodes: sourceNodes + [compositeNode],
+            outputNodeID: compositeNode.id
+        )
+    }
+
+    private static func sourceNode(
+        for clip: Clip,
+        at time: RationalTime,
+        in project: Project
+    ) throws -> RenderNode {
         let mediaID: UUID
         switch clip.source {
         case .media(let id):
@@ -116,16 +125,10 @@ public enum RenderGraphBuilder {
         }
 
         let sourceTime = try mapTimelineTime(time, toSourceTimeFor: clip)
-        let sourceNode = try RenderNodeFactory.makeSourceNode(
+        return try RenderNodeFactory.makeSourceNode(
             mediaID: mediaID,
             clipID: clip.id,
             sourceTime: sourceTime
-        )
-        let compositeNode = try RenderNodeFactory.makeCompositeNode(inputs: [sourceNode])
-
-        return RenderGraph(
-            nodes: [sourceNode, compositeNode],
-            outputNodeID: compositeNode.id
         )
     }
 

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Multi-track timeline lanes in the macOS app with reducer-backed track enable, lock, hide,
+  mute, and solo toggles for FR-TL-001/002.
+- `AjarCore` track-state edit command and ordered multi-input render graph composition for
+  FR-TL-001/002.
 - `AjarCore` trim reducer commands for blade, ripple trim, roll, slip, slide,
   ripple-delete, and lift with undo coverage for FR-TL-004/005/012.
 - `AjarCore` edit reducer commands for insert, overwrite, append, replace-source, and

@@ -15,6 +15,8 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(model.project?.validate(), .valid)
         XCTAssertEqual(model.frameRateDescription, "30 fps")
         XCTAssertEqual(model.project?.mediaPool.count, 1)
+        XCTAssertEqual(model.activeSequence?.videoTracks.count, 2)
+        XCTAssertEqual(model.activeSequence?.audioTracks.count, 2)
         XCTAssertGreaterThan(model.durationFrames, 1)
     }
 
@@ -62,5 +64,32 @@ final class EditorAjarAppModelTests: XCTestCase {
 
         controller.scrub(to: -4)
         XCTAssertEqual(controller.playheadFrame, 0)
+    }
+
+    func testFRTL001TrackToggleRoutesThroughEditHistoryAndUndo() throws {
+        let model = EditorAjarAppModel()
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: videoTrack.id,
+            enabled: false,
+            locked: true,
+            hidden: true
+        )
+
+        let editedTrack = try XCTUnwrap(model.activeSequence?.videoTracks.first)
+        XCTAssertFalse(editedTrack.enabled)
+        XCTAssertTrue(editedTrack.locked)
+        XCTAssertTrue(editedTrack.hidden)
+        XCTAssertTrue(model.canUndo)
+
+        model.undo()
+
+        let restoredTrack = try XCTUnwrap(model.activeSequence?.videoTracks.first)
+        XCTAssertTrue(restoredTrack.enabled)
+        XCTAssertFalse(restoredTrack.locked)
+        XCTAssertFalse(restoredTrack.hidden)
     }
 }

@@ -17,6 +17,7 @@ final class EditorAjarAppModel: ObservableObject {
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
+    private var editHistory: EditHistory?
     private var renderGeneration = 0
 
     init() {
@@ -25,6 +26,7 @@ final class EditorAjarAppModel: ObservableObject {
         switch Self.makeSampleProject() {
         case .success(let project):
             self.project = project
+            editHistory = EditHistory(project: project)
             durationFrames = Self.durationFrames(for: project)
             if let sequence = project.sequences.first {
                 playbackController = EditorAjarPlaybackController(
@@ -50,6 +52,10 @@ final class EditorAjarAppModel: ObservableObject {
             self?.displayLinkTick(deltaSeconds)
         }
         requestRenderForCurrentFrame()
+    }
+
+    var canUndo: Bool {
+        (editHistory?.undoCount ?? 0) > 0
     }
 
     var activeSequence: Sequence? {
@@ -113,6 +119,39 @@ final class EditorAjarAppModel: ObservableObject {
         playbackController?.scrub(to: frame)
         syncPlayheadFromController()
         requestRenderForCurrentFrame()
+    }
+
+    func setTrackState(
+        sequenceID: UUID,
+        trackID: UUID,
+        enabled: Bool? = nil,
+        locked: Bool? = nil,
+        muted: Bool? = nil,
+        solo: Bool? = nil,
+        hidden: Bool? = nil
+    ) {
+        applyEdit(
+            .setTrackState(
+                sequenceID: sequenceID,
+                trackID: trackID,
+                state: TrackStatePatch(
+                    enabled: enabled,
+                    locked: locked,
+                    muted: muted,
+                    solo: solo,
+                    hidden: hidden
+                )
+            )
+        )
+    }
+
+    func undo() {
+        guard var history = editHistory, let project = history.undo() else {
+            return
+        }
+
+        editHistory = history
+        updateProject(project)
     }
 
     static func makeSampleProject() -> Result<Project, Error> {
@@ -192,5 +231,25 @@ final class EditorAjarAppModel: ObservableObject {
             }
         }
         return max(1, lastFrame)
+    }
+
+    private func applyEdit(_ command: EditCommand) {
+        guard var history = editHistory else {
+            return
+        }
+
+        do {
+            let project = try history.apply(command)
+            editHistory = history
+            updateProject(project)
+        } catch {
+            loadMessage = "Edit failed: \(error)"
+        }
+    }
+
+    private func updateProject(_ project: Project) {
+        self.project = project
+        durationFrames = Self.durationFrames(for: project)
+        requestRenderForCurrentFrame()
     }
 }
