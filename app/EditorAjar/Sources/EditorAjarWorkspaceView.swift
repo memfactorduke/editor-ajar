@@ -367,6 +367,10 @@ private struct TimelineView: View {
             }
             .keyboardShortcut(.delete, modifiers: [.command])
             .disabled(model.selectedMarker == nil)
+            TimelineToolButton(title: "Detach Audio", systemImage: "speaker.slash.fill") {
+                model.detachAudioForSelectedClip()
+            }
+            .disabled(!model.selectedClipIsLinked)
             TimelineToolButton(title: "Zoom Timeline Out", systemImage: "minus.magnifyingglass") {
                 model.zoomTimelineOut()
             }

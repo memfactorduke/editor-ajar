@@ -104,6 +104,21 @@ public enum ClipSource: Codable, Equatable, Sendable {
     case sequence(id: UUID)
 }
 
+/// Stable reference to a clip on a specific timeline track.
+public struct ClipReference: Codable, Equatable, Hashable, Sendable {
+    /// Track containing the clip.
+    public let trackID: UUID
+
+    /// Referenced clip ID.
+    public let clipID: UUID
+
+    /// Creates a clip reference.
+    public init(trackID: UUID, clipID: UUID) {
+        self.trackID = trackID
+        self.clipID = clipID
+    }
+}
+
 /// A media or future compound clip placed on a timeline.
 public struct Clip: Codable, Equatable, Sendable {
     /// Stable clip ID.
@@ -124,6 +139,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Human-readable clip name.
     public let name: String
 
+    /// Optional linked A/V group shared by clips that should edit together.
+    public let linkGroupID: UUID?
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -131,7 +149,8 @@ public struct Clip: Codable, Equatable, Sendable {
         sourceRange: TimeRange,
         timelineRange: TimeRange,
         kind: TrackKind,
-        name: String
+        name: String,
+        linkGroupID: UUID? = nil
     ) {
         self.id = id
         self.source = source
@@ -139,6 +158,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.timelineRange = timelineRange
         self.kind = kind
         self.name = name
+        self.linkGroupID = linkGroupID
     }
 }
 

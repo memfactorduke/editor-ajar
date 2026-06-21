@@ -138,6 +138,26 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectedClips.count
     }
 
+    var selectedClipReference: TimelineClipReference? {
+        guard timelineState.selectedClips.count == 1 else {
+            return nil
+        }
+        return timelineState.selectedClips.first
+    }
+
+    var selectedClip: Clip? {
+        guard let selectedClipReference,
+              let sequence = activeSequence
+        else {
+            return nil
+        }
+        return Self.clip(selectedClipReference, in: sequence)
+    }
+
+    var selectedClipIsLinked: Bool {
+        selectedClip?.linkGroupID != nil
+    }
+
     var selectedMarker: Marker? {
         guard let selectedMarkerID = timelineState.selectedMarkerID else {
             return nil
@@ -370,6 +390,83 @@ final class EditorAjarAppModel: ObservableObject {
         }
     }
 
+    @discardableResult
+    func detachAudioForSelectedClip() -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let linkGroupID = selectedClip?.linkGroupID
+        else {
+            return false
+        }
+
+        return applyEdit(.unlinkClips(sequenceID: sequenceID, linkGroupID: linkGroupID))
+    }
+
+    @discardableResult
+    func moveSelectedClip(
+        toStartFrame startFrame: Int64,
+        linkedClipEditMode: LinkedClipEditMode = .linked
+    ) -> Bool {
+        guard let sequence = activeSequence,
+              let selectedClipReference,
+              let selectedClip,
+              let start = try? RationalTime.atFrame(startFrame, frameRate: sequence.timebase),
+              let timelineRange = try? TimeRange(
+                start: start,
+                duration: selectedClip.timelineRange.duration
+              )
+        else {
+            return false
+        }
+
+        return applyEdit(
+            .moveClip(
+                sequenceID: sequence.id,
+                sourceTrackID: selectedClipReference.trackID,
+                clipID: selectedClipReference.clipID,
+                destinationTrackID: selectedClipReference.trackID,
+                timelineRange: timelineRange,
+                linkedClipEditMode: linkedClipEditMode
+            )
+        )
+    }
+
+    @discardableResult
+    func trimSelectedClip(
+        sourceStartFrame: Int64,
+        timelineStartFrame: Int64,
+        durationFrames: Int64,
+        linkedClipEditMode: LinkedClipEditMode = .linked
+    ) -> Bool {
+        guard durationFrames > 0,
+              let sequence = activeSequence,
+              let selectedClipReference,
+              let sourceStart = try? RationalTime.atFrame(
+                sourceStartFrame,
+                frameRate: sequence.timebase
+              ),
+              let timelineStart = try? RationalTime.atFrame(
+                timelineStartFrame,
+                frameRate: sequence.timebase
+              ),
+              let duration = try? sequence.timebase.duration(ofFrames: durationFrames),
+              let sourceRange = try? TimeRange(start: sourceStart, duration: duration),
+              let timelineRange = try? TimeRange(start: timelineStart, duration: duration)
+        else {
+            return false
+        }
+
+        return applyEdit(
+            .trimClip(
+                sequenceID: sequence.id,
+                trackID: selectedClipReference.trackID,
+                clipID: selectedClipReference.clipID,
+                sourceRange: sourceRange,
+                timelineRange: timelineRange,
+                linkedClipEditMode: linkedClipEditMode
+            )
+        )
+    }
+
     func jumpToNextMarker() {
         guard let sequence = activeSequence,
               let currentTime = try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase),
@@ -585,6 +682,20 @@ final class EditorAjarAppModel: ObservableObject {
             }
         }
         return max(1, lastFrame)
+    }
+
+    private static func clip(_ reference: TimelineClipReference, in sequence: Sequence) -> Clip? {
+        for track in sequence.videoTracks + sequence.audioTracks {
+            guard track.id == reference.trackID else {
+                continue
+            }
+            for item in track.items {
+                if case .clip(let clip) = item, clip.id == reference.clipID {
+                    return clip
+                }
+            }
+        }
+        return nil
     }
 
     @discardableResult

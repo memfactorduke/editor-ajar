@@ -211,6 +211,7 @@ private func makeValidCommandCases(seed: Int) throws -> [EditCommandCase] {
     let addClip = try makeEditClip(id: addClipID, mediaID: fixture.mediaID, startFrame: 20)
 
     return try makeClipCommandCases(fixture: fixture, addClip: addClip, seed: seed)
+        + makeLinkedClipCommandCases(seed: seed)
         + makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID)
         + makeMarkerCommandCases(fixture: fixture, seed: seed)
         + makeProjectCommandCases(fixture: fixture, seed: seed)
