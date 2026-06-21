@@ -21,6 +21,28 @@ struct EditorAjarApp: App {
         }
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandMenu("Markers") {
+                Button("Add Marker") {
+                    model.addTimelineMarkerAtPlayhead()
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+
+                Button("Previous Marker") {
+                    model.jumpToPreviousMarker()
+                }
+                .keyboardShortcut("[", modifiers: [.command])
+
+                Button("Next Marker") {
+                    model.jumpToNextMarker()
+                }
+                .keyboardShortcut("]", modifiers: [.command])
+
+                Button("Delete Marker") {
+                    model.deleteSelectedMarker()
+                }
+                .keyboardShortcut(.delete, modifiers: [.command])
+                .disabled(model.selectedMarker == nil)
+            }
         }
     }
 }

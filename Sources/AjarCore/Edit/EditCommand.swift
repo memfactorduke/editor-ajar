@@ -157,6 +157,15 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Renames a sequence.
     case renameSequence(sequenceID: UUID, name: String)
 
+    /// Adds a marker to a sequence.
+    case addMarker(sequenceID: UUID, marker: Marker)
+
+    /// Removes a marker from a sequence.
+    case removeMarker(sequenceID: UUID, markerID: UUID)
+
+    /// Updates an existing marker.
+    case updateMarker(sequenceID: UUID, marker: Marker)
+
     /// Replaces project-wide settings.
     case setProjectSettings(ProjectSettings)
 }
@@ -172,8 +181,14 @@ public enum EditReducerError: Error, Equatable, Sendable {
     /// The command references a missing clip.
     case clipNotFound(sequenceID: UUID, trackID: UUID, clipID: UUID)
 
+    /// The command references a missing marker.
+    case markerNotFound(sequenceID: UUID, markerID: UUID)
+
     /// The command would create duplicate track IDs inside a sequence.
     case duplicateTrackID(sequenceID: UUID, trackID: UUID)
+
+    /// The command would create duplicate marker IDs inside a sequence.
+    case duplicateMarkerID(sequenceID: UUID, markerID: UUID)
 
     /// The command's requested edit is not valid for the current timeline state.
     case invalidEdit(EditCommandValidationError)
@@ -239,6 +254,12 @@ extension EditReducer {
             return try removeTrack(trackID: trackID, sequenceID: sequenceID, from: project)
         case .renameSequence(let sequenceID, let name):
             return try renameSequence(sequenceID: sequenceID, name: name, in: project)
+        case .addMarker(let sequenceID, let marker):
+            return try addMarker(marker, sequenceID: sequenceID, to: project)
+        case .removeMarker(let sequenceID, let markerID):
+            return try removeMarker(markerID: markerID, sequenceID: sequenceID, from: project)
+        case .updateMarker(let sequenceID, let marker):
+            return try updateMarker(marker, sequenceID: sequenceID, in: project)
         case .setProjectSettings(let settings):
             return Project(
                 schemaVersion: project.schemaVersion,

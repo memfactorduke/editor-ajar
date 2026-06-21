@@ -47,6 +47,45 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(mediaManifest.media, project.mediaPool)
         XCTAssertEqual(mediaManifest.schemaVersion, AjarProjectCodec.currentSchemaVersion)
     }
+
+    func testFRTL008MarkerFieldsRoundTripThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 120)
+        let package = try AjarProjectCodec.encode(project)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let marker = try XCTUnwrap(loadedProject.sequences.first?.markers.first)
+
+        XCTAssertEqual(marker.color, .orange)
+        XCTAssertEqual(marker.note, "FR-TL-008 marker note")
+        XCTAssertEqual(
+            marker.anchor,
+            .clip(
+                trackID: try codecUUID(120_004),
+                clipID: try codecUUID(120_006)
+            )
+        )
+    }
+
+    func testFRTL008LegacyMarkerFieldsDefaultWhenMissingFromProjectCodec() throws {
+        let project = try makeCodecProject(seed: 130)
+        let package = try AjarProjectCodec.encode(project)
+        let legacyProjectJSON = try projectJSONWithoutMarkerDetailFields(package.projectJSON)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let marker = try XCTUnwrap(loadedProject.sequences.first?.markers.first)
+
+        XCTAssertEqual(marker.color, .blue)
+        XCTAssertEqual(marker.note, "")
+        XCTAssertEqual(marker.anchor, .timeline)
+    }
 }
 
 final class AjarProjectCodecVersioningTests: XCTestCase {
@@ -186,25 +225,47 @@ private func mutatingOneByte(_ data: Data) -> Data {
     return copy
 }
 
+private func projectJSONWithoutMarkerDetailFields(_ projectJSON: Data) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var markers = try XCTUnwrap(sequence["markers"] as? [[String: Any]])
+    var marker = try XCTUnwrap(markers.first)
+
+    marker.removeValue(forKey: "color")
+    marker.removeValue(forKey: "note")
+    marker.removeValue(forKey: "anchor")
+    markers[0] = marker
+    sequence["markers"] = markers
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
 private func makeCodecProject(seed: Int, schemaVersion: Int = 1) throws -> Project {
     let firstMediaID = try codecUUID(seed * 1_000 + 1)
     let secondMediaID = try codecUUID(seed * 1_000 + 2)
     let sequenceID = try codecUUID(seed * 1_000 + 3)
     let videoTrackID = try codecUUID(seed * 1_000 + 4)
     let audioTrackID = try codecUUID(seed * 1_000 + 5)
+    let firstClipID = try codecUUID(seed * 1_000 + 6)
+    let secondClipID = try codecUUID(seed * 1_000 + 7)
     var mediaPool: [MediaRef] = []
     mediaPool.append(try makeCodecMediaRef(id: firstMediaID, seed: seed))
     mediaPool.append(try makeCodecMediaRef(id: secondMediaID, seed: seed + 1))
     let firstClip = TimelineItem.clip(
         try makeCodecClip(
-            id: try codecUUID(seed * 1_000 + 6),
+            id: firstClipID,
             mediaID: firstMediaID,
             startFrame: 0
         )
     )
     let secondClip = TimelineItem.clip(
         try makeCodecClip(
-            id: try codecUUID(seed * 1_000 + 7),
+            id: secondClipID,
             mediaID: secondMediaID,
             startFrame: 12
         )
@@ -218,7 +279,10 @@ private func makeCodecProject(seed: Int, schemaVersion: Int = 1) throws -> Proje
     let marker = Marker(
         id: try codecUUID(seed * 1_000 + 8),
         time: try codecTime(4),
-        name: "FR-PROJ marker"
+        name: "FR-PROJ marker",
+        color: .orange,
+        note: "FR-TL-008 marker note",
+        anchor: .clip(trackID: videoTrackID, clipID: firstClipID)
     )
     let sequence = Sequence(
         id: sequenceID,

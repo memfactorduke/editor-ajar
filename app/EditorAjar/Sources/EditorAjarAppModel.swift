@@ -138,6 +138,13 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectedClips.count
     }
 
+    var selectedMarker: Marker? {
+        guard let selectedMarkerID = timelineState.selectedMarkerID else {
+            return nil
+        }
+        return activeSequence?.markers.first { $0.id == selectedMarkerID }
+    }
+
     var timelineRangeDescription: String {
         switch (timelineState.selectionInFrame, timelineState.selectionOutFrame) {
         case (.some(let inFrame), .some(let outFrame)):
@@ -231,6 +238,30 @@ final class EditorAjarAppModel: ObservableObject {
         )
     }
 
+    func timelineMarkerLayouts() -> [TimelineMarkerLayout] {
+        guard let sequence = activeSequence else {
+            return []
+        }
+
+        return sequence.markers.compactMap { marker in
+            guard let frame = try? marker.time.frameIndex(
+                at: sequence.timebase,
+                rounding: .nearestOrAwayFromZero
+            ) else {
+                return nil
+            }
+
+            return TimelineMarkerLayout(
+                markerID: marker.id,
+                name: marker.name,
+                note: marker.note,
+                color: marker.color,
+                frame: frame,
+                xPosition: timelineXPosition(for: frame)
+            )
+        }
+    }
+
     func timelineXPosition(for frame: Int64) -> Double {
         TimelineInteraction.xPosition(frame: frame, pixelsPerFrame: timelineState.pixelsPerFrame)
     }
@@ -253,6 +284,7 @@ final class EditorAjarAppModel: ObservableObject {
         )
         timelineState.selectedClips = result.selectedClips
         timelineState.selectionAnchor = result.anchor
+        timelineState.selectedMarkerID = nil
     }
 
     func selectAllClips(on trackID: UUID) {
@@ -263,6 +295,101 @@ final class EditorAjarAppModel: ObservableObject {
             .filter { $0.trackID == trackID }
         timelineState.selectedClips = Set(selectedClips)
         timelineState.selectionAnchor = selectedClips.first
+        timelineState.selectedMarkerID = nil
+    }
+
+    func isMarkerSelected(_ markerID: UUID) -> Bool {
+        timelineState.selectedMarkerID == markerID
+    }
+
+    func selectMarker(_ markerID: UUID) {
+        guard activeSequence?.markers.contains(where: { $0.id == markerID }) == true else {
+            return
+        }
+
+        timelineState.selectedMarkerID = markerID
+        timelineState.selectedClips = []
+        timelineState.selectionAnchor = nil
+    }
+
+    func addTimelineMarkerAtPlayhead() {
+        guard let sequence = activeSequence,
+              let markerTime = try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)
+        else {
+            return
+        }
+
+        let marker = Marker(
+            id: UUID(),
+            time: markerTime,
+            name: "Marker \(sequence.markers.count + 1)",
+            color: .blue,
+            note: "",
+            anchor: .timeline
+        )
+
+        if applyEdit(.addMarker(sequenceID: sequence.id, marker: marker)) {
+            selectMarker(marker.id)
+        }
+    }
+
+    func deleteSelectedMarker() {
+        guard let sequenceID = activeSequence?.id,
+              let markerID = timelineState.selectedMarkerID
+        else {
+            return
+        }
+
+        if applyEdit(.removeMarker(sequenceID: sequenceID, markerID: markerID)) {
+            timelineState.selectedMarkerID = nil
+        }
+    }
+
+    func updateSelectedMarker(
+        name: String? = nil,
+        color: MarkerColor? = nil,
+        note: String? = nil
+    ) {
+        guard let sequence = activeSequence,
+              let selectedMarker
+        else {
+            return
+        }
+
+        let marker = Marker(
+            id: selectedMarker.id,
+            time: selectedMarker.time,
+            name: name ?? selectedMarker.name,
+            color: color ?? selectedMarker.color,
+            note: note ?? selectedMarker.note,
+            anchor: selectedMarker.anchor
+        )
+
+        if applyEdit(.updateMarker(sequenceID: sequence.id, marker: marker)) {
+            timelineState.selectedMarkerID = marker.id
+        }
+    }
+
+    func jumpToNextMarker() {
+        guard let sequence = activeSequence,
+              let currentTime = try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase),
+              let marker = MarkerNavigation.nextMarker(in: sequence, after: currentTime)
+        else {
+            return
+        }
+
+        jump(to: marker, in: sequence)
+    }
+
+    func jumpToPreviousMarker() {
+        guard let sequence = activeSequence,
+              let currentTime = try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase),
+              let marker = MarkerNavigation.previousMarker(in: sequence, before: currentTime)
+        else {
+            return
+        }
+
+        jump(to: marker, in: sequence)
     }
 
     func setTimelineRangeIn() {
@@ -460,9 +587,10 @@ final class EditorAjarAppModel: ObservableObject {
         return max(1, lastFrame)
     }
 
-    private func applyEdit(_ command: EditCommand) {
+    @discardableResult
+    private func applyEdit(_ command: EditCommand) -> Bool {
         guard var history = editHistory else {
-            return
+            return false
         }
 
         do {
@@ -470,9 +598,23 @@ final class EditorAjarAppModel: ObservableObject {
             editHistory = history
             updateProject(project)
             scheduleAutosave(command: command, project: project)
+            return true
         } catch {
             loadMessage = "Edit failed: \(error)"
+            return false
         }
+    }
+
+    private func jump(to marker: Marker, in sequence: Sequence) {
+        guard let frame = try? marker.time.frameIndex(
+            at: sequence.timebase,
+            rounding: .nearestOrAwayFromZero
+        ) else {
+            return
+        }
+
+        scrub(to: frame)
+        selectMarker(marker.id)
     }
 
     private func updateProject(_ project: Project) {
@@ -481,11 +623,17 @@ final class EditorAjarAppModel: ObservableObject {
         let availableClipIDs = Set(
             project.sequences.first.map(TimelineInteraction.clipReferences(in:)) ?? []
         )
+        let availableMarkerIDs = Set(project.sequences.first?.markers.map(\.id) ?? [])
         timelineState.selectedClips = timelineState.selectedClips.intersection(availableClipIDs)
         if let anchor = timelineState.selectionAnchor,
            !availableClipIDs.contains(anchor)
         {
             timelineState.selectionAnchor = timelineState.selectedClips.first
+        }
+        if let selectedMarkerID = timelineState.selectedMarkerID,
+           !availableMarkerIDs.contains(selectedMarkerID)
+        {
+            timelineState.selectedMarkerID = nil
         }
         requestRenderForCurrentFrame()
     }
@@ -632,6 +780,7 @@ struct TimelineInteractionState: Equatable, Sendable {
     var snapToleranceFrames: Int64
     var selectedClips: Set<TimelineClipReference>
     var selectionAnchor: TimelineClipReference?
+    var selectedMarkerID: UUID?
     var selectionInFrame: Int64?
     var selectionOutFrame: Int64?
 
@@ -642,6 +791,7 @@ struct TimelineInteractionState: Equatable, Sendable {
         snapToleranceFrames: Int64 = 2,
         selectedClips: Set<TimelineClipReference> = [],
         selectionAnchor: TimelineClipReference? = nil,
+        selectedMarkerID: UUID? = nil,
         selectionInFrame: Int64? = nil,
         selectionOutFrame: Int64? = nil
     ) {
@@ -651,6 +801,7 @@ struct TimelineInteractionState: Equatable, Sendable {
         self.snapToleranceFrames = snapToleranceFrames
         self.selectedClips = selectedClips
         self.selectionAnchor = selectionAnchor
+        self.selectedMarkerID = selectedMarkerID
         self.selectionInFrame = selectionInFrame
         self.selectionOutFrame = selectionOutFrame
     }
@@ -672,6 +823,15 @@ struct TimelineClipLayout: Equatable, Sendable {
     var durationFrames: Int64 {
         max(0, endFrame - startFrame)
     }
+}
+
+struct TimelineMarkerLayout: Equatable, Sendable {
+    let markerID: UUID
+    let name: String
+    let note: String
+    let color: MarkerColor
+    let frame: Int64
+    let xPosition: Double
 }
 
 enum TimelineSelectionMode: Equatable, Sendable {

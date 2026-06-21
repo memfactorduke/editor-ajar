@@ -191,12 +191,100 @@ private struct InspectorPanel: View {
             DetailRow(label: "Sequence", value: model.activeSequenceName)
             DetailRow(label: "Frame Rate", value: model.frameRateDescription)
             DetailRow(label: "State", value: model.isPlaying ? "Playing" : "Paused")
+            Divider()
+            if let marker = model.selectedMarker {
+                MarkerInspector(marker: marker, model: model)
+            } else {
+                DetailRow(label: "Marker", value: "None selected")
+            }
             Spacer()
         }
         .padding(14)
         .background(Color(red: 0.13, green: 0.13, blue: 0.14))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Inspector panel")
+    }
+}
+
+private struct MarkerInspector: View {
+    let marker: Marker
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Marker", systemImage: "flag.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(marker.color.swatchColor)
+                Spacer()
+                Button(role: .destructive, action: model.deleteSelectedMarker) {
+                    Label("Delete Marker", systemImage: "trash")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .help("Delete Marker")
+                .accessibilityLabel("Delete Marker")
+            }
+
+            TextField(
+                "Marker Name",
+                text: Binding(
+                    get: { model.selectedMarker?.name ?? "" },
+                    set: { model.updateSelectedMarker(name: $0) }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+            .accessibilityLabel("Marker Name")
+
+            Picker(
+                "Marker Color",
+                selection: Binding(
+                    get: { model.selectedMarker?.color ?? .blue },
+                    set: { model.updateSelectedMarker(color: $0) }
+                )
+            ) {
+                ForEach(MarkerColor.allCases, id: \.self) { color in
+                    HStack {
+                        Circle()
+                            .fill(color.swatchColor)
+                            .frame(width: 10, height: 10)
+                        Text(color.displayName)
+                    }
+                    .tag(color)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityLabel("Marker Color")
+
+            TextEditor(
+                text: Binding(
+                    get: { model.selectedMarker?.note ?? "" },
+                    set: { model.updateSelectedMarker(note: $0) }
+                )
+            )
+            .frame(minHeight: 70)
+            .scrollContentBackground(.hidden)
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 4))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            )
+            .accessibilityLabel("Marker Note")
+
+            DetailRow(label: "Position", value: "Frame \(markerFrameDescription(marker))")
+        }
+    }
+
+    private func markerFrameDescription(_ marker: Marker) -> String {
+        guard let sequence = model.activeSequence,
+              let frame = try? marker.time.frameIndex(
+                at: sequence.timebase,
+                rounding: .nearestOrAwayFromZero
+              )
+        else {
+            return "--"
+        }
+        return "\(frame)"
     }
 }
 
@@ -262,6 +350,23 @@ private struct TimelineView: View {
         HStack(spacing: 8) {
             PanelTitle("Timeline")
             Spacer()
+            TimelineToolButton(title: "Add Marker", systemImage: "flag.fill") {
+                model.addTimelineMarkerAtPlayhead()
+            }
+            .keyboardShortcut("m", modifiers: [.command, .shift])
+            TimelineToolButton(title: "Previous Marker", systemImage: "arrow.left.to.line") {
+                model.jumpToPreviousMarker()
+            }
+            .keyboardShortcut("[", modifiers: [.command])
+            TimelineToolButton(title: "Next Marker", systemImage: "arrow.right.to.line") {
+                model.jumpToNextMarker()
+            }
+            .keyboardShortcut("]", modifiers: [.command])
+            TimelineToolButton(title: "Delete Marker", systemImage: "trash") {
+                model.deleteSelectedMarker()
+            }
+            .keyboardShortcut(.delete, modifiers: [.command])
+            .disabled(model.selectedMarker == nil)
             TimelineToolButton(title: "Zoom Timeline Out", systemImage: "minus.magnifyingglass") {
                 model.zoomTimelineOut()
             }
@@ -357,6 +462,18 @@ private struct TimelineRuler: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .offset(x: TimelineLayoutMetrics.trackContentLeadingOffset + 8)
+            ForEach(model.timelineMarkerLayouts(), id: \.markerID) { layout in
+                TimelineMarkerButton(
+                    layout: layout,
+                    isSelected: model.isMarkerSelected(layout.markerID)
+                ) {
+                    model.selectMarker(layout.markerID)
+                }
+                .offset(
+                    x: TimelineLayoutMetrics.trackContentLeadingOffset
+                        + max(0, layout.xPosition - 9)
+                )
+            }
             Rectangle()
                 .fill(Color.accentColor)
                 .frame(width: 2)
@@ -385,6 +502,39 @@ private struct TimelineRuler: View {
     }
 }
 
+private struct TimelineMarkerButton: View {
+    let layout: TimelineMarkerLayout
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "flag.fill")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(layout.color.swatchColor)
+                .frame(width: 18, height: 22)
+                .background(
+                    Color.black.opacity(isSelected ? 0.75 : 0.45),
+                    in: RoundedRectangle(cornerRadius: 4)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(isSelected ? Color.white : Color.white.opacity(0.24), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("\(layout.name), frame \(layout.frame)")
+        .accessibilityLabel("Marker \(layout.name)")
+        .accessibilityValue(accessibilityValue)
+        .accessibilityIdentifier("Timeline marker \(layout.markerID.uuidString)")
+    }
+
+    private var accessibilityValue: String {
+        let note = layout.note.isEmpty ? "No note" : layout.note
+        return "\(isSelected ? "Selected" : "Not selected"), \(layout.color.displayName), frame \(layout.frame), \(note)"
+    }
+}
+
 private struct TimelineToolButton: View {
     let title: String
     let systemImage: String
@@ -399,6 +549,46 @@ private struct TimelineToolButton: View {
         .frame(width: 28, height: 24)
         .help(title)
         .accessibilityLabel(title)
+    }
+}
+
+private extension MarkerColor {
+    var displayName: String {
+        switch self {
+        case .gray:
+            return "Gray"
+        case .red:
+            return "Red"
+        case .orange:
+            return "Orange"
+        case .yellow:
+            return "Yellow"
+        case .green:
+            return "Green"
+        case .blue:
+            return "Blue"
+        case .purple:
+            return "Purple"
+        }
+    }
+
+    var swatchColor: Color {
+        switch self {
+        case .gray:
+            return Color(red: 0.62, green: 0.64, blue: 0.68)
+        case .red:
+            return Color(red: 0.95, green: 0.25, blue: 0.25)
+        case .orange:
+            return Color(red: 0.95, green: 0.55, blue: 0.18)
+        case .yellow:
+            return Color(red: 0.95, green: 0.78, blue: 0.22)
+        case .green:
+            return Color(red: 0.28, green: 0.78, blue: 0.42)
+        case .blue:
+            return Color(red: 0.35, green: 0.62, blue: 0.95)
+        case .purple:
+            return Color(red: 0.70, green: 0.48, blue: 0.95)
+        }
     }
 }
 
