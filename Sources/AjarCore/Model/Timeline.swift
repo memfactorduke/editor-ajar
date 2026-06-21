@@ -142,6 +142,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Optional linked A/V group shared by clips that should edit together.
     public let linkGroupID: UUID?
 
+    /// Per-clip visual transform. Audio clips keep identity unless future audio tooling needs it.
+    public let transform: ClipTransform
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -150,7 +153,8 @@ public struct Clip: Codable, Equatable, Sendable {
         timelineRange: TimeRange,
         kind: TrackKind,
         name: String,
-        linkGroupID: UUID? = nil
+        linkGroupID: UUID? = nil,
+        transform: ClipTransform = .identity
     ) {
         self.id = id
         self.source = source
@@ -159,6 +163,45 @@ public struct Clip: Codable, Equatable, Sendable {
         self.kind = kind
         self.name = name
         self.linkGroupID = linkGroupID
+        self.transform = transform
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case source
+        case sourceRange
+        case timelineRange
+        case kind
+        case name
+        case linkGroupID
+        case transform
+    }
+
+    /// Decodes clips from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        source = try container.decode(ClipSource.self, forKey: .source)
+        sourceRange = try container.decode(TimeRange.self, forKey: .sourceRange)
+        timelineRange = try container.decode(TimeRange.self, forKey: .timelineRange)
+        kind = try container.decode(TrackKind.self, forKey: .kind)
+        name = try container.decode(String.self, forKey: .name)
+        linkGroupID = try container.decodeIfPresent(UUID.self, forKey: .linkGroupID)
+        transform = try container.decodeIfPresent(ClipTransform.self, forKey: .transform)
+            ?? .identity
+    }
+
+    /// Encodes the complete clip payload.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(source, forKey: .source)
+        try container.encode(sourceRange, forKey: .sourceRange)
+        try container.encode(timelineRange, forKey: .timelineRange)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(linkGroupID, forKey: .linkGroupID)
+        try container.encode(transform, forKey: .transform)
     }
 }
 

@@ -45,7 +45,7 @@ func makeEditFixture(seed: Int) throws -> EditFixture {
         timebase: try FrameRate(frames: 24)
     )
     let project = Project(
-        schemaVersion: 1,
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
         settings: try makeEditSettings(),
         mediaPool: [media],
         sequences: [sequence]
@@ -96,7 +96,7 @@ func makeLinkedEditFixture(seed: Int, linked: Bool = true) throws -> LinkedEditF
         timebase: try FrameRate(frames: 24)
     )
     let project = Project(
-        schemaVersion: 1,
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
         settings: try makeEditSettings(),
         mediaPool: [media],
         sequences: [sequence]
@@ -149,7 +149,8 @@ func makeEditClip(
     startFrame: Int64,
     durationFrames: Int64 = 10,
     kind: TrackKind = .video,
-    linkGroupID: UUID? = nil
+    linkGroupID: UUID? = nil,
+    transform: ClipTransform = .identity
 ) throws -> Clip {
     Clip(
         id: id,
@@ -158,7 +159,8 @@ func makeEditClip(
         timelineRange: try editRange(startFrame: startFrame, durationFrames: durationFrames),
         kind: kind,
         name: "Clip \(id.uuidString)",
-        linkGroupID: linkGroupID
+        linkGroupID: linkGroupID,
+        transform: transform
     )
 }
 

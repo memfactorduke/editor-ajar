@@ -162,6 +162,14 @@ public enum EditCommand: Codable, Equatable, Sendable {
         linkedClipEditMode: LinkedClipEditMode = .linked
     )
 
+    /// Replaces a clip's visual transform.
+    case setClipTransform(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        transform: ClipTransform
+    )
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 
@@ -270,6 +278,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A clip is already assigned to a different link group.
     case clipAlreadyLinked(clipID: UUID, linkGroupID: UUID)
+
+    /// A clip transform failed semantic validation.
+    case invalidClipTransform(clipID: UUID, error: ClipTransformValidationError)
 }
 
 /// Pure reducer entry point required by ADR-0008.
@@ -323,6 +334,8 @@ public extension EditCommand {
             return "Move Clip"
         case .trimClip:
             return "Trim Clip"
+        case .setClipTransform:
+            return "Set Clip Transform"
         case .addTrack:
             return "Add Track"
         case .removeTrack:
@@ -358,7 +371,7 @@ extension EditReducer {
         case .addClip, .insertClip, .overwriteClip, .appendClip,
             .removeClip, .replaceClipSource, .threePointEdit, .bladeClip,
             .rippleTrimClip, .rollEdit, .slipClip, .slideClip, .rippleDeleteClip,
-            .liftClip, .moveClip, .trimClip:
+            .liftClip, .moveClip, .trimClip, .setClipTransform:
             return try applyClipCommand(command, to: project)
         case .setTrackState(let sequenceID, let trackID, let state):
             return try setTrackState(

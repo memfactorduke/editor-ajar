@@ -452,7 +452,8 @@ extension EditReducer {
         sourceRange: TimeRange? = nil,
         timelineRange: TimeRange? = nil,
         name: String? = nil,
-        linkGroupID: UUID?? = nil
+        linkGroupID: UUID?? = nil,
+        transform: ClipTransform? = nil
     ) -> Clip {
         Clip(
             id: clip.id,
@@ -461,7 +462,8 @@ extension EditReducer {
             timelineRange: timelineRange ?? clip.timelineRange,
             kind: clip.kind,
             name: name ?? clip.name,
-            linkGroupID: linkGroupID ?? clip.linkGroupID
+            linkGroupID: linkGroupID ?? clip.linkGroupID,
+            transform: transform ?? clip.transform
         )
     }
 }

@@ -41,6 +41,16 @@ extension EditReducer {
             return try applyTrimClipCommand(command, to: project)
         case .moveClip, .trimClip:
             return try applyRangeClipCommand(command, to: project)
+        case .setClipTransform(let sequenceID, let trackID, let clipID, let transform):
+            return try setClipTransform(
+                SetClipTransformEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    transform: transform
+                ),
+                in: project
+            )
         case .addClip(let sequenceID, let trackID, let clip):
             return try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
         case .removeClip(let sequenceID, let trackID, let clipID):
