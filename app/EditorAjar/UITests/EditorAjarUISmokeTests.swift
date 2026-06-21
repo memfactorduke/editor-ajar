@@ -68,15 +68,20 @@ final class EditorAjarUISmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["Mute Audio track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Solo Audio track 1"].waitForExistence(timeout: 5))
 
-        app.buttons["Clip Sample Playback Clip"].click()
-        let positionXField = app.textFields["Transform Position X"]
+        app.buttons["Select all Video track 1"].click()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Transform Inspector"]
+                .waitForExistence(timeout: 5)
+        )
+        let positionXField = app.descendants(matching: .any)["Transform Position X"]
         XCTAssertTrue(positionXField.waitForExistence(timeout: 5))
         positionXField.click()
         positionXField.typeKey("a", modifierFlags: [.command])
         positionXField.typeText("8")
         app.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.buttons["Transform Position Keyframe Toggle"].waitForExistence(timeout: 5))
-        app.buttons["Transform Position Keyframe Toggle"].click()
+        let positionKeyframeToggle = app.descendants(matching: .any)["Transform Position Keyframe Toggle"]
+        XCTAssertTrue(positionKeyframeToggle.waitForExistence(timeout: 5))
+        positionKeyframeToggle.click()
         XCTAssertTrue(
             app.descendants(matching: .any)["Transform keyframe lanes"]
                 .waitForExistence(timeout: 5)
