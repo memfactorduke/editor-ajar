@@ -32,11 +32,25 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
     /// Static transform to apply while compositing the source.
     public let transform: ClipTransform
 
+    /// Clip effects to apply while compositing the source.
+    public let effects: ClipEffects
+
     /// Creates a composite input.
-    public init(sourceNodeID: RenderNodeID, transform: ClipTransform) {
+    public init(
+        sourceNodeID: RenderNodeID,
+        transform: ClipTransform,
+        effects: ClipEffects = .none
+    ) {
         self.sourceNodeID = sourceNodeID
         self.transform = transform
+        self.effects = effects
     }
+}
+
+struct RenderCompositeNodeInput {
+    let node: RenderNode
+    let transform: ClipTransform
+    let effects: ClipEffects
 }
 
 /// Resolved media source parameters for a source render node.
@@ -157,10 +171,13 @@ enum RenderNodeFactory {
         )
     }
 
-    static func makeCompositeNode(inputs: [(node: RenderNode, transform: ClipTransform)]) throws
-        -> RenderNode {
+    static func makeCompositeNode(inputs: [RenderCompositeNodeInput]) throws -> RenderNode {
         let compositeInputs = inputs.map { input in
-            RenderCompositeInput(sourceNodeID: input.node.id, transform: input.transform)
+            RenderCompositeInput(
+                sourceNodeID: input.node.id,
+                transform: input.transform,
+                effects: input.effects
+            )
         }
         return try makeNode(
             id: RenderNodeID(rawValue: "composite:output"),

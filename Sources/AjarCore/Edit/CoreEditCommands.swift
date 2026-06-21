@@ -42,7 +42,7 @@ extension EditReducer {
         case .moveClip, .trimClip:
             return try applyRangeClipCommand(command, to: project)
         case .setClipTransform, .addClipTransformKeyframe, .moveClipTransformKeyframe,
-            .deleteClipTransformKeyframe:
+            .deleteClipTransformKeyframe, .setClipChromaKey:
             return try applyTransformClipCommand(command, to: project)
         case .addClip(let sequenceID, let trackID, let clip):
             return try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
@@ -75,6 +75,16 @@ extension EditReducer {
             )
         case .addClipTransformKeyframe, .moveClipTransformKeyframe, .deleteClipTransformKeyframe:
             return try applyTransformKeyframeCommand(command, to: project)
+        case .setClipChromaKey(let sequenceID, let trackID, let clipID, let settings):
+            return try setClipChromaKey(
+                SetClipChromaKeyEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    settings: settings
+                ),
+                in: project
+            )
         default:
             throw EditReducerError.validationFailed([])
         }

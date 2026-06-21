@@ -97,9 +97,10 @@ public enum RenderGraphBuilder {
         in project: Project
     ) throws -> RenderGraph {
         let sourceInputs = try clips.map { clip in
-            (
+            RenderCompositeNodeInput(
                 node: try sourceNode(for: clip, at: time, in: project),
-                transform: clip.transformAnimation.value(at: time)
+                transform: clip.transformAnimation.value(at: time),
+                effects: clip.effects
             )
         }
         let compositeNode = try RenderNodeFactory.makeCompositeNode(inputs: sourceInputs)

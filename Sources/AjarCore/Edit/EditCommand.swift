@@ -2,48 +2,6 @@
 
 import Foundation
 
-/// Whether an edit should propagate through linked clip groups.
-public enum LinkedClipEditMode: String, Codable, Equatable, Sendable {
-    /// Apply the same compatible edit to linked partner clips.
-    case linked
-
-    /// Edit only the addressed clip, used by momentary unlink gestures.
-    case unlinked
-}
-
-/// Optional track-state fields changed by `EditCommand.setTrackState`.
-public struct TrackStatePatch: Codable, Equatable, Sendable {
-    /// Replacement enabled state, or `nil` to leave it unchanged.
-    public let enabled: Bool?
-
-    /// Replacement locked state, or `nil` to leave it unchanged.
-    public let locked: Bool?
-
-    /// Replacement muted state, or `nil` to leave it unchanged.
-    public let muted: Bool?
-
-    /// Replacement solo state, or `nil` to leave it unchanged.
-    public let solo: Bool?
-
-    /// Replacement hidden state, or `nil` to leave it unchanged.
-    public let hidden: Bool?
-
-    /// Creates a track-state patch.
-    public init(
-        enabled: Bool? = nil,
-        locked: Bool? = nil,
-        muted: Bool? = nil,
-        solo: Bool? = nil,
-        hidden: Bool? = nil
-    ) {
-        self.enabled = enabled
-        self.locked = locked
-        self.muted = muted
-        self.solo = solo
-        self.hidden = hidden
-    }
-}
-
 /// A deterministic edit operation applied to an immutable `Project`.
 public enum EditCommand: Codable, Equatable, Sendable {
     /// Adds a clip to an existing track.
@@ -198,6 +156,14 @@ public enum EditCommand: Codable, Equatable, Sendable {
         time: RationalTime
     )
 
+    /// Replaces a clip's chroma-key settings.
+    case setClipChromaKey(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        settings: ClipChromaKeySettings
+    )
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 
@@ -346,6 +312,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
         time: RationalTime,
         error: ClipTransformValidationError
     )
+
+    /// A clip effect failed semantic validation.
+    case invalidClipEffects(clipID: UUID, error: ClipEffectsValidationError)
 }
 
 /// Pure reducer entry point required by ADR-0008.
@@ -407,6 +376,8 @@ public extension EditCommand {
             return "Move Transform Keyframe"
         case .deleteClipTransformKeyframe:
             return "Delete Transform Keyframe"
+        case .setClipChromaKey:
+            return "Set Chroma Key"
         case .addTrack:
             return "Add Track"
         case .removeTrack:
@@ -444,7 +415,7 @@ extension EditReducer {
             .rippleTrimClip, .rollEdit, .slipClip, .slideClip, .rippleDeleteClip,
             .liftClip, .moveClip, .trimClip, .setClipTransform,
             .addClipTransformKeyframe, .moveClipTransformKeyframe,
-            .deleteClipTransformKeyframe:
+            .deleteClipTransformKeyframe, .setClipChromaKey:
             return try applyClipCommand(command, to: project)
         case .setTrackState(let sequenceID, let trackID, let state):
             return try setTrackState(
