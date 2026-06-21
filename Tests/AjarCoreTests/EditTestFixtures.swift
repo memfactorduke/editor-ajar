@@ -165,6 +165,29 @@ func replacingVideoItems(
     )
 }
 
+func replacingMarkers(
+    _ markers: [Marker],
+    in fixture: EditFixture
+) throws -> Project {
+    let project = fixture.project
+    let sequence = try XCTUnwrap(project.sequences.first { $0.id == fixture.sequenceID })
+    let replacementSequence = Sequence(
+        id: sequence.id,
+        name: sequence.name,
+        videoTracks: sequence.videoTracks,
+        audioTracks: sequence.audioTracks,
+        markers: markers,
+        timebase: sequence.timebase
+    )
+
+    return Project(
+        schemaVersion: project.schemaVersion,
+        settings: project.settings,
+        mediaPool: project.mediaPool,
+        sequences: project.sequences.map { $0.id == sequence.id ? replacementSequence : $0 }
+    )
+}
+
 func assertClipRange(
     _ clipID: UUID,
     in project: Project,
@@ -199,6 +222,15 @@ extension Array where Element == ProjectValidationError {
     var containsItemsOverlap: Bool {
         for error in self {
             if case .itemsOverlap = error {
+                return true
+            }
+        }
+        return false
+    }
+
+    var containsMissingMarkerClipReference: Bool {
+        for error in self {
+            if case .missingMarkerClipReference = error {
                 return true
             }
         }

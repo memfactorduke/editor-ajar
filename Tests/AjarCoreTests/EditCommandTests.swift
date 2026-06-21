@@ -183,6 +183,7 @@ final class EditReducerInvariantTests: XCTestCase {
             )
         }
     }
+
 }
 
 struct EditCommandCase {
@@ -211,6 +212,7 @@ private func makeValidCommandCases(seed: Int) throws -> [EditCommandCase] {
 
     return try makeClipCommandCases(fixture: fixture, addClip: addClip, seed: seed)
         + makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID)
+        + makeMarkerCommandCases(fixture: fixture, seed: seed)
         + makeProjectCommandCases(fixture: fixture, seed: seed)
 }
 

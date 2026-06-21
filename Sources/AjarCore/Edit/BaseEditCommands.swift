@@ -315,6 +315,15 @@ extension EditReducer {
         }
     }
 
+    static func sortedMarkers(_ markers: [Marker]) -> [Marker] {
+        markers.sorted { left, right in
+            if left.time == right.time {
+                return left.id.uuidString < right.id.uuidString
+            }
+            return left.time < right.time
+        }
+    }
+
     static func sortKey(for item: TimelineItem) -> String {
         switch item {
         case .clip(let clip):
@@ -360,14 +369,15 @@ extension EditReducer {
         _ sequence: Sequence,
         name: String? = nil,
         videoTracks: [Track]? = nil,
-        audioTracks: [Track]? = nil
+        audioTracks: [Track]? = nil,
+        markers: [Marker]? = nil
     ) -> Sequence {
         Sequence(
             id: sequence.id,
             name: name ?? sequence.name,
             videoTracks: videoTracks ?? sequence.videoTracks,
             audioTracks: audioTracks ?? sequence.audioTracks,
-            markers: sequence.markers,
+            markers: markers ?? sequence.markers,
             timebase: sequence.timebase
         )
     }

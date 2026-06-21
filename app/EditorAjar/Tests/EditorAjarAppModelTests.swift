@@ -250,6 +250,72 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(model.timelineSnappingEnabled)
     }
 
+    func testFRTL008AppMarkerActionsRouteThroughEditHistoryAndUndo() throws {
+        let model = EditorAjarAppModel()
+        let initialMarkerCount = model.activeSequence?.markers.count ?? 0
+
+        model.scrub(to: 12)
+        model.addTimelineMarkerAtPlayhead()
+
+        let addedMarker = try XCTUnwrap(model.selectedMarker)
+        XCTAssertEqual(model.activeSequence?.markers.count, initialMarkerCount + 1)
+        XCTAssertEqual(
+            try addedMarker.time.frameIndex(
+                at: try XCTUnwrap(model.activeSequence?.timebase),
+                rounding: .nearestOrAwayFromZero
+            ),
+            12
+        )
+        XCTAssertTrue(model.canUndo)
+
+        model.updateSelectedMarker(
+            name: "Scene beat",
+            color: .green,
+            note: "Check the cut before export"
+        )
+
+        let updatedMarker = try XCTUnwrap(model.selectedMarker)
+        XCTAssertEqual(updatedMarker.name, "Scene beat")
+        XCTAssertEqual(updatedMarker.color, .green)
+        XCTAssertEqual(updatedMarker.note, "Check the cut before export")
+        XCTAssertEqual(model.timelineMarkerLayouts().first?.name, "Scene beat")
+
+        model.deleteSelectedMarker()
+        XCTAssertNil(model.selectedMarker)
+        XCTAssertEqual(model.activeSequence?.markers.count, initialMarkerCount)
+
+        model.undo()
+        XCTAssertEqual(model.activeSequence?.markers.count, initialMarkerCount + 1)
+        XCTAssertEqual(model.activeSequence?.markers.first?.name, "Scene beat")
+    }
+
+    func testFRPLAY002AppJumpsBetweenMarkers() throws {
+        let model = EditorAjarAppModel()
+
+        model.scrub(to: 10)
+        model.addTimelineMarkerAtPlayhead()
+        let firstMarker = try XCTUnwrap(model.selectedMarker)
+        model.updateSelectedMarker(name: "First marker")
+
+        model.scrub(to: 24)
+        model.addTimelineMarkerAtPlayhead()
+        let secondMarker = try XCTUnwrap(model.selectedMarker)
+        model.updateSelectedMarker(name: "Second marker")
+
+        model.scrub(to: 0)
+        model.jumpToNextMarker()
+        XCTAssertEqual(model.playheadFrame, 10)
+        XCTAssertEqual(model.selectedMarker?.id, firstMarker.id)
+
+        model.jumpToNextMarker()
+        XCTAssertEqual(model.playheadFrame, 24)
+        XCTAssertEqual(model.selectedMarker?.id, secondMarker.id)
+
+        model.jumpToPreviousMarker()
+        XCTAssertEqual(model.playheadFrame, 10)
+        XCTAssertEqual(model.selectedMarker?.id, firstMarker.id)
+    }
+
     func testFRTL014NFRSTAB002AppLaunchRecoversAutosavePackage() throws {
         let packageURL = try temporaryAutosavePackageURL(named: "LaunchRecovery.ajar")
         defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }

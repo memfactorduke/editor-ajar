@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Named, colored, note-bearing timeline and clip markers with undoable reducer commands, pure
+  next/previous navigation, codec compatibility, and macOS timeline/inspector controls for
+  FR-TL-008 and FR-PLAY-002.
 - `AjarCore` auto-save snapshot, command journal, and best-effort recovery helpers with app
   launch/checkpoint wiring for FR-TL-014 and NFR-STAB-002.
 - Timeline zoom, selection, range, and snapping interaction state in the macOS app with pure
