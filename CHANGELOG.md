@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Timeline zoom, selection, range, and snapping interaction state in the macOS app with pure
+  helper tests for FR-TL-006/007/010.
 - Multi-track timeline lanes in the macOS app with reducer-backed track enable, lock, hide,
   mute, and solo toggles for FR-TL-001/002.
 - `AjarCore` track-state edit command and ordered multi-input render graph composition for

@@ -204,43 +204,116 @@ private struct TimelineView: View {
     @ObservedObject var model: EditorAjarAppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            PanelTitle("Timeline")
-            if let sequence = model.activeSequence {
-                ScrollView(.vertical) {
-                    VStack(spacing: 8) {
-                        ForEach(videoRows(in: sequence), id: \.track.id) { row in
-                            TrackLane(
-                                sequenceID: sequence.id,
-                                row: row,
-                                model: model
+        GeometryReader { geometry in
+            let availableContentWidth = max(
+                320,
+                geometry.size.width - TimelineLayoutMetrics.trackContentLeadingOffset - 28
+            )
+            let timelineContentWidth = model.timelineContentWidth(
+                minimumWidth: availableContentWidth
+            )
+            let timelineWidth = TimelineLayoutMetrics.trackContentLeadingOffset + timelineContentWidth
+            VStack(alignment: .leading, spacing: 10) {
+                toolbar(availableWidth: availableContentWidth)
+                if let sequence = model.activeSequence {
+                    ScrollView([.horizontal, .vertical]) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TimelineRuler(
+                                model: model,
+                                contentWidth: timelineContentWidth
                             )
+                            ForEach(videoRows(in: sequence), id: \.track.id) { row in
+                                TrackLane(
+                                    sequenceID: sequence.id,
+                                    row: row,
+                                    model: model,
+                                    timelineContentWidth: timelineContentWidth
+                                )
+                            }
+                            ForEach(audioRows(in: sequence), id: \.track.id) { row in
+                                TrackLane(
+                                    sequenceID: sequence.id,
+                                    row: row,
+                                    model: model,
+                                    timelineContentWidth: timelineContentWidth
+                                )
+                            }
                         }
-                        ForEach(audioRows(in: sequence), id: \.track.id) { row in
-                            TrackLane(
-                                sequenceID: sequence.id,
-                                row: row,
-                                model: model
-                            )
-                        }
+                        .frame(width: timelineWidth, alignment: .leading)
                     }
+                    .accessibilityIdentifier("Timeline track lanes")
+                    .accessibilityLabel("Timeline track lanes")
+                } else {
+                    Text("No sequence")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .accessibilityIdentifier("Timeline track lanes")
-                .accessibilityLabel("Timeline track lanes")
-            } else {
-                Text("No sequence")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                footer
             }
+            .padding(14)
+            .background(Color(red: 0.12, green: 0.12, blue: 0.13))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("Timeline")
+            .accessibilityLabel("Timeline")
+        }
+    }
+
+    private func toolbar(availableWidth: Double) -> some View {
+        HStack(spacing: 8) {
+            PanelTitle("Timeline")
+            Spacer()
+            TimelineToolButton(title: "Zoom Timeline Out", systemImage: "minus.magnifyingglass") {
+                model.zoomTimelineOut()
+            }
+            TimelineToolButton(title: "Zoom Timeline In", systemImage: "plus.magnifyingglass") {
+                model.zoomTimelineIn()
+            }
+            TimelineToolButton(title: "Decrease Track Height", systemImage: "arrow.down.to.line.compact") {
+                model.zoomTimelineVerticallyOut()
+            }
+            TimelineToolButton(title: "Increase Track Height", systemImage: "arrow.up.to.line.compact") {
+                model.zoomTimelineVerticallyIn()
+            }
+            TimelineToolButton(title: "Fit Timeline", systemImage: "arrow.left.and.right") {
+                model.fitTimeline(toWidth: availableWidth)
+            }
+            TimelineToolButton(title: "Zoom to Selection", systemImage: "selection.pin.in.out") {
+                model.zoomTimelineToSelection(toWidth: availableWidth)
+            }
+            TimelineToolButton(title: "Set Range In", systemImage: "inset.filled.leadinghalf.rectangle") {
+                model.setTimelineRangeIn()
+            }
+            .keyboardShortcut("i", modifiers: [])
+            TimelineToolButton(title: "Set Range Out", systemImage: "inset.filled.trailinghalf.rectangle") {
+                model.setTimelineRangeOut()
+            }
+            .keyboardShortcut("o", modifiers: [])
+            TimelineToolButton(title: "Clear Timeline Range", systemImage: "xmark.rectangle") {
+                model.clearTimelineRange()
+            }
+            TimelineToolButton(
+                title: model.timelineSnappingEnabled ? "Disable Snapping" : "Enable Snapping",
+                systemImage: "link"
+            ) {
+                model.setTimelineSnappingEnabled(!model.timelineSnappingEnabled)
+            }
+        }
+        .controlSize(.small)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 12) {
+            Text(model.timelineRangeDescription)
+            Text("\(model.timelineSelectedClipCount) selected")
             Spacer()
             Text(model.loadMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(14)
-        .background(Color(red: 0.12, green: 0.12, blue: 0.13))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Timeline")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Timeline status, \(model.timelineRangeDescription), \(model.timelineSelectedClipCount) selected"
+        )
     }
 
     private func videoRows(in sequence: AjarCore.Sequence) -> [TrackLaneRow] {
@@ -266,13 +339,90 @@ private struct TimelineView: View {
     }
 }
 
+private enum TimelineLayoutMetrics {
+    static let trackHeaderWidth = 196.0
+    static let trackLaneSpacing = 8.0
+    static let trackContentLeadingOffset = trackHeaderWidth + trackLaneSpacing
+}
+
+private struct TimelineRuler: View {
+    @ObservedObject var model: EditorAjarAppModel
+    let contentWidth: Double
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.white.opacity(0.06))
+            Text("Frame 0")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .offset(x: TimelineLayoutMetrics.trackContentLeadingOffset + 8)
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(width: 2)
+                .offset(
+                    x: TimelineLayoutMetrics.trackContentLeadingOffset
+                        + model.timelineXPosition(for: model.playheadFrame)
+                )
+        }
+        .frame(
+            width: TimelineLayoutMetrics.trackContentLeadingOffset + contentWidth,
+            height: 28
+        )
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    model.scrubTimeline(
+                        xPosition: value.location.x - TimelineLayoutMetrics.trackContentLeadingOffset
+                    )
+                }
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Timeline ruler")
+        .accessibilityValue(model.playheadDescription)
+        .help("Drag to scrub")
+    }
+}
+
+private struct TimelineToolButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.borderless)
+        .frame(width: 28, height: 24)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
+
 private struct TrackLane: View {
     let sequenceID: UUID
     let row: TrackLaneRow
     @ObservedObject var model: EditorAjarAppModel
+    let timelineContentWidth: Double
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: TimelineLayoutMetrics.trackLaneSpacing) {
+            trackHeader
+            timelineContent
+        }
+        .frame(
+            width: TimelineLayoutMetrics.trackContentLeadingOffset + timelineContentWidth,
+            height: model.timelineState.laneHeight
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.fullAccessibilityLabel)
+    }
+
+    private var trackHeader: some View {
+        HStack(spacing: 6) {
             Text(row.name)
                 .font(.caption.weight(.semibold))
                 .frame(width: 34)
@@ -335,18 +485,80 @@ private struct TrackLane: View {
                     )
                 }
             }
+            TrackStateButton(
+                title: "Select all \(row.accessibilityLabel)",
+                systemImage: "checkmark.circle",
+                isOn: false
+            ) {
+                model.selectAllClips(on: row.track.id)
+            }
+        }
+        .frame(width: TimelineLayoutMetrics.trackHeaderWidth, alignment: .leading)
+    }
+
+    private var timelineContent: some View {
+        ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color.white.opacity(0.08))
-                .overlay(alignment: .leading) {
-                    Text(row.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 12)
+            ForEach(model.timelineClipLayouts(for: row.track), id: \.reference) { layout in
+                TimelineClipBlock(
+                    layout: layout,
+                    isSelected: model.isClipSelected(layout.reference)
+                ) {
+                    model.selectClip(
+                        trackID: layout.reference.trackID,
+                        clipID: layout.reference.clipID,
+                        mode: .replace
+                    )
                 }
+                .frame(
+                    width: layout.width,
+                    height: max(24, model.timelineState.laneHeight - 12)
+                )
+                .offset(x: layout.xPosition)
+            }
+            Rectangle()
+                .fill(Color.accentColor.opacity(0.75))
+                .frame(width: 2)
+                .offset(x: model.timelineXPosition(for: model.playheadFrame))
         }
-        .frame(height: 46)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(row.fullAccessibilityLabel)
+        .frame(width: max(1, timelineContentWidth), height: max(24, model.timelineState.laneHeight - 8))
+    }
+}
+
+private struct TimelineClipBlock: View {
+    let layout: TimelineClipLayout
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "film")
+                    .font(.caption2)
+                Text(layout.name)
+                    .font(.caption)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? .black : .white)
+        .background(
+            isSelected ? Color.accentColor : Color.white.opacity(0.16),
+            in: RoundedRectangle(cornerRadius: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(isSelected ? Color.white.opacity(0.7) : Color.white.opacity(0.18), lineWidth: 1)
+        )
+        .help("\(layout.name), frames \(layout.startFrame)-\(layout.endFrame)")
+        .accessibilityLabel("Clip \(layout.name)")
+        .accessibilityValue(
+            "\(isSelected ? "Selected" : "Not selected"), frames \(layout.startFrame)-\(layout.endFrame)"
+        )
+        .accessibilityIdentifier("Timeline clip \(layout.reference.clipID.uuidString)")
     }
 }
 
