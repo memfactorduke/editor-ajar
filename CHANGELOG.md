@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Minimal macOS SwiftUI app shell under `app/EditorAjar` with FR-PLAY-001 transport controls and
+  NFR-A11Y-001 accessibility labels.
 - `AjarMedia` native AVFoundation frame decoder with CVMetalTextureCache zero-copy handoff tests.
 - `AjarCore` immutable render graph primitives and single-clip graph builder with deterministic
   content hashes.
