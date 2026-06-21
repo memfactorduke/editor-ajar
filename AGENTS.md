@@ -1,23 +1,20 @@
 # AGENTS.md — guide for the Codex builder
 
-Codex reads this file automatically. You (Codex) are the **builder** in an autonomous loop for
-**Editor Ajar**, a fast, native, open-source macOS video editor. Claude Code is the **reviewer**.
-A conductor script runs us one at a time — never simultaneously — and owns all git.
+Codex reads this automatically. You (Codex) are the **builder** for **Editor Ajar**, a fast,
+native, open-source macOS video editor. **Claude Code is the orchestrator**: it files GitHub issues
+and reviews your pull requests. You write the code; it manages the work.
 
-## Top priorities (these are merge gates, not slogans)
+## Top priorities (merge gates, not slogans)
 
 1. **Stability** — never crash, never lose user work.
-2. **Performance** — real-time playback / instant scrubbing at the targets in `docs/PERFORMANCE.md`.
-
-If a change improves a feature but regresses stability or a gated performance number, fix the
-regression or back it out.
+2. **Performance** — real-time playback / instant scrubbing at the `docs/PERFORMANCE.md` targets.
 
 ## Sources of truth (read, don't contradict)
 
-- `docs/SPEC.md` — what to build (requirements have stable IDs like `FR-…`, `NFR-…`).
-- `docs/ROADMAP.md` — the order to build it (milestones M0–M9). Build the lowest unfinished one.
+- `docs/SPEC.md` — requirements (stable IDs like `FR-…`, `NFR-…`).
+- `docs/ROADMAP.md` — milestone order (M0–M9). Build the lowest unfinished one.
 - `docs/ARCHITECTURE.md` — how it fits together.
-- `docs/adr/` — binding decisions. An Accepted ADR is a constraint; don't code against it.
+- `docs/adr/` — binding decisions; an Accepted ADR is a constraint.
 - `docs/TESTING.md` — the Definition of Done.
 
 ## The one hard architectural rule
@@ -26,26 +23,27 @@ regression or back it out.
 or CoreImage. It is pure, headless, testable. Platform code goes in `AjarRender` / `AjarMedia` /
 `AjarAudio`. (CI enforces this.)
 
-## Your loop protocol (every run)
+## Your workflow — one issue, one branch, one PR
 
-1. If `.loop/review.md` begins with `CHANGES_REQUESTED`, fix exactly those points first.
-2. Otherwise pick the **single smallest** next task from the lowest unfinished milestone in
-   `docs/ROADMAP.md`. Tag it with the requirement ID(s) it satisfies.
-3. Implement it well and minimally. Add/update tests for what you changed.
-4. Run `swift build` and `swift test` until green before you stop.
-5. **Do not run any git commands** — the conductor commits. (You also can't: `.git` is read-only
-   in your sandbox.)
-6. Write 2–5 lines to `.loop/build-note.md`: what you changed, requirement IDs, and test status.
+1. Pick the lowest-numbered open issue labeled `ready` that nobody has claimed
+   (`gh issue list --label ready`). Comment to claim it so two builders never collide. If none are
+   ready yet, take the next small task straight from `docs/ROADMAP.md`.
+2. `git fetch origin && git switch -c codex/issue-<n> origin/main` — a fresh branch off latest
+   main. **Never commit to `main`.**
+3. Implement it. Add/update tests. Make `swift build` and `swift test` pass.
+4. Commit, push, and open a PR: `gh pr create --fill` with `Closes #<n>` in the body.
+5. Address review comments on your open PRs, then take the next issue.
+
+## How we avoid conflicts (built in)
+
+You only ever write code on your own `codex/issue-N` branch and open PRs. The orchestrator only
+touches GitHub (issues, PR comments/reviews, merges) and reads code — it never edits files or
+switches branches. Different surfaces ⇒ no collisions.
 
 ## Never do this
 
-- No `print()`, force-unwrap (`!`), `try!`, `as!`, or `fatalError` in `AjarCore` (NFR-STAB-003).
-  Errors are typed values; the core never crashes on input.
-- Never edit a golden image or performance baseline to make a test pass.
+- No `print()` / force-unwrap (`!`) / `try!` / `as!` / `fatalError` in `AjarCore` (NFR-STAB-003).
+- Don't edit golden images or performance baselines to make a test pass.
 - No CPU readback on the playback path; no allocation/locking on the audio real-time thread.
-- Never call FFmpeg on the playback hot path (import boundary only — ADR-0003).
-
-## Conventions
-
-Swift API design guidelines; document public declarations; keep functions small. Prefer many small
-verified changes over big ones. Quality and stability over speed.
+- No FFmpeg on the playback hot path (import boundary only — ADR-0003).
+- Don't commit to `main`; don't work more than one issue at a time.

@@ -48,10 +48,3 @@ fastlane/Preview.html
 .env
 *.local
 secrets.json
-
-# ── Autonomous build loop runtime (keep review.md & build-note.md tracked) ──
-/.loop/logs/
-/.loop/STOP
-/.loop/loop.pid
-/.loop/loop.out
-/.loop/state.json
