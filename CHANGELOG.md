@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- macOS app XCUITest smoke target and CI job for the ROADMAP M2 launch/play gate
+  (NFR-A11Y-001).
 - `ajar bench` report-only JSON metrics, baseline capture, and CI benchmark reporting for
   NFR-PERF-001/002/005 under ADR-0011.
 - Metal-backed program monitor playback in the macOS app for the synthetic single-clip sequence

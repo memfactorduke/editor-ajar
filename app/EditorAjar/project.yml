@@ -2,6 +2,7 @@ name: EditorAjar
 options:
   bundleIdPrefix: org.editorajar
   createIntermediateGroups: true
+  projectFormat: xcode15_3
   deploymentTarget:
     macOS: "14.0"
 packages:
@@ -49,15 +50,28 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: org.editorajar.EditorAjarTests
+  EditorAjarUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: EditorAjar
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: org.editorajar.EditorAjarUITests
 schemes:
   EditorAjar:
     build:
       targets:
         EditorAjar: all
         EditorAjarTests: [test]
+        EditorAjarUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - EditorAjarTests
+        - EditorAjarUITests

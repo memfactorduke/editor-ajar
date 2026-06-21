@@ -152,7 +152,9 @@ private struct TransportBar: View {
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 96, alignment: .leading)
-                .accessibilityLabel("Playhead \(model.playheadDescription)")
+                .accessibilityIdentifier("Playhead readout")
+                .accessibilityLabel("Playhead")
+                .accessibilityValue(model.playheadDescription)
             Spacer()
         }
         .overlay(alignment: .bottom) {
@@ -174,6 +176,7 @@ private struct TransportBar: View {
         .frame(height: 58)
         .background(Color(red: 0.11, green: 0.11, blue: 0.12))
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Transport controls")
         .accessibilityLabel("Transport controls")
     }
 }

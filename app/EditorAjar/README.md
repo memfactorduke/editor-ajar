@@ -38,6 +38,10 @@ xcodebuild -project app/EditorAjar/EditorAjar.xcodeproj -scheme EditorAjar -dest
 xcodebuild -project app/EditorAjar/EditorAjar.xcodeproj -scheme EditorAjar -destination 'platform=macOS' test
 ```
 
+The `EditorAjar` scheme includes a minimal XCUITest smoke target for ROADMAP M2. It launches the
+app, waits for the sample project workspace, finds transport controls by accessibility label, and
+exercises play/pause plus one-frame stepping. This is the UI smoke gate in CI.
+
 ## M2 controls
 
 - Play/pause button: starts or stops the display-link playback loop (FR-PLAY-001).
