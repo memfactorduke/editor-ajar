@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` canonical `.ajar` project JSON codec with schema migration and typed loader errors.
 - `AjarCore` edit command reducer and unbounded per-session undo/redo history.
 - `AjarCore` project, sequence, track, clip, and validation primitives for the M1 timeline model.
 - `AjarCore` `MediaRef`, media metadata, content hashing, and relink-match primitives.
