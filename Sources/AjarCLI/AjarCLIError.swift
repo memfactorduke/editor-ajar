@@ -35,6 +35,9 @@ public enum AjarCLIError: Error, Equatable, Sendable, CustomStringConvertible {
     /// A golden manifest is malformed.
     case invalidGoldenManifest(String)
 
+    /// A benchmark could not run or report its result.
+    case benchmarkFailed(String)
+
     /// A human-readable error description.
     public var description: String {
         switch self {
@@ -58,6 +61,8 @@ public enum AjarCLIError: Error, Equatable, Sendable, CustomStringConvertible {
             "PNG failure: \(message)"
         case .invalidGoldenManifest(let message):
             "invalid golden manifest: \(message)"
+        case .benchmarkFailed(let message):
+            "benchmark failed: \(message)"
         }
     }
 

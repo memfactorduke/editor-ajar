@@ -1,6 +1,6 @@
 # Editor Ajar — Continuous Integration (ADR-0011).
 # Ordered quality gates: a change is merge-eligible only when these pass. Visual (golden-frame)
-# gate is wired at ROADMAP M2. Performance gates remain staged until baselines exist.
+# gate is wired at ROADMAP M2. Performance benchmarks are report-only until a reference runner exists.
 
 name: CI
 
@@ -73,8 +73,21 @@ jobs:
       - name: Golden-frame gate (TESTING §2, ADR-0011)
         run: swift run ajar golden Tests/Fixtures/golden
 
+  benchmarks-report:
+    name: Benchmarks (report)
+    runs-on: macos-14
+    needs: [build-test, lint, golden-frame]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      # Hosted-runner output is report-only. Reference-machine regression gating is deferred until
+      # the M1 Pro runner from docs/PERFORMANCE.md exists.
+      - name: Benchmark report (NFR-PERF-001/002/005)
+        run: scripts/bench.sh
+
   # ── Forthcoming gates (wired after ROADMAP M2, per docs/TESTING.md §5) ──────────────────────
-  # benchmarks:
-  #   reference machine → `ajar bench ...` vs. baseline; fail on regression beyond the noise band.
   # sanitizers:
   #   `swift test --sanitize=thread` and `--sanitize=address` (NFR-STAB-004).
