@@ -36,6 +36,9 @@ extension EditReducer {
         switch command {
         case .insertClip, .overwriteClip, .appendClip, .replaceClipSource, .threePointEdit:
             return try applyCoreClipCommand(command, to: project)
+        case .bladeClip, .rippleTrimClip, .rollEdit, .slipClip, .slideClip,
+            .rippleDeleteClip, .liftClip:
+            return try applyTrimClipCommand(command, to: project)
         case .moveClip, .trimClip:
             return try applyRangeClipCommand(command, to: project)
         case .addClip(let sequenceID, let trackID, let clip):
