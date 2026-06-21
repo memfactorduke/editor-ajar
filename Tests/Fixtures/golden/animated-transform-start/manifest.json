@@ -1,0 +1,145 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          0,
+          0,
+          255,
+          255
+        ],
+        "frameCount" : 12,
+        "frameRate" : 24,
+        "height" : 2,
+        "width" : 2
+      },
+      "transformAnimation" : {
+        "anchorPoint" : {
+          "base" : {
+            "x" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "y" : {
+              "denominator" : 1,
+              "numerator" : 0
+            }
+          },
+          "keyframes" : []
+        },
+        "blendMode" : "normal",
+        "crop" : {
+          "base" : {
+            "bottom" : 0,
+            "left" : 0,
+            "right" : 0,
+            "top" : 0
+          },
+          "keyframes" : []
+        },
+        "flip" : {
+          "horizontal" : false,
+          "vertical" : false
+        },
+        "opacity" : {
+          "base" : {
+            "denominator" : 1,
+            "numerator" : 1
+          },
+          "keyframes" : []
+        },
+        "position" : {
+          "base" : {
+            "x" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "y" : {
+              "denominator" : 1,
+              "numerator" : 0
+            }
+          },
+          "keyframes" : [
+            {
+              "interpolation" : "linear",
+              "time" : {
+                "timescale" : 24,
+                "value" : 0
+              },
+              "value" : {
+                "x" : {
+                  "denominator" : 1,
+                  "numerator" : 0
+                },
+                "y" : {
+                  "denominator" : 1,
+                  "numerator" : 0
+                }
+              }
+            },
+            {
+              "interpolation" : "hold",
+              "time" : {
+                "timescale" : 24,
+                "value" : 8
+              },
+              "value" : {
+                "x" : {
+                  "denominator" : 1,
+                  "numerator" : 2
+                },
+                "y" : {
+                  "denominator" : 1,
+                  "numerator" : 0
+                }
+              }
+            }
+          ]
+        },
+        "rotation" : {
+          "base" : {
+            "degrees" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "revolutions" : 0
+          },
+          "keyframes" : []
+        },
+        "scale" : {
+          "base" : {
+            "x" : {
+              "denominator" : 1,
+              "numerator" : 1
+            },
+            "y" : {
+              "denominator" : 1,
+              "numerator" : 1
+            }
+          },
+          "keyframes" : []
+        }
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "animated-transform-start",
+  "outputDimensions" : {
+    "height" : 2,
+    "width" : 4
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-XFORM-008",
+    "FR-KEY-001",
+    "FR-KEY-003",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 25,
+    "minimumSSIM" : 0.9
+  }
+}

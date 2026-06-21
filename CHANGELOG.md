@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Animated transform rendering now evaluates keyframed clip transforms at render time, with
+  multi-time golden fixtures and a report-only multi-layer transform benchmark for FR-XFORM-008,
+  FR-KEY-001/003, and NFR-PERF-003.
 - Keyframed clip transform animation in `AjarCore`, including deterministic cubic Bézier/ease
   interpolation, undoable add/move/delete keyframe commands, validation, and `.ajar` round-trip
   coverage for FR-KEY-001/002/003/009 and FR-XFORM-008.

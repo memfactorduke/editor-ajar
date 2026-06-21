@@ -64,6 +64,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// In-process CLI startup proxy until app signposts are wired.
     case coldStartProxy = "cold-start-proxy"
 
+    /// Render a transformed four-layer frame as a report-only proxy for timeline playback.
+    case multiLayerTransformPlayback = "multi-layer-transform-playback"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -72,6 +75,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "NFR-PERF-002"
         case .coldStartProxy:
             "NFR-PERF-001"
+        case .multiLayerTransformPlayback:
+            "NFR-PERF-003"
         }
     }
 }
@@ -140,6 +145,8 @@ public enum BenchmarkCommand {
             value = try await measureProjectOpen(projectURL: projectURL)
         case .coldStartProxy:
             value = try await measureColdStartProxy()
+        case .multiLayerTransformPlayback:
+            value = try await measureMultiLayerTransformPlayback(projectURL: projectURL)
         }
 
         return BenchmarkResult(
@@ -183,6 +190,40 @@ public enum BenchmarkCommand {
             let project = try ProjectPackageIO.loadProject(from: projectURL)
             _ = project.mediaPool.count + project.sequences.count
         }
+    }
+
+    private static func measureMultiLayerTransformPlayback(projectURL: URL) async throws -> Double {
+        let project = try ProjectPackageIO.loadProject(from: projectURL)
+        guard let sequence = multiLayerTransformSequence(in: project) else {
+            throw AjarCLIError.missingSequence
+        }
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw MetalRenderError.metalDeviceUnavailable
+        }
+
+        let executor = try MetalRenderExecutor(device: device)
+        let renderTime = try RationalTime.atFrame(30, frameRate: project.settings.frameRate)
+        return try await medianMilliseconds {
+            executor.removeAllCachedFrames()
+            let graph = try buildRenderGraph(for: sequence, at: renderTime, in: project)
+            let sourceProvider = try await PredecodedSourceTextureProvider(
+                graph: graph,
+                project: project,
+                device: device
+            )
+            let frame = try executor.render(
+                graph: graph,
+                output: RenderOutputDescriptor(pixelDimensions: project.settings.resolution),
+                sourceProvider: sourceProvider
+            )
+            try await frame.waitForCompletion()
+        }
+    }
+
+    private static func multiLayerTransformSequence(in project: Project) -> Sequence? {
+        project.sequences.first { sequence in
+            sequence.name == BenchmarkSyntheticProject.multiLayerSequenceName
+        } ?? project.sequences.first
     }
 
     private static func measureColdStartProxy() async throws -> Double {
@@ -302,111 +343,5 @@ private final class BenchmarkProjectFixture {
             return
         }
         try? FileManager.default.removeItem(at: generatedDirectory)
-    }
-}
-
-private enum BenchmarkSyntheticProject {
-    static func write(to directory: URL) throws -> URL {
-        let frameRate = try FrameRate(frames: 30)
-        let clipCount = 50
-        let frameCount = 60
-        let movieSpec = SyntheticMovieSpec(
-            width: 64,
-            height: 36,
-            frameCount: frameCount,
-            frameRate: Int32(frameRate.frames),
-            bgra: [32, 64, 192, 255]
-        )
-        let mediaURL = directory.appendingPathComponent("benchmark-source.mov")
-        try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: movieSpec)
-
-        let project = try makeProject(
-            mediaURL: mediaURL,
-            movieSpec: movieSpec,
-            frameRate: frameRate,
-            clipCount: clipCount
-        )
-        let projectURL = directory.appendingPathComponent("benchmark.ajar")
-        try ProjectPackageIO.writeProject(project, to: projectURL)
-        return projectURL
-    }
-
-    private static func makeProject(
-        mediaURL: URL,
-        movieSpec: SyntheticMovieSpec,
-        frameRate: FrameRate,
-        clipCount: Int
-    ) throws -> Project {
-        let mediaID = try uuid("00000000-0000-0000-0000-000000002600")
-        let mediaDuration = try frameRate.duration(ofFrames: Int64(movieSpec.frameCount))
-        let media = MediaRef(
-            id: mediaID,
-            sourceURL: mediaURL,
-            contentHash: ContentHash.sha256(data: Data("benchmark-synthetic".utf8)),
-            metadata: MediaMetadata(
-                codecID: "prores4444",
-                pixelDimensions: PixelDimensions(width: movieSpec.width, height: movieSpec.height),
-                frameRate: frameRate,
-                duration: mediaDuration,
-                colorSpace: .rec709,
-                audioChannelLayout: nil,
-                isVariableFrameRate: false,
-                conformedFrameRate: nil
-            )
-        )
-
-        let clips = try (0..<clipCount).map { index in
-            try makeClip(index: index, mediaID: mediaID, frameRate: frameRate)
-        }
-        let sequence = Sequence(
-            id: try uuid("00000000-0000-0000-0000-000000002601"),
-            name: "Benchmark 50 Clip Sequence",
-            videoTracks: [
-                Track(
-                    id: try uuid("00000000-0000-0000-0000-000000002602"),
-                    kind: .video,
-                    items: clips.map(TimelineItem.clip)
-                )
-            ],
-            audioTracks: [],
-            markers: [],
-            timebase: frameRate
-        )
-
-        return Project(
-            schemaVersion: AjarProjectCodec.currentSchemaVersion,
-            settings: ProjectSettings(
-                frameRate: frameRate,
-                resolution: PixelDimensions(width: movieSpec.width, height: movieSpec.height),
-                colorSpace: .rec709,
-                audioSampleRate: 48_000
-            ),
-            mediaPool: [media],
-            sequences: [sequence]
-        )
-    }
-
-    private static func makeClip(
-        index: Int,
-        mediaID: UUID,
-        frameRate: FrameRate
-    ) throws -> Clip {
-        let start = try RationalTime.atFrame(Int64(index), frameRate: frameRate)
-        let duration = try frameRate.duration(ofFrames: 1)
-        return Clip(
-            id: try uuid(String(format: "00000000-0000-0000-0000-000000%06d", 2_700 + index)),
-            source: .media(id: mediaID),
-            sourceRange: try TimeRange(start: start, duration: duration),
-            timelineRange: try TimeRange(start: start, duration: duration),
-            kind: .video,
-            name: "Benchmark Clip \(index)"
-        )
-    }
-
-    private static func uuid(_ value: String) throws -> UUID {
-        guard let uuid = UUID(uuidString: value) else {
-            throw AjarCLIError.benchmarkFailed("invalid benchmark UUID \(value)")
-        }
-        return uuid
     }
 }

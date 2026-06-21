@@ -99,7 +99,7 @@ public enum RenderGraphBuilder {
         let sourceInputs = try clips.map { clip in
             (
                 node: try sourceNode(for: clip, at: time, in: project),
-                transform: clip.transform
+                transform: clip.transformAnimation.value(at: time)
             )
         }
         let compositeNode = try RenderNodeFactory.makeCompositeNode(inputs: sourceInputs)
