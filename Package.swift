@@ -67,6 +67,11 @@ let package = Package(
             path: "Tests/AjarCoreTests"
         ),
         .testTarget(
+            name: "AjarMediaTests",
+            dependencies: ["AjarMedia", "AjarCore"],
+            path: "Tests/AjarMediaTests"
+        ),
+        .testTarget(
             name: "AjarRenderTests",
             dependencies: ["AjarRender", "AjarCore"],
             path: "Tests/AjarRenderTests"
