@@ -36,6 +36,8 @@ fastlane/Preview.html
 /Benchmarks/results/
 /Tests/Fixtures/_actual/     # rendered frames produced during a test run
 /Tests/Fixtures/_diff/       # golden-vs-actual diff images
+/Tests/Fixtures/golden/**/_actual/
+/Tests/Fixtures/golden/**/_diff/
 *.ajarproxy
 
 # Large media must never be committed. Keep tiny fixtures only.

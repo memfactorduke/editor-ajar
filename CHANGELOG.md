@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `ajar render --frame` PNG output plus the first manifest-driven golden-frame gate in CI
+  (TESTING §2, ADR-0011, NFR-QUAL-001).
 - `AjarRender` Metal render graph executor for single-clip composites with content-hash frame
   caching and CVMetalTexture-backed source tests.
 - Minimal macOS SwiftUI app shell under `app/EditorAjar` with FR-PLAY-001 transport controls and

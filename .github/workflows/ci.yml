@@ -1,7 +1,6 @@
 # Editor Ajar — Continuous Integration (ADR-0011).
 # Ordered quality gates: a change is merge-eligible only when these pass. Visual (golden-frame)
-# and performance (benchmark) gates are added with the render harness at ROADMAP M2; their
-# placeholders below document the intended pipeline.
+# gate is wired at ROADMAP M2. Performance gates remain staged until baselines exist.
 
 name: CI
 
@@ -61,9 +60,20 @@ jobs:
             echo "swift-format not found on runner; skipping (TODO: pin toolchain)."
           fi
 
-  # ── Forthcoming gates (wired at ROADMAP M2, per docs/TESTING.md §5) ─────────────────────────
-  # golden-frame:
-  #   GPU-capable runner → `ajar golden <suite>` compared to Tests/Fixtures/golden within tolerance.
+  golden-frame:
+    name: Golden-frame
+    runs-on: macos-14
+    needs: [build-test, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Golden-frame gate (TESTING §2, ADR-0011)
+        run: swift run ajar golden Tests/Fixtures/golden
+
+  # ── Forthcoming gates (wired after ROADMAP M2, per docs/TESTING.md §5) ──────────────────────
   # benchmarks:
   #   reference machine → `ajar bench ...` vs. baseline; fail on regression beyond the noise band.
   # sanitizers:

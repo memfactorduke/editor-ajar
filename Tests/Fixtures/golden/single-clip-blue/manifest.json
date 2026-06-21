@@ -1,0 +1,28 @@
+{
+  "frame" : "0/24",
+  "id" : "single-clip-blue",
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "TESTING-2",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "syntheticMedia" : {
+    "bgra" : [
+      0,
+      0,
+      255,
+      255
+    ],
+    "frameCount" : 1,
+    "frameRate" : 24,
+    "height" : 16,
+    "width" : 16
+  },
+  "tolerance" : {
+    "maximumAlphaDelta" : 0,
+    "maximumDeltaE" : 25,
+    "minimumSSIM" : 0.9
+  }
+}
