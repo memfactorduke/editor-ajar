@@ -35,6 +35,20 @@
                ReferencedContainer = "container:EditorAjar.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "D0482A94769ACB971C8F5AFE"
+               BuildableName = "EditorAjarUITests.xctest"
+               BlueprintName = "EditorAjarUITests"
+               ReferencedContainer = "container:EditorAjar.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -61,6 +75,17 @@
                BlueprintIdentifier = "80A4C7B5D915B3036EADD118"
                BuildableName = "EditorAjarTests.xctest"
                BlueprintName = "EditorAjarTests"
+               ReferencedContainer = "container:EditorAjar.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "D0482A94769ACB971C8F5AFE"
+               BuildableName = "EditorAjarUITests.xctest"
+               BlueprintName = "EditorAjarUITests"
                ReferencedContainer = "container:EditorAjar.xcodeproj">
             </BuildableReference>
          </TestableReference>

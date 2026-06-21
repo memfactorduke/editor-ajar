@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		17B35B6C5F41AE77A7A15807 /* EditorAjarUISmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */; };
 		18A50F6FE3F5F215D59EEB06 /* AjarRender in Frameworks */ = {isa = PBXBuildFile; productRef = 1A54917698517881ACC715AF /* AjarRender */; };
 		27AC5FC45DA5EF355A9DB6A4 /* EditorAjarWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */; };
 		3A246BF62A10B5DED981A4E7 /* EditorAjarAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */; };
@@ -22,6 +23,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		013B106D87E19BEF32860102 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0C3C6B02D1EFA40A858C9AFF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 781D625050DFF9CEE38EF3D4;
+			remoteInfo = EditorAjar;
+		};
 		5A472FDC64ECCF67D03AAF90 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0C3C6B02D1EFA40A858C9AFF /* Project object */;
@@ -35,6 +43,7 @@
 		0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarSampleProjectFactory.swift; sourceTree = "<group>"; };
 		15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarApp.swift; sourceTree = "<group>"; };
 		1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDisplayLinkDriver.swift; sourceTree = "<group>"; };
+		49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarUISmokeTests.swift; sourceTree = "<group>"; };
 		4B3331D5EA7AED5D0D63F83D /* EditorAjar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditorAjar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		64FE9E23EF9A44E444F2A7E3 /* EditorAjarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarWorkspaceView.swift; sourceTree = "<group>"; };
@@ -42,6 +51,7 @@
 		8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarRenderPipeline.swift; sourceTree = "<group>"; };
 		A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModelTests.swift; sourceTree = "<group>"; };
 		D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramMetalView.swift; sourceTree = "<group>"; };
+		DAF934E19339DC9EEF4DB2EE /* EditorAjarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarPlaybackController.swift; sourceTree = "<group>"; };
 		F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -73,6 +83,7 @@
 			children = (
 				4B3331D5EA7AED5D0D63F83D /* EditorAjar.app */,
 				64FE9E23EF9A44E444F2A7E3 /* EditorAjarTests.xctest */,
+				DAF934E19339DC9EEF4DB2EE /* EditorAjarUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -83,6 +94,7 @@
 				E2F1B1AE384DA4CD60EEA89F /* Packages */,
 				6F7022CEA1657A2876E1F698 /* Sources */,
 				434CAD8C2E31A62C2A1C11F5 /* Tests */,
+				EFDECB95AA0FC7EA60DBC44E /* UITests */,
 				6300850ED77A215EBE853DED /* Products */,
 			);
 			sourceTree = "<group>";
@@ -108,6 +120,14 @@
 				8842F08C3935D10A02B4F09E /* editor-ajar */,
 			);
 			name = Packages;
+			sourceTree = "<group>";
+		};
+		EFDECB95AA0FC7EA60DBC44E /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */,
+			);
+			path = UITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -152,6 +172,24 @@
 			productReference = 64FE9E23EF9A44E444F2A7E3 /* EditorAjarTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		D0482A94769ACB971C8F5AFE /* EditorAjarUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 08294F124391A0B760A471F5 /* Build configuration list for PBXNativeTarget "EditorAjarUITests" */;
+			buildPhases = (
+				A55BF1DEAA6AB92D08E2FDE6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				47FF43E4B4C624CF4C007A80 /* PBXTargetDependency */,
+			);
+			name = EditorAjarUITests;
+			packageProductDependencies = (
+			);
+			productName = EditorAjarUITests;
+			productReference = DAF934E19339DC9EEF4DB2EE /* EditorAjarUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -166,6 +204,10 @@
 					};
 					80A4C7B5D915B3036EADD118 = {
 						ProvisioningStyle = Manual;
+					};
+					D0482A94769ACB971C8F5AFE = {
+						ProvisioningStyle = Manual;
+						TestTargetID = 781D625050DFF9CEE38EF3D4;
 					};
 				};
 			};
@@ -188,6 +230,7 @@
 			targets = (
 				781D625050DFF9CEE38EF3D4 /* EditorAjar */,
 				80A4C7B5D915B3036EADD118 /* EditorAjarTests */,
+				D0482A94769ACB971C8F5AFE /* EditorAjarUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -208,6 +251,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A55BF1DEAA6AB92D08E2FDE6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17B35B6C5F41AE77A7A15807 /* EditorAjarUISmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FACDAA0182B5967178C2390C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -219,6 +270,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		47FF43E4B4C624CF4C007A80 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 781D625050DFF9CEE38EF3D4 /* EditorAjar */;
+			targetProxy = 013B106D87E19BEF32860102 /* PBXContainerItemProxy */;
+		};
 		BD361347D7BF0B8EBE7132F0 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 781D625050DFF9CEE38EF3D4 /* EditorAjar */;
@@ -347,6 +403,23 @@
 			};
 			name = Release;
 		};
+		701B6B491FAB6EA87FCCFF11 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.editorajar.EditorAjarUITests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = EditorAjar;
+			};
+			name = Debug;
+		};
 		A6ECD8FA487F2A26E4DB834D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -424,9 +497,35 @@
 			};
 			name = Release;
 		};
+		B97427F7EE91A106F56CE8E5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.editorajar.EditorAjarUITests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = EditorAjar;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		08294F124391A0B760A471F5 /* Build configuration list for PBXNativeTarget "EditorAjarUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				701B6B491FAB6EA87FCCFF11 /* Debug */,
+				B97427F7EE91A106F56CE8E5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		69E18E429A5252F6F6058F93 /* Build configuration list for PBXProject "EditorAjar" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
