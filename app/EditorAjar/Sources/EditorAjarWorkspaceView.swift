@@ -9,6 +9,7 @@ struct EditorAjarWorkspaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            SequenceTabsBar(model: model)
             Divider()
             HStack(spacing: 0) {
                 LibraryPanel()
@@ -44,6 +45,106 @@ struct EditorAjarWorkspaceView: View {
         .frame(height: 44)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Editor Ajar, \(model.projectSummary)")
+    }
+}
+
+private struct SequenceTabsBar: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(model.sequenceTabs) { tab in
+                        SequenceTabButton(tab: tab, model: model)
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("Sequence tabs")
+            .accessibilityLabel("Sequence tabs")
+
+            Button {
+                model.addSequence()
+            } label: {
+                Label("New Sequence", systemImage: "plus")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .frame(width: 30, height: 28)
+            .help("New Sequence")
+            .accessibilityLabel("New Sequence")
+            .accessibilityIdentifier("New Sequence")
+
+            Button {
+                model.closeActiveSequence()
+            } label: {
+                Label("Close Sequence", systemImage: "xmark")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .frame(width: 30, height: 28)
+            .help("Close Sequence")
+            .accessibilityLabel("Close Sequence")
+            .accessibilityIdentifier("Close Sequence")
+            .disabled(!model.canCloseActiveSequence)
+        }
+        .padding(.trailing, 12)
+        .frame(height: 38)
+        .background(Color(red: 0.12, green: 0.12, blue: 0.13))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Sequence tab bar")
+        .accessibilityLabel("Sequence tab bar")
+    }
+}
+
+private struct SequenceTabButton: View {
+    let tab: SequenceTab
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                model.selectSequence(tab.id)
+            } label: {
+                Text(tab.title)
+                    .font(.caption.weight(tab.isActive ? .semibold : .regular))
+                    .lineLimit(1)
+                    .frame(minWidth: 104, maxWidth: 170, alignment: .leading)
+                    .padding(.leading, 10)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            .help(tab.title)
+            .accessibilityLabel("Sequence tab \(tab.title)")
+            .accessibilityValue(tab.isActive ? "Selected" : "Not selected")
+            .accessibilityIdentifier("Sequence tab \(tab.title)")
+
+            Button {
+                model.closeSequence(tab.id)
+            } label: {
+                Label("Close \(tab.title)", systemImage: "xmark")
+                    .labelStyle(.iconOnly)
+                    .font(.caption2.weight(.semibold))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .help("Close \(tab.title)")
+            .accessibilityLabel("Close \(tab.title)")
+            .accessibilityIdentifier("Close \(tab.title)")
+            .disabled(!tab.canClose)
+            .padding(.trailing, 6)
+        }
+        .foregroundStyle(tab.isActive ? .white : Color.white.opacity(0.72))
+        .background(
+            tab.isActive ? Color.accentColor.opacity(0.56) : Color.white.opacity(0.07),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(tab.isActive ? Color.white.opacity(0.55) : Color.white.opacity(0.14))
+        )
     }
 }
 

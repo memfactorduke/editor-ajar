@@ -114,6 +114,17 @@ func makeLinkedEditFixture(seed: Int, linked: Bool = true) throws -> LinkedEditF
     )
 }
 
+func makeEmptyEditSequence(id: UUID, name: String) throws -> Sequence {
+    Sequence(
+        id: id,
+        name: name,
+        videoTracks: [],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+}
+
 func makeEditMediaRef(id: UUID) throws -> MediaRef {
     MediaRef(
         id: id,

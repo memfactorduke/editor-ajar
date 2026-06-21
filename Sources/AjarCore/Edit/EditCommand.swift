@@ -168,6 +168,15 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Removes a track from a sequence.
     case removeTrack(sequenceID: UUID, trackID: UUID)
 
+    /// Adds a sequence to the project.
+    case addSequence(Sequence)
+
+    /// Removes a sequence from the project.
+    case removeSequence(sequenceID: UUID)
+
+    /// Adds a caller-provided duplicate after the source sequence.
+    case duplicateSequence(sourceSequenceID: UUID, duplicate: Sequence)
+
     /// Renames a sequence.
     case renameSequence(sequenceID: UUID, name: String)
 
@@ -203,6 +212,12 @@ public enum EditReducerError: Error, Equatable, Sendable {
 
     /// The command references a missing marker.
     case markerNotFound(sequenceID: UUID, markerID: UUID)
+
+    /// The command would create duplicate sequence IDs inside the project.
+    case duplicateSequenceID(UUID)
+
+    /// The command would leave the project without any editable sequence.
+    case cannotRemoveLastSequence(UUID)
 
     /// The command would create duplicate track IDs inside a sequence.
     case duplicateTrackID(sequenceID: UUID, trackID: UUID)
@@ -312,6 +327,12 @@ public extension EditCommand {
             return "Add Track"
         case .removeTrack:
             return "Remove Track"
+        case .addSequence:
+            return "Add Sequence"
+        case .removeSequence:
+            return "Remove Sequence"
+        case .duplicateSequence:
+            return "Duplicate Sequence"
         case .renameSequence:
             return "Rename Sequence"
         case .addMarker:
@@ -331,6 +352,7 @@ public extension EditCommand {
 }
 
 extension EditReducer {
+    // swiftlint:disable:next cyclomatic_complexity
     static func applyUnchecked(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
         case .addClip, .insertClip, .overwriteClip, .appendClip,
@@ -347,6 +369,16 @@ extension EditReducer {
             return try addTrack(track, sequenceID: sequenceID, to: project)
         case .removeTrack(let sequenceID, let trackID):
             return try removeTrack(trackID: trackID, sequenceID: sequenceID, from: project)
+        case .addSequence(let sequence):
+            return try addSequence(sequence, to: project)
+        case .removeSequence(let sequenceID):
+            return try removeSequence(sequenceID: sequenceID, from: project)
+        case .duplicateSequence(let sourceSequenceID, let duplicate):
+            return try duplicateSequence(
+                sourceSequenceID: sourceSequenceID,
+                duplicate: duplicate,
+                in: project
+            )
         case .renameSequence(let sequenceID, let name):
             return try renameSequence(sequenceID: sequenceID, name: name, in: project)
         case .addMarker(let sequenceID, let marker):

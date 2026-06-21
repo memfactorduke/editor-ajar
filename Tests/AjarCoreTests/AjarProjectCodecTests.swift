@@ -103,6 +103,38 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertNotNil(videoClip.linkGroupID)
         XCTAssertEqual(videoClip.linkGroupID, audioClip.linkGroupID)
     }
+
+    func testFRTL011TwoSequencesRoundTripThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 150)
+        let secondSequence = Sequence(
+            id: try codecUUID(150_050),
+            name: "Second Codec Sequence",
+            videoTracks: [Track(id: try codecUUID(150_051), kind: .video, items: [])],
+            audioTracks: [Track(id: try codecUUID(150_052), kind: .audio, items: [])],
+            markers: [],
+            timebase: try FrameRate(frames: 24)
+        )
+        let twoSequenceProject = Project(
+            schemaVersion: project.schemaVersion,
+            settings: project.settings,
+            mediaPool: project.mediaPool,
+            sequences: project.sequences + [secondSequence]
+        )
+
+        let package = try AjarProjectCodec.encode(twoSequenceProject)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+
+        XCTAssertEqual(loadedProject, twoSequenceProject)
+        XCTAssertEqual(loadedProject.sequences.map(\.name), [
+            "Codec Sequence 150",
+            "Second Codec Sequence"
+        ])
+    }
 }
 
 final class AjarProjectCodecVersioningTests: XCTestCase {

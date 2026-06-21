@@ -195,6 +195,81 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(model.canRedo)
     }
 
+    func testFRTL011SequenceTabsAddCloseAndUndoThroughEditHistory() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let originalProject = try XCTUnwrap(model.project)
+        let originalSequenceID = try XCTUnwrap(model.activeSequenceID)
+
+        XCTAssertEqual(model.sequenceTabs.map(\.title), ["Sample Playback Sequence"])
+        XCTAssertFalse(model.canCloseActiveSequence)
+
+        XCTAssertTrue(model.addSequence())
+        let addedSequenceID = try XCTUnwrap(model.activeSequenceID)
+
+        XCTAssertNotEqual(addedSequenceID, originalSequenceID)
+        XCTAssertEqual(model.activeSequenceName, "Sequence 2")
+        XCTAssertEqual(model.project?.sequences.count, 2)
+        XCTAssertTrue(model.canCloseActiveSequence)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Add Sequence")
+
+        XCTAssertTrue(model.closeActiveSequence())
+
+        XCTAssertEqual(model.activeSequenceID, originalSequenceID)
+        XCTAssertEqual(model.project?.sequences.count, 1)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Remove Sequence")
+
+        model.undo()
+
+        XCTAssertEqual(model.project?.sequences.count, 2)
+        XCTAssertTrue(model.canCloseActiveSequence)
+
+        model.undo()
+
+        XCTAssertEqual(model.project, originalProject)
+        XCTAssertEqual(model.activeSequenceID, originalSequenceID)
+        XCTAssertFalse(model.canCloseActiveSequence)
+    }
+
+    func testFRTL011SequenceTabsRestorePerSequenceEditingContext() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let firstSequenceID = try XCTUnwrap(model.activeSequenceID)
+        let firstVideoTrack = try XCTUnwrap(model.activeSequence?.videoTracks.first)
+        let firstClipLayout = try XCTUnwrap(model.timelineClipLayouts(for: firstVideoTrack).first)
+
+        model.scrub(to: 12)
+        model.selectClip(
+            trackID: firstClipLayout.reference.trackID,
+            clipID: firstClipLayout.reference.clipID,
+            mode: .replace
+        )
+        model.zoomTimelineIn()
+        let firstPixelsPerFrame = model.timelineState.pixelsPerFrame
+
+        XCTAssertTrue(model.addSequence())
+        let secondSequenceID = try XCTUnwrap(model.activeSequenceID)
+
+        XCTAssertNotEqual(firstSequenceID, secondSequenceID)
+        XCTAssertEqual(model.playheadFrame, 0)
+        XCTAssertEqual(model.timelineSelectedClipCount, 0)
+        XCTAssertTrue(model.timelineSnappingEnabled)
+
+        model.scrub(to: 5)
+        model.setTimelineSnappingEnabled(false)
+        model.zoomTimelineOut()
+
+        XCTAssertTrue(model.selectSequence(firstSequenceID))
+
+        XCTAssertEqual(model.playheadFrame, 12)
+        XCTAssertEqual(model.timelineSelectedClipCount, 1)
+        XCTAssertTrue(model.timelineSnappingEnabled)
+        XCTAssertEqual(model.timelineState.pixelsPerFrame, firstPixelsPerFrame)
+
+        XCTAssertTrue(model.selectSequence(secondSequenceID))
+
+        XCTAssertEqual(model.playheadFrame, 0)
+        XCTAssertFalse(model.timelineSnappingEnabled)
+    }
+
     func testFRTL010TimelineTimeMappingAndZoomClamps() {
         XCTAssertEqual(
             TimelineInteraction.xPosition(frame: 12, pixelsPerFrame: 4),
