@@ -13,7 +13,22 @@
 //      ajar bench   <project.ajar> <metric>
 //      ajar golden  <suite>
 //
-//  Links AjarCore + AjarRender + AjarMedia + AjarAudio.
+//  Links the testable AjarCLI implementation for headless engine workflows.
 //
-//  STATUS: scaffold only. Implementation begins at ROADMAP M2 (when the render graph + compositor
-//  land). Intentional placeholder — no command logic yet.
+//  The executable stays thin; the implementation lives in the testable AjarCLI target.
+
+import AjarCLI
+import Darwin
+import Foundation
+
+@main
+struct AjarExecutable {
+    static func main() async {
+        let exitCode = await AjarCommand.run(
+            arguments: Array(CommandLine.arguments.dropFirst())
+        )
+        guard exitCode == 0 else {
+            Darwin.exit(exitCode)
+        }
+    }
+}

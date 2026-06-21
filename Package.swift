@@ -53,10 +53,17 @@ let package = Package(
             path: "Sources/AjarAudio"
         ),
 
+        // Testable implementation for the `ajar` executable.
+        .target(
+            name: "AjarCLI",
+            dependencies: ["AjarCore", "AjarRender", "AjarMedia"],
+            path: "Sources/AjarCLI"
+        ),
+
         // `ajar`: headless render / inspect / benchmark / golden-frame harness (TESTING, ADR-0011).
         .executableTarget(
             name: "ajar-cli",
-            dependencies: ["AjarCore", "AjarRender", "AjarMedia", "AjarAudio"],
+            dependencies: ["AjarCLI"],
             path: "Sources/ajar-cli"
         ),
 
@@ -75,6 +82,11 @@ let package = Package(
             name: "AjarRenderTests",
             dependencies: ["AjarRender", "AjarCore"],
             path: "Tests/AjarRenderTests"
+        ),
+        .testTarget(
+            name: "AjarCLITests",
+            dependencies: ["AjarCLI", "AjarCore"],
+            path: "Tests/AjarCLITests"
         ),
     ]
 )
