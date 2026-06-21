@@ -345,7 +345,7 @@ private struct TrackLane: View {
                 }
         }
         .frame(height: 46)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(row.fullAccessibilityLabel)
     }
 }
