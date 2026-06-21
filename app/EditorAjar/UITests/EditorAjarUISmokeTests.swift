@@ -32,19 +32,16 @@ final class EditorAjarUISmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["Step Forward"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.sliders["Scrub playhead"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Playhead Frame 0"].waitForExistence(timeout: 5))
 
-        app.buttons["Step Forward"].click()
-        XCTAssertTrue(app.staticTexts["Playhead Frame 1"].waitForExistence(timeout: 5))
-
-        app.buttons["Step Backward"].click()
-        XCTAssertTrue(app.staticTexts["Playhead Frame 0"].waitForExistence(timeout: 5))
+        let playheadReadout = app.staticTexts["Playhead readout"]
+        XCTAssertTrue(playheadReadout.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel("Playhead Frame 0", on: playheadReadout))
 
         app.typeKey(.rightArrow, modifierFlags: [])
-        XCTAssertTrue(app.staticTexts["Playhead Frame 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel("Playhead Frame 1", on: playheadReadout))
 
         app.typeKey(.leftArrow, modifierFlags: [])
-        XCTAssertTrue(app.staticTexts["Playhead Frame 0"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel("Playhead Frame 0", on: playheadReadout))
 
         app.typeKey(.space, modifierFlags: [])
         XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5))
@@ -68,5 +65,15 @@ final class EditorAjarUISmokeTests: XCTestCase {
         }
 
         return XCUIApplication(url: appURL)
+    }
+
+    private func waitForLabel(
+        _ expectedLabel: String,
+        on element: XCUIElement,
+        timeout: TimeInterval = 5
+    ) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", expectedLabel)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 }

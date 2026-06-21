@@ -152,6 +152,7 @@ private struct TransportBar: View {
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 96, alignment: .leading)
+                .accessibilityIdentifier("Playhead readout")
                 .accessibilityLabel("Playhead \(model.playheadDescription)")
             Spacer()
         }
