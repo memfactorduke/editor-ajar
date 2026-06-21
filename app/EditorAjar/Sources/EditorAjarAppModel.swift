@@ -19,30 +19,66 @@ final class EditorAjarAppModel: ObservableObject {
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
     private var editHistory: EditHistory?
+    private let autosaveCoordinator: EditorAjarAutosaveCoordinator?
+    private let autosaveIntervalSeconds: TimeInterval
+    private var autosaveLoopTask: Task<Void, Never>?
+    private var autosaveWriteTask: Task<Void, Never>?
+    private var autosaveCommandCount = 0
     private var renderGeneration = 0
 
-    init() {
+    init(autosavePackageURL: URL? = nil, autosaveIntervalSeconds: TimeInterval = 5.0) {
+        self.autosaveIntervalSeconds = autosaveIntervalSeconds
+        if let autosavePackageURL {
+            autosaveCoordinator = EditorAjarAutosaveCoordinator(packageURL: autosavePackageURL)
+        } else {
+            autosaveCoordinator = nil
+        }
+
         loadMessage = "Loading sample project"
 
-        switch Self.makeSampleProject() {
-        case .success(let project):
-            self.project = project
-            editHistory = EditHistory(project: project)
-            durationFrames = Self.durationFrames(for: project)
-            if let sequence = project.sequences.first {
+        var initialProject: Project?
+        if let autosavePackageURL,
+           AjarAutosaveStore.hasRecoverableSnapshot(at: autosavePackageURL)
+        {
+            do {
+                let recovery = try AjarAutosaveStore.recoverProject(from: autosavePackageURL)
+                initialProject = recovery.project
+                autosaveCommandCount = recovery.latestCommandCount
+                loadMessage = recovery.isComplete
+                    ? "Recovered autosave"
+                    : "Recovered autosave to last good state"
+            } catch {
+                loadMessage = "Autosave recovery unavailable: \(error)"
+            }
+        }
+
+        if initialProject == nil {
+            switch Self.makeSampleProject() {
+            case .success(let project):
+                initialProject = project
+                loadMessage = "Sample project loaded"
+            case .failure(let error):
+                loadMessage = "Sample project unavailable: \(error)"
+            }
+        }
+
+        if let initialProject {
+            project = initialProject
+            editHistory = EditHistory(project: initialProject)
+            durationFrames = Self.durationFrames(for: initialProject)
+            if let sequence = initialProject.sequences.first {
                 playbackController = EditorAjarPlaybackController(
                     frameRate: sequence.timebase,
                     durationFrames: durationFrames
                 )
             }
-        case .failure(let error):
+        } else {
             project = nil
-            loadMessage = "Sample project unavailable: \(error)"
         }
 
         do {
             renderPipeline = try EditorAjarRenderPipeline()
-            if project != nil {
+            if project != nil, loadMessage == "Loading sample project" {
                 loadMessage = "Sample project loaded"
             }
         } catch {
@@ -52,7 +88,16 @@ final class EditorAjarAppModel: ObservableObject {
         displayLinkDriver = EditorAjarDisplayLinkDriver { [weak self] deltaSeconds in
             self?.displayLinkTick(deltaSeconds)
         }
+        if let project {
+            scheduleAutosaveCheckpoint(project: project)
+        }
+        startAutosaveLoop()
         requestRenderForCurrentFrame()
+    }
+
+    deinit {
+        autosaveLoopTask?.cancel()
+        autosaveWriteTask?.cancel()
     }
 
     var canUndo: Bool {
@@ -318,6 +363,7 @@ final class EditorAjarAppModel: ObservableObject {
 
         editHistory = history
         updateProject(project)
+        scheduleAutosaveCheckpoint(project: project)
     }
 
     static func makeSampleProject() -> Result<Project, Error> {
@@ -326,6 +372,21 @@ final class EditorAjarAppModel: ObservableObject {
         } catch {
             return .failure(error)
         }
+    }
+
+    static func defaultAutosavePackageURL() -> URL {
+        let supportDirectory = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first ?? FileManager.default.temporaryDirectory
+        return supportDirectory
+            .appendingPathComponent("EditorAjar", isDirectory: true)
+            .appendingPathComponent("Autosave.ajar", isDirectory: true)
+    }
+
+    func autosaveCheckpointForTesting() async {
+        await autosaveWriteTask?.value
+        await autosaveCurrentProjectAndWait()
     }
 
     private func displayLinkTick(_ deltaSeconds: Double) {
@@ -408,6 +469,7 @@ final class EditorAjarAppModel: ObservableObject {
             let project = try history.apply(command)
             editHistory = history
             updateProject(project)
+            scheduleAutosave(command: command, project: project)
         } catch {
             loadMessage = "Edit failed: \(error)"
         }
@@ -426,6 +488,135 @@ final class EditorAjarAppModel: ObservableObject {
             timelineState.selectionAnchor = timelineState.selectedClips.first
         }
         requestRenderForCurrentFrame()
+    }
+
+    private func startAutosaveLoop() {
+        guard autosaveCoordinator != nil,
+              autosaveIntervalSeconds.isFinite,
+              autosaveIntervalSeconds > 0
+        else {
+            return
+        }
+
+        let nanoseconds = UInt64(max(0.1, autosaveIntervalSeconds) * 1_000_000_000)
+        autosaveLoopTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: nanoseconds)
+                await self?.autosaveCurrentProject()
+            }
+        }
+    }
+
+    private func scheduleAutosave(command: EditCommand, project: Project) {
+        guard let autosaveCoordinator else {
+            return
+        }
+
+        autosaveCommandCount += 1
+        let commandCount = autosaveCommandCount
+        let previousWriteTask = autosaveWriteTask
+        autosaveWriteTask = Task {
+            [weak self, autosaveCoordinator, command, commandCount, project, previousWriteTask] in
+            await previousWriteTask?.value
+            let message = await autosaveCoordinator.recordSignificantEdit(
+                command: command,
+                sequenceNumber: commandCount,
+                project: project
+            )
+            await MainActor.run {
+                if let message {
+                    self?.loadMessage = message
+                }
+            }
+        }
+    }
+
+    private func scheduleAutosaveCheckpoint(project: Project) {
+        guard let autosaveCoordinator else {
+            return
+        }
+
+        let commandCount = autosaveCommandCount
+        let previousWriteTask = autosaveWriteTask
+        autosaveWriteTask = Task { [weak self, autosaveCoordinator, commandCount, project, previousWriteTask] in
+            await previousWriteTask?.value
+            let message = await autosaveCoordinator.writeSnapshot(
+                project: project,
+                appliedCommandCount: commandCount
+            )
+            await MainActor.run {
+                if let message {
+                    self?.loadMessage = message
+                }
+            }
+        }
+    }
+
+    private func autosaveCurrentProject() {
+        guard let project else {
+            return
+        }
+        scheduleAutosaveCheckpoint(project: project)
+    }
+
+    private func autosaveCurrentProjectAndWait() async {
+        guard let project,
+              let autosaveCoordinator
+        else {
+            return
+        }
+
+        await autosaveWriteTask?.value
+        let message = await autosaveCoordinator.writeSnapshot(
+            project: project,
+            appliedCommandCount: autosaveCommandCount
+        )
+        if let message {
+            loadMessage = message
+        }
+    }
+}
+
+private actor EditorAjarAutosaveCoordinator {
+    private let packageURL: URL
+
+    init(packageURL: URL) {
+        self.packageURL = packageURL
+    }
+
+    func recordSignificantEdit(
+        command: EditCommand,
+        sequenceNumber: Int,
+        project: Project
+    ) -> String? {
+        do {
+            try AjarAutosaveStore.appendJournalEntry(
+                command: command,
+                sequenceNumber: sequenceNumber,
+                to: packageURL
+            )
+            try AjarAutosaveStore.writeSnapshot(
+                project,
+                appliedCommandCount: sequenceNumber,
+                to: packageURL
+            )
+            return nil
+        } catch {
+            return "Autosave failed: \(error)"
+        }
+    }
+
+    func writeSnapshot(project: Project, appliedCommandCount: Int) -> String? {
+        do {
+            try AjarAutosaveStore.writeSnapshot(
+                project,
+                appliedCommandCount: appliedCommandCount,
+                to: packageURL
+            )
+            return nil
+        } catch {
+            return "Autosave failed: \(error)"
+        }
     }
 }
 
