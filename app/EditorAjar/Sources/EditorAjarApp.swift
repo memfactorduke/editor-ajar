@@ -21,6 +21,21 @@ struct EditorAjarApp: App {
         }
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .undoRedo) {
+                Button(model.undoMenuTitle) {
+                    model.undo()
+                }
+                .keyboardShortcut("z", modifiers: [.command])
+                .disabled(!model.canUndo)
+                .accessibilityLabel(model.undoMenuTitle)
+
+                Button(model.redoMenuTitle) {
+                    model.redo()
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(!model.canRedo)
+                .accessibilityLabel(model.redoMenuTitle)
+            }
             CommandMenu("Markers") {
                 Button("Add Marker") {
                     model.addTimelineMarkerAtPlayhead()

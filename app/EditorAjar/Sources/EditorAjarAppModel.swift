@@ -104,6 +104,18 @@ final class EditorAjarAppModel: ObservableObject {
         (editHistory?.undoCount ?? 0) > 0
     }
 
+    var canRedo: Bool {
+        (editHistory?.redoCount ?? 0) > 0
+    }
+
+    var undoMenuTitle: String {
+        editMenuTitle(prefix: "Undo", command: editHistory?.nextUndoCommand)
+    }
+
+    var redoMenuTitle: String {
+        editMenuTitle(prefix: "Redo", command: editHistory?.nextRedoCommand)
+    }
+
     var activeSequence: Sequence? {
         project?.sequences.first
     }
@@ -590,6 +602,23 @@ final class EditorAjarAppModel: ObservableObject {
         scheduleAutosaveCheckpoint(project: project)
     }
 
+    func redo() {
+        guard var history = editHistory else {
+            return
+        }
+
+        do {
+            guard let project = try history.redo() else {
+                return
+            }
+            editHistory = history
+            updateProject(project)
+            scheduleAutosaveCheckpoint(project: project)
+        } catch {
+            loadMessage = "Redo failed: \(error)"
+        }
+    }
+
     static func makeSampleProject() -> Result<Project, Error> {
         do {
             return .success(try EditorAjarSampleProjectFactory.makeSampleProject())
@@ -698,6 +727,13 @@ final class EditorAjarAppModel: ObservableObject {
         return nil
     }
 
+    private func editMenuTitle(prefix: String, command: EditCommand?) -> String {
+        guard let command else {
+            return prefix
+        }
+        return "\(prefix) \(command.actionName)"
+    }
+
     @discardableResult
     private func applyEdit(_ command: EditCommand) -> Bool {
         guard var history = editHistory else {
@@ -761,7 +797,7 @@ final class EditorAjarAppModel: ObservableObject {
         autosaveLoopTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: nanoseconds)
-                await self?.autosaveCurrentProject()
+                self?.autosaveCurrentProject()
             }
         }
     }

@@ -270,6 +270,66 @@ public enum EditReducer {
     }
 }
 
+public extension EditCommand {
+    /// Human-readable action name for menus, autosave logs, and diagnostics.
+    var actionName: String {
+        switch self {
+        case .addClip:
+            return "Add Clip"
+        case .insertClip:
+            return "Insert Clip"
+        case .overwriteClip:
+            return "Overwrite Clip"
+        case .appendClip:
+            return "Append Clip"
+        case .removeClip:
+            return "Remove Clip"
+        case .replaceClipSource:
+            return "Replace Clip Source"
+        case .threePointEdit:
+            return "Three-Point Edit"
+        case .bladeClip:
+            return "Blade Clip"
+        case .rippleTrimClip:
+            return "Ripple Trim"
+        case .rollEdit:
+            return "Roll Edit"
+        case .slipClip:
+            return "Slip Clip"
+        case .slideClip:
+            return "Slide Clip"
+        case .rippleDeleteClip:
+            return "Ripple Delete"
+        case .liftClip:
+            return "Lift Clip"
+        case .setTrackState:
+            return "Change Track State"
+        case .moveClip:
+            return "Move Clip"
+        case .trimClip:
+            return "Trim Clip"
+        case .addTrack:
+            return "Add Track"
+        case .removeTrack:
+            return "Remove Track"
+        case .renameSequence:
+            return "Rename Sequence"
+        case .addMarker:
+            return "Add Marker"
+        case .removeMarker:
+            return "Delete Marker"
+        case .updateMarker:
+            return "Update Marker"
+        case .linkClips:
+            return "Link Clips"
+        case .unlinkClips:
+            return "Detach Audio"
+        case .setProjectSettings:
+            return "Change Project Settings"
+        }
+    }
+}
+
 extension EditReducer {
     static func applyUnchecked(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {

@@ -46,6 +46,16 @@ public struct EditHistory: Equatable, Sendable {
         redoEntries.count
     }
 
+    /// Command that would be undone next, if any.
+    public var nextUndoCommand: EditCommand? {
+        undoEntries.last?.command
+    }
+
+    /// Command that would be redone next, if any.
+    public var nextRedoCommand: EditCommand? {
+        redoEntries.last?.command
+    }
+
     /// Creates an empty edit history at `project`.
     public init(project: Project) {
         currentProject = project

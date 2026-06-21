@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Undo/redo menu items, standard keyboard shortcuts, action-name labels, redo support, and
+  UI-smoke shortcut coverage in the macOS app for FR-TL-012.
 - Linked A/V clip groups in `AjarCore`, including undoable link/unlink commands, linked
   move/trim propagation, momentary unlink edit mode, `.ajar` codec coverage, and macOS detach
   audio controls for FR-TL-009.

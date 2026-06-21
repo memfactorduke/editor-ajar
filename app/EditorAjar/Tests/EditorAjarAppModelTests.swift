@@ -93,6 +93,108 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(restoredTrack.hidden)
     }
 
+    func testFRTL012AppUndoRedoMenuTitlesAndAvailabilityReflectEditHistory() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+        let originalProject = try XCTUnwrap(model.project)
+
+        XCTAssertFalse(model.canUndo)
+        XCTAssertFalse(model.canRedo)
+        XCTAssertEqual(model.undoMenuTitle, "Undo")
+        XCTAssertEqual(model.redoMenuTitle, "Redo")
+
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: videoTrack.id,
+            hidden: true
+        )
+        let editedProject = try XCTUnwrap(model.project)
+
+        XCTAssertTrue(model.canUndo)
+        XCTAssertFalse(model.canRedo)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Change Track State")
+
+        model.undo()
+
+        XCTAssertEqual(model.project, originalProject)
+        XCTAssertFalse(model.canUndo)
+        XCTAssertTrue(model.canRedo)
+        XCTAssertEqual(model.undoMenuTitle, "Undo")
+        XCTAssertEqual(model.redoMenuTitle, "Redo Change Track State")
+
+        model.redo()
+
+        XCTAssertEqual(model.project, editedProject)
+        XCTAssertTrue(model.canUndo)
+        XCTAssertFalse(model.canRedo)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Change Track State")
+        XCTAssertEqual(model.redoMenuTitle, "Redo")
+
+        model.undo()
+        model.addTimelineMarkerAtPlayhead()
+
+        XCTAssertTrue(model.canUndo)
+        XCTAssertFalse(model.canRedo)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Add Marker")
+    }
+
+    func testFRTL012LongAppUndoRedoSequenceRestoresExactProjectState() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let originalProject = try XCTUnwrap(model.project)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+        let audioTrack = try XCTUnwrap(sequence.audioTracks.first)
+        let linkedSelection = try sampleLinkedSelection(in: model)
+
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: videoTrack.id,
+            hidden: true
+        )
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: audioTrack.id,
+            muted: true
+        )
+        model.scrub(to: 12)
+        model.addTimelineMarkerAtPlayhead()
+        model.updateSelectedMarker(
+            name: "Undo checkpoint",
+            color: .green,
+            note: "FR-TL-012"
+        )
+        model.selectClip(
+            trackID: linkedSelection.videoTrackID,
+            clipID: linkedSelection.videoClip.id,
+            mode: .replace
+        )
+        XCTAssertTrue(model.moveSelectedClip(toStartFrame: 6))
+        XCTAssertTrue(model.detachAudioForSelectedClip())
+
+        let editedProject = try XCTUnwrap(model.project)
+        XCTAssertNotEqual(editedProject, originalProject)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Detach Audio")
+
+        for _ in 0..<6 {
+            XCTAssertTrue(model.canUndo)
+            model.undo()
+        }
+
+        XCTAssertEqual(model.project, originalProject)
+        XCTAssertFalse(model.canUndo)
+        XCTAssertTrue(model.canRedo)
+
+        for _ in 0..<6 {
+            XCTAssertTrue(model.canRedo)
+            model.redo()
+        }
+
+        XCTAssertEqual(model.project, editedProject)
+        XCTAssertTrue(model.canUndo)
+        XCTAssertFalse(model.canRedo)
+    }
+
     func testFRTL010TimelineTimeMappingAndZoomClamps() {
         XCTAssertEqual(
             TimelineInteraction.xPosition(frame: 12, pixelsPerFrame: 4),
