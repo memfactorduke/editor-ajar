@@ -7,8 +7,39 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Adds a clip to an existing track.
     case addClip(sequenceID: UUID, trackID: UUID, clip: Clip)
 
+    /// Inserts a clip and pushes later items right by the clip duration.
+    case insertClip(sequenceID: UUID, trackID: UUID, clip: Clip)
+
+    /// Overwrites the clip's timeline range without rippling later items.
+    case overwriteClip(sequenceID: UUID, trackID: UUID, clip: Clip)
+
+    /// Appends a clip after the last item on an existing track.
+    case appendClip(sequenceID: UUID, trackID: UUID, clip: Clip)
+
     /// Removes a clip from an existing track.
     case removeClip(sequenceID: UUID, trackID: UUID, clipID: UUID)
+
+    /// Swaps a clip source while keeping its timeline placement.
+    case replaceClipSource(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        source: ClipSource,
+        sourceRange: TimeRange
+    )
+
+    /// Places a source in/out range at a timeline target as an insert or overwrite edit.
+    case threePointEdit(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        source: ClipSource,
+        sourceRange: TimeRange,
+        timelineStart: RationalTime,
+        kind: TrackKind,
+        name: String,
+        mode: ThreePointEditMode
+    )
 
     /// Moves a clip to a new track/range.
     case moveClip(
@@ -55,6 +86,9 @@ public enum EditReducerError: Error, Equatable, Sendable {
     /// The command would create duplicate track IDs inside a sequence.
     case duplicateTrackID(sequenceID: UUID, trackID: UUID)
 
+    /// Exact timeline arithmetic failed while applying the command.
+    case timeArithmeticFailed(RationalTimeError)
+
     /// The command produced a project that failed central validation.
     case validationFailed([ProjectValidationError])
 }
@@ -68,72 +102,34 @@ public func apply(_ command: EditCommand, to project: Project) throws -> Project
 public enum EditReducer {
     /// Applies `command` to `project`, returning a new validated project.
     public static func apply(_ command: EditCommand, to project: Project) throws -> Project {
-        let candidate: Project
+        try validated(try applyUnchecked(command, to: project))
+    }
+}
 
+extension EditReducer {
+    static func applyUnchecked(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
-        case .addClip(let sequenceID, let trackID, let clip):
-            candidate = try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
-        case .removeClip(let sequenceID, let trackID, let clipID):
-            candidate = try removeClip(
-                clipID: clipID,
-                sequenceID: sequenceID,
-                trackID: trackID,
-                from: project
-            )
-        case .moveClip(
-            let sequenceID,
-            let sourceTrackID,
-            let clipID,
-            let destinationTrackID,
-            let timelineRange
-        ):
-            candidate = try moveClip(
-                MoveClipEdit(
-                    clipID: clipID,
-                    sequenceID: sequenceID,
-                    sourceTrackID: sourceTrackID,
-                    destinationTrackID: destinationTrackID,
-                    timelineRange: timelineRange
-                ),
-                in: project
-            )
-        case .trimClip(
-            let sequenceID,
-            let trackID,
-            let clipID,
-            let sourceRange,
-            let timelineRange
-        ):
-            candidate = try trimClip(
-                TrimClipEdit(
-                    clipID: clipID,
-                    sequenceID: sequenceID,
-                    trackID: trackID,
-                    sourceRange: sourceRange,
-                    timelineRange: timelineRange
-                ),
-                in: project
-            )
+        case .addClip, .insertClip, .overwriteClip, .appendClip,
+            .removeClip, .replaceClipSource, .threePointEdit, .moveClip, .trimClip:
+            return try applyClipCommand(command, to: project)
         case .addTrack(let sequenceID, let track):
-            candidate = try addTrack(track, sequenceID: sequenceID, to: project)
+            return try addTrack(track, sequenceID: sequenceID, to: project)
         case .removeTrack(let sequenceID, let trackID):
-            candidate = try removeTrack(trackID: trackID, sequenceID: sequenceID, from: project)
+            return try removeTrack(trackID: trackID, sequenceID: sequenceID, from: project)
         case .renameSequence(let sequenceID, let name):
-            candidate = try renameSequence(sequenceID: sequenceID, name: name, in: project)
+            return try renameSequence(sequenceID: sequenceID, name: name, in: project)
         case .setProjectSettings(let settings):
-            candidate = Project(
+            return Project(
                 schemaVersion: project.schemaVersion,
                 settings: settings,
                 mediaPool: project.mediaPool,
                 sequences: project.sequences
             )
         }
-
-        return try validated(candidate)
     }
 }
 
-private extension EditReducer {
+extension EditReducer {
     enum TrackCollection {
         case video
         case audio
@@ -481,16 +477,18 @@ private extension EditReducer {
 
     static func copying(
         _ clip: Clip,
+        source: ClipSource? = nil,
         sourceRange: TimeRange? = nil,
-        timelineRange: TimeRange
+        timelineRange: TimeRange? = nil,
+        name: String? = nil
     ) -> Clip {
         Clip(
             id: clip.id,
-            source: clip.source,
+            source: source ?? clip.source,
             sourceRange: sourceRange ?? clip.sourceRange,
-            timelineRange: timelineRange,
+            timelineRange: timelineRange ?? clip.timelineRange,
             kind: clip.kind,
-            name: clip.name
+            name: name ?? clip.name
         )
     }
 }

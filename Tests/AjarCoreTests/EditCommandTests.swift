@@ -185,15 +185,6 @@ final class EditReducerInvariantTests: XCTestCase {
     }
 }
 
-private struct EditFixture {
-    let project: Project
-    let sequenceID: UUID
-    let videoTrackID: UUID
-    let audioTrackID: UUID
-    let clipID: UUID
-    let mediaID: UUID
-}
-
 private struct EditCommandCase {
     let project: Project
     let command: EditCommand
@@ -218,12 +209,118 @@ private func makeValidCommandCases(seed: Int) throws -> [EditCommandCase] {
     let addClipID = try editUUID(seed * 1_000 + 21)
     let addClip = try makeEditClip(id: addClipID, mediaID: fixture.mediaID, startFrame: 20)
 
-    return try makeClipCommandCases(fixture: fixture, addClip: addClip)
+    return try makeClipCommandCases(fixture: fixture, addClip: addClip, seed: seed)
         + makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID)
         + makeProjectCommandCases(fixture: fixture, seed: seed)
 }
 
 private func makeClipCommandCases(
+    fixture: EditFixture,
+    addClip: Clip,
+    seed: Int
+) throws -> [EditCommandCase] {
+    try makeCoreClipCommandCases(fixture: fixture, seed: seed)
+        + makeLegacyClipCommandCases(fixture: fixture, addClip: addClip)
+}
+
+private func makeCoreClipCommandCases(
+    fixture: EditFixture,
+    seed: Int
+) throws -> [EditCommandCase] {
+    try makePlacementClipCommandCases(fixture: fixture, seed: seed)
+        + makeReplaceAndThreePointCommandCases(fixture: fixture, seed: seed)
+}
+
+private func makePlacementClipCommandCases(
+    fixture: EditFixture,
+    seed: Int
+) throws -> [EditCommandCase] {
+    var cases: [EditCommandCase] = []
+    let insertClip = try makeEditClip(
+        id: try editUUID(seed * 1_000 + 22),
+        mediaID: fixture.mediaID,
+        startFrame: 10,
+        durationFrames: 4
+    )
+    let overwriteClip = try makeEditClip(
+        id: try editUUID(seed * 1_000 + 23),
+        mediaID: fixture.mediaID,
+        startFrame: 0,
+        durationFrames: 4
+    )
+    let appendClip = try makeEditClip(
+        id: try editUUID(seed * 1_000 + 24),
+        mediaID: fixture.mediaID,
+        startFrame: 100,
+        durationFrames: 4
+    )
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .insertClip(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clip: insertClip
+            )
+        )
+    )
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .overwriteClip(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clip: overwriteClip
+            )
+        )
+    )
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .appendClip(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clip: appendClip
+            )
+        )
+    )
+    return cases
+}
+
+private func makeReplaceAndThreePointCommandCases(
+    fixture: EditFixture,
+    seed: Int
+) throws -> [EditCommandCase] {
+    let threePointSourceRange = try editRange(startFrame: 2, durationFrames: 4)
+    return try [
+        EditCommandCase(
+            project: fixture.project,
+            command: .replaceClipSource(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                source: .media(id: fixture.mediaID),
+                sourceRange: try editRange(startFrame: 1, durationFrames: 4)
+            )
+        ),
+        makeThreePointCommandCase(
+            fixture: fixture,
+            seed: seed,
+            sourceRange: threePointSourceRange,
+            timelineFrame: 10,
+            mode: .insert
+        ),
+        makeThreePointCommandCase(
+            fixture: fixture,
+            seed: seed + 1,
+            sourceRange: threePointSourceRange,
+            timelineFrame: 0,
+            mode: .overwrite
+        )
+    ]
+}
+
+private func makeLegacyClipCommandCases(
     fixture: EditFixture,
     addClip: Clip
 ) throws -> [EditCommandCase] {
@@ -275,6 +372,29 @@ private func makeClipCommandCases(
     return cases
 }
 
+private func makeThreePointCommandCase(
+    fixture: EditFixture,
+    seed: Int,
+    sourceRange: TimeRange,
+    timelineFrame: Int64,
+    mode: ThreePointEditMode
+) throws -> EditCommandCase {
+    EditCommandCase(
+        project: fixture.project,
+        command: .threePointEdit(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clipID: try editUUID(seed * 1_000 + 25),
+            source: .media(id: fixture.mediaID),
+            sourceRange: sourceRange,
+            timelineStart: try editTime(timelineFrame),
+            kind: .video,
+            name: "Three-point \(mode.rawValue) \(seed)",
+            mode: mode
+        )
+    )
+}
+
 private func makeTrackCommandCases(
     fixture: EditFixture,
     addTrackID: UUID
@@ -323,97 +443,4 @@ private func makeProjectCommandCases(
         EditCommandCase(project: fixture.project, command: .setProjectSettings(settings))
     )
     return cases
-}
-
-private func makeEditFixture(seed: Int) throws -> EditFixture {
-    let base = seed * 1_000
-    let mediaID = try editUUID(base + 1)
-    let sequenceID = try editUUID(base + 2)
-    let videoTrackID = try editUUID(base + 3)
-    let audioTrackID = try editUUID(base + 4)
-    let clipID = try editUUID(base + 5)
-    let media = try makeEditMediaRef(id: mediaID)
-    let clip = try makeEditClip(id: clipID, mediaID: mediaID, startFrame: 0)
-    let videoTrack = Track(id: videoTrackID, kind: .video, items: [.clip(clip)])
-    let audioTrack = Track(id: audioTrackID, kind: .audio, items: [])
-    let sequence = Sequence(
-        id: sequenceID,
-        name: "Sequence \(seed)",
-        videoTracks: [videoTrack],
-        audioTracks: [audioTrack],
-        markers: [],
-        timebase: try FrameRate(frames: 24)
-    )
-    let project = Project(
-        schemaVersion: 1,
-        settings: try makeEditSettings(),
-        mediaPool: [media],
-        sequences: [sequence]
-    )
-
-    return EditFixture(
-        project: project,
-        sequenceID: sequenceID,
-        videoTrackID: videoTrackID,
-        audioTrackID: audioTrackID,
-        clipID: clipID,
-        mediaID: mediaID
-    )
-}
-
-private func makeEditSettings() throws -> ProjectSettings {
-    ProjectSettings(
-        frameRate: try FrameRate(frames: 24),
-        resolution: PixelDimensions(width: 1_920, height: 1_080),
-        colorSpace: .rec709,
-        audioSampleRate: 48_000
-    )
-}
-
-private func makeEditMediaRef(id: UUID) throws -> MediaRef {
-    MediaRef(
-        id: id,
-        sourceURL: URL(fileURLWithPath: "/media/\(id.uuidString).mov"),
-        contentHash: ContentHash.sha256(data: Data(id.uuidString.utf8)),
-        metadata: MediaMetadata(
-            codecID: "h264",
-            pixelDimensions: PixelDimensions(width: 1_920, height: 1_080),
-            frameRate: try FrameRate(frames: 24),
-            duration: try editTime(240),
-            colorSpace: .rec709,
-            audioChannelLayout: AudioChannelLayout(channelCount: 2, layoutTag: "stereo"),
-            isVariableFrameRate: false,
-            conformedFrameRate: nil
-        )
-    )
-}
-
-private func makeEditClip(
-    id: UUID,
-    mediaID: UUID,
-    startFrame: Int64,
-    durationFrames: Int64 = 10,
-    kind: TrackKind = .video
-) throws -> Clip {
-    Clip(
-        id: id,
-        source: .media(id: mediaID),
-        sourceRange: try editRange(startFrame: 0, durationFrames: durationFrames),
-        timelineRange: try editRange(startFrame: startFrame, durationFrames: durationFrames),
-        kind: kind,
-        name: "Clip \(id.uuidString)"
-    )
-}
-
-private func editRange(startFrame: Int64, durationFrames: Int64) throws -> TimeRange {
-    try TimeRange(start: editTime(startFrame), duration: editTime(durationFrames))
-}
-
-private func editTime(_ frame: Int64) throws -> RationalTime {
-    try RationalTime(value: frame, timescale: 24)
-}
-
-private func editUUID(_ value: Int) throws -> UUID {
-    let uuidString = String(format: "00000000-0000-0000-0000-%012d", value)
-    return try XCTUnwrap(UUID(uuidString: uuidString))
 }
