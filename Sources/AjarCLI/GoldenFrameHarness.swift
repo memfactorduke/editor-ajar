@@ -122,11 +122,20 @@ public enum GoldenFrameHarness {
             try? FileManager.default.removeItem(at: workingDirectory)
         }
 
-        let mediaURL = workingDirectory.appendingPathComponent("source.mov")
+        let clipSpecs = try manifest.resolvedClipSpecs()
+        let mediaURLs = clipSpecs.indices.map { index in
+            workingDirectory.appendingPathComponent("source-\(index).mov")
+        }
         let projectURL = workingDirectory.appendingPathComponent("project.ajar")
         let actualURL = workingDirectory.appendingPathComponent("actual.png")
-        try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: manifest.syntheticMedia)
-        let project = try makeSyntheticProject(manifest: manifest, mediaURL: mediaURL)
+        for (clipSpec, mediaURL) in zip(clipSpecs, mediaURLs) {
+            try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: clipSpec.syntheticMedia)
+        }
+        let project = try makeSyntheticProject(
+            manifest: manifest,
+            clipSpecs: clipSpecs,
+            mediaURLs: mediaURLs
+        )
         try ProjectPackageIO.writeProject(project, to: projectURL)
 
         _ = try await RenderFrameCommand.render(
@@ -173,48 +182,54 @@ public enum GoldenFrameHarness {
 
     private static func makeSyntheticProject(
         manifest: GoldenFrameManifest,
-        mediaURL: URL
+        clipSpecs: [GoldenFrameClipSpec],
+        mediaURLs: [URL]
     ) throws -> Project {
-        let frameRate = try FrameRate(frames: Int64(manifest.syntheticMedia.frameRate))
-        let mediaID = try uuid("00000000-0000-0000-0000-000000000018")
-        let clipID = try uuid("00000000-0000-0000-0000-000000000118")
-        let duration = try frameRate.duration(ofFrames: Int64(manifest.syntheticMedia.frameCount))
-        let media = MediaRef(
-            id: mediaID,
-            sourceURL: mediaURL,
-            contentHash: ContentHash.sha256(data: Data(manifest.id.utf8)),
-            metadata: MediaMetadata(
-                codecID: "prores4444",
-                pixelDimensions: PixelDimensions(
-                    width: manifest.syntheticMedia.width,
-                    height: manifest.syntheticMedia.height
-                ),
-                frameRate: frameRate,
-                duration: duration,
-                colorSpace: .rec709,
-                audioChannelLayout: nil,
-                isVariableFrameRate: false,
-                conformedFrameRate: nil
+        guard let firstClipSpec = clipSpecs.first, clipSpecs.count == mediaURLs.count else {
+            throw AjarCLIError.invalidGoldenManifest("\(manifest.id) has no synthetic clips")
+        }
+
+        let frameRate = try FrameRate(frames: Int64(firstClipSpec.syntheticMedia.frameRate))
+        let duration = try frameRate.duration(
+            ofFrames: Int64(firstClipSpec.syntheticMedia.frameCount)
+        )
+        let context = GoldenFrameBuildContext(
+            manifestID: manifest.id,
+            frameRate: frameRate,
+            duration: duration
+        )
+        let resolution = manifest.outputDimensions ?? PixelDimensions(
+            width: firstClipSpec.syntheticMedia.width,
+            height: firstClipSpec.syntheticMedia.height
+        )
+        let media = try zip(clipSpecs, mediaURLs).enumerated().map { index, pair in
+            try makeMediaRef(
+                context: context,
+                clipSpec: pair.0,
+                mediaURL: pair.1,
+                index: index
             )
-        )
-        let clip = Clip(
-            id: clipID,
-            source: .media(id: mediaID),
-            sourceRange: try TimeRange(start: .zero, duration: duration),
-            timelineRange: try TimeRange(start: .zero, duration: duration),
-            kind: .video,
-            name: "Golden \(manifest.id)"
-        )
+        }
+        let tracks = try clipSpecs.indices.map { index in
+            Track(
+                id: try numberedUUID(318 + index),
+                kind: .video,
+                items: [
+                    .clip(
+                        try makeClip(
+                            context: context,
+                            clipSpec: clipSpecs[index],
+                            mediaID: media[index].id,
+                            index: index
+                        )
+                    )
+                ]
+            )
+        }
         let sequence = Sequence(
             id: try uuid("00000000-0000-0000-0000-000000000218"),
             name: "Golden \(manifest.id)",
-            videoTracks: [
-                Track(
-                    id: try uuid("00000000-0000-0000-0000-000000000318"),
-                    kind: .video,
-                    items: [.clip(clip)]
-                )
-            ],
+            videoTracks: tracks,
             audioTracks: [],
             markers: [],
             timebase: frameRate
@@ -224,15 +239,61 @@ public enum GoldenFrameHarness {
             schemaVersion: AjarProjectCodec.currentSchemaVersion,
             settings: ProjectSettings(
                 frameRate: frameRate,
-                resolution: PixelDimensions(
-                    width: manifest.syntheticMedia.width,
-                    height: manifest.syntheticMedia.height
-                ),
+                resolution: resolution,
                 colorSpace: .rec709,
                 audioSampleRate: 48_000
             ),
-            mediaPool: [media],
+            mediaPool: media,
             sequences: [sequence]
+        )
+    }
+
+    private struct GoldenFrameBuildContext {
+        let manifestID: String
+        let frameRate: FrameRate
+        let duration: RationalTime
+    }
+
+    private static func makeMediaRef(
+        context: GoldenFrameBuildContext,
+        clipSpec: GoldenFrameClipSpec,
+        mediaURL: URL,
+        index: Int
+    ) throws -> MediaRef {
+        MediaRef(
+            id: try numberedUUID(18 + index),
+            sourceURL: mediaURL,
+            contentHash: ContentHash.sha256(data: Data("\(context.manifestID)-\(index)".utf8)),
+            metadata: MediaMetadata(
+                codecID: "prores4444",
+                pixelDimensions: PixelDimensions(
+                    width: clipSpec.syntheticMedia.width,
+                    height: clipSpec.syntheticMedia.height
+                ),
+                frameRate: context.frameRate,
+                duration: context.duration,
+                colorSpace: .rec709,
+                audioChannelLayout: nil,
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+    }
+
+    private static func makeClip(
+        context: GoldenFrameBuildContext,
+        clipSpec: GoldenFrameClipSpec,
+        mediaID: UUID,
+        index: Int
+    ) throws -> Clip {
+        Clip(
+            id: try numberedUUID(118 + index),
+            source: .media(id: mediaID),
+            sourceRange: try TimeRange(start: .zero, duration: context.duration),
+            timelineRange: try TimeRange(start: .zero, duration: context.duration),
+            kind: .video,
+            name: "Golden \(context.manifestID) \(index)",
+            transform: clipSpec.transform ?? .identity
         )
     }
 
@@ -241,6 +302,10 @@ public enum GoldenFrameHarness {
             throw AjarCLIError.invalidGoldenManifest("invalid fixture UUID \(value)")
         }
         return uuid
+    }
+
+    private static func numberedUUID(_ value: Int) throws -> UUID {
+        try uuid(String(format: "00000000-0000-0000-0000-%012d", value))
     }
 }
 
@@ -261,8 +326,14 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
     /// Reference PNG path relative to the manifest directory.
     let referencePNG: String
 
-    /// Synthetic media source specification.
-    let syntheticMedia: SyntheticMovieSpec
+    /// Optional output canvas dimensions. Defaults to the first synthetic clip dimensions.
+    let outputDimensions: PixelDimensions?
+
+    /// Legacy single synthetic media source specification.
+    let syntheticMedia: SyntheticMovieSpec?
+
+    /// Synthetic clips to stack bottom-to-top.
+    let clips: [GoldenFrameClipSpec]?
 
     /// Comparison tolerance.
     let tolerance: GoldenFrameTolerance
@@ -281,6 +352,7 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
             guard !manifest.requirements.isEmpty else {
                 throw AjarCLIError.invalidGoldenManifest("\(url.path) has no requirement refs")
             }
+            _ = try manifest.resolvedClipSpecs()
             return manifest
         } catch let error as AjarCLIError {
             throw error
@@ -290,6 +362,21 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
             )
         }
     }
+
+    func resolvedClipSpecs() throws -> [GoldenFrameClipSpec] {
+        if let clips, !clips.isEmpty {
+            return clips
+        }
+        if let syntheticMedia {
+            return [GoldenFrameClipSpec(syntheticMedia: syntheticMedia, transform: nil)]
+        }
+        throw AjarCLIError.invalidGoldenManifest("\(id) has no synthetic media")
+    }
+}
+
+struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
+    let syntheticMedia: SyntheticMovieSpec
+    let transform: ClipTransform?
 }
 
 private struct GoldenFrameCaseResult {

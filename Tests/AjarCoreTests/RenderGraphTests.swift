@@ -35,6 +35,13 @@ final class RenderGraphTests: XCTestCase {
         XCTAssertEqual(payload.mediaID, mediaID)
         XCTAssertEqual(payload.clipID, clipID)
         XCTAssertEqual(payload.sourceTime, try time(54))
+
+        guard case .composite(let composite) = output.kind else {
+            return XCTFail("Expected composite output")
+        }
+        XCTAssertEqual(composite.inputs, [
+            RenderCompositeInput(sourceNodeID: source.id, transform: clip.transform)
+        ])
     }
 
     func testADR0009RenderGraphCodableRoundTripPreservesHashes() throws {
@@ -99,6 +106,41 @@ final class RenderGraphTests: XCTestCase {
         )
 
         XCTAssertNotEqual(
+            try sourceNode(in: firstGraph).contentHash,
+            try sourceNode(in: secondGraph).contentHash
+        )
+        XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
+    }
+
+    func testFRXFORM001To005ChangingTransformInvalidatesCompositeButNotSourceHash() throws {
+        let mediaID = try uuid(32)
+        let clipID = try uuid(33)
+        let media = try makeMediaRef(id: mediaID)
+        let firstClip = try makeClip(id: clipID, mediaID: mediaID, transform: .identity)
+        let secondClip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            transform: ClipTransform(
+                position: CanvasPoint(x: RationalValue(4), y: RationalValue(2)),
+                opacity: try RationalValue(numerator: 1, denominator: 2),
+                blendMode: .screen,
+                crop: ClipCropInsets(left: 1, top: 2, right: 3, bottom: 4),
+                flip: ClipFlip(horizontal: true, vertical: false)
+            )
+        )
+        let firstSequence = try makeSequence(with: firstClip)
+        let secondSequence = try makeSequence(with: secondClip)
+        let firstProject = try makeProject(mediaPool: [media], sequences: [firstSequence])
+        let secondProject = try makeProject(mediaPool: [media], sequences: [secondSequence])
+
+        let firstGraph = try buildRenderGraph(for: firstSequence, at: try time(4), in: firstProject)
+        let secondGraph = try buildRenderGraph(
+            for: secondSequence,
+            at: try time(4),
+            in: secondProject
+        )
+
+        XCTAssertEqual(
             try sourceNode(in: firstGraph).contentHash,
             try sourceNode(in: secondGraph).contentHash
         )
@@ -268,7 +310,7 @@ private func sourceNode(in graph: RenderGraph) throws -> RenderNode {
 
 private func makeProject(mediaPool: [MediaRef], sequences: [Sequence]) throws -> Project {
     Project(
-        schemaVersion: 1,
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
         settings: ProjectSettings(
             frameRate: try FrameRate(frames: 24),
             resolution: PixelDimensions(width: 1_920, height: 1_080),
@@ -322,14 +364,16 @@ private func makeClip(
     mediaID: UUID,
     timelineStartFrame: Int64 = 0,
     sourceStartFrame: Int64 = 0,
-    durationFrames: Int64 = 10
+    durationFrames: Int64 = 10,
+    transform: ClipTransform = .identity
 ) throws -> Clip {
     try makeClip(
         id: id,
         source: .media(id: mediaID),
         timelineStartFrame: timelineStartFrame,
         sourceStartFrame: sourceStartFrame,
-        durationFrames: durationFrames
+        durationFrames: durationFrames,
+        transform: transform
     )
 }
 
@@ -338,7 +382,8 @@ private func makeClip(
     source: ClipSource,
     timelineStartFrame: Int64,
     sourceStartFrame: Int64,
-    durationFrames: Int64 = 10
+    durationFrames: Int64 = 10,
+    transform: ClipTransform = .identity
 ) throws -> Clip {
     Clip(
         id: id,
@@ -346,7 +391,8 @@ private func makeClip(
         sourceRange: try range(startFrame: sourceStartFrame, durationFrames: durationFrames),
         timelineRange: try range(startFrame: timelineStartFrame, durationFrames: durationFrames),
         kind: .video,
-        name: "RenderGraph clip"
+        name: "RenderGraph clip",
+        transform: transform
     )
 }
 

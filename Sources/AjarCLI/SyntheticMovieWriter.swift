@@ -10,6 +10,23 @@ struct SyntheticMovieSpec: Codable, Equatable, Sendable {
     let frameCount: Int
     let frameRate: Int32
     let bgra: [UInt8]
+    let pixelsBGRA: [UInt8]?
+
+    init(
+        width: Int,
+        height: Int,
+        frameCount: Int,
+        frameRate: Int32,
+        bgra: [UInt8],
+        pixelsBGRA: [UInt8]? = nil
+    ) {
+        self.width = width
+        self.height = height
+        self.frameCount = frameCount
+        self.frameRate = frameRate
+        self.bgra = bgra
+        self.pixelsBGRA = pixelsBGRA
+    }
 }
 
 enum SyntheticMovieWriter {
@@ -113,7 +130,14 @@ enum SyntheticMovieWriter {
         spec: SyntheticMovieSpec,
         frameIndex: Int
     ) throws -> CVPixelBuffer {
-        guard spec.width > 0, spec.height > 0, spec.frameCount > 0, spec.bgra.count == 4 else {
+        guard spec.width > 0, spec.height > 0, spec.frameCount > 0 else {
+            throw SyntheticMovieWriterError.invalidSpec
+        }
+        if let pixelsBGRA = spec.pixelsBGRA {
+            guard pixelsBGRA.count == spec.width * spec.height * 4 else {
+                throw SyntheticMovieWriterError.invalidSpec
+            }
+        } else if spec.bgra.count != 4 {
             throw SyntheticMovieWriterError.invalidSpec
         }
 
@@ -158,12 +182,24 @@ enum SyntheticMovieWriter {
         for yPosition in 0..<spec.height {
             for xPosition in 0..<spec.width {
                 let offset = yPosition * rowBytes + xPosition * 4
-                bytes[offset] = spec.bgra[0]
-                bytes[offset + 1] = UInt8((Int(spec.bgra[1]) + frameIndex) % 256)
-                bytes[offset + 2] = spec.bgra[2]
-                bytes[offset + 3] = spec.bgra[3]
+                if let pixelsBGRA = spec.pixelsBGRA {
+                    let source = offsetInTightBGRA(width: spec.width, x: xPosition, y: yPosition)
+                    bytes[offset] = pixelsBGRA[source]
+                    bytes[offset + 1] = pixelsBGRA[source + 1]
+                    bytes[offset + 2] = pixelsBGRA[source + 2]
+                    bytes[offset + 3] = pixelsBGRA[source + 3]
+                } else {
+                    bytes[offset] = spec.bgra[0]
+                    bytes[offset + 1] = UInt8((Int(spec.bgra[1]) + frameIndex) % 256)
+                    bytes[offset + 2] = spec.bgra[2]
+                    bytes[offset + 3] = spec.bgra[3]
+                }
             }
         }
+    }
+
+    private static func offsetInTightBGRA(width: Int, x: Int, y: Int) -> Int {
+        ((y * width) + x) * 4
     }
 }
 
