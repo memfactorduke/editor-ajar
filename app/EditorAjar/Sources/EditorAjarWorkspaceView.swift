@@ -67,25 +67,48 @@ private struct ProgramMonitor: View {
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.black)
+                ProgramMetalView(device: model.metalDevice, texture: model.presentedTexture)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color.white.opacity(0.12), lineWidth: 1)
                     )
                     .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                VStack(spacing: 6) {
-                    Text(model.activeSequenceName)
-                        .font(.title3.weight(.semibold))
-                    Text("1920 x 1080 · \(model.frameRateDescription)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+
+                if model.presentedTexture == nil {
+                    VStack(spacing: 6) {
+                        Text(model.activeSequenceName)
+                            .font(.title3.weight(.semibold))
+                        Text(model.loadMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .padding(.horizontal, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Program monitor showing \(model.activeSequenceName)")
+
+            VStack(spacing: 4) {
+                HStack {
+                    Text(model.activeSequenceName)
+                        .font(.callout.weight(.semibold))
+                    Spacer()
+                    Text(model.loadMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("\(model.frameRateDescription)")
+                    Spacer()
+                    Text(model.playheadDescription)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 24)
         }
         .padding(.vertical, 18)
         .background(Color(red: 0.08, green: 0.08, blue: 0.09))
@@ -131,6 +154,19 @@ private struct TransportBar: View {
                 .frame(minWidth: 96, alignment: .leading)
                 .accessibilityLabel("Playhead \(model.playheadDescription)")
             Spacer()
+        }
+        .overlay(alignment: .bottom) {
+            Slider(
+                value: Binding(
+                    get: { Double(model.playheadFrame) },
+                    set: { model.scrub(to: Int64($0.rounded())) }
+                ),
+                in: 0...Double(max(1, model.durationFrames - 1)),
+                step: 1
+            )
+            .padding(.horizontal, 24)
+            .padding(.bottom, 3)
+            .accessibilityLabel("Scrub playhead")
         }
         .buttonStyle(.bordered)
         .controlSize(.large)

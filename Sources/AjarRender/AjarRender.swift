@@ -14,4 +14,4 @@
 //
 //  Depends on AjarCore; AjarCore never depends on this (ADR-0005).
 //
-//  STATUS: scaffold only. Implementation begins at ROADMAP M2. Intentional placeholder.
+//  STATUS: M2 single-source render execution and app presentation are implemented.
