@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Keyframed clip transform animation in `AjarCore`, including deterministic cubic Bézier/ease
+  interpolation, undoable add/move/delete keyframe commands, validation, and `.ajar` round-trip
+  coverage for FR-KEY-001/002/003/009 and FR-XFORM-008.
 - `AjarRender` static clip transforms in the Metal composite path with render-graph cache
   invalidation and golden-frame coverage for FR-XFORM-001..005.
 - `AjarCore` per-clip transform model and undoable set-transform reducer command with exact

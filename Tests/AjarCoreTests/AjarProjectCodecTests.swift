@@ -162,6 +162,32 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(videoClip.transform, transform)
     }
 
+    func testFRKEY001FRXFORM008KeyframedTransformRoundTripsThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 165)
+        let animation = try makeKeyframedCodecTransform()
+        let transformedProject = try replacingFirstCodecClipTransformAnimation(
+            in: project,
+            with: animation
+        )
+
+        let package = try AjarProjectCodec.encode(transformedProject)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject, transformedProject)
+        XCTAssertEqual(videoClip.transformAnimation, animation)
+        XCTAssertEqual(
+            videoClip.transformAnimation.value(at: try codecTime(4)).position,
+            CanvasPoint(x: RationalValue(4), y: RationalValue(8))
+        )
+    }
+
     func testFRXFORM001To005LegacyClipWithoutTransformDefaultsToIdentity() throws {
         let project = try makeCodecProject(seed: 170)
         let package = try AjarProjectCodec.encode(project)
@@ -177,6 +203,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
         XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
         XCTAssertEqual(videoClip.transform, .identity)
+        XCTAssertEqual(videoClip.transformAnimation, .identity)
     }
 }
 
@@ -351,6 +378,7 @@ private func projectJSONWithoutClipTransformFields(_ projectJSON: Data) throws -
 
     document["schemaVersion"] = 1
     clipPayload.removeValue(forKey: "transform")
+    clipPayload.removeValue(forKey: "transformAnimation")
     clipItem["clip"] = clipPayload
     items[0] = clipItem
     videoTrack["items"] = items
@@ -360,6 +388,85 @@ private func projectJSONWithoutClipTransformFields(_ projectJSON: Data) throws -
     document["sequences"] = sequences
 
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func replacingFirstCodecClipTransformAnimation(
+    in project: Project,
+    with animation: AnimatableClipTransform
+) throws -> Project {
+    let sequence = try XCTUnwrap(project.sequences.first)
+    let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+    let originalClip = try XCTUnwrap(clip(in: videoTrack))
+    let transformedClip = Clip(
+        id: originalClip.id,
+        source: originalClip.source,
+        sourceRange: originalClip.sourceRange,
+        timelineRange: originalClip.timelineRange,
+        kind: originalClip.kind,
+        name: originalClip.name,
+        linkGroupID: originalClip.linkGroupID,
+        transform: animation.baseTransform,
+        transformAnimation: animation
+    )
+    let replacementTrack = Track(
+        id: videoTrack.id,
+        kind: videoTrack.kind,
+        items: videoTrack.items.map { item in
+            if case .clip(let currentClip) = item, currentClip.id == originalClip.id {
+                return .clip(transformedClip)
+            }
+            return item
+        },
+        enabled: videoTrack.enabled,
+        locked: videoTrack.locked,
+        muted: videoTrack.muted,
+        solo: videoTrack.solo,
+        hidden: videoTrack.hidden
+    )
+    let replacementSequence = Sequence(
+        id: sequence.id,
+        name: sequence.name,
+        videoTracks: [replacementTrack] + sequence.videoTracks.dropFirst(),
+        audioTracks: sequence.audioTracks,
+        markers: sequence.markers,
+        timebase: sequence.timebase
+    )
+
+    return Project(
+        schemaVersion: project.schemaVersion,
+        settings: project.settings,
+        mediaPool: project.mediaPool,
+        sequences: [replacementSequence] + project.sequences.dropFirst()
+    )
+}
+
+private func makeKeyframedCodecTransform() throws -> AnimatableClipTransform {
+    try AnimatableClipTransform(
+        position: Animatable(
+            base: .zero,
+            keyframes: [
+                Keyframe(time: codecTime(0), value: .zero, interpolation: .linear),
+                Keyframe(
+                    time: codecTime(8),
+                    value: CanvasPoint(x: RationalValue(8), y: RationalValue(16)),
+                    interpolation: .hold
+                )
+            ]
+        ),
+        opacity: Animatable(
+            base: .one,
+            keyframes: [
+                Keyframe(time: codecTime(0), value: .one, interpolation: .easeInOut),
+                Keyframe(
+                    time: codecTime(8),
+                    value: try RationalValue(numerator: 1, denominator: 2),
+                    interpolation: .hold
+                )
+            ]
+        ),
+        blendMode: .screen,
+        flip: ClipFlip(horizontal: true, vertical: false)
+    )
 }
 
 private func replacingFirstCodecClipTransform(

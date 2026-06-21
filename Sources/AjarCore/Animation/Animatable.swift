@@ -1,15 +1,111 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// Interpolation modes available for a keyframe segment in M1.
+/// Interpolation modes available for a keyframe segment.
 ///
-/// The segment beginning at a keyframe uses that keyframe's mode. M4 will expand this model with
-/// ease and Bezier curve modes alongside the curve editor.
-public enum InterpolationMode: String, Codable, Equatable, Sendable {
+/// The segment beginning at a keyframe uses that keyframe's mode.
+public enum InterpolationMode: Codable, Equatable, Sendable {
     /// Keep the left keyframe value until the next keyframe is reached.
     case hold
 
     /// Linearly interpolate between the left and right keyframe values.
     case linear
+
+    /// Ease slowly out of the left keyframe.
+    case easeIn
+
+    /// Ease slowly into the right keyframe.
+    case easeOut
+
+    /// Ease at both ends of the segment.
+    case easeInOut
+
+    /// Custom cubic Bezier timing.
+    case bezier(CubicBezierTimingCurve)
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case curve
+    }
+
+    /// Decodes legacy string modes and current structured Bezier modes.
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(),
+           let value = try? container.decode(String.self) {
+            switch value {
+            case "hold":
+                self = .hold
+            case "linear":
+                self = .linear
+            case "easeIn":
+                self = .easeIn
+            case "easeOut":
+                self = .easeOut
+            case "easeInOut":
+                self = .easeInOut
+            default:
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Unknown interpolation mode \(value)"
+                )
+            }
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(String.self, forKey: .kind)
+        switch kind {
+        case "bezier":
+            self = .bezier(try container.decode(CubicBezierTimingCurve.self, forKey: .curve))
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .kind,
+                in: container,
+                debugDescription: "Unknown interpolation mode \(kind)"
+            )
+        }
+    }
+
+    /// Encodes built-in modes as legacy strings and custom Bezier modes as structured values.
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .hold:
+            var container = encoder.singleValueContainer()
+            try container.encode("hold")
+        case .linear:
+            var container = encoder.singleValueContainer()
+            try container.encode("linear")
+        case .easeIn:
+            var container = encoder.singleValueContainer()
+            try container.encode("easeIn")
+        case .easeOut:
+            var container = encoder.singleValueContainer()
+            try container.encode("easeOut")
+        case .easeInOut:
+            var container = encoder.singleValueContainer()
+            try container.encode("easeInOut")
+        case .bezier(let curve):
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode("bezier", forKey: .kind)
+            try container.encode(curve, forKey: .curve)
+        }
+    }
+
+    func timingFraction(for linearFraction: Double) -> Double {
+        switch self {
+        case .hold:
+            0
+        case .linear:
+            linearFraction
+        case .easeIn:
+            CubicBezierTimingCurve.easeIn.value(at: linearFraction)
+        case .easeOut:
+            CubicBezierTimingCurve.easeOut.value(at: linearFraction)
+        case .easeInOut:
+            CubicBezierTimingCurve.easeInOut.value(at: linearFraction)
+        case .bezier(let curve):
+            curve.value(at: linearFraction)
+        }
+    }
 }
 
 /// A value that can be linearly interpolated for keyframe evaluation.
@@ -93,6 +189,11 @@ public struct Animatable<
     /// Keyframes in strictly ascending time order.
     public let keyframes: [Keyframe<Value>]
 
+    private enum CodingKeys: String, CodingKey {
+        case base
+        case keyframes
+    }
+
     /// Creates an animatable parameter after validating the keyframe ordering invariant.
     public init(base: Value, keyframes: [Keyframe<Value>] = []) throws {
         switch Self.validate(keyframes: keyframes) {
@@ -104,6 +205,27 @@ public struct Animatable<
 
         self.base = base
         self.keyframes = keyframes
+    }
+
+    /// Decodes and validates keyframe ordering.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            base: container.decode(Value.self, forKey: .base),
+            keyframes: container.decode([Keyframe<Value>].self, forKey: .keyframes)
+        )
+    }
+
+    /// Encodes the animatable parameter.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(base, forKey: .base)
+        try container.encode(keyframes, forKey: .keyframes)
+    }
+
+    /// Creates a constant animatable parameter.
+    public static func constant(_ value: Value) -> Animatable<Value> {
+        Animatable(base: value, validatedKeyframes: [])
     }
 
     /// Validates the strict time-order invariant shared by construction and tests.
@@ -181,17 +303,23 @@ public struct Animatable<
     ) -> Value {
         switch left.interpolation {
         case .hold:
-            left.value
-        case .linear:
-            left.value.lerp(
+            return left.value
+        case .linear, .easeIn, .easeOut, .easeInOut, .bezier:
+            let fraction = Self.interpolationFraction(
+                at: time,
+                leftTime: left.time,
+                rightTime: right.time
+            )
+            return left.value.lerp(
                 to: right.value,
-                fraction: Self.interpolationFraction(
-                    at: time,
-                    leftTime: left.time,
-                    rightTime: right.time
-                )
+                fraction: left.interpolation.timingFraction(for: fraction)
             )
         }
+    }
+
+    private init(base: Value, validatedKeyframes keyframes: [Keyframe<Value>]) {
+        self.base = base
+        self.keyframes = keyframes
     }
 
     private static func interpolationFraction(
@@ -233,5 +361,37 @@ public struct Animatable<
         let startValue = Double(start.value) * Double(end.timescale)
         let denominator = Double(end.timescale) * Double(start.timescale)
         return (endValue - startValue) / denominator
+    }
+}
+
+extension RationalValue {
+    /// Approximate `Double` representation used by interpolation and GPU uniform conversion.
+    public var doubleValue: Double {
+        Double(numerator) / Double(denominator)
+    }
+
+    /// Creates a stable rational approximation for non-time interpolated model values.
+    public static func approximating(_ value: Double) -> RationalValue {
+        guard value.isFinite else {
+            return .zero
+        }
+
+        let denominator: Int64 = 1_000_000
+        let scaled = value * Double(denominator)
+        guard scaled >= Double(Int64.min), scaled <= Double(Int64.max) else {
+            return value < 0
+                ? RationalValue(Int64.min / denominator)
+                : RationalValue(Int64.max / denominator)
+        }
+
+        let numerator = Int64(scaled.rounded())
+        return (try? RationalValue(numerator: numerator, denominator: denominator)) ?? .zero
+    }
+}
+
+extension RationalValue: Interpolatable {
+    /// Returns the linearly interpolated rational approximation.
+    public func lerp(to target: RationalValue, fraction: Double) -> RationalValue {
+        RationalValue.approximating(doubleValue + ((target.doubleValue - doubleValue) * fraction))
     }
 }

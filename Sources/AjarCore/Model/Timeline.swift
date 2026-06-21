@@ -145,6 +145,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Per-clip visual transform. Audio clips keep identity unless future audio tooling needs it.
     public let transform: ClipTransform
 
+    /// Keyframable visual transform parameters. Evaluates to `transform` when constant.
+    public let transformAnimation: AnimatableClipTransform
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -154,7 +157,8 @@ public struct Clip: Codable, Equatable, Sendable {
         kind: TrackKind,
         name: String,
         linkGroupID: UUID? = nil,
-        transform: ClipTransform = .identity
+        transform: ClipTransform = .identity,
+        transformAnimation: AnimatableClipTransform? = nil
     ) {
         self.id = id
         self.source = source
@@ -164,6 +168,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.name = name
         self.linkGroupID = linkGroupID
         self.transform = transform
+        self.transformAnimation = transformAnimation ?? .constant(transform)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -175,6 +180,7 @@ public struct Clip: Codable, Equatable, Sendable {
         case name
         case linkGroupID
         case transform
+        case transformAnimation
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -189,6 +195,10 @@ public struct Clip: Codable, Equatable, Sendable {
         linkGroupID = try container.decodeIfPresent(UUID.self, forKey: .linkGroupID)
         transform = try container.decodeIfPresent(ClipTransform.self, forKey: .transform)
             ?? .identity
+        transformAnimation = try container.decodeIfPresent(
+            AnimatableClipTransform.self,
+            forKey: .transformAnimation
+        ) ?? .constant(transform)
     }
 
     /// Encodes the complete clip payload.
@@ -202,6 +212,7 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(name, forKey: .name)
         try container.encodeIfPresent(linkGroupID, forKey: .linkGroupID)
         try container.encode(transform, forKey: .transform)
+        try container.encode(transformAnimation, forKey: .transformAnimation)
     }
 }
 

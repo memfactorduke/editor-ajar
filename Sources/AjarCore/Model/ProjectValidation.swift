@@ -63,17 +63,37 @@ public enum ProjectValidationError: Equatable, Sendable {
         clipID: UUID,
         error: ClipTransformValidationError
     )
+
+    /// A transform keyframe time is outside its clip timeline range.
+    case transformKeyframeTimeOutsideClip(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        time: RationalTime,
+        clipRange: TimeRange
+    )
+
+    /// A transform keyframe value is outside the valid project-frame range.
+    case invalidClipTransformKeyframe(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        time: RationalTime,
+        error: ClipTransformValidationError
+    )
 }
 
 enum ProjectValidator {
-    private struct ValidationState {
+    struct ValidationState {
         let mediaIDs: Set<UUID>
         let sequenceIDs: Set<UUID>
         let frame: PixelDimensions
         var errors: [ProjectValidationError] = []
     }
 
-    private struct TrackContext {
+    struct TrackContext {
         let sequenceID: UUID
         let trackID: UUID
         let trackKind: TrackKind
@@ -307,27 +327,6 @@ enum ProjectValidator {
                     )
                 )
             }
-        }
-    }
-
-    private static func validateClipTransform(
-        _ item: TimelineItem,
-        context: TrackContext,
-        state: inout ValidationState
-    ) {
-        guard case .clip(let clip) = item else {
-            return
-        }
-
-        for error in ClipTransformValidator.errors(for: clip.transform, frame: state.frame) {
-            state.errors.append(
-                .invalidClipTransform(
-                    sequenceID: context.sequenceID,
-                    trackID: context.trackID,
-                    clipID: clip.id,
-                    error: error
-                )
-            )
         }
     }
 
