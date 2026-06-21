@@ -217,6 +217,61 @@ extension EditReducer {
             copying(sequence, name: name)
         }
     }
+
+    static func addSequence(_ sequence: Sequence, to project: Project) throws -> Project {
+        guard !project.sequences.contains(where: { $0.id == sequence.id }) else {
+            throw EditReducerError.duplicateSequenceID(sequence.id)
+        }
+
+        return Project(
+            schemaVersion: project.schemaVersion,
+            settings: project.settings,
+            mediaPool: project.mediaPool,
+            sequences: project.sequences + [sequence]
+        )
+    }
+
+    static func removeSequence(sequenceID: UUID, from project: Project) throws -> Project {
+        guard let index = project.sequences.firstIndex(where: { $0.id == sequenceID }) else {
+            throw EditReducerError.sequenceNotFound(sequenceID)
+        }
+        guard project.sequences.count > 1 else {
+            throw EditReducerError.cannotRemoveLastSequence(sequenceID)
+        }
+
+        var sequences = project.sequences
+        sequences.remove(at: index)
+        return Project(
+            schemaVersion: project.schemaVersion,
+            settings: project.settings,
+            mediaPool: project.mediaPool,
+            sequences: sequences
+        )
+    }
+
+    static func duplicateSequence(
+        sourceSequenceID: UUID,
+        duplicate: Sequence,
+        in project: Project
+    ) throws -> Project {
+        guard let sourceIndex = project.sequences.firstIndex(
+            where: { $0.id == sourceSequenceID }
+        ) else {
+            throw EditReducerError.sequenceNotFound(sourceSequenceID)
+        }
+        guard !project.sequences.contains(where: { $0.id == duplicate.id }) else {
+            throw EditReducerError.duplicateSequenceID(duplicate.id)
+        }
+
+        var sequences = project.sequences
+        sequences.insert(duplicate, at: sourceIndex + 1)
+        return Project(
+            schemaVersion: project.schemaVersion,
+            settings: project.settings,
+            mediaPool: project.mediaPool,
+            sequences: sequences
+        )
+    }
 }
 
 extension EditReducer {

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Multi-sequence project editing with undoable core add/remove/duplicate sequence commands,
+  `.ajar` two-sequence round-trip coverage, and macOS sequence tabs that preserve per-sequence
+  timeline editing context for FR-TL-011.
 - Undo/redo menu items, standard keyboard shortcuts, action-name labels, redo support, and
   UI-smoke shortcut coverage in the macOS app for FR-TL-012.
 - Linked A/V clip groups in `AjarCore`, including undoable link/unlink commands, linked

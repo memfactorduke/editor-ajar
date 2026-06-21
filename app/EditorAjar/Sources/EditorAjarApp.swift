@@ -36,6 +36,18 @@ struct EditorAjarApp: App {
                 .disabled(!model.canRedo)
                 .accessibilityLabel(model.redoMenuTitle)
             }
+            CommandMenu("Sequences") {
+                Button("New Sequence") {
+                    model.addSequence()
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+
+                Button("Close Sequence") {
+                    model.closeActiveSequence()
+                }
+                .keyboardShortcut("w", modifiers: [.command])
+                .disabled(!model.canCloseActiveSequence)
+            }
             CommandMenu("Markers") {
                 Button("Add Marker") {
                     model.addTimelineMarkerAtPlayhead()

@@ -306,6 +306,15 @@ final class ProjectValidationTests: XCTestCase {
         )
     }
 
+    func testFRTL011ValidationRejectsDuplicateSequenceIDsWithoutCrashing() throws {
+        let sequenceID = try uuid(85)
+        let firstSequence = try makeSequence(id: sequenceID)
+        let secondSequence = try makeSequence(id: sequenceID)
+        let project = try makeProject(mediaPool: [], sequences: [firstSequence, secondSequence])
+
+        XCTAssertTrue(validationErrors(from: project).contains(.duplicateSequenceID(sequenceID)))
+    }
+
     func testADR0008ValidationPropertyAcceptsGeneratedSortedNonOverlappingClips() throws {
         let mediaID = try uuid(90)
         let media = try makeMediaRef(id: mediaID)

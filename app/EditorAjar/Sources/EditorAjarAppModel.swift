@@ -14,6 +14,7 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var presentedTexture: MTLTexture?
     @Published private(set) var loadMessage: String
     @Published private(set) var timelineState = TimelineInteractionState()
+    @Published private(set) var activeSequenceID: UUID?
 
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
@@ -25,6 +26,7 @@ final class EditorAjarAppModel: ObservableObject {
     private var autosaveWriteTask: Task<Void, Never>?
     private var autosaveCommandCount = 0
     private var renderGeneration = 0
+    private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
 
     init(autosavePackageURL: URL? = nil, autosaveIntervalSeconds: TimeInterval = 5.0) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
@@ -65,12 +67,14 @@ final class EditorAjarAppModel: ObservableObject {
         if let initialProject {
             project = initialProject
             editHistory = EditHistory(project: initialProject)
-            durationFrames = Self.durationFrames(for: initialProject)
             if let sequence = initialProject.sequences.first {
+                activeSequenceID = sequence.id
+                durationFrames = Self.durationFrames(for: sequence)
                 playbackController = EditorAjarPlaybackController(
                     frameRate: sequence.timebase,
                     durationFrames: durationFrames
                 )
+                persistActiveSequenceContext()
             }
         } else {
             project = nil
@@ -117,11 +121,39 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var activeSequence: Sequence? {
-        project?.sequences.first
+        guard let project else {
+            return nil
+        }
+        if let activeSequenceID,
+           let sequence = project.sequences.first(where: { $0.id == activeSequenceID })
+        {
+            return sequence
+        }
+        return project.sequences.first
     }
 
     var activeSequenceName: String {
         activeSequence?.name ?? "No Sequence"
+    }
+
+    var sequenceTabs: [SequenceTab] {
+        guard let project else {
+            return []
+        }
+        let activeID = activeSequence?.id
+        let canClose = project.sequences.count > 1
+        return project.sequences.map { sequence in
+            SequenceTab(
+                id: sequence.id,
+                title: sequence.name,
+                isActive: sequence.id == activeID,
+                canClose: canClose
+            )
+        }
+    }
+
+    var canCloseActiveSequence: Bool {
+        (project?.sequences.count ?? 0) > 1
     }
 
     var projectSummary: String {
@@ -131,7 +163,8 @@ final class EditorAjarAppModel: ObservableObject {
 
         let sequenceCount = project.sequences.count
         let mediaCount = project.mediaPool.count
-        return "\(sequenceCount) sequence, \(mediaCount) media items"
+        let sequenceLabel = sequenceCount == 1 ? "sequence" : "sequences"
+        return "\(sequenceCount) \(sequenceLabel), \(mediaCount) media items"
     }
 
     var frameRateDescription: String {
@@ -203,6 +236,68 @@ final class EditorAjarAppModel: ObservableObject {
         } else {
             displayLinkDriver?.stop()
         }
+    }
+
+    @discardableResult
+    func selectSequence(_ sequenceID: UUID) -> Bool {
+        guard let project,
+              let sequence = project.sequences.first(where: { $0.id == sequenceID })
+        else {
+            return false
+        }
+
+        persistActiveSequenceContext()
+        isPlaying = false
+        displayLinkDriver?.stop()
+        restoreActiveSequenceContext(for: sequence)
+        requestRenderForCurrentFrame()
+        return true
+    }
+
+    @discardableResult
+    func addSequence() -> Bool {
+        guard let project else {
+            return false
+        }
+
+        let sequence = Self.emptySequence(
+            name: Self.nextSequenceName(in: project),
+            frameRate: project.settings.frameRate
+        )
+        guard applyEdit(.addSequence(sequence)) else {
+            return false
+        }
+
+        return selectSequence(sequence.id)
+    }
+
+    @discardableResult
+    func closeActiveSequence() -> Bool {
+        guard let sequenceID = activeSequence?.id else {
+            return false
+        }
+        return closeSequence(sequenceID)
+    }
+
+    @discardableResult
+    func closeSequence(_ sequenceID: UUID) -> Bool {
+        guard let project else {
+            return false
+        }
+        let replacementID = Self.replacementSequenceID(
+            afterRemoving: sequenceID,
+            from: project
+        )
+        let isRemovingActiveSequence = activeSequence?.id == sequenceID
+
+        guard applyEdit(.removeSequence(sequenceID: sequenceID)) else {
+            return false
+        }
+
+        if isRemovingActiveSequence, let replacementID {
+            selectSequence(replacementID)
+        }
+        return true
     }
 
     func stepBackward() {
@@ -317,6 +412,7 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectedClips = result.selectedClips
         timelineState.selectionAnchor = result.anchor
         timelineState.selectedMarkerID = nil
+        persistActiveSequenceContext()
     }
 
     func selectAllClips(on trackID: UUID) {
@@ -328,6 +424,7 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectedClips = Set(selectedClips)
         timelineState.selectionAnchor = selectedClips.first
         timelineState.selectedMarkerID = nil
+        persistActiveSequenceContext()
     }
 
     func isMarkerSelected(_ markerID: UUID) -> Bool {
@@ -342,6 +439,7 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectedMarkerID = markerID
         timelineState.selectedClips = []
         timelineState.selectionAnchor = nil
+        persistActiveSequenceContext()
     }
 
     func addTimelineMarkerAtPlayhead() {
@@ -374,6 +472,7 @@ final class EditorAjarAppModel: ObservableObject {
 
         if applyEdit(.removeMarker(sequenceID: sequenceID, markerID: markerID)) {
             timelineState.selectedMarkerID = nil
+            persistActiveSequenceContext()
         }
     }
 
@@ -399,6 +498,7 @@ final class EditorAjarAppModel: ObservableObject {
 
         if applyEdit(.updateMarker(sequenceID: sequence.id, marker: marker)) {
             timelineState.selectedMarkerID = marker.id
+            persistActiveSequenceContext()
         }
     }
 
@@ -503,19 +603,23 @@ final class EditorAjarAppModel: ObservableObject {
 
     func setTimelineRangeIn() {
         timelineState.selectionInFrame = playheadFrame
+        persistActiveSequenceContext()
     }
 
     func setTimelineRangeOut() {
         timelineState.selectionOutFrame = playheadFrame
+        persistActiveSequenceContext()
     }
 
     func clearTimelineRange() {
         timelineState.selectionInFrame = nil
         timelineState.selectionOutFrame = nil
+        persistActiveSequenceContext()
     }
 
     func setTimelineSnappingEnabled(_ isEnabled: Bool) {
         timelineState.snappingEnabled = isEnabled
+        persistActiveSequenceContext()
     }
 
     func zoomTimelineIn() {
@@ -523,6 +627,7 @@ final class EditorAjarAppModel: ObservableObject {
             timelineState.pixelsPerFrame,
             factor: 1.25
         )
+        persistActiveSequenceContext()
     }
 
     func zoomTimelineOut() {
@@ -530,6 +635,7 @@ final class EditorAjarAppModel: ObservableObject {
             timelineState.pixelsPerFrame,
             factor: 0.8
         )
+        persistActiveSequenceContext()
     }
 
     func zoomTimelineVerticallyIn() {
@@ -537,6 +643,7 @@ final class EditorAjarAppModel: ObservableObject {
             timelineState.laneHeight,
             factor: 1.18
         )
+        persistActiveSequenceContext()
     }
 
     func zoomTimelineVerticallyOut() {
@@ -544,6 +651,7 @@ final class EditorAjarAppModel: ObservableObject {
             timelineState.laneHeight,
             factor: 0.85
         )
+        persistActiveSequenceContext()
     }
 
     func fitTimeline(toWidth availableWidth: Double) {
@@ -551,6 +659,7 @@ final class EditorAjarAppModel: ObservableObject {
             durationFrames: durationFrames,
             availableWidth: availableWidth
         )
+        persistActiveSequenceContext()
     }
 
     func zoomTimelineToSelection(toWidth availableWidth: Double) {
@@ -566,6 +675,7 @@ final class EditorAjarAppModel: ObservableObject {
             durationFrames: frameRange.durationFrames,
             availableWidth: availableWidth
         )
+        persistActiveSequenceContext()
     }
 
     func setTrackState(
@@ -653,6 +763,7 @@ final class EditorAjarAppModel: ObservableObject {
 
     private func syncPlayheadFromController() {
         playheadFrame = playbackController?.playheadFrame ?? 0
+        persistActiveSequenceContext()
     }
 
     private func requestRenderForCurrentFrame() {
@@ -693,11 +804,7 @@ final class EditorAjarAppModel: ObservableObject {
         }
     }
 
-    private static func durationFrames(for project: Project) -> Int64 {
-        guard let sequence = project.sequences.first else {
-            return 1
-        }
-
+    private static func durationFrames(for sequence: Sequence) -> Int64 {
         let frameRate = sequence.timebase
         var lastFrame: Int64 = 1
         for track in sequence.videoTracks + sequence.audioTracks {
@@ -711,6 +818,48 @@ final class EditorAjarAppModel: ObservableObject {
             }
         }
         return max(1, lastFrame)
+    }
+
+    private static func emptySequence(name: String, frameRate: FrameRate) -> Sequence {
+        Sequence(
+            id: UUID(),
+            name: name,
+            videoTracks: [Track(id: UUID(), kind: .video, items: [])],
+            audioTracks: [Track(id: UUID(), kind: .audio, items: [])],
+            markers: [],
+            timebase: frameRate
+        )
+    }
+
+    private static func nextSequenceName(in project: Project) -> String {
+        let existingNames = Set(project.sequences.map(\.name))
+        var index = project.sequences.count + 1
+        while existingNames.contains("Sequence \(index)") {
+            index += 1
+        }
+        return "Sequence \(index)"
+    }
+
+    private static func replacementSequenceID(
+        afterRemoving sequenceID: UUID,
+        from project: Project
+    ) -> UUID? {
+        guard let index = project.sequences.firstIndex(where: { $0.id == sequenceID }) else {
+            return activeSequenceFallbackID(in: project)
+        }
+        let nextIndex = project.sequences.index(after: index)
+        if nextIndex < project.sequences.endIndex {
+            return project.sequences[nextIndex].id
+        }
+        if index > project.sequences.startIndex {
+            let previousIndex = project.sequences.index(before: index)
+            return project.sequences[previousIndex].id
+        }
+        return nil
+    }
+
+    private static func activeSequenceFallbackID(in project: Project) -> UUID? {
+        project.sequences.first?.id
     }
 
     private static func clip(_ reference: TimelineClipReference, in sequence: Sequence) -> Clip? {
@@ -741,6 +890,7 @@ final class EditorAjarAppModel: ObservableObject {
         }
 
         do {
+            persistActiveSequenceContext()
             let project = try history.apply(command)
             editHistory = history
             updateProject(project)
@@ -765,24 +915,73 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func updateProject(_ project: Project) {
+        persistActiveSequenceContext()
         self.project = project
-        durationFrames = Self.durationFrames(for: project)
-        let availableClipIDs = Set(
-            project.sequences.first.map(TimelineInteraction.clipReferences(in:)) ?? []
-        )
-        let availableMarkerIDs = Set(project.sequences.first?.markers.map(\.id) ?? [])
-        timelineState.selectedClips = timelineState.selectedClips.intersection(availableClipIDs)
-        if let anchor = timelineState.selectionAnchor,
-           !availableClipIDs.contains(anchor)
+        let sequenceIDs = Set(project.sequences.map(\.id))
+        sequenceContexts = sequenceContexts.filter { sequenceIDs.contains($0.key) }
+
+        if let activeSequenceID,
+           let sequence = project.sequences.first(where: { $0.id == activeSequenceID })
         {
-            timelineState.selectionAnchor = timelineState.selectedClips.first
-        }
-        if let selectedMarkerID = timelineState.selectedMarkerID,
-           !availableMarkerIDs.contains(selectedMarkerID)
-        {
-            timelineState.selectedMarkerID = nil
+            restoreActiveSequenceContext(for: sequence)
+        } else if let sequence = project.sequences.first {
+            restoreActiveSequenceContext(for: sequence)
+        } else {
+            activeSequenceID = nil
+            durationFrames = 1
+            playheadFrame = 0
+            timelineState = TimelineInteractionState()
+            playbackController = nil
+            presentedTexture = nil
         }
         requestRenderForCurrentFrame()
+    }
+
+    private func persistActiveSequenceContext() {
+        guard let activeSequenceID else {
+            return
+        }
+
+        sequenceContexts[activeSequenceID] = SequenceEditingContext(
+            playheadFrame: playheadFrame,
+            timelineState: timelineState
+        )
+    }
+
+    private func restoreActiveSequenceContext(for sequence: Sequence) {
+        let context = sequenceContexts[sequence.id] ?? SequenceEditingContext()
+        let nextDurationFrames = Self.durationFrames(for: sequence)
+        activeSequenceID = sequence.id
+        durationFrames = nextDurationFrames
+        playheadFrame = min(max(0, context.playheadFrame), max(0, nextDurationFrames - 1))
+        timelineState = Self.validTimelineState(context.timelineState, for: sequence)
+        playbackController = EditorAjarPlaybackController(
+            frameRate: sequence.timebase,
+            durationFrames: nextDurationFrames,
+            playheadFrame: playheadFrame
+        )
+        persistActiveSequenceContext()
+    }
+
+    private static func validTimelineState(
+        _ state: TimelineInteractionState,
+        for sequence: Sequence
+    ) -> TimelineInteractionState {
+        var nextState = state
+        let availableClipIDs = Set(TimelineInteraction.clipReferences(in: sequence))
+        let availableMarkerIDs = Set(sequence.markers.map(\.id))
+        nextState.selectedClips = nextState.selectedClips.intersection(availableClipIDs)
+        if let anchor = nextState.selectionAnchor,
+           !availableClipIDs.contains(anchor)
+        {
+            nextState.selectionAnchor = nextState.selectedClips.first
+        }
+        if let selectedMarkerID = nextState.selectedMarkerID,
+           !availableMarkerIDs.contains(selectedMarkerID)
+        {
+            nextState.selectedMarkerID = nil
+        }
+        return nextState
     }
 
     private func startAutosaveLoop() {
@@ -912,6 +1111,26 @@ private actor EditorAjarAutosaveCoordinator {
         } catch {
             return "Autosave failed: \(error)"
         }
+    }
+}
+
+struct SequenceTab: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let title: String
+    let isActive: Bool
+    let canClose: Bool
+}
+
+private struct SequenceEditingContext: Equatable, Sendable {
+    var playheadFrame: Int64
+    var timelineState: TimelineInteractionState
+
+    init(
+        playheadFrame: Int64 = 0,
+        timelineState: TimelineInteractionState = TimelineInteractionState()
+    ) {
+        self.playheadFrame = playheadFrame
+        self.timelineState = timelineState
     }
 }
 

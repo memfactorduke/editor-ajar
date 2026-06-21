@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// swiftlint:disable file_length
+
 import Foundation
 import XCTest
 
@@ -446,6 +448,24 @@ private func makeProjectCommandCases(
     fixture: EditFixture,
     seed: Int
 ) throws -> [EditCommandCase] {
+    let addedSequence = try makeEmptyEditSequence(
+        id: try editUUID(seed * 1_000 + 50),
+        name: "Generated added sequence \(seed)"
+    )
+    let removedSequence = try makeEmptyEditSequence(
+        id: try editUUID(seed * 1_000 + 51),
+        name: "Generated removed sequence \(seed)"
+    )
+    let duplicatedSequence = try makeEmptyEditSequence(
+        id: try editUUID(seed * 1_000 + 52),
+        name: "Generated duplicated sequence \(seed)"
+    )
+    let removeSequenceProject = Project(
+        schemaVersion: fixture.project.schemaVersion,
+        settings: fixture.project.settings,
+        mediaPool: fixture.project.mediaPool,
+        sequences: fixture.project.sequences + [removedSequence]
+    )
     let settings = ProjectSettings(
         frameRate: try FrameRate(frames: 30),
         resolution: PixelDimensions(width: 1_280, height: 720),
@@ -454,6 +474,27 @@ private func makeProjectCommandCases(
     )
 
     var cases: [EditCommandCase] = []
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .addSequence(addedSequence)
+        )
+    )
+    cases.append(
+        EditCommandCase(
+            project: removeSequenceProject,
+            command: .removeSequence(sequenceID: removedSequence.id)
+        )
+    )
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .duplicateSequence(
+                sourceSequenceID: fixture.sequenceID,
+                duplicate: duplicatedSequence
+            )
+        )
+    )
     cases.append(
         EditCommandCase(
             project: fixture.project,

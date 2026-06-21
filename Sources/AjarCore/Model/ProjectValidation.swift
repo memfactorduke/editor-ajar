@@ -18,6 +18,9 @@ public enum ProjectValidationResult: Equatable, Sendable {
 
 /// Typed project validation error.
 public enum ProjectValidationError: Equatable, Sendable {
+    /// Two sequences use the same stable ID.
+    case duplicateSequenceID(UUID)
+
     /// A track is stored in the wrong sequence track collection.
     case trackKindMismatch(sequenceID: UUID, trackID: UUID, expected: TrackKind, actual: TrackKind)
 
@@ -78,7 +81,15 @@ enum ProjectValidator {
             sequenceIDs: Set(project.sequences.map(\.id))
         )
 
+        var seenSequenceIDs = Set<UUID>()
+
         for sequence in project.sequences {
+            if seenSequenceIDs.contains(sequence.id) {
+                state.errors.append(.duplicateSequenceID(sequence.id))
+            } else {
+                seenSequenceIDs.insert(sequence.id)
+            }
+
             validateTracks(
                 sequence.videoTracks,
                 expectedKind: .video,

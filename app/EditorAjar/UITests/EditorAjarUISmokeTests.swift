@@ -25,6 +25,24 @@ final class EditorAjarUISmokeTests: XCTestCase {
                 .waitForExistence(timeout: 10)
         )
         XCTAssertTrue(
+            app.descendants(matching: .any)["Sequence tab bar"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(app.buttons["Sequence tab Sample Playback Sequence"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["New Sequence"].waitForExistence(timeout: 5))
+
+        app.buttons["New Sequence"].click()
+        XCTAssertTrue(app.buttons["Sequence tab Sequence 2"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Close Sequence"].isEnabled)
+
+        app.buttons["Sequence tab Sample Playback Sequence"].click()
+        XCTAssertTrue(app.buttons["Sequence tab Sequence 2"].waitForExistence(timeout: 5))
+
+        app.buttons["Sequence tab Sequence 2"].click()
+        app.buttons["Close Sequence"].click()
+        XCTAssertFalse(app.buttons["Sequence tab Sequence 2"].exists)
+
+        XCTAssertTrue(
             app.descendants(matching: .any)["Transport controls"]
                 .waitForExistence(timeout: 5)
         )
