@@ -8,7 +8,7 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app = makeEditorAjarApplication()
+        app = XCUIApplication()
         app.launch()
     }
 
@@ -64,8 +64,23 @@ final class EditorAjarUISmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["Lock Video track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Hide Video track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Select all Video track 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Clip Sample Playback Clip"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Mute Audio track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Solo Audio track 1"].waitForExistence(timeout: 5))
+
+        app.buttons["Clip Sample Playback Clip"].click()
+        let positionXField = app.textFields["Transform Position X"]
+        XCTAssertTrue(positionXField.waitForExistence(timeout: 5))
+        positionXField.click()
+        positionXField.typeKey("a", modifierFlags: [.command])
+        positionXField.typeText("8")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.buttons["Transform Position Keyframe Toggle"].waitForExistence(timeout: 5))
+        app.buttons["Transform Position Keyframe Toggle"].click()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Transform keyframe lanes"]
+                .waitForExistence(timeout: 5)
+        )
 
         app.buttons["Hide Video track 1"].click()
         XCTAssertTrue(app.buttons["Show Video track 1"].waitForExistence(timeout: 5))
@@ -93,21 +108,6 @@ final class EditorAjarUISmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         XCTAssertTrue(window.exists)
         XCTAssertEqual(app.state, .runningForeground)
-    }
-
-    private func makeEditorAjarApplication() -> XCUIApplication {
-        let environment = ProcessInfo.processInfo.environment
-        guard let builtProductsPath = environment["BUILT_PRODUCTS_DIR"] else {
-            return XCUIApplication()
-        }
-
-        let appURL = URL(fileURLWithPath: builtProductsPath)
-            .appendingPathComponent("EditorAjar.app")
-        guard FileManager.default.fileExists(atPath: appURL.path) else {
-            return XCUIApplication()
-        }
-
-        return XCUIApplication(url: appURL)
     }
 
     private func assertPlayheadValue(

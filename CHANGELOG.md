@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Transform/keyframe UI in the macOS app, including reducer-backed inspector fields,
+  program-monitor manipulation handles, inline timeline keyframe lanes, and UI-smoke coverage
+  for FR-XFORM-007 and FR-KEY-005.
 - Animated transform rendering now evaluates keyframed clip transforms at render time, with
   multi-time golden fixtures and a report-only multi-layer transform benchmark for FR-XFORM-008,
   FR-KEY-001/003, and NFR-PERF-003.

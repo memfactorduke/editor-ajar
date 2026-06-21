@@ -579,6 +579,118 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedMarker?.id, firstMarker.id)
     }
 
+    func testFRXFORM007TransformInspectorFieldsRouteThroughEditHistoryAndUndo() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        try selectSampleVideoClip(in: model)
+        let originalProject = try XCTUnwrap(model.project)
+
+        XCTAssertEqual(model.transformFieldValue(.positionX), "0")
+        XCTAssertTrue(model.updateSelectedTransformField(.positionX, rawValue: "12.5"))
+
+        let editedTransform = try XCTUnwrap(model.selectedTransformInspector?.transform)
+        XCTAssertEqual(editedTransform.position.x.doubleValue, 12.5, accuracy: 0.000_001)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Set Clip Transform")
+
+        model.undo()
+
+        XCTAssertEqual(model.project, originalProject)
+        XCTAssertEqual(model.transformFieldValue(.positionX), "0")
+    }
+
+    func testFRXFORM007BlendFlipAndCanvasGestureRouteThroughEditHistory() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        try selectSampleVideoClip(in: model)
+
+        XCTAssertTrue(model.updateSelectedClipBlendMode(.screen))
+        XCTAssertEqual(model.selectedTransformInspector?.transform.blendMode, .screen)
+
+        XCTAssertTrue(model.updateSelectedClipFlip(horizontal: true))
+        XCTAssertEqual(model.selectedTransformInspector?.transform.flip.horizontal, true)
+
+        XCTAssertTrue(
+            model.applyCanvasTransformGesture(
+                CanvasTransformGesture(
+                    handle: .move,
+                    translationX: 20,
+                    translationY: 10,
+                    canvasScale: 2
+                )
+            )
+        )
+        let movedTransform = try XCTUnwrap(model.selectedTransformInspector?.transform)
+        XCTAssertEqual(movedTransform.position.x.doubleValue, 10, accuracy: 0.000_001)
+        XCTAssertEqual(movedTransform.position.y.doubleValue, 5, accuracy: 0.000_001)
+        XCTAssertTrue(model.canUndo)
+    }
+
+    func testFRKEY005TransformKeyframeToggleLaneMoveAndDeleteRouteThroughEditHistory() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        try selectSampleVideoClip(in: model)
+        model.scrub(to: 10)
+
+        XCTAssertFalse(model.selectedTransformHasKeyframe(.position))
+        XCTAssertTrue(model.toggleSelectedTransformKeyframe(.position))
+        XCTAssertTrue(model.selectedTransformHasKeyframe(.position))
+        XCTAssertEqual(try positionLane(in: model).keyframes.map(\.frame), [10])
+        XCTAssertEqual(model.undoMenuTitle, "Undo Add Transform Keyframe")
+
+        XCTAssertTrue(model.moveSelectedTransformKeyframe(parameter: .position, fromFrame: 10, toFrame: 12))
+        XCTAssertEqual(try positionLane(in: model).keyframes.map(\.frame), [12])
+
+        XCTAssertTrue(model.deleteSelectedTransformKeyframe(parameter: .position, atFrame: 12))
+        XCTAssertEqual(try positionLane(in: model).keyframes, [])
+
+        model.undo()
+
+        XCTAssertEqual(try positionLane(in: model).keyframes.map(\.frame), [12])
+    }
+
+    func testFRXFORM007PureTransformFieldAndGestureMappingHelpers() throws {
+        let transform = ClipTransform(
+            position: CanvasPoint(x: RationalValue(1), y: RationalValue(2)),
+            scale: .identity
+        )
+
+        let updatedScale = try XCTUnwrap(
+            TransformFieldValueMapper.updatedTransform(
+                .scaleXPercent,
+                rawValue: "125",
+                in: transform
+            )
+        )
+        XCTAssertEqual(updatedScale.scale.x.doubleValue, 1.25, accuracy: 0.000_001)
+        XCTAssertEqual(
+            TransformFieldValueMapper.stringValue(for: .scaleXPercent, in: updatedScale),
+            "125"
+        )
+
+        let moved = CanvasTransformGestureMapper.updatedTransform(
+            from: transform,
+            gesture: CanvasTransformGesture(
+                handle: .move,
+                translationX: 8,
+                translationY: -4,
+                canvasScale: 2
+            ),
+            clipSize: PixelDimensions(width: 100, height: 50)
+        )
+        XCTAssertEqual(moved.position.x.doubleValue, 5, accuracy: 0.000_001)
+        XCTAssertEqual(moved.position.y.doubleValue, 0, accuracy: 0.000_001)
+
+        let scaled = CanvasTransformGestureMapper.updatedTransform(
+            from: transform,
+            gesture: CanvasTransformGesture(
+                handle: .scaleBottomRight,
+                translationX: 50,
+                translationY: 25,
+                canvasScale: 1
+            ),
+            clipSize: PixelDimensions(width: 100, height: 50)
+        )
+        XCTAssertEqual(scaled.scale.x.doubleValue, 1.5, accuracy: 0.000_001)
+        XCTAssertEqual(scaled.scale.y.doubleValue, 1.5, accuracy: 0.000_001)
+    }
+
     func testFRTL014NFRSTAB002AppLaunchRecoversAutosavePackage() throws {
         let packageURL = try temporaryAutosavePackageURL(named: "LaunchRecovery.ajar")
         defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
@@ -732,6 +844,25 @@ final class EditorAjarAppModelTests: XCTestCase {
             audioTrackID: audioTrack.id,
             videoClip: try firstClip(in: videoTrack),
             audioClip: try firstClip(in: audioTrack)
+        )
+    }
+
+    @discardableResult
+    private func selectSampleVideoClip(
+        in model: EditorAjarAppModel
+    ) throws -> Clip {
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+        let clip = try firstClip(in: videoTrack)
+        model.selectClip(trackID: videoTrack.id, clipID: clip.id, mode: .replace)
+        return clip
+    }
+
+    private func positionLane(in model: EditorAjarAppModel) throws -> TransformKeyframeLane {
+        try XCTUnwrap(
+            model.selectedTransformKeyframeLanes.first { lane in
+                lane.parameter == .position
+            }
         )
     }
 

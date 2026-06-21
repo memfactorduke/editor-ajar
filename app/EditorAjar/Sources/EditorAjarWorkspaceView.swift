@@ -172,6 +172,9 @@ private struct ProgramMonitor: View {
                 ProgramMetalView(device: model.metalDevice, texture: model.presentedTexture)
                     .background(Color.black)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay {
+                        CanvasTransformOverlay(model: model)
+                    }
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color.white.opacity(0.12), lineWidth: 1)
@@ -295,8 +298,11 @@ private struct InspectorPanel: View {
             Divider()
             if let marker = model.selectedMarker {
                 MarkerInspector(marker: marker, model: model)
+            } else if let transformState = model.selectedTransformInspector {
+                TransformInspector(state: transformState, model: model)
             } else {
                 DetailRow(label: "Marker", value: "None selected")
+                DetailRow(label: "Transform", value: "Select one video clip")
             }
             Spacer()
         }
@@ -697,6 +703,27 @@ private extension MarkerColor {
     }
 }
 
+private extension ClipBlendMode {
+    var displayName: String {
+        switch self {
+        case .normal:
+            return "Normal"
+        case .multiply:
+            return "Multiply"
+        case .screen:
+            return "Screen"
+        case .overlay:
+            return "Overlay"
+        case .add:
+            return "Add"
+        case .darken:
+            return "Darken"
+        case .lighten:
+            return "Lighten"
+        }
+    }
+}
+
 private struct TrackLane: View {
     let sequenceID: UUID
     let row: TrackLaneRow
@@ -798,7 +825,24 @@ private struct TrackLane: View {
             ForEach(model.timelineClipLayouts(for: row.track), id: \.reference) { layout in
                 TimelineClipBlock(
                     layout: layout,
-                    isSelected: model.isClipSelected(layout.reference)
+                    isSelected: model.isClipSelected(layout.reference),
+                    keyframeLanes: model.isClipSelected(layout.reference) && row.kind == .video
+                        ? model.selectedTransformKeyframeLanes
+                        : [],
+                    pixelsPerFrame: model.timelineState.pixelsPerFrame,
+                    addKeyframe: { parameter, frame in
+                        model.addSelectedTransformKeyframe(parameter: parameter, atFrame: frame)
+                    },
+                    moveKeyframe: { parameter, fromFrame, toFrame in
+                        model.moveSelectedTransformKeyframe(
+                            parameter: parameter,
+                            fromFrame: fromFrame,
+                            toFrame: toFrame
+                        )
+                    },
+                    deleteKeyframe: { parameter, frame in
+                        model.deleteSelectedTransformKeyframe(parameter: parameter, atFrame: frame)
+                    }
                 ) {
                     model.selectClip(
                         trackID: layout.reference.trackID,
@@ -824,36 +868,479 @@ private struct TrackLane: View {
 private struct TimelineClipBlock: View {
     let layout: TimelineClipLayout
     let isSelected: Bool
+    let keyframeLanes: [TransformKeyframeLane]
+    let pixelsPerFrame: Double
+    let addKeyframe: (ClipTransformParameter, Int64) -> Void
+    let moveKeyframe: (ClipTransformParameter, Int64, Int64) -> Void
+    let deleteKeyframe: (ClipTransformParameter, Int64) -> Void
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: "film")
-                    .font(.caption2)
-                Text(layout.name)
-                    .font(.caption)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
+        VStack(spacing: 2) {
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Image(systemName: "film")
+                        .font(.caption2)
+                    Text(layout.name)
+                        .font(.caption)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8)
             }
-            .padding(.horizontal, 8)
+            .buttonStyle(.plain)
+            .foregroundStyle(isSelected ? .black : .white)
+            .frame(maxWidth: .infinity, maxHeight: keyframeLanes.isEmpty ? .infinity : 24)
+            .background(
+                isSelected ? Color.accentColor : Color.white.opacity(0.16),
+                in: RoundedRectangle(cornerRadius: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isSelected ? Color.white.opacity(0.7) : Color.white.opacity(0.18), lineWidth: 1)
+            )
+            .help("\(layout.name), frames \(layout.startFrame)-\(layout.endFrame)")
+            .accessibilityLabel("Clip \(layout.name)")
+            .accessibilityValue(
+                "\(isSelected ? "Selected" : "Not selected"), frames \(layout.startFrame)-\(layout.endFrame)"
+            )
+            .accessibilityIdentifier("Timeline clip \(layout.reference.clipID.uuidString)")
+
+            if !keyframeLanes.isEmpty {
+                TransformKeyframeLanesView(
+                    layout: layout,
+                    lanes: keyframeLanes,
+                    pixelsPerFrame: pixelsPerFrame,
+                    addKeyframe: addKeyframe,
+                    moveKeyframe: moveKeyframe,
+                    deleteKeyframe: deleteKeyframe
+                )
+            }
+        }
+    }
+}
+
+private struct TransformInspector: View {
+    let state: SelectedTransformInspectorState
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(state.clipName, systemImage: "slider.horizontal.3")
+                    .font(.callout.weight(.semibold))
+                TransformFieldGrid(
+                    fields: [.positionX, .positionY],
+                    keyframeParameter: .position,
+                    model: model
+                )
+                TransformFieldGrid(
+                    fields: [.scaleXPercent, .scaleYPercent],
+                    keyframeParameter: .scale,
+                    model: model
+                )
+                TransformFieldGrid(
+                    fields: [.anchorX, .anchorY],
+                    keyframeParameter: .anchorPoint,
+                    model: model
+                )
+                TransformFieldGrid(
+                    fields: [.rotationDegrees],
+                    keyframeParameter: .rotation,
+                    model: model
+                )
+                TransformFieldGrid(
+                    fields: [.opacityPercent],
+                    keyframeParameter: .opacity,
+                    model: model
+                )
+                TransformBlendPicker(model: model)
+                TransformFieldGrid(
+                    fields: [.cropLeft, .cropTop, .cropRight, .cropBottom],
+                    keyframeParameter: .crop,
+                    model: model
+                )
+                TransformFlipControls(model: model)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Transform Inspector")
+        .accessibilityLabel("Transform Inspector")
+    }
+}
+
+private struct TransformFieldGrid: View {
+    let fields: [TransformInspectorField]
+    let keyframeParameter: ClipTransformParameter
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(keyframeParameter.displayName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                TransformKeyframeToggle(parameter: keyframeParameter, model: model)
+            }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(fields) { field in
+                    TransformNumberField(field: field, model: model)
+                }
+            }
+        }
+    }
+}
+
+private struct TransformNumberField: View {
+    let field: TransformInspectorField
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(field.title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            TextField(
+                field.title,
+                text: Binding(
+                    get: { model.transformFieldValue(field) },
+                    set: { model.updateSelectedTransformField(field, rawValue: $0) }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+            .accessibilityLabel(field.title)
+            .accessibilityIdentifier(field.accessibilityIdentifier)
+        }
+    }
+}
+
+private struct TransformKeyframeToggle: View {
+    let parameter: ClipTransformParameter
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        let hasKeyframe = model.selectedTransformHasKeyframe(parameter)
+        Button {
+            model.toggleSelectedTransformKeyframe(parameter)
+        } label: {
+            Label(
+                hasKeyframe ? "Delete \(parameter.displayName) Keyframe" : "Add \(parameter.displayName) Keyframe",
+                systemImage: hasKeyframe ? "diamond.fill" : "diamond"
+            )
+            .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.borderless)
+        .help(hasKeyframe ? "Delete keyframe at playhead" : "Add keyframe at playhead")
+        .accessibilityLabel(
+            hasKeyframe ? "Delete \(parameter.displayName) Keyframe" : "Add \(parameter.displayName) Keyframe"
+        )
+        .accessibilityIdentifier("Transform \(parameter.displayName) Keyframe Toggle")
+    }
+}
+
+private struct TransformBlendPicker: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        Picker(
+            "Blend",
+            selection: Binding(
+                get: { model.selectedTransformInspector?.transform.blendMode ?? .normal },
+                set: { model.updateSelectedClipBlendMode($0) }
+            )
+        ) {
+            ForEach(ClipBlendMode.allCases, id: \.self) { blendMode in
+                Text(blendMode.displayName).tag(blendMode)
+            }
+        }
+        .pickerStyle(.menu)
+        .accessibilityLabel("Blend Mode")
+        .accessibilityIdentifier("Transform Blend Mode")
+    }
+}
+
+private struct TransformFlipControls: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Flip")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Toggle(
+                "Horizontal",
+                isOn: Binding(
+                    get: { model.selectedTransformInspector?.transform.flip.horizontal ?? false },
+                    set: { model.updateSelectedClipFlip(horizontal: $0) }
+                )
+            )
+            .accessibilityIdentifier("Transform Flip Horizontal")
+            Toggle(
+                "Vertical",
+                isOn: Binding(
+                    get: { model.selectedTransformInspector?.transform.flip.vertical ?? false },
+                    set: { model.updateSelectedClipFlip(vertical: $0) }
+                )
+            )
+            .accessibilityIdentifier("Transform Flip Vertical")
+        }
+    }
+}
+
+private struct CanvasTransformOverlay: View {
+    @ObservedObject var model: EditorAjarAppModel
+    @GestureState private var movePreview = CGSize.zero
+
+    var body: some View {
+        GeometryReader { geometry in
+            if let layout = model.selectedCanvasTransformLayout {
+                let metrics = canvasMetrics(layout: layout, size: geometry.size)
+                ZStack(alignment: .topLeading) {
+                    transformOutline(metrics: metrics)
+                    transformReadout(metrics: metrics, transform: layout.transform)
+                    transformHandle(
+                        title: "Scale Transform",
+                        systemImage: "arrow.up.left.and.arrow.down.right",
+                        position: CGPoint(x: metrics.rect.maxX, y: metrics.rect.maxY),
+                        handle: .scaleBottomRight,
+                        canvasScale: metrics.scale
+                    )
+                    transformHandle(
+                        title: "Rotate Transform",
+                        systemImage: "rotate.right",
+                        position: CGPoint(x: metrics.rect.midX, y: metrics.rect.minY - 28),
+                        handle: .rotate,
+                        canvasScale: metrics.scale
+                    )
+                    transformHandle(
+                        title: "Move Anchor",
+                        systemImage: "scope",
+                        position: metrics.anchorPoint,
+                        handle: .anchor,
+                        canvasScale: metrics.scale
+                    )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("Program Transform Overlay")
+                .accessibilityLabel("Program Transform Overlay")
+            }
+        }
+    }
+
+    private func transformOutline(metrics: CanvasOverlayMetrics) -> some View {
+        RoundedRectangle(cornerRadius: 4)
+            .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+            .frame(width: metrics.rect.width, height: metrics.rect.height)
+            .offset(x: metrics.rect.minX, y: metrics.rect.minY)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .updating($movePreview) { value, state, _ in
+                        state = value.translation
+                    }
+                    .onEnded { value in
+                        model.applyCanvasTransformGesture(
+                            CanvasTransformGesture(
+                                handle: .move,
+                                translationX: value.translation.width,
+                                translationY: value.translation.height,
+                                canvasScale: metrics.scale
+                            )
+                        )
+                    }
+            )
+            .accessibilityLabel("Move Transform")
+            .accessibilityIdentifier("Program Move Transform")
+    }
+
+    private func transformReadout(metrics: CanvasOverlayMetrics, transform: ClipTransform) -> some View {
+        Text(readout(transform))
+            .font(.caption2.monospacedDigit())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 4))
+            .offset(x: metrics.rect.minX, y: max(0, metrics.rect.minY - 24))
+            .accessibilityIdentifier("Program Transform Readout")
+    }
+
+    private func transformHandle(
+        title: String,
+        systemImage: String,
+        position: CGPoint,
+        handle: CanvasTransformHandle,
+        canvasScale: Double
+    ) -> some View {
+        Image(systemName: systemImage)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.black)
+            .frame(width: 22, height: 22)
+            .background(Color.accentColor, in: Circle())
+            .offset(x: position.x - 11, y: position.y - 11)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onEnded { value in
+                        model.applyCanvasTransformGesture(
+                            CanvasTransformGesture(
+                                handle: handle,
+                                translationX: value.translation.width,
+                                translationY: value.translation.height,
+                                canvasScale: canvasScale
+                            )
+                        )
+                    }
+            )
+            .accessibilityLabel(title)
+            .accessibilityIdentifier("Program \(title)")
+    }
+
+    private func canvasMetrics(layout: CanvasClipTransformLayout, size: CGSize) -> CanvasOverlayMetrics {
+        let canvasWidth = max(1.0, Double(layout.canvasSize.width))
+        let canvasHeight = max(1.0, Double(layout.canvasSize.height))
+        let scale = min(size.width / canvasWidth, size.height / canvasHeight)
+        let origin = CGPoint(
+            x: (size.width - (canvasWidth * scale)) / 2.0,
+            y: (size.height - (canvasHeight * scale)) / 2.0
+        )
+        let xPosition = origin.x
+            + ((layout.transform.position.x.doubleValue * scale) + movePreview.width)
+        let yPosition = origin.y
+            + ((layout.transform.position.y.doubleValue * scale) + movePreview.height)
+        let width = max(8, Double(layout.clipSize.width) * layout.transform.scale.x.doubleValue * scale)
+        let height = max(8, Double(layout.clipSize.height) * layout.transform.scale.y.doubleValue * scale)
+        let rect = CGRect(x: xPosition, y: yPosition, width: width, height: height)
+        let anchorPoint = CGPoint(
+            x: origin.x + (layout.transform.anchorPoint.x.doubleValue * scale),
+            y: origin.y + (layout.transform.anchorPoint.y.doubleValue * scale)
+        )
+        return CanvasOverlayMetrics(scale: scale, rect: rect, anchorPoint: anchorPoint)
+    }
+
+    private func readout(_ transform: ClipTransform) -> String {
+        let xPosition = TransformFieldValueMapper.stringValue(for: .positionX, in: transform)
+        let yPosition = TransformFieldValueMapper.stringValue(for: .positionY, in: transform)
+        let scale = TransformFieldValueMapper.stringValue(for: .scaleXPercent, in: transform)
+        let rotation = TransformFieldValueMapper.stringValue(for: .rotationDegrees, in: transform)
+        return "X \(xPosition)  Y \(yPosition)  S \(scale)%  R \(rotation)"
+    }
+}
+
+private struct CanvasOverlayMetrics {
+    let scale: Double
+    let rect: CGRect
+    let anchorPoint: CGPoint
+}
+
+private struct TransformKeyframeLanesView: View {
+    let layout: TimelineClipLayout
+    let lanes: [TransformKeyframeLane]
+    let pixelsPerFrame: Double
+    let addKeyframe: (ClipTransformParameter, Int64) -> Void
+    let moveKeyframe: (ClipTransformParameter, Int64, Int64) -> Void
+    let deleteKeyframe: (ClipTransformParameter, Int64) -> Void
+
+    var body: some View {
+        VStack(spacing: 1) {
+            ForEach(lanes) { lane in
+                TransformKeyframeLaneRow(
+                    layout: layout,
+                    lane: lane,
+                    pixelsPerFrame: pixelsPerFrame,
+                    addKeyframe: addKeyframe,
+                    moveKeyframe: moveKeyframe,
+                    deleteKeyframe: deleteKeyframe
+                )
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Transform keyframe lanes")
+        .accessibilityLabel("Transform keyframe lanes")
+    }
+}
+
+private struct TransformKeyframeLaneRow: View {
+    let layout: TimelineClipLayout
+    let lane: TransformKeyframeLane
+    let pixelsPerFrame: Double
+    let addKeyframe: (ClipTransformParameter, Int64) -> Void
+    let moveKeyframe: (ClipTransformParameter, Int64, Int64) -> Void
+    let deleteKeyframe: (ClipTransformParameter, Int64) -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.10))
+                Text(lane.title)
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+                ForEach(lane.keyframes) { point in
+                    TransformKeyframeDot(
+                        lane: lane,
+                        point: point,
+                        clipStartX: layout.xPosition,
+                        laneWidth: geometry.size.width,
+                        pixelsPerFrame: pixelsPerFrame,
+                        moveKeyframe: moveKeyframe,
+                        deleteKeyframe: deleteKeyframe
+                    )
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onEnded { value in
+                        let frame = layout.startFrame
+                            + Int64((value.location.x / max(1.0, pixelsPerFrame)).rounded())
+                        addKeyframe(lane.parameter, min(max(layout.startFrame, frame), layout.endFrame - 1))
+                    }
+            )
+        }
+        .frame(height: 8)
+        .accessibilityIdentifier("Transform keyframe lane \(lane.title)")
+        .accessibilityLabel("Transform keyframe lane \(lane.title)")
+    }
+}
+
+private struct TransformKeyframeDot: View {
+    let lane: TransformKeyframeLane
+    let point: TransformKeyframePoint
+    let clipStartX: Double
+    let laneWidth: Double
+    let pixelsPerFrame: Double
+    let moveKeyframe: (ClipTransformParameter, Int64, Int64) -> Void
+    let deleteKeyframe: (ClipTransformParameter, Int64) -> Void
+
+    var body: some View {
+        Button {
+            deleteKeyframe(lane.parameter, point.frame)
+        } label: {
+            Image(systemName: "diamond.fill")
+                .font(.system(size: 6, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 14, height: 10)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isSelected ? .black : .white)
-        .background(
-            isSelected ? Color.accentColor : Color.white.opacity(0.16),
-            in: RoundedRectangle(cornerRadius: 4)
+        .offset(x: dotX)
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onEnded { value in
+                    let deltaFrames = Int64((value.translation.width / max(1.0, pixelsPerFrame)).rounded())
+                    moveKeyframe(lane.parameter, point.frame, point.frame + deltaFrames)
+                }
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(isSelected ? Color.white.opacity(0.7) : Color.white.opacity(0.18), lineWidth: 1)
-        )
-        .help("\(layout.name), frames \(layout.startFrame)-\(layout.endFrame)")
-        .accessibilityLabel("Clip \(layout.name)")
-        .accessibilityValue(
-            "\(isSelected ? "Selected" : "Not selected"), frames \(layout.startFrame)-\(layout.endFrame)"
-        )
-        .accessibilityIdentifier("Timeline clip \(layout.reference.clipID.uuidString)")
+        .help("\(lane.title) keyframe, frame \(point.frame)")
+        .accessibilityLabel("\(lane.title) keyframe")
+        .accessibilityValue("Frame \(point.frame)")
+        .accessibilityIdentifier("Transform \(lane.title) Keyframe \(point.frame)")
+    }
+
+    private var dotX: Double {
+        min(max(0, point.xPosition - clipStartX - 7), max(0, laneWidth - 14))
     }
 }
 
