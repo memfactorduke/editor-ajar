@@ -62,6 +62,11 @@ public enum AjarCommand {
                         + "\(summary.failureCount) failed, \(summary.passCount) passed"
                 )
                 return 1
+            case "bench":
+                let options = try BenchmarkOptions.parse(Array(arguments.dropFirst()))
+                let results = try await BenchmarkCommand.run(options: options)
+                try BenchmarkCommand.writeJSON(results, standardOutput: standardOutput)
+                return 0
             default:
                 standardError.writeLine("error: unknown command '\(command)'")
                 standardError.writeLine(usage)
@@ -81,5 +86,6 @@ public enum AjarCommand {
           ajar version
           ajar render --frame <value|value/timescale> <project.ajar> -o <out.png>
           ajar golden [Tests/Fixtures/golden | manifest.json]
+          ajar bench <all|metric> [project.ajar]
         """
 }

@@ -10,7 +10,7 @@
 //      ajar version
 //      ajar inspect <project.ajar>
 //      ajar render  --frame <t> <project.ajar> -o <png>
-//      ajar bench   <project.ajar> <metric>
+//      ajar bench   <all|metric> [project.ajar]
 //      ajar golden  <suite>
 //
 //  Links the testable AjarCLI implementation for headless engine workflows.

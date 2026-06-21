@@ -49,15 +49,8 @@ enum SyntheticMovieWriter {
         }
 
         writer.startSession(atSourceTime: .zero)
-        for frameIndex in 0..<spec.frameCount {
-            let pixelBuffer = try makePixelBuffer(spec: spec, frameIndex: frameIndex)
-            let presentationTime = CMTime(value: Int64(frameIndex), timescale: spec.frameRate)
-            guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
-                throw SyntheticMovieWriterError.writerFailed(writer.errorDescription)
-            }
-        }
+        try appendFrames(spec: spec, adaptor: adaptor, input: input, writer: writer)
 
-        input.markAsFinished()
         let semaphore = DispatchSemaphore(value: 0)
         writer.finishWriting {
             semaphore.signal()
@@ -66,6 +59,53 @@ enum SyntheticMovieWriter {
 
         guard writer.status == .completed else {
             throw SyntheticMovieWriterError.writerFailed(writer.errorDescription)
+        }
+    }
+
+    private static func appendFrames(
+        spec: SyntheticMovieSpec,
+        adaptor: AVAssetWriterInputPixelBufferAdaptor,
+        input: AVAssetWriterInput,
+        writer: AVAssetWriter
+    ) throws {
+        let writingQueue = DispatchQueue(label: "dev.editor-ajar.synthetic-movie-writer")
+        let inputFinished = DispatchSemaphore(value: 0)
+        var writeError: Error?
+        var frameIndex = 0
+
+        input.requestMediaDataWhenReady(on: writingQueue) {
+            while input.isReadyForMoreMediaData, frameIndex < spec.frameCount {
+                do {
+                    let pixelBuffer = try makePixelBuffer(spec: spec, frameIndex: frameIndex)
+                    let presentationTime = CMTime(
+                        value: Int64(frameIndex),
+                        timescale: spec.frameRate
+                    )
+                    guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
+                        writeError = SyntheticMovieWriterError.writerFailed(writer.errorDescription)
+                        input.markAsFinished()
+                        inputFinished.signal()
+                        return
+                    }
+                    frameIndex += 1
+                } catch {
+                    writeError = error
+                    input.markAsFinished()
+                    inputFinished.signal()
+                    return
+                }
+            }
+
+            if frameIndex == spec.frameCount {
+                input.markAsFinished()
+                inputFinished.signal()
+            }
+        }
+
+        inputFinished.wait()
+        if let writeError {
+            writer.cancelWriting()
+            throw writeError
         }
     }
 

@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
-import AjarMedia
 import AjarRender
-import CoreVideo
 import Foundation
 import Metal
 
@@ -150,7 +148,7 @@ public enum RenderFrameCommand {
             output: RenderOutputDescriptor(pixelDimensions: project.settings.resolution),
             sourceProvider: sourceProvider
         )
-        try waitForRender(frame)
+        try await waitForRender(frame)
 
         let bytes = try TextureReadback.readBGRA8(texture: frame.texture, device: device)
         let image = PNGImage(
@@ -170,75 +168,18 @@ public enum RenderFrameCommand {
         )
     }
 
-    private static func waitForRender(_ frame: RenderedFrame) throws {
-        guard let commandBuffer = frame.commandBuffer else {
-            return
-        }
-
-        commandBuffer.waitUntilCompleted()
-        if let error = commandBuffer.error {
+    private static func waitForRender(_ frame: RenderedFrame) async throws {
+        try await frame.waitForCompletion()
+        if let error = frame.commandBuffer?.error {
             throw AjarCLIError.renderCommandFailed(String(describing: error))
         }
-        guard commandBuffer.status == .completed else {
+        guard frame.commandBuffer?.status ?? .completed == .completed else {
+            let statusDescription = frame.commandBuffer
+                .map { String(describing: $0.status) }
+                ?? "unknown"
             throw AjarCLIError.renderCommandFailed(
-                "command buffer status \(commandBuffer.status.rawValue)"
+                "command buffer status \(statusDescription)"
             )
         }
-    }
-}
-
-private struct RenderSourceKey: Hashable {
-    let mediaID: UUID
-    let clipID: UUID
-    let sourceTime: RationalTime
-
-    init(_ source: RenderSourceNode) {
-        mediaID = source.mediaID
-        clipID = source.clipID
-        sourceTime = source.sourceTime
-    }
-}
-
-private final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
-    private let textures: [RenderSourceKey: MTLTexture]
-    private let retainedFrames: [DecodedFrame]
-
-    init(graph: RenderGraph, project: Project, device: MTLDevice) async throws {
-        let decoder = try VideoFrameDecoder(device: device)
-        var textures: [RenderSourceKey: MTLTexture] = [:]
-        var retainedFrames: [DecodedFrame] = []
-
-        for node in graph.nodes {
-            guard case .source(let source) = node.kind else {
-                continue
-            }
-
-            let media = try Self.media(for: source.mediaID, in: project)
-            let frame = try await decoder.decodeFrame(from: media, at: source.sourceTime)
-            guard let texture = CVMetalTextureGetTexture(frame.metalTexture) else {
-                throw AjarCLIError.decodedTextureUnavailable(source.mediaID)
-            }
-
-            textures[RenderSourceKey(source)] = texture
-            retainedFrames.append(frame)
-        }
-
-        self.textures = textures
-        self.retainedFrames = retainedFrames
-    }
-
-    func texture(for source: RenderSourceNode) throws -> MTLTexture {
-        guard let texture = textures[RenderSourceKey(source)] else {
-            throw AjarCLIError.decodedTextureUnavailable(source.mediaID)
-        }
-        _ = retainedFrames.count
-        return texture
-    }
-
-    private static func media(for mediaID: UUID, in project: Project) throws -> MediaRef {
-        guard let media = project.mediaPool.first(where: { candidate in candidate.id == mediaID }) else {
-            throw AjarCLIError.missingMediaReference(mediaID)
-        }
-        return media
     }
 }

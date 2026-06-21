@@ -1,0 +1,20 @@
+[
+  {
+    "metric": "single-frame-render-seek-latency",
+    "requirementID": "NFR-PERF-005",
+    "unit": "ms",
+    "value": 6.429
+  },
+  {
+    "metric": "project-open-decode-load",
+    "requirementID": "NFR-PERF-002",
+    "unit": "ms",
+    "value": 0.654
+  },
+  {
+    "metric": "cold-start-proxy",
+    "requirementID": "NFR-PERF-001",
+    "unit": "ms",
+    "value": 5.185
+  }
+]

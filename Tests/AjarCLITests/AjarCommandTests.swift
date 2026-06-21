@@ -78,6 +78,35 @@ final class AjarCommandTests: XCTestCase {
         XCTAssertTrue(output.lines.contains { line in line.contains("golden-frame passed") })
     }
 
+    func testBenchmarkAllEmitsReportOnlyPerformanceJSON() async throws {
+        try requireMetal()
+        let output = BufferedTextOutput()
+        let errorOutput = BufferedTextOutput()
+        let exitCode = await AjarCommand.run(
+            arguments: ["bench", "all"],
+            standardOutput: output,
+            standardError: errorOutput
+        )
+
+        let diagnosticOutput = (output.lines + errorOutput.lines).joined(separator: "\n")
+        XCTAssertEqual(exitCode, 0, diagnosticOutput)
+        XCTAssertTrue(errorOutput.lines.isEmpty, diagnosticOutput)
+        let reportData = try XCTUnwrap(output.lines.joined(separator: "\n").data(using: .utf8))
+        let results = try JSONDecoder().decode([BenchmarkReportRow].self, from: reportData)
+        let expectedRequirementIDs = [
+            "single-frame-render-seek-latency": "NFR-PERF-005",
+            "project-open-decode-load": "NFR-PERF-002",
+            "cold-start-proxy": "NFR-PERF-001"
+        ]
+
+        XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))
+        for result in results {
+            XCTAssertEqual(result.unit, "ms")
+            XCTAssertGreaterThanOrEqual(result.value, 0)
+            XCTAssertEqual(result.requirementID, expectedRequirementIDs[result.metric])
+        }
+    }
+
     private func temporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("editor-ajar-cli-tests")
@@ -99,6 +128,13 @@ private final class BufferedTextOutput: AjarTextOutput {
     func writeLine(_ line: String) {
         lines.append(line)
     }
+}
+
+private struct BenchmarkReportRow: Decodable {
+    let metric: String
+    let value: Double
+    let unit: String
+    let requirementID: String
 }
 
 private func requireMetal() throws {
