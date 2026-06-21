@@ -96,7 +96,8 @@ final class AjarCommandTests: XCTestCase {
         let expectedRequirementIDs = [
             "single-frame-render-seek-latency": "NFR-PERF-005",
             "project-open-decode-load": "NFR-PERF-002",
-            "cold-start-proxy": "NFR-PERF-001"
+            "cold-start-proxy": "NFR-PERF-001",
+            "multi-layer-transform-playback": "NFR-PERF-003"
         ]
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))

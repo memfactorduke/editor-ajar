@@ -293,7 +293,8 @@ public enum GoldenFrameHarness {
             timelineRange: try TimeRange(start: .zero, duration: context.duration),
             kind: .video,
             name: "Golden \(context.manifestID) \(index)",
-            transform: clipSpec.transform ?? .identity
+            transform: clipSpec.transform ?? .identity,
+            transformAnimation: clipSpec.transformAnimation
         )
     }
 
@@ -368,7 +369,13 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
             return clips
         }
         if let syntheticMedia {
-            return [GoldenFrameClipSpec(syntheticMedia: syntheticMedia, transform: nil)]
+            return [
+                GoldenFrameClipSpec(
+                    syntheticMedia: syntheticMedia,
+                    transform: nil,
+                    transformAnimation: nil
+                )
+            ]
         }
         throw AjarCLIError.invalidGoldenManifest("\(id) has no synthetic media")
     }
@@ -377,6 +384,7 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
 struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let syntheticMedia: SyntheticMovieSpec
     let transform: ClipTransform?
+    let transformAnimation: AnimatableClipTransform?
 }
 
 private struct GoldenFrameCaseResult {
