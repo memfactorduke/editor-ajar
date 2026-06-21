@@ -24,7 +24,10 @@ final class EditorAjarUISmokeTests: XCTestCase {
             app.otherElements["Program monitor showing Sample Playback Sequence"]
                 .waitForExistence(timeout: 10)
         )
-        XCTAssertTrue(app.otherElements["Transport controls"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Transport controls"]
+                .waitForExistence(timeout: 5)
+        )
         XCTAssertTrue(app.buttons["Step Backward"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Step Forward"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))

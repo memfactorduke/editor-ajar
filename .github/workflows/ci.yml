@@ -93,6 +93,7 @@ jobs:
             -scheme EditorAjar \
             -destination 'platform=macOS' \
             -derivedDataPath /tmp/editor-ajar-ui-derived \
+            -only-testing:EditorAjarUITests \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 60 \
             -maximum-test-execution-time-allowance 120 \
