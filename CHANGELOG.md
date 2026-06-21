@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` exact `RationalTime`, `FrameRate`, and `TimeRange` primitives for M1 timeline math.
 - Repository scaffold: master specification, architecture docs, founding ADRs (0001–0014).
 - Swift package skeleton with the `AjarCore` / `AjarRender` / `AjarMedia` / `AjarAudio`
   module split and the `ajar` headless CLI.
