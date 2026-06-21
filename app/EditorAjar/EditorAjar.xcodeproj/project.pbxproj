@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -212,6 +212,7 @@
 				};
 			};
 			buildConfigurationList = 69E18E429A5252F6F6058F93 /* Build configuration list for PBXProject "EditorAjar" */;
+			compatibilityVersion = "Xcode 15.3";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -223,7 +224,6 @@
 			packageReferences = (
 				B2E1E4C65F771F6B29536AF8 /* XCLocalSwiftPackageReference "../.." */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = 6300850ED77A215EBE853DED /* Products */;
 			projectDirPath = "";
 			projectRoot = "";

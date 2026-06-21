@@ -2,6 +2,7 @@ name: EditorAjar
 options:
   bundleIdPrefix: org.editorajar
   createIntermediateGroups: true
+  projectFormat: xcode15_3
   deploymentTarget:
     macOS: "14.0"
 packages:
