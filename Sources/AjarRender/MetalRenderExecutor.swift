@@ -179,8 +179,11 @@ public final class MetalRenderExecutor {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let library: MTLLibrary
-    private var pipelineStates: [UInt: MTLRenderPipelineState] = [:]
+    private var pipelineStates: [PipelineStateKey: MTLRenderPipelineState] = [:]
     private var frameCache: [ContentHash: MTLTexture] = [:]
+
+    /// Half-float linear working format used between composite passes.
+    public static let linearWorkingPixelFormat: MTLPixelFormat = .rgba16Float
 
     /// Number of content-hash cache entries retained by this executor.
     public var cacheEntryCount: Int {
@@ -328,6 +331,7 @@ public final class MetalRenderExecutor {
                 try sourceInput(graph: graph, input: input, sourceProvider: sourceProvider)
             }
             try encodeSourceComposite(
+                composite: composite,
                 sourceInputs: sourceInputs,
                 outputTexture: outputTexture,
                 commandBuffer: commandBuffer
@@ -339,6 +343,7 @@ public final class MetalRenderExecutor {
         let source: RenderSourceNode
         let texture: MTLTexture
         let transform: ClipTransform
+        let sourceColorSpace: MediaColorSpace
     }
 
     private func sourceInput(
@@ -358,7 +363,8 @@ public final class MetalRenderExecutor {
             return SourceCompositeInput(
                 source: source,
                 texture: try sourceProvider.texture(for: source),
-                transform: input.transform
+                transform: input.transform,
+                sourceColorSpace: source.colorSpace
             )
         } catch {
             throw MetalRenderError.sourceTextureUnavailable(
@@ -381,6 +387,7 @@ public final class MetalRenderExecutor {
     }
 
     private func encodeSourceComposite(
+        composite: RenderCompositeNode,
         sourceInputs: [SourceCompositeInput],
         outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer
@@ -393,6 +400,7 @@ public final class MetalRenderExecutor {
         var writeTexture = secondTexture
         for sourceInput in sourceInputs {
             try encodeSourceCompositePass(
+                composite: composite,
                 sourceInput: sourceInput,
                 destinationTexture: readTexture,
                 outputTexture: writeTexture,
@@ -401,10 +409,16 @@ public final class MetalRenderExecutor {
             swap(&readTexture, &writeTexture)
         }
 
-        try copy(readTexture, to: outputTexture, commandBuffer: commandBuffer)
+        try encodeOutputPass(
+            linearTexture: readTexture,
+            outputTexture: outputTexture,
+            composite: composite,
+            commandBuffer: commandBuffer
+        )
     }
 
     private func encodeSourceCompositePass(
+        composite: RenderCompositeNode,
         sourceInput: SourceCompositeInput,
         destinationTexture: MTLTexture,
         outputTexture: MTLTexture,
@@ -415,11 +429,18 @@ public final class MetalRenderExecutor {
             throw MetalRenderError.renderEncoderCreationFailed
         }
 
-        encoder.setRenderPipelineState(try pipelineState(for: outputTexture.pixelFormat))
+        encoder.setRenderPipelineState(
+            try pipelineState(
+                fragmentFunctionName: "ajar_transform_fragment",
+                pixelFormat: outputTexture.pixelFormat
+            )
+        )
         var uniforms = uniforms(
             transform: sourceInput.transform,
             sourceTexture: sourceInput.texture,
-            outputTexture: outputTexture
+            outputTexture: outputTexture,
+            sourceColorSpace: sourceInput.sourceColorSpace,
+            workingColorSpace: composite.workingColorSpace
         )
         encoder.setFragmentTexture(sourceInput.texture, index: 0)
         encoder.setFragmentTexture(destinationTexture, index: 1)
@@ -432,9 +453,37 @@ public final class MetalRenderExecutor {
         encoder.endEncoding()
     }
 
+    private func encodeOutputPass(
+        linearTexture: MTLTexture,
+        outputTexture: MTLTexture,
+        composite: RenderCompositeNode,
+        commandBuffer: MTLCommandBuffer
+    ) throws {
+        let descriptor = renderPassDescriptor(for: outputTexture)
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
+            throw MetalRenderError.renderEncoderCreationFailed
+        }
+
+        encoder.setRenderPipelineState(
+            try pipelineState(
+                fragmentFunctionName: "ajar_present_fragment",
+                pixelFormat: outputTexture.pixelFormat
+            )
+        )
+        var uniforms = presentUniforms(composite: composite)
+        encoder.setFragmentTexture(linearTexture, index: 0)
+        encoder.setFragmentBytes(
+            &uniforms,
+            length: MemoryLayout<AjarPresentUniforms>.stride,
+            index: 0
+        )
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        encoder.endEncoding()
+    }
+
     private func makeIntermediateTexture(matching outputTexture: MTLTexture) throws -> MTLTexture {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: outputTexture.pixelFormat,
+            pixelFormat: Self.linearWorkingPixelFormat,
             width: outputTexture.width,
             height: outputTexture.height,
             mipmapped: false
@@ -496,16 +545,23 @@ public final class MetalRenderExecutor {
         return descriptor
     }
 
-    private func pipelineState(for pixelFormat: MTLPixelFormat) throws -> MTLRenderPipelineState {
-        if let pipelineState = pipelineStates[pixelFormat.rawValue] {
+    private func pipelineState(
+        fragmentFunctionName: String,
+        pixelFormat: MTLPixelFormat
+    ) throws -> MTLRenderPipelineState {
+        let key = PipelineStateKey(
+            fragmentFunctionName: fragmentFunctionName,
+            pixelFormatRawValue: pixelFormat.rawValue
+        )
+        if let pipelineState = pipelineStates[key] {
             return pipelineState
         }
 
         guard let vertexFunction = library.makeFunction(name: "ajar_fullscreen_vertex") else {
             throw MetalRenderError.shaderFunctionUnavailable("ajar_fullscreen_vertex")
         }
-        guard let fragmentFunction = library.makeFunction(name: "ajar_transform_fragment") else {
-            throw MetalRenderError.shaderFunctionUnavailable("ajar_transform_fragment")
+        guard let fragmentFunction = library.makeFunction(name: fragmentFunctionName) else {
+            throw MetalRenderError.shaderFunctionUnavailable(fragmentFunctionName)
         }
 
         let descriptor = MTLRenderPipelineDescriptor()
@@ -516,7 +572,7 @@ public final class MetalRenderExecutor {
 
         do {
             let pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
-            pipelineStates[pixelFormat.rawValue] = pipelineState
+            pipelineStates[key] = pipelineState
             return pipelineState
         } catch {
             throw MetalRenderError.pipelineCreationFailed(String(describing: error))
@@ -526,7 +582,9 @@ public final class MetalRenderExecutor {
     private func uniforms(
         transform: ClipTransform,
         sourceTexture: MTLTexture,
-        outputTexture: MTLTexture
+        outputTexture: MTLTexture,
+        sourceColorSpace: MediaColorSpace,
+        workingColorSpace: MediaColorSpace
     ) -> AjarCompositeUniforms {
         AjarCompositeUniforms(
             outputSize: SIMD2<Float>(Float(outputTexture.width), Float(outputTexture.height)),
@@ -545,6 +603,18 @@ public final class MetalRenderExecutor {
             flipHorizontal: transform.flip.horizontal ? 1 : 0,
             flipVertical: transform.flip.vertical ? 1 : 0,
             blendMode: blendModeValue(transform.blendMode),
+            sourceTransfer: colorTransferValue(sourceColorSpace),
+            sourcePrimaries: colorPrimariesValue(sourceColorSpace),
+            workingPrimaries: colorPrimariesValue(workingColorSpace),
+            padding: 0
+        )
+    }
+
+    private func presentUniforms(composite: RenderCompositeNode) -> AjarPresentUniforms {
+        AjarPresentUniforms(
+            workingPrimaries: colorPrimariesValue(composite.workingColorSpace),
+            outputTransfer: colorTransferValue(composite.outputColorSpace),
+            outputPrimaries: colorPrimariesValue(composite.outputColorSpace),
             padding: 0
         )
     }
@@ -593,6 +663,31 @@ public final class MetalRenderExecutor {
         }
     }
 
+    private func colorTransferValue(_ colorSpace: MediaColorSpace) -> UInt32 {
+        switch colorSpace {
+        case .sRGB, .displayP3:
+            return 0
+        case .rec709, .rec2020, .unspecified, .unknown:
+            return 1
+        }
+    }
+
+    private func colorPrimariesValue(_ colorSpace: MediaColorSpace) -> UInt32 {
+        switch colorSpace {
+        case .displayP3:
+            return 1
+        case .rec2020:
+            return 2
+        case .rec709, .sRGB, .unspecified, .unknown:
+            return 0
+        }
+    }
+
+    private struct PipelineStateKey: Hashable {
+        let fragmentFunctionName: String
+        let pixelFormatRawValue: UInt
+    }
+
     private struct AjarCompositeUniforms {
         var outputSize: SIMD2<Float>
         var sourceSize: SIMD2<Float>
@@ -605,6 +700,16 @@ public final class MetalRenderExecutor {
         var flipHorizontal: UInt32
         var flipVertical: UInt32
         var blendMode: UInt32
+        var sourceTransfer: UInt32
+        var sourcePrimaries: UInt32
+        var workingPrimaries: UInt32
+        var padding: UInt32
+    }
+
+    private struct AjarPresentUniforms {
+        var workingPrimaries: UInt32
+        var outputTransfer: UInt32
+        var outputPrimaries: UInt32
         var padding: UInt32
     }
 
@@ -653,8 +758,131 @@ public final class MetalRenderExecutor {
             uint flipHorizontal;
             uint flipVertical;
             uint blendMode;
+            uint sourceTransfer;
+            uint sourcePrimaries;
+            uint workingPrimaries;
             uint padding;
         };
+
+        struct AjarPresentUniforms {
+            uint workingPrimaries;
+            uint outputTransfer;
+            uint outputPrimaries;
+            uint padding;
+        };
+
+        static float3 ajar_decode_srgb(float3 value) {
+            return select(
+                pow((value + 0.055) / 1.055, float3(2.4)),
+                value / 12.92,
+                value <= 0.04045
+            );
+        }
+
+        static float3 ajar_encode_srgb(float3 value) {
+            return select(
+                (1.055 * pow(value, float3(1.0 / 2.4))) - 0.055,
+                value * 12.92,
+                value <= 0.0031308
+            );
+        }
+
+        static float3 ajar_decode_rec709(float3 value) {
+            return select(
+                pow((value + 0.099) / 1.099, float3(1.0 / 0.45)),
+                value / 4.5,
+                value < 0.081
+            );
+        }
+
+        static float3 ajar_encode_rec709(float3 value) {
+            return select(
+                (1.099 * pow(value, float3(0.45))) - 0.099,
+                value * 4.5,
+                value < 0.018
+            );
+        }
+
+        static float3 ajar_decode_transfer(float3 value, uint transfer) {
+            if (transfer == 0) {
+                return ajar_decode_srgb(value);
+            }
+            return ajar_decode_rec709(value);
+        }
+
+        static float3 ajar_encode_transfer(float3 value, uint transfer) {
+            if (transfer == 0) {
+                return ajar_encode_srgb(value);
+            }
+            return ajar_encode_rec709(value);
+        }
+
+        static float3 ajar_rgb_to_xyz(float3 rgb, uint primaries) {
+            if (primaries == 1) {
+                return float3(
+                    (0.4865709 * rgb.r) + (0.2656677 * rgb.g) + (0.1982173 * rgb.b),
+                    (0.2289746 * rgb.r) + (0.6917385 * rgb.g) + (0.0792869 * rgb.b),
+                    (0.0000000 * rgb.r) + (0.0451134 * rgb.g) + (1.0439444 * rgb.b)
+                );
+            }
+            if (primaries == 2) {
+                return float3(
+                    (0.6369580 * rgb.r) + (0.1446169 * rgb.g) + (0.1688809 * rgb.b),
+                    (0.2627002 * rgb.r) + (0.6779981 * rgb.g) + (0.0593017 * rgb.b),
+                    (0.0000000 * rgb.r) + (0.0280727 * rgb.g) + (1.0609851 * rgb.b)
+                );
+            }
+            return float3(
+                (0.4124564 * rgb.r) + (0.3575761 * rgb.g) + (0.1804375 * rgb.b),
+                (0.2126729 * rgb.r) + (0.7151522 * rgb.g) + (0.0721750 * rgb.b),
+                (0.0193339 * rgb.r) + (0.1191920 * rgb.g) + (0.9503041 * rgb.b)
+            );
+        }
+
+        static float3 ajar_xyz_to_rgb(float3 xyz, uint primaries) {
+            if (primaries == 1) {
+                return float3(
+                    (2.4934969 * xyz.x) + (-0.9313836 * xyz.y) + (-0.4027108 * xyz.z),
+                    (-0.8294890 * xyz.x) + (1.7626640 * xyz.y) + (0.0236247 * xyz.z),
+                    (0.0358458 * xyz.x) + (-0.0761724 * xyz.y) + (0.9568845 * xyz.z)
+                );
+            }
+            if (primaries == 2) {
+                return float3(
+                    (1.7166512 * xyz.x) + (-0.3556708 * xyz.y) + (-0.2533663 * xyz.z),
+                    (-0.6666844 * xyz.x) + (1.6164812 * xyz.y) + (0.0157685 * xyz.z),
+                    (0.0176399 * xyz.x) + (-0.0427706 * xyz.y) + (0.9421031 * xyz.z)
+                );
+            }
+            return float3(
+                (3.2404542 * xyz.x) + (-1.5371385 * xyz.y) + (-0.4985314 * xyz.z),
+                (-0.9692660 * xyz.x) + (1.8760108 * xyz.y) + (0.0415560 * xyz.z),
+                (0.0556434 * xyz.x) + (-0.2040259 * xyz.y) + (1.0572252 * xyz.z)
+            );
+        }
+
+        static float3 ajar_convert_primaries(
+            float3 rgb,
+            uint sourcePrimaries,
+            uint targetPrimaries
+        ) {
+            if (sourcePrimaries == targetPrimaries) {
+                return rgb;
+            }
+            return ajar_xyz_to_rgb(ajar_rgb_to_xyz(rgb, sourcePrimaries), targetPrimaries);
+        }
+
+        static float3 ajar_source_to_working_linear(
+            float3 encoded,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            float3 sourceLinear = ajar_decode_transfer(saturate(encoded), uniforms.sourceTransfer);
+            return ajar_convert_primaries(
+                sourceLinear,
+                uniforms.sourcePrimaries,
+                uniforms.workingPrimaries
+            );
+        }
 
         static float3 ajar_unpremultiply(float4 color) {
             if (color.a <= 0.00001) {
@@ -750,10 +978,29 @@ public final class MetalRenderExecutor {
                 sourceUV.y = 1.0 - sourceUV.y;
             }
 
-            float4 source = sourceTexture.sample(sourceSampler, sourceUV);
-            source.a *= uniforms.opacity;
-            source.rgb *= source.a;
+            float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
+            float sourceAlpha = saturate(sampledSource.a * uniforms.opacity);
+            float3 sourceLinear = ajar_source_to_working_linear(sampledSource.rgb, uniforms);
+            float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
             return ajar_composite(source, destination, uniforms.blendMode);
+        }
+
+        fragment float4 ajar_present_fragment(
+            AjarVertexOut in [[stage_in]],
+            texture2d<float> linearTexture [[texture(0)]],
+            constant AjarPresentUniforms &uniforms [[buffer(0)]]
+        ) {
+            constexpr sampler sourceSampler(address::clamp_to_edge, filter::nearest);
+            float4 linearColor = linearTexture.sample(sourceSampler, in.uv);
+            float alpha = saturate(linearColor.a);
+            float3 straightWorking = ajar_unpremultiply(linearColor);
+            float3 outputLinear = ajar_convert_primaries(
+                straightWorking,
+                uniforms.workingPrimaries,
+                uniforms.outputPrimaries
+            );
+            float3 encoded = ajar_encode_transfer(saturate(outputLinear), uniforms.outputTransfer);
+            return saturate(float4(encoded * alpha, alpha));
         }
         """
 }

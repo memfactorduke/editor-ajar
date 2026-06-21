@@ -35,10 +35,13 @@ final class RenderGraphTests: XCTestCase {
         XCTAssertEqual(payload.mediaID, mediaID)
         XCTAssertEqual(payload.clipID, clipID)
         XCTAssertEqual(payload.sourceTime, try time(54))
+        XCTAssertEqual(payload.colorSpace, .rec709)
 
         guard case .composite(let composite) = output.kind else {
             return XCTFail("Expected composite output")
         }
+        XCTAssertEqual(composite.workingColorSpace, .rec709)
+        XCTAssertEqual(composite.outputColorSpace, .rec709)
         XCTAssertEqual(composite.inputs, [
             RenderCompositeInput(sourceNodeID: source.id, transform: clip.transform)
         ])
@@ -340,13 +343,17 @@ private func sourceNode(in graph: RenderGraph) throws -> RenderNode {
     )
 }
 
-private func makeProject(mediaPool: [MediaRef], sequences: [Sequence]) throws -> Project {
+private func makeProject(
+    colorSpace: MediaColorSpace = .rec709,
+    mediaPool: [MediaRef],
+    sequences: [Sequence]
+) throws -> Project {
     Project(
         schemaVersion: AjarProjectCodec.currentSchemaVersion,
         settings: ProjectSettings(
             frameRate: try FrameRate(frames: 24),
             resolution: PixelDimensions(width: 1_920, height: 1_080),
-            colorSpace: .rec709,
+            colorSpace: colorSpace,
             audioSampleRate: 48_000
         ),
         mediaPool: mediaPool,
@@ -373,7 +380,10 @@ private func makeEmptySequence(
     )
 }
 
-private func makeMediaRef(id: UUID) throws -> MediaRef {
+private func makeMediaRef(
+    id: UUID,
+    colorSpace: MediaColorSpace = .rec709
+) throws -> MediaRef {
     MediaRef(
         id: id,
         sourceURL: URL(fileURLWithPath: "/media/\(id.uuidString).mov"),
@@ -383,7 +393,7 @@ private func makeMediaRef(id: UUID) throws -> MediaRef {
             pixelDimensions: PixelDimensions(width: 1_920, height: 1_080),
             frameRate: try FrameRate(frames: 24),
             duration: try time(240),
-            colorSpace: .rec709,
+            colorSpace: colorSpace,
             audioChannelLayout: AudioChannelLayout(channelCount: 2, layoutTag: "stereo"),
             isVariableFrameRate: false,
             conformedFrameRate: nil

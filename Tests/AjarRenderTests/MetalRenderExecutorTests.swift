@@ -188,7 +188,7 @@ final class MetalRenderExecutorTests: XCTestCase {
         )
     }
 
-    func testFRXFORM004OpacityCompositesPremultipliedOverDestination() throws {
+    func testFRXFORM004FRCOMP007OpacityCompositesInLinearLight() throws {
         let device = try metalDeviceOrSkip()
         let graph = try makeTwoClipGraph(
             topTransform: ClipTransform(opacity: try RationalValue(numerator: 1, denominator: 2))
@@ -219,7 +219,36 @@ final class MetalRenderExecutorTests: XCTestCase {
 
         try waitForRender(frame)
 
-        XCTAssertEqual(try readBGRA8(texture: frame.texture, device: device), [128, 0, 128, 255])
+        XCTAssertEqual(try readBGRA8(texture: frame.texture, device: device), [180, 0, 180, 255])
+    }
+
+    func testFRCOL008UsesHalfFloatLinearWorkingTextureFormat() {
+        XCTAssertEqual(MetalRenderExecutor.linearWorkingPixelFormat, .rgba16Float)
+    }
+
+    func testFRCOL005NFRQUAL002Rec709RoundTripPreservesKnownPatch() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph()
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [32, 64, 128, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1)),
+            sourceProvider: CountingSourceTextureProvider(texture: sourceTexture)
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertBGRA8(
+            try readBGRA8(texture: frame.texture, device: device),
+            approximatelyEquals: [32, 64, 128, 255],
+            channelTolerance: 1
+        )
     }
 
     func testFRXFORM004ScreenBlendModeCombinesSourceAndDestination() throws {
@@ -677,6 +706,20 @@ private func readBGRA8(texture: MTLTexture, device: MTLDevice) throws -> [UInt8]
 
     let pointer = buffer.contents().bindMemory(to: UInt8.self, capacity: byteCount)
     return Array(UnsafeBufferPointer(start: pointer, count: byteCount))
+}
+
+private func XCTAssertBGRA8(
+    _ actual: [UInt8],
+    approximatelyEquals expected: [UInt8],
+    channelTolerance: UInt8,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(actual.count, expected.count, file: file, line: line)
+    for index in actual.indices {
+        let delta = abs(Int(actual[index]) - Int(expected[index]))
+        XCTAssertLessThanOrEqual(delta, Int(channelTolerance), file: file, line: line)
+    }
 }
 
 private func waitForRender(_ frame: RenderedFrame) throws {

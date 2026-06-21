@@ -1,0 +1,106 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          255,
+          0,
+          0,
+          255
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 1
+      }
+    },
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          0,
+          0,
+          255,
+          255
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 1
+      },
+      "transform" : {
+        "anchorPoint" : {
+          "x" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "y" : {
+            "denominator" : 1,
+            "numerator" : 0
+          }
+        },
+        "blendMode" : "normal",
+        "crop" : {
+          "bottom" : 0,
+          "left" : 0,
+          "right" : 0,
+          "top" : 0
+        },
+        "flip" : {
+          "horizontal" : false,
+          "vertical" : false
+        },
+        "opacity" : {
+          "denominator" : 2,
+          "numerator" : 1
+        },
+        "position" : {
+          "x" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "y" : {
+            "denominator" : 1,
+            "numerator" : 0
+          }
+        },
+        "rotation" : {
+          "degrees" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "revolutions" : 0
+        },
+        "scale" : {
+          "x" : {
+            "denominator" : 1,
+            "numerator" : 1
+          },
+          "y" : {
+            "denominator" : 1,
+            "numerator" : 1
+          }
+        }
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "linear-light-opacity-blend",
+  "outputDimensions" : {
+    "height" : 1,
+    "width" : 1
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-007",
+    "FR-COL-005",
+    "FR-COL-008",
+    "ADR-0010",
+    "NFR-QUAL-002"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 0,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 1
+  }
+}

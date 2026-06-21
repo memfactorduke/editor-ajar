@@ -64,11 +64,20 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Exact time in source media coordinates.
     public let sourceTime: RationalTime
 
+    /// Tagged source color space used by the render pipeline.
+    public let colorSpace: MediaColorSpace
+
     /// Creates resolved source node parameters.
-    public init(mediaID: UUID, clipID: UUID, sourceTime: RationalTime) {
+    public init(
+        mediaID: UUID,
+        clipID: UUID,
+        sourceTime: RationalTime,
+        colorSpace: MediaColorSpace = .rec709
+    ) {
         self.mediaID = mediaID
         self.clipID = clipID
         self.sourceTime = sourceTime
+        self.colorSpace = colorSpace
     }
 }
 
@@ -80,13 +89,23 @@ public struct RenderCompositeNode: Codable, Equatable, Sendable {
     /// Source inputs in composite order.
     public let inputs: [RenderCompositeInput]
 
+    /// Linear-light working space primaries for compositing.
+    public let workingColorSpace: MediaColorSpace
+
+    /// Encoded output/display color space.
+    public let outputColorSpace: MediaColorSpace
+
     /// Creates resolved composite node parameters.
     public init(
         background: RenderCompositeBackground = .transparent,
-        inputs: [RenderCompositeInput] = []
+        inputs: [RenderCompositeInput] = [],
+        workingColorSpace: MediaColorSpace = .rec709,
+        outputColorSpace: MediaColorSpace = .rec709
     ) {
         self.background = background
         self.inputs = inputs
+        self.workingColorSpace = workingColorSpace
+        self.outputColorSpace = outputColorSpace
     }
 }
 
@@ -158,10 +177,16 @@ enum RenderNodeFactory {
     static func makeSourceNode(
         mediaID: UUID,
         clipID: UUID,
-        sourceTime: RationalTime
+        sourceTime: RationalTime,
+        colorSpace: MediaColorSpace
     ) throws -> RenderNode {
         let kind = RenderNodeKind.source(
-            RenderSourceNode(mediaID: mediaID, clipID: clipID, sourceTime: sourceTime)
+            RenderSourceNode(
+                mediaID: mediaID,
+                clipID: clipID,
+                sourceTime: sourceTime,
+                colorSpace: colorSpace
+            )
         )
         return try makeNode(
             id: RenderNodeID(rawValue: "source:\(clipID.uuidString)"),
@@ -171,7 +196,11 @@ enum RenderNodeFactory {
         )
     }
 
-    static func makeCompositeNode(inputs: [RenderCompositeNodeInput]) throws -> RenderNode {
+    static func makeCompositeNode(
+        inputs: [RenderCompositeNodeInput],
+        workingColorSpace: MediaColorSpace,
+        outputColorSpace: MediaColorSpace
+    ) throws -> RenderNode {
         let compositeInputs = inputs.map { input in
             RenderCompositeInput(
                 sourceNodeID: input.node.id,
@@ -181,7 +210,13 @@ enum RenderNodeFactory {
         }
         return try makeNode(
             id: RenderNodeID(rawValue: "composite:output"),
-            kind: .composite(RenderCompositeNode(inputs: compositeInputs)),
+            kind: .composite(
+                RenderCompositeNode(
+                    inputs: compositeInputs,
+                    workingColorSpace: workingColorSpace,
+                    outputColorSpace: outputColorSpace
+                )
+            ),
             inputIDs: inputs.map(\.node.id),
             inputHashes: inputs.map(\.node.contentHash)
         )

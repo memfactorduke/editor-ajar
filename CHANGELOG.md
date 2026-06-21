@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarRender` linear-light compositing with half-float working textures, explicit color-space
+  transfer/primary conversion, cache-key color metadata, and golden coverage for FR-COMP-007,
+  FR-COL-005/008, ADR-0010, and NFR-QUAL-002.
 - `AjarCore` clip effects and chroma-key settings model with undoable reducer commands,
   validation, `.ajar` codec compatibility, and render-graph propagation for FR-COMP-001.
 - Transform/keyframe UI in the macOS app, including reducer-backed inspector fields,

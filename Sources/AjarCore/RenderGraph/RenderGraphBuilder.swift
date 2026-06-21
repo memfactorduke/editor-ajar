@@ -51,7 +51,7 @@ public enum RenderGraphBuilder {
     ) throws -> RenderGraph {
         let candidates = try activeMediaClips(in: sequence, at: time)
         guard !candidates.isEmpty else {
-            return try transparentGraph()
+            return try transparentGraph(outputColorSpace: project.settings.colorSpace)
         }
 
         return try graph(for: candidates.map(\.clip), at: time, in: project)
@@ -86,8 +86,12 @@ public enum RenderGraphBuilder {
         return candidates
     }
 
-    private static func transparentGraph() throws -> RenderGraph {
-        let compositeNode = try RenderNodeFactory.makeCompositeNode(inputs: [])
+    private static func transparentGraph(outputColorSpace: MediaColorSpace) throws -> RenderGraph {
+        let compositeNode = try RenderNodeFactory.makeCompositeNode(
+            inputs: [],
+            workingColorSpace: outputColorSpace,
+            outputColorSpace: outputColorSpace
+        )
         return RenderGraph(nodes: [compositeNode], outputNodeID: compositeNode.id)
     }
 
@@ -103,7 +107,11 @@ public enum RenderGraphBuilder {
                 effects: clip.effects
             )
         }
-        let compositeNode = try RenderNodeFactory.makeCompositeNode(inputs: sourceInputs)
+        let compositeNode = try RenderNodeFactory.makeCompositeNode(
+            inputs: sourceInputs,
+            workingColorSpace: project.settings.colorSpace,
+            outputColorSpace: project.settings.colorSpace
+        )
 
         return RenderGraph(
             nodes: sourceInputs.map(\.node) + [compositeNode],
@@ -124,7 +132,7 @@ public enum RenderGraphBuilder {
             throw RenderGraphBuildError.unsupportedClipSource(clipID: clip.id, source: clip.source)
         }
 
-        guard project.mediaPool.contains(where: { media in media.id == mediaID }) else {
+        guard let media = project.mediaPool.first(where: { media in media.id == mediaID }) else {
             throw RenderGraphBuildError.missingMediaReference(clipID: clip.id, mediaID: mediaID)
         }
 
@@ -132,7 +140,8 @@ public enum RenderGraphBuilder {
         return try RenderNodeFactory.makeSourceNode(
             mediaID: mediaID,
             clipID: clip.id,
-            sourceTime: sourceTime
+            sourceTime: sourceTime,
+            colorSpace: media.metadata.colorSpace
         )
     }
 
