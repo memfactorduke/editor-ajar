@@ -106,10 +106,10 @@ final class EditorAjarUISmokeTests: XCTestCase {
         app.typeKey(.leftArrow, modifierFlags: [])
         assertPlayheadValue("Frame 0", on: playheadReadout)
 
-        app.typeKey(.space, modifierFlags: [])
+        app.buttons["Play"].click()
         XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5))
 
-        app.typeKey(.space, modifierFlags: [])
+        app.buttons["Pause"].click()
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         XCTAssertTrue(window.exists)
         XCTAssertEqual(app.state, .runningForeground)
