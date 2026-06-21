@@ -8,6 +8,7 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        executionTimeAllowance = 120
         app = XCUIApplication()
         app.launch()
     }

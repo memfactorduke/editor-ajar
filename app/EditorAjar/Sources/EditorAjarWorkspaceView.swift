@@ -826,9 +826,7 @@ private struct TrackLane: View {
                 TimelineClipBlock(
                     layout: layout,
                     isSelected: model.isClipSelected(layout.reference),
-                    keyframeLanes: model.isClipSelected(layout.reference) && row.kind == .video
-                        ? model.selectedTransformKeyframeLanes
-                        : [],
+                    keyframeLanes: transformKeyframeLanes(for: layout),
                     pixelsPerFrame: model.timelineState.pixelsPerFrame,
                     addKeyframe: { parameter, frame in
                         model.addSelectedTransformKeyframe(parameter: parameter, atFrame: frame)
@@ -862,6 +860,16 @@ private struct TrackLane: View {
                 .offset(x: model.timelineXPosition(for: model.playheadFrame))
         }
         .frame(width: max(1, timelineContentWidth), height: max(24, model.timelineState.laneHeight - 8))
+    }
+
+    private func transformKeyframeLanes(for layout: TimelineClipLayout) -> [TransformKeyframeLane] {
+        guard row.kind == .video,
+              model.selectedTransformClipReference == layout.reference
+        else {
+            return []
+        }
+
+        return model.selectedTransformKeyframeLanes.filter { !$0.keyframes.isEmpty }
     }
 }
 

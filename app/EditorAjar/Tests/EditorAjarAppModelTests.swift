@@ -627,10 +627,16 @@ final class EditorAjarAppModelTests: XCTestCase {
         let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
         try selectSampleVideoClip(in: model)
         model.scrub(to: 10)
+        let selectedTransformReference = try XCTUnwrap(model.selectedTransformClipReference)
 
         XCTAssertFalse(model.selectedTransformHasKeyframe(.position))
         XCTAssertTrue(model.toggleSelectedTransformKeyframe(.position))
         XCTAssertTrue(model.selectedTransformHasKeyframe(.position))
+        XCTAssertEqual(model.selectedTransformClipReference, selectedTransformReference)
+        XCTAssertEqual(
+            model.selectedTransformKeyframeLanes.filter { !$0.keyframes.isEmpty }.map(\.parameter),
+            [.position]
+        )
         XCTAssertEqual(try positionLane(in: model).keyframes.map(\.frame), [10])
         XCTAssertEqual(model.undoMenuTitle, "Undo Add Transform Keyframe")
 

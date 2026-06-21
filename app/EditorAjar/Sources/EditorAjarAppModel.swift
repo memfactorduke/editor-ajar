@@ -199,6 +199,15 @@ final class EditorAjarAppModel: ObservableObject {
         return Self.clip(selectedClipReference, in: sequence)
     }
 
+    var selectedTransformClipReference: TimelineClipReference? {
+        guard let selectedClipReference,
+              selectedClip?.kind == .video
+        else {
+            return nil
+        }
+        return selectedClipReference
+    }
+
     var selectedTransformInspector: SelectedTransformInspectorState? {
         guard let selectedClip,
               selectedClip.kind == .video,
