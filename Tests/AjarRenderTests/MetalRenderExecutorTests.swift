@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import AjarCore
 import AjarRender
@@ -122,6 +123,171 @@ final class MetalRenderExecutorTests: XCTestCase {
         )
         XCTAssertEqual(try readBGRA8(texture: frame.texture, device: device), [0, 0, 255, 255])
     }
+
+    func testFRXFORM001PositionOffsetsSourceInCanvasPixels() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph(
+            transform: ClipTransform(
+                position: CanvasPoint(x: RationalValue(1), y: RationalValue(1))
+            )
+        )
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 2,
+            height: 2,
+            bgraPixels: repeatedBGRA([0, 0, 255, 255], count: 4)
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 4, height: 4)),
+            sourceProvider: CountingSourceTextureProvider(texture: sourceTexture)
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertEqual(
+            try readBGRA8(texture: frame.texture, device: device),
+            pixels4x4(
+                [
+                    clear, clear, clear, clear,
+                    clear, red, red, clear,
+                    clear, red, red, clear,
+                    clear, clear, clear, clear
+                ]
+            )
+        )
+    }
+
+    func testFRXFORM002ScaleAboutAnchorExpandsSourceQuad() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph(
+            transform: ClipTransform(
+                scale: ClipScale(x: RationalValue(2), y: RationalValue(2)),
+                anchorPoint: .zero
+            )
+        )
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 2,
+            height: 2,
+            bgraPixels: repeatedBGRA([0, 255, 0, 255], count: 4)
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 4, height: 4)),
+            sourceProvider: CountingSourceTextureProvider(texture: sourceTexture)
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertEqual(
+            try readBGRA8(texture: frame.texture, device: device),
+            repeatedBGRA([0, 255, 0, 255], count: 16)
+        )
+    }
+
+    func testFRXFORM004OpacityCompositesPremultipliedOverDestination() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeTwoClipGraph(
+            topTransform: ClipTransform(opacity: try RationalValue(numerator: 1, denominator: 2))
+        )
+        let bottomTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [255, 0, 0, 255]
+        )
+        let topTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1)),
+            sourceProvider: ClipTextureProvider(
+                textures: [
+                    try testUUID(TestIDs.bottomClip): bottomTexture,
+                    try testUUID(TestIDs.topClip): topTexture
+                ]
+            )
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertEqual(try readBGRA8(texture: frame.texture, device: device), [128, 0, 128, 255])
+    }
+
+    func testFRXFORM004ScreenBlendModeCombinesSourceAndDestination() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeTwoClipGraph(topTransform: ClipTransform(blendMode: .screen))
+        let bottomTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [255, 0, 0, 255]
+        )
+        let topTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1)),
+            sourceProvider: ClipTextureProvider(
+                textures: [
+                    try testUUID(TestIDs.bottomClip): bottomTexture,
+                    try testUUID(TestIDs.topClip): topTexture
+                ]
+            )
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertEqual(try readBGRA8(texture: frame.texture, device: device), [255, 0, 255, 255])
+    }
+
+    func testFRXFORM005CropAndFlipAffectSourceSampling() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph(
+            transform: ClipTransform(
+                crop: ClipCropInsets(left: 1, top: 0, right: 0, bottom: 0),
+                flip: ClipFlip(horizontal: true, vertical: false)
+            )
+        )
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 2,
+            height: 2,
+            bgraPixels: [
+                0, 0, 255, 255, 0, 255, 0, 255,
+                255, 0, 0, 255, 255, 255, 255, 255
+            ]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 2, height: 2)),
+            sourceProvider: CountingSourceTextureProvider(texture: sourceTexture)
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertEqual(
+            try readBGRA8(texture: frame.texture, device: device),
+            [
+                0, 0, 0, 0, 0, 0, 255, 255,
+                0, 0, 0, 0, 255, 0, 0, 255
+            ]
+        )
+    }
 }
 
 private enum TestIDs {
@@ -195,7 +361,10 @@ private final class CVMetalTextureFixture {
     }
 }
 
-private func makeSingleClipGraph() throws -> RenderGraph {
+private let clear: [UInt8] = [0, 0, 0, 0]
+private let red: [UInt8] = [0, 0, 255, 255]
+
+private func makeSingleClipGraph(transform: ClipTransform = .identity) throws -> RenderGraph {
     let mediaID = try testUUID(TestIDs.media)
     let clipID = try testUUID(TestIDs.clip)
     let media = MediaRef(
@@ -219,7 +388,8 @@ private func makeSingleClipGraph() throws -> RenderGraph {
         sourceRange: try range(startFrame: 0, durationFrames: 24),
         timelineRange: try range(startFrame: 0, durationFrames: 24),
         kind: .video,
-        name: "Synthetic"
+        name: "Synthetic",
+        transform: transform
     )
     let sequence = Sequence(
         id: UUID(),
@@ -230,7 +400,7 @@ private func makeSingleClipGraph() throws -> RenderGraph {
         timebase: try FrameRate(frames: 24)
     )
     let project = Project(
-        schemaVersion: 1,
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
         settings: ProjectSettings(
             frameRate: try FrameRate(frames: 24),
             resolution: PixelDimensions(width: 1, height: 1),
@@ -244,7 +414,7 @@ private func makeSingleClipGraph() throws -> RenderGraph {
     return try buildRenderGraph(for: sequence, at: try time(0), in: project)
 }
 
-private func makeTwoClipGraph() throws -> RenderGraph {
+private func makeTwoClipGraph(topTransform: ClipTransform = .identity) throws -> RenderGraph {
     let bottomMediaID = try testUUID(TestIDs.bottomMedia)
     let topMediaID = try testUUID(TestIDs.topMedia)
     let bottomClip = try makeRenderClip(
@@ -253,7 +423,8 @@ private func makeTwoClipGraph() throws -> RenderGraph {
     )
     let topClip = try makeRenderClip(
         id: try testUUID(TestIDs.topClip),
-        mediaID: topMediaID
+        mediaID: topMediaID,
+        transform: topTransform
     )
     let sequence = Sequence(
         id: UUID(),
@@ -267,7 +438,7 @@ private func makeTwoClipGraph() throws -> RenderGraph {
         timebase: try FrameRate(frames: 24)
     )
     let project = Project(
-        schemaVersion: 1,
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
         settings: ProjectSettings(
             frameRate: try FrameRate(frames: 24),
             resolution: PixelDimensions(width: 1, height: 1),
@@ -302,14 +473,19 @@ private func makeRenderMedia(id: UUID) throws -> MediaRef {
     )
 }
 
-private func makeRenderClip(id: UUID, mediaID: UUID) throws -> Clip {
+private func makeRenderClip(
+    id: UUID,
+    mediaID: UUID,
+    transform: ClipTransform = .identity
+) throws -> Clip {
     Clip(
         id: id,
         source: .media(id: mediaID),
         sourceRange: try range(startFrame: 0, durationFrames: 24),
         timelineRange: try range(startFrame: 0, durationFrames: 24),
         kind: .video,
-        name: "Synthetic"
+        name: "Synthetic",
+        transform: transform
     )
 }
 
@@ -323,7 +499,7 @@ private func makeTransparentGraph() throws -> RenderGraph {
         timebase: try FrameRate(frames: 24)
     )
     let project = Project(
-        schemaVersion: 1,
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
         settings: ProjectSettings(
             frameRate: try FrameRate(frames: 24),
             resolution: PixelDimensions(width: 1, height: 1),
@@ -395,6 +571,49 @@ private func makeCVMetalTextureFixture(
         metalTexture: metalTexture,
         texture: texture
     )
+}
+
+private func makeTexture(
+    device: MTLDevice,
+    width: Int,
+    height: Int,
+    bgraPixels: [UInt8]
+) throws -> MTLTexture {
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .bgra8Unorm,
+        width: width,
+        height: height,
+        mipmapped: false
+    )
+    descriptor.usage = [.shaderRead]
+
+    guard let texture = device.makeTexture(descriptor: descriptor) else {
+        throw TestTextureError.metalTextureUnavailable
+    }
+    guard bgraPixels.count == width * height * 4 else {
+        throw TestTextureError.pixelBufferBaseAddressUnavailable
+    }
+
+    texture.replace(
+        region: MTLRegionMake2D(0, 0, width, height),
+        mipmapLevel: 0,
+        withBytes: bgraPixels,
+        bytesPerRow: width * 4
+    )
+    return texture
+}
+
+private func repeatedBGRA(_ pixel: [UInt8], count: Int) -> [UInt8] {
+    var pixels: [UInt8] = []
+    pixels.reserveCapacity(pixel.count * count)
+    for _ in 0..<count {
+        pixels.append(contentsOf: pixel)
+    }
+    return pixels
+}
+
+private func pixels4x4(_ pixels: [[UInt8]]) -> [UInt8] {
+    pixels.flatMap { $0 }
 }
 
 private func fill(

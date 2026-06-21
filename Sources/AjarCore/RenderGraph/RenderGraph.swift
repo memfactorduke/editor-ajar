@@ -24,6 +24,21 @@ public enum RenderCompositeBackground: String, Codable, Equatable, Sendable {
     case transparent
 }
 
+/// One source input plus its compositing instructions.
+public struct RenderCompositeInput: Codable, Equatable, Sendable {
+    /// Source node to composite.
+    public let sourceNodeID: RenderNodeID
+
+    /// Static transform to apply while compositing the source.
+    public let transform: ClipTransform
+
+    /// Creates a composite input.
+    public init(sourceNodeID: RenderNodeID, transform: ClipTransform) {
+        self.sourceNodeID = sourceNodeID
+        self.transform = transform
+    }
+}
+
 /// Resolved media source parameters for a source render node.
 public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Stable media reference ID to decode.
@@ -48,9 +63,16 @@ public struct RenderCompositeNode: Codable, Equatable, Sendable {
     /// Output background when there are no inputs.
     public let background: RenderCompositeBackground
 
+    /// Source inputs in composite order.
+    public let inputs: [RenderCompositeInput]
+
     /// Creates resolved composite node parameters.
-    public init(background: RenderCompositeBackground = .transparent) {
+    public init(
+        background: RenderCompositeBackground = .transparent,
+        inputs: [RenderCompositeInput] = []
+    ) {
         self.background = background
+        self.inputs = inputs
     }
 }
 
@@ -135,12 +157,16 @@ enum RenderNodeFactory {
         )
     }
 
-    static func makeCompositeNode(inputs: [RenderNode]) throws -> RenderNode {
-        try makeNode(
+    static func makeCompositeNode(inputs: [(node: RenderNode, transform: ClipTransform)]) throws
+        -> RenderNode {
+        let compositeInputs = inputs.map { input in
+            RenderCompositeInput(sourceNodeID: input.node.id, transform: input.transform)
+        }
+        return try makeNode(
             id: RenderNodeID(rawValue: "composite:output"),
-            kind: .composite(RenderCompositeNode()),
-            inputIDs: inputs.map(\.id),
-            inputHashes: inputs.map(\.contentHash)
+            kind: .composite(RenderCompositeNode(inputs: compositeInputs)),
+            inputIDs: inputs.map(\.node.id),
+            inputHashes: inputs.map(\.node.contentHash)
         )
     }
 

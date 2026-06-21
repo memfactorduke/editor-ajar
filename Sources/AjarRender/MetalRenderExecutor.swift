@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import AjarCore
 import Foundation
 import Metal
+import simd
 
 /// Errors produced by Metal render graph execution.
 public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertible {
@@ -33,6 +35,9 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     /// A composite input node was not present in the graph.
     case missingInputNode(RenderNodeID)
 
+    /// A composite node did not contain parameters for each source input.
+    case compositeInputMetadataMismatch(nodeID: RenderNodeID)
+
     /// M2 only supports source nodes as composite inputs.
     case unsupportedInputNode(RenderNodeID)
 
@@ -44,6 +49,9 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
 
     /// A Metal command buffer could not be created.
     case commandBufferCreationFailed
+
+    /// A Metal blit encoder could not be created.
+    case blitEncoderCreationFailed
 
     /// A render command encoder could not be created.
     case renderEncoderCreationFailed
@@ -69,6 +77,8 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
             "composite node \(nodeID) has unsupported input count \(inputCount)"
         case .missingInputNode(let nodeID):
             "render graph is missing input node \(nodeID)"
+        case .compositeInputMetadataMismatch(let nodeID):
+            "composite node \(nodeID) does not have matching source input metadata"
         case .unsupportedInputNode(let nodeID):
             "composite input node \(nodeID) is not a source node"
         case .sourceTextureUnavailable(let nodeID, let message):
@@ -77,6 +87,8 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
             "output texture creation failed for \(width)x\(height)"
         case .commandBufferCreationFailed:
             "Metal command buffer creation failed"
+        case .blitEncoderCreationFailed:
+            "Metal blit encoder creation failed"
         case .renderEncoderCreationFailed:
             "Metal render command encoder creation failed"
         }
@@ -161,6 +173,7 @@ public struct RenderedFrame {
     }
 }
 
+// swiftlint:disable type_body_length
 /// Metal executor for GPU-resident render graph composites.
 public final class MetalRenderExecutor {
     private let device: MTLDevice
@@ -296,38 +309,62 @@ public final class MetalRenderExecutor {
         commandBuffer: MTLCommandBuffer,
         sourceProvider: any RenderSourceTextureProvider
     ) throws {
+        guard case .composite(let composite) = outputNode.kind else {
+            throw MetalRenderError.unsupportedOutputNode(outputNode.id)
+        }
+
         switch outputNode.inputIDs.count {
         case 0:
             try encodeTransparentComposite(into: outputTexture, commandBuffer: commandBuffer)
         default:
-            let sourceTextures = try outputNode.inputIDs.map { inputID in
-                try sourceTexture(graph: graph, inputID: inputID, sourceProvider: sourceProvider)
+            guard composite.inputs.count == outputNode.inputIDs.count else {
+                throw MetalRenderError.compositeInputMetadataMismatch(nodeID: outputNode.id)
+            }
+            guard composite.inputs.map(\.sourceNodeID) == outputNode.inputIDs else {
+                throw MetalRenderError.compositeInputMetadataMismatch(nodeID: outputNode.id)
+            }
+
+            let sourceInputs = try composite.inputs.map { input in
+                try sourceInput(graph: graph, input: input, sourceProvider: sourceProvider)
             }
             try encodeSourceComposite(
-                sourceTextures: sourceTextures,
+                sourceInputs: sourceInputs,
                 outputTexture: outputTexture,
                 commandBuffer: commandBuffer
             )
         }
     }
 
-    private func sourceTexture(
+    private struct SourceCompositeInput {
+        let source: RenderSourceNode
+        let texture: MTLTexture
+        let transform: ClipTransform
+    }
+
+    private func sourceInput(
         graph: RenderGraph,
-        inputID: RenderNodeID,
+        input: RenderCompositeInput,
         sourceProvider: any RenderSourceTextureProvider
-    ) throws -> MTLTexture {
-        guard let inputNode = graph.node(withID: inputID) else {
-            throw MetalRenderError.missingInputNode(inputID)
+    ) throws -> SourceCompositeInput {
+        guard let inputNode = graph.node(withID: input.sourceNodeID) else {
+            throw MetalRenderError.missingInputNode(input.sourceNodeID)
         }
 
         guard case .source(let source) = inputNode.kind else {
-            throw MetalRenderError.unsupportedInputNode(inputID)
+            throw MetalRenderError.unsupportedInputNode(input.sourceNodeID)
         }
 
         do {
-            return try sourceProvider.texture(for: source)
+            return SourceCompositeInput(
+                source: source,
+                texture: try sourceProvider.texture(for: source),
+                transform: input.transform
+            )
         } catch {
-            throw MetalRenderError.sourceTextureUnavailable(inputID, String(describing: error))
+            throw MetalRenderError.sourceTextureUnavailable(
+                input.sourceNodeID,
+                String(describing: error)
+            )
         }
     }
 
@@ -344,7 +381,32 @@ public final class MetalRenderExecutor {
     }
 
     private func encodeSourceComposite(
-        sourceTextures: [MTLTexture],
+        sourceInputs: [SourceCompositeInput],
+        outputTexture: MTLTexture,
+        commandBuffer: MTLCommandBuffer
+    ) throws {
+        let firstTexture = try makeIntermediateTexture(matching: outputTexture)
+        let secondTexture = try makeIntermediateTexture(matching: outputTexture)
+        try clear(firstTexture, commandBuffer: commandBuffer)
+
+        var readTexture = firstTexture
+        var writeTexture = secondTexture
+        for sourceInput in sourceInputs {
+            try encodeSourceCompositePass(
+                sourceInput: sourceInput,
+                destinationTexture: readTexture,
+                outputTexture: writeTexture,
+                commandBuffer: commandBuffer
+            )
+            swap(&readTexture, &writeTexture)
+        }
+
+        try copy(readTexture, to: outputTexture, commandBuffer: commandBuffer)
+    }
+
+    private func encodeSourceCompositePass(
+        sourceInput: SourceCompositeInput,
+        destinationTexture: MTLTexture,
         outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer
     ) throws {
@@ -354,11 +416,74 @@ public final class MetalRenderExecutor {
         }
 
         encoder.setRenderPipelineState(try pipelineState(for: outputTexture.pixelFormat))
-        for sourceTexture in sourceTextures {
-            encoder.setFragmentTexture(sourceTexture, index: 0)
-            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        var uniforms = uniforms(
+            transform: sourceInput.transform,
+            sourceTexture: sourceInput.texture,
+            outputTexture: outputTexture
+        )
+        encoder.setFragmentTexture(sourceInput.texture, index: 0)
+        encoder.setFragmentTexture(destinationTexture, index: 1)
+        encoder.setFragmentBytes(
+            &uniforms,
+            length: MemoryLayout<AjarCompositeUniforms>.stride,
+            index: 0
+        )
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        encoder.endEncoding()
+    }
+
+    private func makeIntermediateTexture(matching outputTexture: MTLTexture) throws -> MTLTexture {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: outputTexture.pixelFormat,
+            width: outputTexture.width,
+            height: outputTexture.height,
+            mipmapped: false
+        )
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .private
+
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            throw MetalRenderError.outputTextureCreationFailed(
+                width: outputTexture.width,
+                height: outputTexture.height
+            )
+        }
+
+        return texture
+    }
+
+    private func clear(_ texture: MTLTexture, commandBuffer: MTLCommandBuffer) throws {
+        let descriptor = renderPassDescriptor(for: texture)
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
+            throw MetalRenderError.renderEncoderCreationFailed
         }
         encoder.endEncoding()
+    }
+
+    private func copy(
+        _ sourceTexture: MTLTexture,
+        to destinationTexture: MTLTexture,
+        commandBuffer: MTLCommandBuffer
+    ) throws {
+        guard let blitEncoder = commandBuffer.makeBlitCommandEncoder() else {
+            throw MetalRenderError.blitEncoderCreationFailed
+        }
+        blitEncoder.copy(
+            from: sourceTexture,
+            sourceSlice: 0,
+            sourceLevel: 0,
+            sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+            sourceSize: MTLSize(
+                width: sourceTexture.width,
+                height: sourceTexture.height,
+                depth: 1
+            ),
+            to: destinationTexture,
+            destinationSlice: 0,
+            destinationLevel: 0,
+            destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
+        )
+        blitEncoder.endEncoding()
     }
 
     private func renderPassDescriptor(for outputTexture: MTLTexture) -> MTLRenderPassDescriptor {
@@ -379,21 +504,15 @@ public final class MetalRenderExecutor {
         guard let vertexFunction = library.makeFunction(name: "ajar_fullscreen_vertex") else {
             throw MetalRenderError.shaderFunctionUnavailable("ajar_fullscreen_vertex")
         }
-        guard let fragmentFunction = library.makeFunction(name: "ajar_passthrough_fragment") else {
-            throw MetalRenderError.shaderFunctionUnavailable("ajar_passthrough_fragment")
+        guard let fragmentFunction = library.makeFunction(name: "ajar_transform_fragment") else {
+            throw MetalRenderError.shaderFunctionUnavailable("ajar_transform_fragment")
         }
 
         let descriptor = MTLRenderPipelineDescriptor()
         descriptor.vertexFunction = vertexFunction
         descriptor.fragmentFunction = fragmentFunction
         descriptor.colorAttachments[0].pixelFormat = pixelFormat
-        descriptor.colorAttachments[0].isBlendingEnabled = true
-        descriptor.colorAttachments[0].rgbBlendOperation = .add
-        descriptor.colorAttachments[0].alphaBlendOperation = .add
-        descriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-        descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
-        descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
-        descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        descriptor.colorAttachments[0].isBlendingEnabled = false
 
         do {
             let pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
@@ -402,6 +521,91 @@ public final class MetalRenderExecutor {
         } catch {
             throw MetalRenderError.pipelineCreationFailed(String(describing: error))
         }
+    }
+
+    private func uniforms(
+        transform: ClipTransform,
+        sourceTexture: MTLTexture,
+        outputTexture: MTLTexture
+    ) -> AjarCompositeUniforms {
+        AjarCompositeUniforms(
+            outputSize: SIMD2<Float>(Float(outputTexture.width), Float(outputTexture.height)),
+            sourceSize: SIMD2<Float>(Float(sourceTexture.width), Float(sourceTexture.height)),
+            position: simdPoint(transform.position),
+            scale: simdScale(transform.scale),
+            anchorPoint: simdPoint(transform.anchorPoint),
+            crop: SIMD4<Float>(
+                Float(transform.crop.left),
+                Float(transform.crop.top),
+                Float(transform.crop.right),
+                Float(transform.crop.bottom)
+            ),
+            rotationRadians: radians(from: transform.rotation),
+            opacity: clamp01(floatValue(transform.opacity)),
+            flipHorizontal: transform.flip.horizontal ? 1 : 0,
+            flipVertical: transform.flip.vertical ? 1 : 0,
+            blendMode: blendModeValue(transform.blendMode),
+            padding: 0
+        )
+    }
+
+    private func simdPoint(_ point: CanvasPoint) -> SIMD2<Float> {
+        SIMD2<Float>(floatValue(point.x), floatValue(point.y))
+    }
+
+    private func simdScale(_ scale: ClipScale) -> SIMD2<Float> {
+        SIMD2<Float>(floatValue(scale.x), floatValue(scale.y))
+    }
+
+    private func radians(from rotation: ClipRotation) -> Float {
+        let degrees = doubleValue(rotation.degrees) + (Double(rotation.revolutions) * 360.0)
+        return Float(degrees * .pi / 180.0)
+    }
+
+    private func floatValue(_ value: RationalValue) -> Float {
+        Float(doubleValue(value))
+    }
+
+    private func doubleValue(_ value: RationalValue) -> Double {
+        Double(value.numerator) / Double(value.denominator)
+    }
+
+    private func clamp01(_ value: Float) -> Float {
+        min(max(value, 0), 1)
+    }
+
+    private func blendModeValue(_ blendMode: ClipBlendMode) -> UInt32 {
+        switch blendMode {
+        case .normal:
+            return 0
+        case .multiply:
+            return 1
+        case .screen:
+            return 2
+        case .overlay:
+            return 3
+        case .add:
+            return 4
+        case .darken:
+            return 5
+        case .lighten:
+            return 6
+        }
+    }
+
+    private struct AjarCompositeUniforms {
+        var outputSize: SIMD2<Float>
+        var sourceSize: SIMD2<Float>
+        var position: SIMD2<Float>
+        var scale: SIMD2<Float>
+        var anchorPoint: SIMD2<Float>
+        var crop: SIMD4<Float>
+        var rotationRadians: Float
+        var opacity: Float
+        var flipHorizontal: UInt32
+        var flipVertical: UInt32
+        var blendMode: UInt32
+        var padding: UInt32
     }
 
     private static let shaderSource = """
@@ -437,15 +641,123 @@ public final class MetalRenderExecutor {
             return out;
         }
 
-        fragment float4 ajar_passthrough_fragment(
+        struct AjarCompositeUniforms {
+            float2 outputSize;
+            float2 sourceSize;
+            float2 position;
+            float2 scale;
+            float2 anchorPoint;
+            float4 crop;
+            float rotationRadians;
+            float opacity;
+            uint flipHorizontal;
+            uint flipVertical;
+            uint blendMode;
+            uint padding;
+        };
+
+        static float3 ajar_unpremultiply(float4 color) {
+            if (color.a <= 0.00001) {
+                return float3(0.0);
+            }
+            return color.rgb / color.a;
+        }
+
+        static float3 ajar_blend_color(uint mode, float3 source, float3 destination) {
+            switch (mode) {
+            case 1:
+                return source * destination;
+            case 2:
+                return 1.0 - ((1.0 - source) * (1.0 - destination));
+            case 3:
+                return select(
+                    1.0 - (2.0 * (1.0 - source) * (1.0 - destination)),
+                    2.0 * source * destination,
+                    destination <= 0.5
+                );
+            case 4:
+                return min(source + destination, 1.0);
+            case 5:
+                return min(source, destination);
+            case 6:
+                return max(source, destination);
+            default:
+                return source;
+            }
+        }
+
+        static float4 ajar_composite(float4 source, float4 destination, uint blendMode) {
+            float sourceAlpha = source.a;
+            float destinationAlpha = destination.a;
+            if (sourceAlpha <= 0.00001) {
+                return destination;
+            }
+
+            float outputAlpha = sourceAlpha + (destinationAlpha * (1.0 - sourceAlpha));
+            if (blendMode == 0 || destinationAlpha <= 0.00001) {
+                return saturate(float4(
+                    source.rgb + (destination.rgb * (1.0 - sourceAlpha)),
+                    outputAlpha
+                ));
+            }
+
+            float3 sourceStraight = source.rgb / sourceAlpha;
+            float3 destinationStraight = ajar_unpremultiply(destination);
+            float3 blended = ajar_blend_color(blendMode, sourceStraight, destinationStraight);
+            float3 outputRGB = (blended * sourceAlpha * destinationAlpha)
+                + (source.rgb * (1.0 - destinationAlpha))
+                + (destination.rgb * (1.0 - sourceAlpha));
+            return saturate(float4(outputRGB, outputAlpha));
+        }
+
+        fragment float4 ajar_transform_fragment(
             AjarVertexOut in [[stage_in]],
-            texture2d<float> sourceTexture [[texture(0)]]
+            texture2d<float> sourceTexture [[texture(0)]],
+            texture2d<float> destinationTexture [[texture(1)]],
+            constant AjarCompositeUniforms &uniforms [[buffer(0)]]
         ) {
             constexpr sampler sourceSampler(address::clamp_to_edge, filter::nearest);
-            return sourceTexture.sample(sourceSampler, in.uv);
+            float4 destination = destinationTexture.sample(sourceSampler, in.uv);
+            float2 canvasPoint = in.uv * uniforms.outputSize;
+            float2 relative = canvasPoint - uniforms.anchorPoint - uniforms.position;
+            float cosine = cos(-uniforms.rotationRadians);
+            float sine = sin(-uniforms.rotationRadians);
+            float2 rotated = float2(
+                (relative.x * cosine) - (relative.y * sine),
+                (relative.x * sine) + (relative.y * cosine)
+            );
+
+            if (abs(uniforms.scale.x) <= 0.00001 || abs(uniforms.scale.y) <= 0.00001) {
+                return destination;
+            }
+
+            float2 localPoint = (rotated / uniforms.scale) + uniforms.anchorPoint;
+            float2 cropMin = uniforms.crop.xy;
+            float2 cropMax = uniforms.sourceSize - uniforms.crop.zw;
+            if (localPoint.x < cropMin.x || localPoint.y < cropMin.y
+                || localPoint.x >= cropMax.x || localPoint.y >= cropMax.y) {
+                return destination;
+            }
+
+            float2 sourceUV = localPoint / uniforms.sourceSize;
+            if (sourceUV.x < 0.0 || sourceUV.y < 0.0 || sourceUV.x > 1.0 || sourceUV.y > 1.0) {
+                return destination;
+            }
+            if (uniforms.flipHorizontal != 0) {
+                sourceUV.x = 1.0 - sourceUV.x;
+            }
+            if (uniforms.flipVertical != 0) {
+                sourceUV.y = 1.0 - sourceUV.y;
+            }
+
+            float4 source = sourceTexture.sample(sourceSampler, sourceUV);
+            source.a *= uniforms.opacity;
+            source.rgb *= source.a;
+            return ajar_composite(source, destination, uniforms.blendMode);
         }
         """
 }
+// swiftlint:enable type_body_length
 
 final class RenderCompletion {
     private typealias CompletionContinuation = CheckedContinuation<Void, Error>
