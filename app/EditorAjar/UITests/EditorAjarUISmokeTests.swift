@@ -36,9 +36,16 @@ final class EditorAjarUISmokeTests: XCTestCase {
             app.descendants(matching: .any)["Timeline track lanes"]
                 .waitForExistence(timeout: 5)
         )
+        XCTAssertTrue(app.buttons["Zoom Timeline In"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Fit Timeline"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Zoom to Selection"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Set Range In"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Set Range Out"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Disable Snapping"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Disable Video track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Lock Video track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Hide Video track 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Select all Video track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Mute Audio track 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Solo Audio track 1"].waitForExistence(timeout: 5))
 

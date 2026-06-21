@@ -92,4 +92,230 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(restoredTrack.locked)
         XCTAssertFalse(restoredTrack.hidden)
     }
+
+    func testFRTL010TimelineTimeMappingAndZoomClamps() {
+        XCTAssertEqual(
+            TimelineInteraction.xPosition(frame: 12, pixelsPerFrame: 4),
+            48
+        )
+        XCTAssertEqual(
+            TimelineInteraction.frame(atX: 49, pixelsPerFrame: 4, durationFrames: 20),
+            12
+        )
+        XCTAssertEqual(
+            TimelineInteraction.frame(atX: -25, pixelsPerFrame: 4, durationFrames: 20),
+            0
+        )
+        XCTAssertEqual(
+            TimelineInteraction.frame(atX: 200, pixelsPerFrame: 4, durationFrames: 20),
+            19
+        )
+        XCTAssertEqual(
+            TimelineInteraction.fittedPixelsPerFrame(durationFrames: 100, availableWidth: 500),
+            5
+        )
+        XCTAssertEqual(
+            TimelineInteraction.zoomedPixelsPerFrame(100, factor: 2),
+            TimelineInteractionState.maximumPixelsPerFrame
+        )
+        XCTAssertEqual(
+            TimelineInteraction.zoomedLaneHeight(10, factor: 0.5),
+            TimelineInteractionState.minimumLaneHeight
+        )
+    }
+
+    func testFRTL010TimelineClipLayoutsScaleTimelineItems() throws {
+        let sequence = try makeInteractionSequence()
+        let track = try XCTUnwrap(sequence.videoTracks.first)
+
+        let layouts = TimelineInteraction.clipLayouts(
+            for: track,
+            frameRate: sequence.timebase,
+            pixelsPerFrame: 2
+        )
+
+        XCTAssertEqual(layouts.count, 3)
+        XCTAssertEqual(layouts[0].startFrame, 0)
+        XCTAssertEqual(layouts[0].endFrame, 30)
+        XCTAssertEqual(layouts[0].xPosition, 0)
+        XCTAssertEqual(layouts[0].width, 60)
+        XCTAssertEqual(layouts[1].startFrame, 45)
+        XCTAssertEqual(layouts[1].width, 30)
+    }
+
+    func testFRTL007SelectionReducerSupportsReplaceToggleAndRange() throws {
+        let sequence = try makeInteractionSequence()
+        let references = TimelineInteraction.clipReferences(in: sequence)
+        let first = try XCTUnwrap(references.first)
+        let second = try XCTUnwrap(references.dropFirst().first)
+        let third = try XCTUnwrap(references.dropFirst(2).first)
+
+        let replaced = TimelineInteraction.reducedSelection(
+            currentSelection: [],
+            anchor: nil,
+            visibleClipReferences: references,
+            reference: first,
+            mode: .replace
+        )
+        XCTAssertEqual(replaced.selectedClips, [first])
+        XCTAssertEqual(replaced.anchor, first)
+
+        let toggled = TimelineInteraction.reducedSelection(
+            currentSelection: replaced.selectedClips,
+            anchor: replaced.anchor,
+            visibleClipReferences: references,
+            reference: second,
+            mode: .toggle
+        )
+        XCTAssertEqual(toggled.selectedClips, [first, second])
+
+        let ranged = TimelineInteraction.reducedSelection(
+            currentSelection: toggled.selectedClips,
+            anchor: first,
+            visibleClipReferences: references,
+            reference: third,
+            mode: .rangeOnTrack
+        )
+        XCTAssertEqual(ranged.selectedClips, [first, second, third])
+        XCTAssertEqual(ranged.anchor, first)
+    }
+
+    func testFRTL006SnappingUsesPlayheadClipEdgesAndMarkers() throws {
+        let sequence = try makeInteractionSequence()
+        let targets = TimelineInteraction.snapTargets(in: sequence, playheadFrame: 10)
+
+        XCTAssertEqual(
+            TimelineInteraction.snappedFrame(
+                proposedFrame: 11,
+                targets: targets,
+                toleranceFrames: 2
+            ),
+            10
+        )
+        XCTAssertEqual(
+            TimelineInteraction.snappedFrame(
+                proposedFrame: 31,
+                targets: targets,
+                toleranceFrames: 2
+            ),
+            30
+        )
+        XCTAssertEqual(
+            TimelineInteraction.snappedFrame(
+                proposedFrame: 59,
+                targets: targets,
+                toleranceFrames: 2
+            ),
+            60
+        )
+        XCTAssertEqual(
+            TimelineInteraction.snappedFrame(
+                proposedFrame: 25,
+                targets: targets,
+                toleranceFrames: 2
+            ),
+            25
+        )
+    }
+
+    func testFRTL006FRTL007FRTL010AppTimelineInteractionState() throws {
+        let model = EditorAjarAppModel()
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+        let clipLayout = try XCTUnwrap(model.timelineClipLayouts(for: videoTrack).first)
+
+        XCTAssertTrue(model.timelineSnappingEnabled)
+        model.selectClip(
+            trackID: clipLayout.reference.trackID,
+            clipID: clipLayout.reference.clipID,
+            mode: .replace
+        )
+        XCTAssertTrue(model.isClipSelected(clipLayout.reference))
+        XCTAssertEqual(model.timelineSelectedClipCount, 1)
+
+        model.setTimelineRangeIn()
+        model.scrubTimeline(xPosition: 16, snappingDisabled: true)
+        model.setTimelineRangeOut()
+        XCTAssertEqual(model.timelineRangeDescription, "Range 0-2")
+
+        let initialPixelsPerFrame = model.timelineState.pixelsPerFrame
+        model.zoomTimelineIn()
+        XCTAssertGreaterThan(model.timelineState.pixelsPerFrame, initialPixelsPerFrame)
+        model.fitTimeline(toWidth: 450)
+        XCTAssertEqual(model.timelineContentWidth(minimumWidth: 450), 450)
+        model.zoomTimelineToSelection(toWidth: 300)
+        XCTAssertGreaterThan(model.timelineState.pixelsPerFrame, 1)
+
+        model.setTimelineSnappingEnabled(false)
+        XCTAssertFalse(model.timelineSnappingEnabled)
+    }
+
+    private func makeInteractionSequence() throws -> AjarCore.Sequence {
+        let frameRate = try FrameRate(frames: 30)
+        let trackID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000a001"))
+        let markerID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000b001"))
+        return Sequence(
+            id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000c001")),
+            name: "Interaction Sequence",
+            videoTracks: [
+                Track(
+                    id: trackID,
+                    kind: .video,
+                    items: [
+                        .clip(try makeInteractionClip(
+                            id: "00000000-0000-0000-0000-00000000d001",
+                            name: "First",
+                            startFrame: 0,
+                            durationFrames: 30,
+                            frameRate: frameRate
+                        )),
+                        .clip(try makeInteractionClip(
+                            id: "00000000-0000-0000-0000-00000000d002",
+                            name: "Second",
+                            startFrame: 45,
+                            durationFrames: 15,
+                            frameRate: frameRate
+                        )),
+                        .clip(try makeInteractionClip(
+                            id: "00000000-0000-0000-0000-00000000d003",
+                            name: "Third",
+                            startFrame: 60,
+                            durationFrames: 30,
+                            frameRate: frameRate
+                        )),
+                    ]
+                )
+            ],
+            audioTracks: [],
+            markers: [
+                Marker(
+                    id: markerID,
+                    time: try RationalTime.atFrame(30, frameRate: frameRate),
+                    name: "Marker"
+                )
+            ],
+            timebase: frameRate
+        )
+    }
+
+    private func makeInteractionClip(
+        id: String,
+        name: String,
+        startFrame: Int64,
+        durationFrames: Int64,
+        frameRate: FrameRate
+    ) throws -> Clip {
+        let duration = try frameRate.duration(ofFrames: durationFrames)
+        return Clip(
+            id: try XCTUnwrap(UUID(uuidString: id)),
+            source: .media(id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000e001"))),
+            sourceRange: try TimeRange(start: .zero, duration: duration),
+            timelineRange: try TimeRange(
+                start: try RationalTime.atFrame(startFrame, frameRate: frameRate),
+                duration: duration
+            ),
+            kind: .video,
+            name: name
+        )
+    }
 }
