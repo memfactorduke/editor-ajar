@@ -225,6 +225,7 @@ private func makeClipCommandCases(
     seed: Int
 ) throws -> [EditCommandCase] {
     try makeCoreClipCommandCases(fixture: fixture, seed: seed)
+        + makeTransformCommandCases(fixture: fixture)
         + makeLegacyClipCommandCases(fixture: fixture, addClip: addClip)
 }
 
@@ -376,6 +377,22 @@ private func makeLegacyClipCommandCases(
         )
     )
     return cases
+}
+
+private func makeTransformCommandCases(
+    fixture: EditFixture
+) throws -> [EditCommandCase] {
+    [
+        EditCommandCase(
+            project: fixture.project,
+            command: .setClipTransform(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                transform: try makeNonIdentityClipTransform()
+            )
+        )
+    ]
 }
 
 private func makeThreePointCommandCase(

@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` per-clip transform model and undoable set-transform reducer command with exact
+  position/scale/anchor/rotation/opacity/blend/crop/flip storage for FR-XFORM-001..005.
 - Multi-sequence project editing with undoable core add/remove/duplicate sequence commands,
   `.ajar` two-sequence round-trip coverage, and macOS sequence tabs that preserve per-sequence
   timeline editing context for FR-TL-011.

@@ -55,12 +55,21 @@ public enum ProjectValidationError: Equatable, Sendable {
         trackID: UUID,
         clipID: UUID
     )
+
+    /// A clip transform is outside the valid project-frame range.
+    case invalidClipTransform(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: ClipTransformValidationError
+    )
 }
 
 enum ProjectValidator {
     private struct ValidationState {
         let mediaIDs: Set<UUID>
         let sequenceIDs: Set<UUID>
+        let frame: PixelDimensions
         var errors: [ProjectValidationError] = []
     }
 
@@ -78,7 +87,8 @@ enum ProjectValidator {
     static func validate(project: Project) -> ProjectValidationResult {
         var state = ValidationState(
             mediaIDs: Set(project.mediaPool.map(\.id)),
-            sequenceIDs: Set(project.sequences.map(\.id))
+            sequenceIDs: Set(project.sequences.map(\.id)),
+            frame: project.settings.resolution
         )
 
         var seenSequenceIDs = Set<UUID>()
@@ -159,6 +169,7 @@ enum ProjectValidator {
                 state: &state
             )
             validateClipSource(item, context: context, state: &state)
+            validateClipTransform(item, context: context, state: &state)
             validateItemOrder(
                 item,
                 itemIndex: itemIndex,
@@ -296,6 +307,27 @@ enum ProjectValidator {
                     )
                 )
             }
+        }
+    }
+
+    private static func validateClipTransform(
+        _ item: TimelineItem,
+        context: TrackContext,
+        state: inout ValidationState
+    ) {
+        guard case .clip(let clip) = item else {
+            return
+        }
+
+        for error in ClipTransformValidator.errors(for: clip.transform, frame: state.frame) {
+            state.errors.append(
+                .invalidClipTransform(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    error: error
+                )
+            )
         }
     }
 

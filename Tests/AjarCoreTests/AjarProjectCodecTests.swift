@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// swiftlint:disable file_length
+
 import Foundation
 import XCTest
 
@@ -130,10 +132,51 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         )
 
         XCTAssertEqual(loadedProject, twoSequenceProject)
-        XCTAssertEqual(loadedProject.sequences.map(\.name), [
+        let sequenceNames = loadedProject.sequences.map(\.name)
+
+        XCTAssertEqual(sequenceNames, [
             "Codec Sequence 150",
             "Second Codec Sequence"
         ])
+    }
+
+    func testFRXFORM001To005ClipTransformRoundTripsThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 160)
+        let transform = try makeNonIdentityClipTransform()
+        let transformedProject = try replacingFirstCodecClipTransform(
+            in: project,
+            with: transform
+        )
+
+        let package = try AjarProjectCodec.encode(transformedProject)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject, transformedProject)
+        XCTAssertEqual(videoClip.transform, transform)
+    }
+
+    func testFRXFORM001To005LegacyClipWithoutTransformDefaultsToIdentity() throws {
+        let project = try makeCodecProject(seed: 170)
+        let package = try AjarProjectCodec.encode(project)
+        let legacyProjectJSON = try projectJSONWithoutClipTransformFields(package.projectJSON)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(videoClip.transform, .identity)
     }
 }
 
@@ -294,7 +337,84 @@ private func projectJSONWithoutMarkerDetailFields(_ projectJSON: Data) throws ->
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
 }
 
-private func makeCodecProject(seed: Int, schemaVersion: Int = 1) throws -> Project {
+private func projectJSONWithoutClipTransformFields(_ projectJSON: Data) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var videoTracks = try XCTUnwrap(sequence["videoTracks"] as? [[String: Any]])
+    var videoTrack = try XCTUnwrap(videoTracks.first)
+    var items = try XCTUnwrap(videoTrack["items"] as? [[String: Any]])
+    var clipItem = try XCTUnwrap(items.first)
+    var clipPayload = try XCTUnwrap(clipItem["clip"] as? [String: Any])
+
+    document["schemaVersion"] = 1
+    clipPayload.removeValue(forKey: "transform")
+    clipItem["clip"] = clipPayload
+    items[0] = clipItem
+    videoTrack["items"] = items
+    videoTracks[0] = videoTrack
+    sequence["videoTracks"] = videoTracks
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func replacingFirstCodecClipTransform(
+    in project: Project,
+    with transform: ClipTransform
+) throws -> Project {
+    let sequence = try XCTUnwrap(project.sequences.first)
+    let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+    let originalClip = try XCTUnwrap(clip(in: videoTrack))
+    let transformedClip = Clip(
+        id: originalClip.id,
+        source: originalClip.source,
+        sourceRange: originalClip.sourceRange,
+        timelineRange: originalClip.timelineRange,
+        kind: originalClip.kind,
+        name: originalClip.name,
+        linkGroupID: originalClip.linkGroupID,
+        transform: transform
+    )
+    let replacementTrack = Track(
+        id: videoTrack.id,
+        kind: videoTrack.kind,
+        items: videoTrack.items.map { item in
+            if case .clip(let currentClip) = item, currentClip.id == originalClip.id {
+                return .clip(transformedClip)
+            }
+            return item
+        },
+        enabled: videoTrack.enabled,
+        locked: videoTrack.locked,
+        muted: videoTrack.muted,
+        solo: videoTrack.solo,
+        hidden: videoTrack.hidden
+    )
+    let replacementSequence = Sequence(
+        id: sequence.id,
+        name: sequence.name,
+        videoTracks: [replacementTrack] + sequence.videoTracks.dropFirst(),
+        audioTracks: sequence.audioTracks,
+        markers: sequence.markers,
+        timebase: sequence.timebase
+    )
+
+    return Project(
+        schemaVersion: project.schemaVersion,
+        settings: project.settings,
+        mediaPool: project.mediaPool,
+        sequences: [replacementSequence] + project.sequences.dropFirst()
+    )
+}
+
+private func makeCodecProject(
+    seed: Int,
+    schemaVersion: Int = AjarProjectCodec.currentSchemaVersion
+) throws -> Project {
     let firstMediaID = try codecUUID(seed * 1_000 + 1)
     let secondMediaID = try codecUUID(seed * 1_000 + 2)
     let videoTrackID = try codecUUID(seed * 1_000 + 4)

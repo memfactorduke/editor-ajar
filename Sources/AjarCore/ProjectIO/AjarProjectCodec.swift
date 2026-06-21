@@ -86,7 +86,7 @@ public enum AjarProjectCodecError: Error, Equatable, Sendable {
 /// Canonical JSON codec for the headless `.ajar` document model.
 public enum AjarProjectCodec {
     /// Current `AjarCore` project schema version.
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     public static func encode(_ project: Project) throws -> AjarProjectPackageData {
