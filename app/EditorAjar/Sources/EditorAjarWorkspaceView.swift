@@ -153,7 +153,8 @@ private struct TransportBar: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 96, alignment: .leading)
                 .accessibilityIdentifier("Playhead readout")
-                .accessibilityLabel("Playhead \(model.playheadDescription)")
+                .accessibilityLabel("Playhead")
+                .accessibilityValue(model.playheadDescription)
             Spacer()
         }
         .overlay(alignment: .bottom) {

@@ -35,13 +35,13 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
         let playheadReadout = app.staticTexts["Playhead readout"]
         XCTAssertTrue(playheadReadout.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForLabel("Playhead Frame 0", on: playheadReadout))
+        assertPlayheadValue("Frame 0", on: playheadReadout)
 
         app.typeKey(.rightArrow, modifierFlags: [])
-        XCTAssertTrue(waitForLabel("Playhead Frame 1", on: playheadReadout))
+        assertPlayheadValue("Frame 1", on: playheadReadout)
 
         app.typeKey(.leftArrow, modifierFlags: [])
-        XCTAssertTrue(waitForLabel("Playhead Frame 0", on: playheadReadout))
+        assertPlayheadValue("Frame 0", on: playheadReadout)
 
         app.typeKey(.space, modifierFlags: [])
         XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5))
@@ -67,13 +67,32 @@ final class EditorAjarUISmokeTests: XCTestCase {
         return XCUIApplication(url: appURL)
     }
 
-    private func waitForLabel(
-        _ expectedLabel: String,
+    private func assertPlayheadValue(
+        _ expectedValue: String,
         on element: XCUIElement,
-        timeout: TimeInterval = 5
-    ) -> Bool {
-        let predicate = NSPredicate(format: "label == %@", expectedLabel)
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
-        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let timeout: TimeInterval = 5
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            if playheadValue(on: element) == expectedValue {
+                return
+            }
+
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        }
+
+        let actualValue = playheadValue(on: element)
+        XCTFail(
+            "Expected playhead value \(expectedValue), got \(actualValue)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func playheadValue(on element: XCUIElement) -> String {
+        element.value as? String ?? "<nil>"
     }
 }
