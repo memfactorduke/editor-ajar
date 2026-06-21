@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarMedia` native AVFoundation frame decoder with CVMetalTextureCache zero-copy handoff tests.
 - `AjarCore` immutable render graph primitives and single-clip graph builder with deterministic
   content hashes.
 - `AjarCore` animatable parameter, keyframe, interpolation mode, and deterministic linear/hold
