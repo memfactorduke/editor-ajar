@@ -147,6 +147,38 @@ final class RenderGraphTests: XCTestCase {
         XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
     }
 
+    func testFRCOMP001ClipEffectsPropagateToCompositeAndInvalidateCompositeHash() throws {
+        let mediaID = try uuid(34)
+        let clipID = try uuid(35)
+        let media = try makeMediaRef(id: mediaID)
+        let effects = try makeChromaKeyEffects()
+        let firstClip = try makeClip(id: clipID, mediaID: mediaID, effects: .none)
+        let secondClip = try makeClip(id: clipID, mediaID: mediaID, effects: effects)
+        let firstSequence = try makeSequence(with: firstClip)
+        let secondSequence = try makeSequence(with: secondClip)
+        let firstProject = try makeProject(mediaPool: [media], sequences: [firstSequence])
+        let secondProject = try makeProject(mediaPool: [media], sequences: [secondSequence])
+
+        let firstGraph = try buildRenderGraph(for: firstSequence, at: try time(4), in: firstProject)
+        let secondGraph = try buildRenderGraph(
+            for: secondSequence,
+            at: try time(4),
+            in: secondProject
+        )
+        let secondOutput = try XCTUnwrap(secondGraph.outputNode)
+
+        guard case .composite(let composite) = secondOutput.kind else {
+            return XCTFail("Expected composite output")
+        }
+
+        XCTAssertEqual(composite.inputs.first?.effects, effects)
+        XCTAssertEqual(
+            try sourceNode(in: firstGraph).contentHash,
+            try sourceNode(in: secondGraph).contentHash
+        )
+        XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
+    }
+
     func testADR0009NoActiveClipYieldsTransparentCompositeGraph() throws {
         let mediaID = try uuid(40)
         let clip = try makeClip(id: try uuid(41), mediaID: mediaID, timelineStartFrame: 10)
@@ -365,7 +397,8 @@ private func makeClip(
     timelineStartFrame: Int64 = 0,
     sourceStartFrame: Int64 = 0,
     durationFrames: Int64 = 10,
-    transform: ClipTransform = .identity
+    transform: ClipTransform = .identity,
+    effects: ClipEffects = .none
 ) throws -> Clip {
     try makeClip(
         id: id,
@@ -373,7 +406,8 @@ private func makeClip(
         timelineStartFrame: timelineStartFrame,
         sourceStartFrame: sourceStartFrame,
         durationFrames: durationFrames,
-        transform: transform
+        transform: transform,
+        effects: effects
     )
 }
 
@@ -383,7 +417,8 @@ private func makeClip(
     timelineStartFrame: Int64,
     sourceStartFrame: Int64,
     durationFrames: Int64 = 10,
-    transform: ClipTransform = .identity
+    transform: ClipTransform = .identity,
+    effects: ClipEffects = .none
 ) throws -> Clip {
     Clip(
         id: id,
@@ -392,7 +427,20 @@ private func makeClip(
         timelineRange: try range(startFrame: timelineStartFrame, durationFrames: durationFrames),
         kind: .video,
         name: "RenderGraph clip",
-        transform: transform
+        transform: transform,
+        effects: effects
+    )
+}
+
+private func makeChromaKeyEffects() throws -> ClipEffects {
+    ClipEffects(
+        chromaKey: ClipChromaKeySettings(
+            enabled: true,
+            keyColor: .green,
+            tolerance: try RationalValue(numerator: 1, denominator: 5),
+            edgeSoftness: try RationalValue(numerator: 1, denominator: 10),
+            spillSuppression: try RationalValue(numerator: 3, denominator: 5)
+        )
     )
 }
 

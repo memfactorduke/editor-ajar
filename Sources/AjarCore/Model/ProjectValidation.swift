@@ -83,6 +83,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         time: RationalTime,
         error: ClipTransformValidationError
     )
+
+    /// A clip effect is outside the valid normalized range.
+    case invalidClipEffects(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: ClipEffectsValidationError
+    )
 }
 
 enum ProjectValidator {
@@ -190,6 +198,7 @@ enum ProjectValidator {
             )
             validateClipSource(item, context: context, state: &state)
             validateClipTransform(item, context: context, state: &state)
+            validateClipEffects(item, context: context, state: &state)
             validateItemOrder(
                 item,
                 itemIndex: itemIndex,

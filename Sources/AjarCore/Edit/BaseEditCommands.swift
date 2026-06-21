@@ -454,7 +454,8 @@ extension EditReducer {
         name: String? = nil,
         linkGroupID: UUID?? = nil,
         transform: ClipTransform? = nil,
-        transformAnimation: AnimatableClipTransform? = nil
+        transformAnimation: AnimatableClipTransform? = nil,
+        effects: ClipEffects? = nil
     ) -> Clip {
         let replacementTransform = transform ?? clip.transform
         let replacementAnimation = transformAnimation
@@ -468,7 +469,8 @@ extension EditReducer {
             name: name ?? clip.name,
             linkGroupID: linkGroupID ?? clip.linkGroupID,
             transform: replacementTransform,
-            transformAnimation: replacementAnimation
+            transformAnimation: replacementAnimation,
+            effects: effects ?? clip.effects
         )
     }
 }

@@ -205,6 +205,45 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(videoClip.transform, .identity)
         XCTAssertEqual(videoClip.transformAnimation, .identity)
     }
+
+    func testFRCOMP001ClipEffectsRoundTripThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 180)
+        let effects = try makeCodecClipEffects()
+        let effectsProject = try replacingFirstCodecClipEffects(
+            in: project,
+            with: effects
+        )
+
+        let package = try AjarProjectCodec.encode(effectsProject)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject, effectsProject)
+        XCTAssertEqual(videoClip.effects, effects)
+    }
+
+    func testFRCOMP001LegacyClipWithoutEffectsDefaultsToNone() throws {
+        let project = try makeCodecProject(seed: 190)
+        let package = try AjarProjectCodec.encode(project)
+        let legacyProjectJSON = try projectJSONWithoutClipEffectsField(package.projectJSON)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(videoClip.effects, .none)
+    }
 }
 
 final class AjarProjectCodecVersioningTests: XCTestCase {
@@ -390,6 +429,31 @@ private func projectJSONWithoutClipTransformFields(_ projectJSON: Data) throws -
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
 }
 
+private func projectJSONWithoutClipEffectsField(_ projectJSON: Data) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var videoTracks = try XCTUnwrap(sequence["videoTracks"] as? [[String: Any]])
+    var videoTrack = try XCTUnwrap(videoTracks.first)
+    var items = try XCTUnwrap(videoTrack["items"] as? [[String: Any]])
+    var clipItem = try XCTUnwrap(items.first)
+    var clipPayload = try XCTUnwrap(clipItem["clip"] as? [String: Any])
+
+    document["schemaVersion"] = 1
+    clipPayload.removeValue(forKey: "effects")
+    clipItem["clip"] = clipPayload
+    items[0] = clipItem
+    videoTrack["items"] = items
+    videoTracks[0] = videoTrack
+    sequence["videoTracks"] = videoTracks
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
 private func replacingFirstCodecClipTransformAnimation(
     in project: Project,
     with animation: AnimatableClipTransform
@@ -515,6 +579,73 @@ private func replacingFirstCodecClipTransform(
         settings: project.settings,
         mediaPool: project.mediaPool,
         sequences: [replacementSequence] + project.sequences.dropFirst()
+    )
+}
+
+private func replacingFirstCodecClipEffects(
+    in project: Project,
+    with effects: ClipEffects
+) throws -> Project {
+    let sequence = try XCTUnwrap(project.sequences.first)
+    let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+    let originalClip = try XCTUnwrap(clip(in: videoTrack))
+    let effectsClip = Clip(
+        id: originalClip.id,
+        source: originalClip.source,
+        sourceRange: originalClip.sourceRange,
+        timelineRange: originalClip.timelineRange,
+        kind: originalClip.kind,
+        name: originalClip.name,
+        linkGroupID: originalClip.linkGroupID,
+        transform: originalClip.transform,
+        transformAnimation: originalClip.transformAnimation,
+        effects: effects
+    )
+    let replacementTrack = Track(
+        id: videoTrack.id,
+        kind: videoTrack.kind,
+        items: videoTrack.items.map { item in
+            if case .clip(let currentClip) = item, currentClip.id == originalClip.id {
+                return .clip(effectsClip)
+            }
+            return item
+        },
+        enabled: videoTrack.enabled,
+        locked: videoTrack.locked,
+        muted: videoTrack.muted,
+        solo: videoTrack.solo,
+        hidden: videoTrack.hidden
+    )
+    let replacementSequence = Sequence(
+        id: sequence.id,
+        name: sequence.name,
+        videoTracks: [replacementTrack] + sequence.videoTracks.dropFirst(),
+        audioTracks: sequence.audioTracks,
+        markers: sequence.markers,
+        timebase: sequence.timebase
+    )
+
+    return Project(
+        schemaVersion: project.schemaVersion,
+        settings: project.settings,
+        mediaPool: project.mediaPool,
+        sequences: [replacementSequence] + project.sequences.dropFirst()
+    )
+}
+
+private func makeCodecClipEffects() throws -> ClipEffects {
+    ClipEffects(
+        chromaKey: ClipChromaKeySettings(
+            enabled: true,
+            keyColor: ClipRGBColor(
+                red: try RationalValue(numerator: 1, denominator: 10),
+                green: try RationalValue(numerator: 9, denominator: 10),
+                blue: try RationalValue(numerator: 1, denominator: 5)
+            ),
+            tolerance: try RationalValue(numerator: 1, denominator: 4),
+            edgeSoftness: try RationalValue(numerator: 1, denominator: 8),
+            spillSuppression: try RationalValue(numerator: 3, denominator: 5)
+        )
     )
 }
 

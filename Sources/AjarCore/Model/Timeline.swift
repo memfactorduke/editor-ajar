@@ -148,6 +148,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Keyframable visual transform parameters. Evaluates to `transform` when constant.
     public let transformAnimation: AnimatableClipTransform
 
+    /// Per-clip visual effects.
+    public let effects: ClipEffects
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -158,7 +161,8 @@ public struct Clip: Codable, Equatable, Sendable {
         name: String,
         linkGroupID: UUID? = nil,
         transform: ClipTransform = .identity,
-        transformAnimation: AnimatableClipTransform? = nil
+        transformAnimation: AnimatableClipTransform? = nil,
+        effects: ClipEffects = .none
     ) {
         self.id = id
         self.source = source
@@ -169,6 +173,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.linkGroupID = linkGroupID
         self.transform = transform
         self.transformAnimation = transformAnimation ?? .constant(transform)
+        self.effects = effects
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -181,6 +186,7 @@ public struct Clip: Codable, Equatable, Sendable {
         case linkGroupID
         case transform
         case transformAnimation
+        case effects
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -199,6 +205,7 @@ public struct Clip: Codable, Equatable, Sendable {
             AnimatableClipTransform.self,
             forKey: .transformAnimation
         ) ?? .constant(transform)
+        effects = try container.decodeIfPresent(ClipEffects.self, forKey: .effects) ?? .none
     }
 
     /// Encodes the complete clip payload.
@@ -213,6 +220,7 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encodeIfPresent(linkGroupID, forKey: .linkGroupID)
         try container.encode(transform, forKey: .transform)
         try container.encode(transformAnimation, forKey: .transformAnimation)
+        try container.encode(effects, forKey: .effects)
     }
 }
 

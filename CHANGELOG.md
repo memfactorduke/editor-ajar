@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` clip effects and chroma-key settings model with undoable reducer commands,
+  validation, `.ajar` codec compatibility, and render-graph propagation for FR-COMP-001.
 - Transform/keyframe UI in the macOS app, including reducer-backed inspector fields,
   program-monitor manipulation handles, inline timeline keyframe lanes, and UI-smoke coverage
   for FR-XFORM-007 and FR-KEY-005.
