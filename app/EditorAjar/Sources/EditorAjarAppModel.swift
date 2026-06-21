@@ -199,6 +199,63 @@ final class EditorAjarAppModel: ObservableObject {
         return Self.clip(selectedClipReference, in: sequence)
     }
 
+    var selectedTransformClipReference: TimelineClipReference? {
+        guard let selectedClipReference,
+              selectedClip?.kind == .video
+        else {
+            return nil
+        }
+        return selectedClipReference
+    }
+
+    var selectedTransformInspector: SelectedTransformInspectorState? {
+        guard let selectedClip,
+              selectedClip.kind == .video,
+              let sequence = activeSequence,
+              let time = playheadTime(in: sequence)
+        else {
+            return nil
+        }
+
+        return SelectedTransformInspectorState(
+            clipName: selectedClip.name,
+            transform: selectedClip.transformAnimation.value(at: time)
+        )
+    }
+
+    var selectedTransformKeyframeLanes: [TransformKeyframeLane] {
+        guard let selectedClip,
+              selectedClip.kind == .video,
+              let sequence = activeSequence
+        else {
+            return []
+        }
+
+        return TransformKeyframeLane.makeLanes(
+            animation: selectedClip.transformAnimation,
+            frameRate: sequence.timebase,
+            pixelsPerFrame: timelineState.pixelsPerFrame
+        )
+    }
+
+    var selectedCanvasTransformLayout: CanvasClipTransformLayout? {
+        guard let project,
+              let selectedClip,
+              selectedClip.kind == .video,
+              let sequence = activeSequence,
+              let time = playheadTime(in: sequence),
+              let clipDimensions = Self.mediaDimensions(for: selectedClip, in: project)
+        else {
+            return nil
+        }
+
+        return CanvasClipTransformLayout(
+            canvasSize: project.settings.resolution,
+            clipSize: clipDimensions,
+            transform: selectedClip.transformAnimation.value(at: time)
+        )
+    }
+
     var selectedClipIsLinked: Bool {
         selectedClip?.linkGroupID != nil
     }
@@ -425,6 +482,140 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectionAnchor = selectedClips.first
         timelineState.selectedMarkerID = nil
         persistActiveSequenceContext()
+    }
+
+    func transformFieldValue(_ field: TransformInspectorField) -> String {
+        guard let transform = selectedTransformInspector?.transform else {
+            return ""
+        }
+        return TransformFieldValueMapper.stringValue(for: field, in: transform)
+    }
+
+    @discardableResult
+    func updateSelectedTransformField(_ field: TransformInspectorField, rawValue: String) -> Bool {
+        guard let transform = selectedTransformInspector?.transform,
+              let replacement = TransformFieldValueMapper.updatedTransform(
+                field,
+                rawValue: rawValue,
+                in: transform
+              )
+        else {
+            return false
+        }
+
+        return updateSelectedClipTransform(replacement)
+    }
+
+    @discardableResult
+    func updateSelectedClipBlendMode(_ blendMode: ClipBlendMode) -> Bool {
+        guard let transform = selectedTransformInspector?.transform else {
+            return false
+        }
+
+        return updateSelectedClipTransform(
+            TransformEditor.copying(transform, blendMode: blendMode)
+        )
+    }
+
+    @discardableResult
+    func updateSelectedClipFlip(horizontal: Bool? = nil, vertical: Bool? = nil) -> Bool {
+        guard let transform = selectedTransformInspector?.transform else {
+            return false
+        }
+        let flip = ClipFlip(
+            horizontal: horizontal ?? transform.flip.horizontal,
+            vertical: vertical ?? transform.flip.vertical
+        )
+        return updateSelectedClipTransform(TransformEditor.copying(transform, flip: flip))
+    }
+
+    @discardableResult
+    func applyCanvasTransformGesture(_ gesture: CanvasTransformGesture) -> Bool {
+        guard let layout = selectedCanvasTransformLayout else {
+            return false
+        }
+
+        let transform = CanvasTransformGestureMapper.updatedTransform(
+            from: layout.transform,
+            gesture: gesture,
+            clipSize: layout.clipSize
+        )
+        return updateSelectedClipTransform(transform)
+    }
+
+    func selectedTransformHasKeyframe(_ parameter: ClipTransformParameter) -> Bool {
+        guard let sequence = activeSequence,
+              let time = playheadTime(in: sequence),
+              let selectedClip
+        else {
+            return false
+        }
+
+        return TransformKeyframeLookup.keyframe(
+            parameter: parameter,
+            at: time,
+            in: selectedClip.transformAnimation
+        ) != nil
+    }
+
+    @discardableResult
+    func toggleSelectedTransformKeyframe(_ parameter: ClipTransformParameter) -> Bool {
+        guard let sequence = activeSequence,
+              let time = playheadTime(in: sequence)
+        else {
+            return false
+        }
+
+        if selectedTransformHasKeyframe(parameter) {
+            return deleteSelectedTransformKeyframe(parameter: parameter, at: time)
+        }
+        return addSelectedTransformKeyframe(parameter: parameter, at: time)
+    }
+
+    @discardableResult
+    func addSelectedTransformKeyframe(
+        parameter: ClipTransformParameter,
+        atFrame frame: Int64
+    ) -> Bool {
+        guard let sequence = activeSequence,
+              let time = try? RationalTime.atFrame(frame, frameRate: sequence.timebase)
+        else {
+            return false
+        }
+        return addSelectedTransformKeyframe(parameter: parameter, at: time)
+    }
+
+    @discardableResult
+    func moveSelectedTransformKeyframe(
+        parameter: ClipTransformParameter,
+        fromFrame: Int64,
+        toFrame: Int64
+    ) -> Bool {
+        guard let sequence = activeSequence,
+              let fromTime = try? RationalTime.atFrame(fromFrame, frameRate: sequence.timebase),
+              let toTime = try? RationalTime.atFrame(
+                max(0, min(toFrame, max(0, durationFrames - 1))),
+                frameRate: sequence.timebase
+              )
+        else {
+            return false
+        }
+
+        return moveSelectedTransformKeyframe(parameter: parameter, from: fromTime, to: toTime)
+    }
+
+    @discardableResult
+    func deleteSelectedTransformKeyframe(
+        parameter: ClipTransformParameter,
+        atFrame frame: Int64
+    ) -> Bool {
+        guard let sequence = activeSequence,
+              let time = try? RationalTime.atFrame(frame, frameRate: sequence.timebase)
+        else {
+            return false
+        }
+
+        return deleteSelectedTransformKeyframe(parameter: parameter, at: time)
     }
 
     func isMarkerSelected(_ markerID: UUID) -> Bool {
@@ -702,6 +893,112 @@ final class EditorAjarAppModel: ObservableObject {
         )
     }
 
+    @discardableResult
+    private func updateSelectedClipTransform(_ transform: ClipTransform) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let selectedClipReference
+        else {
+            return false
+        }
+
+        return applyEdit(
+            .setClipTransform(
+                sequenceID: sequenceID,
+                trackID: selectedClipReference.trackID,
+                clipID: selectedClipReference.clipID,
+                transform: transform
+            )
+        )
+    }
+
+    @discardableResult
+    private func addSelectedTransformKeyframe(
+        parameter: ClipTransformParameter,
+        at time: RationalTime
+    ) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let selectedClipReference,
+              let selectedClip
+        else {
+            return false
+        }
+
+        let transform = selectedClip.transformAnimation.value(at: time)
+        let keyframe = ClipTransformKeyframe(
+            time: time,
+            value: TransformKeyframeLookup.value(parameter: parameter, in: transform),
+            interpolation: .linear
+        )
+
+        return applyEdit(
+            .addClipTransformKeyframe(
+                sequenceID: sequenceID,
+                trackID: selectedClipReference.trackID,
+                clipID: selectedClipReference.clipID,
+                parameter: parameter,
+                keyframe: keyframe
+            )
+        )
+    }
+
+    @discardableResult
+    private func moveSelectedTransformKeyframe(
+        parameter: ClipTransformParameter,
+        from fromTime: RationalTime,
+        to toTime: RationalTime
+    ) -> Bool {
+        guard fromTime != toTime,
+              let sequenceID = activeSequence?.id,
+              let selectedClipReference,
+              let selectedClip,
+              let existingKeyframe = TransformKeyframeLookup.keyframe(
+                parameter: parameter,
+                at: fromTime,
+                in: selectedClip.transformAnimation
+              )
+        else {
+            return false
+        }
+
+        let movedKeyframe = ClipTransformKeyframe(
+            time: toTime,
+            value: existingKeyframe.value,
+            interpolation: existingKeyframe.interpolation
+        )
+        return applyEdit(
+            .moveClipTransformKeyframe(
+                sequenceID: sequenceID,
+                trackID: selectedClipReference.trackID,
+                clipID: selectedClipReference.clipID,
+                parameter: parameter,
+                fromTime: fromTime,
+                keyframe: movedKeyframe
+            )
+        )
+    }
+
+    @discardableResult
+    private func deleteSelectedTransformKeyframe(
+        parameter: ClipTransformParameter,
+        at time: RationalTime
+    ) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let selectedClipReference
+        else {
+            return false
+        }
+
+        return applyEdit(
+            .deleteClipTransformKeyframe(
+                sequenceID: sequenceID,
+                trackID: selectedClipReference.trackID,
+                clipID: selectedClipReference.clipID,
+                parameter: parameter,
+                time: time
+            )
+        )
+    }
+
     func undo() {
         guard var history = editHistory, let project = history.undo() else {
             return
@@ -874,6 +1171,17 @@ final class EditorAjarAppModel: ObservableObject {
             }
         }
         return nil
+    }
+
+    private static func mediaDimensions(for clip: Clip, in project: Project) -> PixelDimensions? {
+        guard case .media(let mediaID) = clip.source else {
+            return nil
+        }
+        return project.mediaPool.first { $0.id == mediaID }?.metadata.pixelDimensions
+    }
+
+    private func playheadTime(in sequence: Sequence) -> RationalTime? {
+        try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)
     }
 
     private func editMenuTitle(prefix: String, command: EditCommand?) -> String {
@@ -1176,6 +1484,534 @@ struct TimelineInteractionState: Equatable, Sendable {
 struct TimelineClipReference: Hashable, Sendable {
     let trackID: UUID
     let clipID: UUID
+}
+
+struct SelectedTransformInspectorState: Equatable, Sendable {
+    let clipName: String
+    let transform: ClipTransform
+}
+
+struct CanvasClipTransformLayout: Equatable, Sendable {
+    let canvasSize: PixelDimensions
+    let clipSize: PixelDimensions
+    let transform: ClipTransform
+}
+
+enum TransformInspectorField: String, CaseIterable, Identifiable, Sendable {
+    case positionX
+    case positionY
+    case scaleXPercent
+    case scaleYPercent
+    case anchorX
+    case anchorY
+    case rotationDegrees
+    case opacityPercent
+    case cropLeft
+    case cropTop
+    case cropRight
+    case cropBottom
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .positionX:
+            return "Position X"
+        case .positionY:
+            return "Position Y"
+        case .scaleXPercent:
+            return "Scale X %"
+        case .scaleYPercent:
+            return "Scale Y %"
+        case .anchorX:
+            return "Anchor X"
+        case .anchorY:
+            return "Anchor Y"
+        case .rotationDegrees:
+            return "Rotation"
+        case .opacityPercent:
+            return "Opacity %"
+        case .cropLeft:
+            return "Crop Left"
+        case .cropTop:
+            return "Crop Top"
+        case .cropRight:
+            return "Crop Right"
+        case .cropBottom:
+            return "Crop Bottom"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        "Transform \(title)"
+    }
+}
+
+enum TransformFieldValueMapper {
+    static func stringValue(for field: TransformInspectorField, in transform: ClipTransform) -> String {
+        switch field {
+        case .positionX:
+            return string(from: transform.position.x)
+        case .positionY:
+            return string(from: transform.position.y)
+        case .scaleXPercent:
+            return percentString(from: transform.scale.x)
+        case .scaleYPercent:
+            return percentString(from: transform.scale.y)
+        case .anchorX:
+            return string(from: transform.anchorPoint.x)
+        case .anchorY:
+            return string(from: transform.anchorPoint.y)
+        case .rotationDegrees:
+            return string(from: transform.rotation.degrees)
+        case .opacityPercent:
+            return percentString(from: transform.opacity)
+        case .cropLeft:
+            return "\(transform.crop.left)"
+        case .cropTop:
+            return "\(transform.crop.top)"
+        case .cropRight:
+            return "\(transform.crop.right)"
+        case .cropBottom:
+            return "\(transform.crop.bottom)"
+        }
+    }
+
+    static func updatedTransform(
+        _ field: TransformInspectorField,
+        rawValue: String,
+        in transform: ClipTransform
+    ) -> ClipTransform? {
+        switch field {
+        case .positionX:
+            return rational(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    position: CanvasPoint(x: value, y: transform.position.y)
+                )
+            }
+        case .positionY:
+            return rational(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    position: CanvasPoint(x: transform.position.x, y: value)
+                )
+            }
+        case .scaleXPercent:
+            return percent(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    scale: ClipScale(x: value, y: transform.scale.y)
+                )
+            }
+        case .scaleYPercent:
+            return percent(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    scale: ClipScale(x: transform.scale.x, y: value)
+                )
+            }
+        case .anchorX:
+            return rational(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    anchorPoint: CanvasPoint(x: value, y: transform.anchorPoint.y)
+                )
+            }
+        case .anchorY:
+            return rational(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    anchorPoint: CanvasPoint(x: transform.anchorPoint.x, y: value)
+                )
+            }
+        case .rotationDegrees:
+            return rational(rawValue).map { value in
+                TransformEditor.copying(transform, rotation: ClipRotation(degrees: value))
+            }
+        case .opacityPercent:
+            return percent(rawValue).map { value in
+                TransformEditor.copying(transform, opacity: value)
+            }
+        case .cropLeft:
+            return int64(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    crop: ClipCropInsets(
+                        left: value,
+                        top: transform.crop.top,
+                        right: transform.crop.right,
+                        bottom: transform.crop.bottom
+                    )
+                )
+            }
+        case .cropTop:
+            return int64(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    crop: ClipCropInsets(
+                        left: transform.crop.left,
+                        top: value,
+                        right: transform.crop.right,
+                        bottom: transform.crop.bottom
+                    )
+                )
+            }
+        case .cropRight:
+            return int64(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    crop: ClipCropInsets(
+                        left: transform.crop.left,
+                        top: transform.crop.top,
+                        right: value,
+                        bottom: transform.crop.bottom
+                    )
+                )
+            }
+        case .cropBottom:
+            return int64(rawValue).map { value in
+                TransformEditor.copying(
+                    transform,
+                    crop: ClipCropInsets(
+                        left: transform.crop.left,
+                        top: transform.crop.top,
+                        right: transform.crop.right,
+                        bottom: value
+                    )
+                )
+            }
+        }
+    }
+
+    private static func string(from value: RationalValue) -> String {
+        formatted(value.doubleValue)
+    }
+
+    private static func percentString(from value: RationalValue) -> String {
+        formatted(value.doubleValue * 100.0)
+    }
+
+    private static func formatted(_ value: Double) -> String {
+        if abs(value.rounded() - value) < 0.000_001 {
+            return "\(Int64(value.rounded()))"
+        }
+        return String(format: "%.2f", value)
+    }
+
+    private static func rational(_ rawValue: String) -> RationalValue? {
+        double(rawValue).map(RationalValue.approximating)
+    }
+
+    private static func percent(_ rawValue: String) -> RationalValue? {
+        double(rawValue).map { RationalValue.approximating($0 / 100.0) }
+    }
+
+    private static func int64(_ rawValue: String) -> Int64? {
+        double(rawValue).map { Int64($0.rounded()) }
+    }
+
+    private static func double(_ rawValue: String) -> Double? {
+        let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedValue.isEmpty,
+              let value = Double(trimmedValue),
+              value.isFinite
+        else {
+            return nil
+        }
+        return value
+    }
+}
+
+enum TransformEditor {
+    static func copying(
+        _ transform: ClipTransform,
+        position: CanvasPoint? = nil,
+        scale: ClipScale? = nil,
+        anchorPoint: CanvasPoint? = nil,
+        rotation: ClipRotation? = nil,
+        opacity: RationalValue? = nil,
+        blendMode: ClipBlendMode? = nil,
+        crop: ClipCropInsets? = nil,
+        flip: ClipFlip? = nil
+    ) -> ClipTransform {
+        ClipTransform(
+            position: position ?? transform.position,
+            scale: scale ?? transform.scale,
+            anchorPoint: anchorPoint ?? transform.anchorPoint,
+            rotation: rotation ?? transform.rotation,
+            opacity: opacity ?? transform.opacity,
+            blendMode: blendMode ?? transform.blendMode,
+            crop: crop ?? transform.crop,
+            flip: flip ?? transform.flip
+        )
+    }
+}
+
+enum CanvasTransformHandle: String, CaseIterable, Identifiable, Sendable {
+    case move
+    case scaleBottomRight
+    case rotate
+    case anchor
+
+    var id: String { rawValue }
+}
+
+struct CanvasTransformGesture: Equatable, Sendable {
+    let handle: CanvasTransformHandle
+    let translationX: Double
+    let translationY: Double
+    let canvasScale: Double
+}
+
+enum CanvasTransformGestureMapper {
+    static func updatedTransform(
+        from transform: ClipTransform,
+        gesture: CanvasTransformGesture,
+        clipSize: PixelDimensions
+    ) -> ClipTransform {
+        switch gesture.handle {
+        case .move:
+            return moved(transform, gesture: gesture)
+        case .scaleBottomRight:
+            return scaled(transform, gesture: gesture, clipSize: clipSize)
+        case .rotate:
+            return rotated(transform, gesture: gesture)
+        case .anchor:
+            return anchored(transform, gesture: gesture)
+        }
+    }
+
+    private static func moved(
+        _ transform: ClipTransform,
+        gesture: CanvasTransformGesture
+    ) -> ClipTransform {
+        TransformEditor.copying(
+            transform,
+            position: CanvasPoint(
+                x: offset(transform.position.x, gesture.translationX, canvasScale: gesture.canvasScale),
+                y: offset(transform.position.y, gesture.translationY, canvasScale: gesture.canvasScale)
+            )
+        )
+    }
+
+    private static func scaled(
+        _ transform: ClipTransform,
+        gesture: CanvasTransformGesture,
+        clipSize: PixelDimensions
+    ) -> ClipTransform {
+        let width = max(1.0, Double(clipSize.width))
+        let height = max(1.0, Double(clipSize.height))
+        let scaleX = max(0.01, transform.scale.x.doubleValue + gesture.translationX / gesture.canvasScale / width)
+        let scaleY = max(0.01, transform.scale.y.doubleValue + gesture.translationY / gesture.canvasScale / height)
+        return TransformEditor.copying(
+            transform,
+            scale: ClipScale(
+                x: RationalValue.approximating(scaleX),
+                y: RationalValue.approximating(scaleY)
+            )
+        )
+    }
+
+    private static func rotated(
+        _ transform: ClipTransform,
+        gesture: CanvasTransformGesture
+    ) -> ClipTransform {
+        let degrees = transform.rotation.degrees.doubleValue + gesture.translationX / 2.0
+        return TransformEditor.copying(
+            transform,
+            rotation: ClipRotation(degrees: RationalValue.approximating(degrees))
+        )
+    }
+
+    private static func anchored(
+        _ transform: ClipTransform,
+        gesture: CanvasTransformGesture
+    ) -> ClipTransform {
+        TransformEditor.copying(
+            transform,
+            anchorPoint: CanvasPoint(
+                x: offset(transform.anchorPoint.x, gesture.translationX, canvasScale: gesture.canvasScale),
+                y: offset(transform.anchorPoint.y, gesture.translationY, canvasScale: gesture.canvasScale)
+            )
+        )
+    }
+
+    private static func offset(
+        _ value: RationalValue,
+        _ delta: Double,
+        canvasScale: Double
+    ) -> RationalValue {
+        RationalValue.approximating(value.doubleValue + delta / max(0.000_001, canvasScale))
+    }
+}
+
+struct TransformKeyframeLane: Identifiable, Equatable, Sendable {
+    let parameter: ClipTransformParameter
+    let title: String
+    let keyframes: [TransformKeyframePoint]
+
+    var id: String { parameter.rawValue }
+
+    static func makeLanes(
+        animation: AnimatableClipTransform,
+        frameRate: FrameRate,
+        pixelsPerFrame: Double
+    ) -> [TransformKeyframeLane] {
+        ClipTransformParameter.allCases.map { parameter in
+            TransformKeyframeLane(
+                parameter: parameter,
+                title: parameter.displayName,
+                keyframes: TransformKeyframeLookup.keyframes(
+                    parameter: parameter,
+                    in: animation,
+                    frameRate: frameRate,
+                    pixelsPerFrame: pixelsPerFrame
+                )
+            )
+        }
+    }
+}
+
+struct TransformKeyframePoint: Identifiable, Equatable, Sendable {
+    let parameter: ClipTransformParameter
+    let frame: Int64
+    let xPosition: Double
+    let keyframe: ClipTransformKeyframe
+
+    var id: String {
+        "\(parameter.rawValue)-\(frame)"
+    }
+}
+
+enum TransformKeyframeLookup {
+    static func keyframes(
+        parameter: ClipTransformParameter,
+        in animation: AnimatableClipTransform,
+        frameRate: FrameRate,
+        pixelsPerFrame: Double
+    ) -> [TransformKeyframePoint] {
+        keyframes(parameter: parameter, in: animation).compactMap { keyframe in
+            guard let frame = try? keyframe.time.frameIndex(
+                at: frameRate,
+                rounding: .nearestOrAwayFromZero
+            ) else {
+                return nil
+            }
+            return TransformKeyframePoint(
+                parameter: parameter,
+                frame: frame,
+                xPosition: TimelineInteraction.xPosition(
+                    frame: frame,
+                    pixelsPerFrame: pixelsPerFrame
+                ),
+                keyframe: keyframe
+            )
+        }
+    }
+
+    static func keyframe(
+        parameter: ClipTransformParameter,
+        at time: RationalTime,
+        in animation: AnimatableClipTransform
+    ) -> ClipTransformKeyframe? {
+        keyframes(parameter: parameter, in: animation).first { $0.time == time }
+    }
+
+    static func value(
+        parameter: ClipTransformParameter,
+        in transform: ClipTransform
+    ) -> ClipTransformKeyframeValue {
+        switch parameter {
+        case .position:
+            return .position(transform.position)
+        case .scale:
+            return .scale(transform.scale)
+        case .anchorPoint:
+            return .anchorPoint(transform.anchorPoint)
+        case .rotation:
+            return .rotation(transform.rotation)
+        case .opacity:
+            return .opacity(transform.opacity)
+        case .crop:
+            return .crop(transform.crop)
+        }
+    }
+
+    private static func keyframes(
+        parameter: ClipTransformParameter,
+        in animation: AnimatableClipTransform
+    ) -> [ClipTransformKeyframe] {
+        switch parameter {
+        case .position:
+            return animation.position.keyframes.map { keyframe in
+                ClipTransformKeyframe(
+                    time: keyframe.time,
+                    value: .position(keyframe.value),
+                    interpolation: keyframe.interpolation
+                )
+            }
+        case .scale:
+            return animation.scale.keyframes.map { keyframe in
+                ClipTransformKeyframe(
+                    time: keyframe.time,
+                    value: .scale(keyframe.value),
+                    interpolation: keyframe.interpolation
+                )
+            }
+        case .anchorPoint:
+            return animation.anchorPoint.keyframes.map { keyframe in
+                ClipTransformKeyframe(
+                    time: keyframe.time,
+                    value: .anchorPoint(keyframe.value),
+                    interpolation: keyframe.interpolation
+                )
+            }
+        case .rotation:
+            return animation.rotation.keyframes.map { keyframe in
+                ClipTransformKeyframe(
+                    time: keyframe.time,
+                    value: .rotation(keyframe.value),
+                    interpolation: keyframe.interpolation
+                )
+            }
+        case .opacity:
+            return animation.opacity.keyframes.map { keyframe in
+                ClipTransformKeyframe(
+                    time: keyframe.time,
+                    value: .opacity(keyframe.value),
+                    interpolation: keyframe.interpolation
+                )
+            }
+        case .crop:
+            return animation.crop.keyframes.map { keyframe in
+                ClipTransformKeyframe(
+                    time: keyframe.time,
+                    value: .crop(keyframe.value),
+                    interpolation: keyframe.interpolation
+                )
+            }
+        }
+    }
+}
+
+extension ClipTransformParameter {
+    var displayName: String {
+        switch self {
+        case .position:
+            return "Position"
+        case .scale:
+            return "Scale"
+        case .anchorPoint:
+            return "Anchor"
+        case .rotation:
+            return "Rotation"
+        case .opacity:
+            return "Opacity"
+        case .crop:
+            return "Crop"
+        }
+    }
 }
 
 struct TimelineClipLayout: Equatable, Sendable {

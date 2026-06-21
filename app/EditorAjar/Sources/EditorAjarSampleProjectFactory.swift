@@ -93,7 +93,7 @@ enum EditorAjarSampleProjectFactory {
         )
 
         return Project(
-            schemaVersion: 1,
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
             settings: ProjectSettings(
                 frameRate: frameRate,
                 resolution: PixelDimensions(width: width, height: height),
