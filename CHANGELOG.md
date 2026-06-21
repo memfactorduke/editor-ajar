@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` edit reducer commands for insert, overwrite, append, replace-source, and
+  three-point edits with undo coverage for FR-TL-003/012.
 - macOS app XCUITest smoke target and CI job for the ROADMAP M2 launch/play gate
   (NFR-A11Y-001).
 - `ajar bench` report-only JSON metrics, baseline capture, and CI benchmark reporting for
