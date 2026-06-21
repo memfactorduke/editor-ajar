@@ -27,7 +27,7 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     /// The graph output node is not a composite node.
     case unsupportedOutputNode(RenderNodeID)
 
-    /// M2 only supports empty or single-source composite nodes.
+    /// A composite node did not contain any supported source inputs.
     case unsupportedCompositeInputCount(nodeID: RenderNodeID, inputCount: Int)
 
     /// A composite input node was not present in the graph.
@@ -161,7 +161,7 @@ public struct RenderedFrame {
     }
 }
 
-/// Metal executor for the M2 single-source render graph.
+/// Metal executor for GPU-resident render graph composites.
 public final class MetalRenderExecutor {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
@@ -299,21 +299,14 @@ public final class MetalRenderExecutor {
         switch outputNode.inputIDs.count {
         case 0:
             try encodeTransparentComposite(into: outputTexture, commandBuffer: commandBuffer)
-        case 1:
-            let sourceTexture = try sourceTexture(
-                graph: graph,
-                inputID: outputNode.inputIDs[0],
-                sourceProvider: sourceProvider
-            )
+        default:
+            let sourceTextures = try outputNode.inputIDs.map { inputID in
+                try sourceTexture(graph: graph, inputID: inputID, sourceProvider: sourceProvider)
+            }
             try encodeSourceComposite(
-                sourceTexture: sourceTexture,
+                sourceTextures: sourceTextures,
                 outputTexture: outputTexture,
                 commandBuffer: commandBuffer
-            )
-        default:
-            throw MetalRenderError.unsupportedCompositeInputCount(
-                nodeID: outputNode.id,
-                inputCount: outputNode.inputIDs.count
             )
         }
     }
@@ -351,7 +344,7 @@ public final class MetalRenderExecutor {
     }
 
     private func encodeSourceComposite(
-        sourceTexture: MTLTexture,
+        sourceTextures: [MTLTexture],
         outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer
     ) throws {
@@ -361,8 +354,10 @@ public final class MetalRenderExecutor {
         }
 
         encoder.setRenderPipelineState(try pipelineState(for: outputTexture.pixelFormat))
-        encoder.setFragmentTexture(sourceTexture, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        for sourceTexture in sourceTextures {
+            encoder.setFragmentTexture(sourceTexture, index: 0)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        }
         encoder.endEncoding()
     }
 
@@ -392,6 +387,13 @@ public final class MetalRenderExecutor {
         descriptor.vertexFunction = vertexFunction
         descriptor.fragmentFunction = fragmentFunction
         descriptor.colorAttachments[0].pixelFormat = pixelFormat
+        descriptor.colorAttachments[0].isBlendingEnabled = true
+        descriptor.colorAttachments[0].rgbBlendOperation = .add
+        descriptor.colorAttachments[0].alphaBlendOperation = .add
+        descriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
+        descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
 
         do {
             let pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)

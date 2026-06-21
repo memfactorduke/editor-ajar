@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AjarCore
 import SwiftUI
 
 struct EditorAjarWorkspaceView: View {
@@ -23,8 +24,8 @@ struct EditorAjarWorkspaceView: View {
             }
             .frame(maxHeight: .infinity)
             Divider()
-            TimelinePlaceholder(model: model)
-                .frame(height: 210)
+            TimelineView(model: model)
+                .frame(height: 250)
         }
         .background(Color(red: 0.10, green: 0.10, blue: 0.11))
         .foregroundStyle(.white)
@@ -199,15 +200,37 @@ private struct InspectorPanel: View {
     }
 }
 
-private struct TimelinePlaceholder: View {
+private struct TimelineView: View {
     @ObservedObject var model: EditorAjarAppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             PanelTitle("Timeline")
-            VStack(spacing: 8) {
-                TrackLane(name: "V1", label: "Video track one")
-                TrackLane(name: "A1", label: "Audio track one")
+            if let sequence = model.activeSequence {
+                ScrollView(.vertical) {
+                    VStack(spacing: 8) {
+                        ForEach(videoRows(in: sequence), id: \.track.id) { row in
+                            TrackLane(
+                                sequenceID: sequence.id,
+                                row: row,
+                                model: model
+                            )
+                        }
+                        ForEach(audioRows(in: sequence), id: \.track.id) { row in
+                            TrackLane(
+                                sequenceID: sequence.id,
+                                row: row,
+                                model: model
+                            )
+                        }
+                    }
+                }
+                .accessibilityIdentifier("Timeline track lanes")
+                .accessibilityLabel("Timeline track lanes")
+            } else {
+                Text("No sequence")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             Text(model.loadMessage)
@@ -217,31 +240,179 @@ private struct TimelinePlaceholder: View {
         .padding(14)
         .background(Color(red: 0.12, green: 0.12, blue: 0.13))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Timeline placeholder")
+        .accessibilityLabel("Timeline")
+    }
+
+    private func videoRows(in sequence: AjarCore.Sequence) -> [TrackLaneRow] {
+        sequence.videoTracks.enumerated().reversed().map { index, track in
+            TrackLaneRow(
+                name: "V\(index + 1)",
+                kind: .video,
+                track: track,
+                accessibilityLabel: "Video track \(index + 1)"
+            )
+        }
+    }
+
+    private func audioRows(in sequence: AjarCore.Sequence) -> [TrackLaneRow] {
+        sequence.audioTracks.enumerated().map { index, track in
+            TrackLaneRow(
+                name: "A\(index + 1)",
+                kind: .audio,
+                track: track,
+                accessibilityLabel: "Audio track \(index + 1)"
+            )
+        }
     }
 }
 
 private struct TrackLane: View {
-    let name: String
-    let label: String
+    let sequenceID: UUID
+    let row: TrackLaneRow
+    @ObservedObject var model: EditorAjarAppModel
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(name)
+        HStack(spacing: 8) {
+            Text(row.name)
                 .font(.caption.weight(.semibold))
-                .frame(width: 44)
+                .frame(width: 34)
+                .accessibilityHidden(true)
+            TrackStateButton(
+                title: row.track.enabled ? "Disable \(row.accessibilityLabel)" : "Enable \(row.accessibilityLabel)",
+                systemImage: "power",
+                isOn: row.track.enabled
+            ) {
+                model.setTrackState(
+                    sequenceID: sequenceID,
+                    trackID: row.track.id,
+                    enabled: !row.track.enabled
+                )
+            }
+            TrackStateButton(
+                title: row.track.locked ? "Unlock \(row.accessibilityLabel)" : "Lock \(row.accessibilityLabel)",
+                systemImage: row.track.locked ? "lock.fill" : "lock.open",
+                isOn: row.track.locked
+            ) {
+                model.setTrackState(
+                    sequenceID: sequenceID,
+                    trackID: row.track.id,
+                    locked: !row.track.locked
+                )
+            }
+            if row.kind == .video {
+                TrackStateButton(
+                    title: row.track.hidden ? "Show \(row.accessibilityLabel)" : "Hide \(row.accessibilityLabel)",
+                    systemImage: row.track.hidden ? "eye.slash.fill" : "eye",
+                    isOn: !row.track.hidden
+                ) {
+                    model.setTrackState(
+                        sequenceID: sequenceID,
+                        trackID: row.track.id,
+                        hidden: !row.track.hidden
+                    )
+                }
+            } else {
+                TrackStateButton(
+                    title: row.track.muted ? "Unmute \(row.accessibilityLabel)" : "Mute \(row.accessibilityLabel)",
+                    systemImage: row.track.muted ? "speaker.slash.fill" : "speaker.wave.2",
+                    isOn: row.track.muted
+                ) {
+                    model.setTrackState(
+                        sequenceID: sequenceID,
+                        trackID: row.track.id,
+                        muted: !row.track.muted
+                    )
+                }
+                TrackStateButton(
+                    title: row.track.solo ? "Unsolo \(row.accessibilityLabel)" : "Solo \(row.accessibilityLabel)",
+                    systemImage: row.track.solo ? "headphones.circle.fill" : "headphones",
+                    isOn: row.track.solo
+                ) {
+                    model.setTrackState(
+                        sequenceID: sequenceID,
+                        trackID: row.track.id,
+                        solo: !row.track.solo
+                    )
+                }
+            }
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color.white.opacity(0.08))
                 .overlay(alignment: .leading) {
-                    Text("Empty")
+                    Text(row.summary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.leading, 12)
                 }
         }
         .frame(height: 46)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label), empty")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.fullAccessibilityLabel)
+    }
+}
+
+private struct TrackLaneRow {
+    let name: String
+    let kind: TrackKind
+    let track: Track
+    let accessibilityLabel: String
+
+    var summary: String {
+        guard !track.items.isEmpty else {
+            return "Empty"
+        }
+        let clipCount = track.items.reduce(0) { count, item in
+            if case .clip = item {
+                return count + 1
+            }
+            return count
+        }
+        if clipCount == 1 {
+            return "1 clip"
+        }
+        if clipCount > 1 {
+            return "\(clipCount) clips"
+        }
+        return "\(track.items.count) item"
+    }
+
+    var fullAccessibilityLabel: String {
+        var states: [String] = []
+        states.append(track.enabled ? "enabled" : "disabled")
+        if track.locked {
+            states.append("locked")
+        }
+        if kind == .video, track.hidden {
+            states.append("hidden")
+        }
+        if kind == .audio {
+            if track.muted {
+                states.append("muted")
+            }
+            if track.solo {
+                states.append("solo")
+            }
+        }
+        return "\(accessibilityLabel), \(summary), \(states.joined(separator: ", "))"
+    }
+}
+
+private struct TrackStateButton: View {
+    let title: String
+    let systemImage: String
+    let isOn: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+        .frame(width: 28, height: 28)
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityValue(isOn ? "On" : "Off")
     }
 }
 

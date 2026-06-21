@@ -2,6 +2,39 @@
 
 import Foundation
 
+/// Optional track-state fields changed by `EditCommand.setTrackState`.
+public struct TrackStatePatch: Codable, Equatable, Sendable {
+    /// Replacement enabled state, or `nil` to leave it unchanged.
+    public let enabled: Bool?
+
+    /// Replacement locked state, or `nil` to leave it unchanged.
+    public let locked: Bool?
+
+    /// Replacement muted state, or `nil` to leave it unchanged.
+    public let muted: Bool?
+
+    /// Replacement solo state, or `nil` to leave it unchanged.
+    public let solo: Bool?
+
+    /// Replacement hidden state, or `nil` to leave it unchanged.
+    public let hidden: Bool?
+
+    /// Creates a track-state patch.
+    public init(
+        enabled: Bool? = nil,
+        locked: Bool? = nil,
+        muted: Bool? = nil,
+        solo: Bool? = nil,
+        hidden: Bool? = nil
+    ) {
+        self.enabled = enabled
+        self.locked = locked
+        self.muted = muted
+        self.solo = solo
+        self.hidden = hidden
+    }
+}
+
 /// A deterministic edit operation applied to an immutable `Project`.
 public enum EditCommand: Codable, Equatable, Sendable {
     /// Adds a clip to an existing track.
@@ -89,6 +122,13 @@ public enum EditCommand: Codable, Equatable, Sendable {
 
     /// Removes a clip and leaves a gap with the same timeline range.
     case liftClip(sequenceID: UUID, trackID: UUID, clipID: UUID)
+
+    /// Updates track playback/editing state flags without changing track items or order.
+    case setTrackState(
+        sequenceID: UUID,
+        trackID: UUID,
+        state: TrackStatePatch
+    )
 
     /// Moves a clip to a new track/range.
     case moveClip(
@@ -188,6 +228,11 @@ extension EditReducer {
             .rippleTrimClip, .rollEdit, .slipClip, .slideClip, .rippleDeleteClip,
             .liftClip, .moveClip, .trimClip:
             return try applyClipCommand(command, to: project)
+        case .setTrackState(let sequenceID, let trackID, let state):
+            return try setTrackState(
+                TrackStateEdit(sequenceID: sequenceID, trackID: trackID, state: state),
+                in: project
+            )
         case .addTrack(let sequenceID, let track):
             return try addTrack(track, sequenceID: sequenceID, to: project)
         case .removeTrack(let sequenceID, let trackID):

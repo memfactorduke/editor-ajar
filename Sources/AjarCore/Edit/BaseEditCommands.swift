@@ -29,6 +29,12 @@ extension EditReducer {
         let timelineRange: TimeRange
     }
 
+    struct TrackStateEdit {
+        let sequenceID: UUID
+        let trackID: UUID
+        let state: TrackStatePatch
+    }
+
     static func addClip(
         _ clip: Clip,
         sequenceID: UUID,
@@ -187,6 +193,12 @@ extension EditReducer {
         }
     }
 
+    static func setTrackState(_ edit: TrackStateEdit, in project: Project) throws -> Project {
+        try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
+            copying(track, state: edit.state)
+        }
+    }
+
     static func renameSequence(
         sequenceID: UUID,
         name: String,
@@ -324,15 +336,23 @@ extension EditReducer {
     }
 
     static func copying(_ track: Track, items: [TimelineItem]) -> Track {
+        copying(track, items: items, state: TrackStatePatch())
+    }
+
+    static func copying(
+        _ track: Track,
+        items: [TimelineItem]? = nil,
+        state: TrackStatePatch
+    ) -> Track {
         Track(
             id: track.id,
             kind: track.kind,
-            items: items,
-            enabled: track.enabled,
-            locked: track.locked,
-            muted: track.muted,
-            solo: track.solo,
-            hidden: track.hidden
+            items: items ?? track.items,
+            enabled: state.enabled ?? track.enabled,
+            locked: state.locked ?? track.locked,
+            muted: state.muted ?? track.muted,
+            solo: state.solo ?? track.solo,
+            hidden: state.hidden ?? track.hidden
         )
     }
 

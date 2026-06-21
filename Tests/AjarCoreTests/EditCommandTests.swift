@@ -416,6 +416,26 @@ private func makeTrackCommandCases(
             command: .removeTrack(sequenceID: fixture.sequenceID, trackID: fixture.audioTrackID)
         )
     )
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .setTrackState(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                state: TrackStatePatch(enabled: false, locked: true, hidden: true)
+            )
+        )
+    )
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .setTrackState(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.audioTrackID,
+                state: TrackStatePatch(locked: true, muted: true, solo: true)
+            )
+        )
+    )
     return cases
 }
 

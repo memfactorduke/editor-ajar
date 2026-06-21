@@ -32,6 +32,15 @@ final class EditorAjarUISmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["Step Forward"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.sliders["Scrub playhead"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Timeline track lanes"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(app.buttons["Disable Video track 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Lock Video track 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Hide Video track 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Mute Audio track 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Solo Audio track 1"].waitForExistence(timeout: 5))
 
         let playheadReadout = app.staticTexts["Playhead readout"]
         XCTAssertTrue(playheadReadout.waitForExistence(timeout: 5))
