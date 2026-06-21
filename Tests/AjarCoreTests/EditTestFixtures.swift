@@ -150,7 +150,8 @@ func makeEditClip(
     durationFrames: Int64 = 10,
     kind: TrackKind = .video,
     linkGroupID: UUID? = nil,
-    transform: ClipTransform = .identity
+    transform: ClipTransform = .identity,
+    transformAnimation: AnimatableClipTransform? = nil
 ) throws -> Clip {
     Clip(
         id: id,
@@ -160,7 +161,8 @@ func makeEditClip(
         kind: kind,
         name: "Clip \(id.uuidString)",
         linkGroupID: linkGroupID,
-        transform: transform
+        transform: transform,
+        transformAnimation: transformAnimation
     )
 }
 

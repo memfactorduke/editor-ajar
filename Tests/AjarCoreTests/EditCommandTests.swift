@@ -382,14 +382,74 @@ private func makeLegacyClipCommandCases(
 private func makeTransformCommandCases(
     fixture: EditFixture
 ) throws -> [EditCommandCase] {
-    [
+    let transform = try makeNonIdentityClipTransform()
+    return [
         EditCommandCase(
             project: fixture.project,
             command: .setClipTransform(
                 sequenceID: fixture.sequenceID,
                 trackID: fixture.videoTrackID,
                 clipID: fixture.clipID,
-                transform: try makeNonIdentityClipTransform()
+                transform: transform
+            )
+        )
+    ] + (try makeTransformKeyframeCommandCases(fixture: fixture))
+}
+
+private func makeTransformKeyframeCommandCases(
+    fixture: EditFixture
+) throws -> [EditCommandCase] {
+    let keyframe = ClipTransformKeyframe(
+        time: try editTime(2),
+        value: .opacity(try RationalValue(numerator: 1, denominator: 2)),
+        interpolation: .linear
+    )
+    let movedKeyframe = ClipTransformKeyframe(
+        time: try editTime(4),
+        value: .opacity(try RationalValue(numerator: 1, denominator: 4)),
+        interpolation: .easeInOut
+    )
+    let projectWithKeyframe = try apply(
+        .addClipTransformKeyframe(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clipID: fixture.clipID,
+            parameter: .opacity,
+            keyframe: keyframe
+        ),
+        to: fixture.project
+    )
+
+    return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .addClipTransformKeyframe(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                parameter: .opacity,
+                keyframe: keyframe
+            )
+        ),
+        EditCommandCase(
+            project: projectWithKeyframe,
+            command: .moveClipTransformKeyframe(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                parameter: .opacity,
+                fromTime: try editTime(2),
+                keyframe: movedKeyframe
+            )
+        ),
+        EditCommandCase(
+            project: projectWithKeyframe,
+            command: .deleteClipTransformKeyframe(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                parameter: .opacity,
+                time: try editTime(2)
             )
         )
     ]

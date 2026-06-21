@@ -51,6 +51,32 @@ final class AnimatableTests: XCTestCase {
         XCTAssertEqual(linear.value(at: try time(seconds: 5)), 50)
     }
 
+    func testFRKEY003EaseAndBezierInterpolationUseDeterministicTimingCurves() throws {
+        let easeIn = try animation(interpolation: .easeIn)
+        let easeOut = try animation(interpolation: .easeOut)
+        let easeInOut = try animation(interpolation: .easeInOut)
+        let customBezier = try animation(
+            interpolation: .bezier(
+                CubicBezierTimingCurve(
+                    controlPoint1: CubicBezierTimingControlPoint(
+                        x: try RationalValue(numerator: 1, denominator: 4),
+                        y: try RationalValue(numerator: 1, denominator: 10)
+                    ),
+                    controlPoint2: CubicBezierTimingControlPoint(
+                        x: try RationalValue(numerator: 1, denominator: 4),
+                        y: RationalValue(1)
+                    )
+                )
+            )
+        )
+        let midpoint = try time(seconds: 5)
+
+        XCTAssertEqual(easeIn.value(at: midpoint), 31.535681, accuracy: 0.0001)
+        XCTAssertEqual(easeOut.value(at: midpoint), 68.464319, accuracy: 0.0001)
+        XCTAssertEqual(easeInOut.value(at: midpoint), 50, accuracy: 0.0001)
+        XCTAssertEqual(customBezier.value(at: midpoint), 80.240336, accuracy: 0.0001)
+    }
+
     func testFRKEY001ClampsBeforeFirstAndAfterLastKeyframes() throws {
         let animation = try Animatable(
             base: -1,
@@ -183,6 +209,26 @@ final class AnimatableTests: XCTestCase {
         XCTAssertEqual(decoded, animation)
     }
 
+    func testFRKEY003BezierInterpolationModeRoundTripsThroughCodable() throws {
+        let mode = InterpolationMode.bezier(
+            CubicBezierTimingCurve(
+                controlPoint1: CubicBezierTimingControlPoint(
+                    x: try RationalValue(numerator: 1, denominator: 5),
+                    y: .zero
+                ),
+                controlPoint2: CubicBezierTimingControlPoint(
+                    x: try RationalValue(numerator: 4, denominator: 5),
+                    y: .one
+                )
+            )
+        )
+
+        let encoded = try JSONEncoder().encode(mode)
+        let decoded = try JSONDecoder().decode(InterpolationMode.self, from: encoded)
+
+        XCTAssertEqual(decoded, mode)
+    }
+
     private func keyframe(
         seconds: Int64,
         value: Double,
@@ -197,6 +243,16 @@ final class AnimatableTests: XCTestCase {
         interpolation: InterpolationMode
     ) -> Keyframe<Double> {
         Keyframe(time: time, value: value, interpolation: interpolation)
+    }
+
+    private func animation(interpolation: InterpolationMode) throws -> Animatable<Double> {
+        try Animatable(
+            base: 0,
+            keyframes: makeKeyframes(
+                keyframe(seconds: 0, value: 0, interpolation: interpolation),
+                keyframe(seconds: 10, value: 100, interpolation: .hold)
+            )
+        )
     }
 
     private func time(seconds: Int64) throws -> RationalTime {

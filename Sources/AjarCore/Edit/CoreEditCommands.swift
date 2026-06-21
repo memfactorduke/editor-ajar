@@ -41,6 +41,28 @@ extension EditReducer {
             return try applyTrimClipCommand(command, to: project)
         case .moveClip, .trimClip:
             return try applyRangeClipCommand(command, to: project)
+        case .setClipTransform, .addClipTransformKeyframe, .moveClipTransformKeyframe,
+            .deleteClipTransformKeyframe:
+            return try applyTransformClipCommand(command, to: project)
+        case .addClip(let sequenceID, let trackID, let clip):
+            return try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
+        case .removeClip(let sequenceID, let trackID, let clipID):
+            return try removeClip(
+                clipID: clipID,
+                sequenceID: sequenceID,
+                trackID: trackID,
+                from: project
+            )
+        default:
+            throw EditReducerError.validationFailed([])
+        }
+    }
+
+    static func applyTransformClipCommand(
+        _ command: EditCommand,
+        to project: Project
+    ) throws -> Project {
+        switch command {
         case .setClipTransform(let sequenceID, let trackID, let clipID, let transform):
             return try setClipTransform(
                 SetClipTransformEdit(
@@ -51,14 +73,70 @@ extension EditReducer {
                 ),
                 in: project
             )
-        case .addClip(let sequenceID, let trackID, let clip):
-            return try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
-        case .removeClip(let sequenceID, let trackID, let clipID):
-            return try removeClip(
-                clipID: clipID,
-                sequenceID: sequenceID,
-                trackID: trackID,
-                from: project
+        case .addClipTransformKeyframe, .moveClipTransformKeyframe, .deleteClipTransformKeyframe:
+            return try applyTransformKeyframeCommand(command, to: project)
+        default:
+            throw EditReducerError.validationFailed([])
+        }
+    }
+
+    static func applyTransformKeyframeCommand(
+        _ command: EditCommand,
+        to project: Project
+    ) throws -> Project {
+        switch command {
+        case .addClipTransformKeyframe(
+            let sequenceID,
+            let trackID,
+            let clipID,
+            let parameter,
+            let keyframe
+        ):
+            return try addClipTransformKeyframe(
+                TransformKeyframeEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    parameter: parameter,
+                    keyframe: keyframe
+                ),
+                in: project
+            )
+        case .moveClipTransformKeyframe(
+            let sequenceID,
+            let trackID,
+            let clipID,
+            let parameter,
+            let fromTime,
+            let keyframe
+        ):
+            return try moveClipTransformKeyframe(
+                MoveTransformKeyframeEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    parameter: parameter,
+                    fromTime: fromTime,
+                    keyframe: keyframe
+                ),
+                in: project
+            )
+        case .deleteClipTransformKeyframe(
+            let sequenceID,
+            let trackID,
+            let clipID,
+            let parameter,
+            let time
+        ):
+            return try deleteClipTransformKeyframe(
+                DeleteTransformKeyframeEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    parameter: parameter,
+                    time: time
+                ),
+                in: project
             )
         default:
             throw EditReducerError.validationFailed([])

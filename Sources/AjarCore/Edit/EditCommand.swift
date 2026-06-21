@@ -170,6 +170,34 @@ public enum EditCommand: Codable, Equatable, Sendable {
         transform: ClipTransform
     )
 
+    /// Adds a keyframe to one transform parameter.
+    case addClipTransformKeyframe(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        keyframe: ClipTransformKeyframe
+    )
+
+    /// Moves or replaces a keyframe on one transform parameter.
+    case moveClipTransformKeyframe(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        fromTime: RationalTime,
+        keyframe: ClipTransformKeyframe
+    )
+
+    /// Deletes a keyframe from one transform parameter.
+    case deleteClipTransformKeyframe(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        time: RationalTime
+    )
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 
@@ -281,6 +309,43 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A clip transform failed semantic validation.
     case invalidClipTransform(clipID: UUID, error: ClipTransformValidationError)
+
+    /// A transform keyframe value did not match the requested parameter.
+    case transformKeyframeValueMismatch(
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        value: ClipTransformKeyframeValue
+    )
+
+    /// A transform keyframe time falls outside its clip's timeline range.
+    case transformKeyframeTimeOutsideClip(
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        time: RationalTime,
+        clipRange: TimeRange
+    )
+
+    /// A transform keyframe duplicates an existing keyframe time.
+    case duplicateTransformKeyframeTime(
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        time: RationalTime
+    )
+
+    /// A transform keyframe was not found.
+    case transformKeyframeNotFound(
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        time: RationalTime
+    )
+
+    /// A transform keyframe value failed semantic transform validation.
+    case invalidClipTransformKeyframe(
+        clipID: UUID,
+        parameter: ClipTransformParameter,
+        time: RationalTime,
+        error: ClipTransformValidationError
+    )
 }
 
 /// Pure reducer entry point required by ADR-0008.
@@ -336,6 +401,12 @@ public extension EditCommand {
             return "Trim Clip"
         case .setClipTransform:
             return "Set Clip Transform"
+        case .addClipTransformKeyframe:
+            return "Add Transform Keyframe"
+        case .moveClipTransformKeyframe:
+            return "Move Transform Keyframe"
+        case .deleteClipTransformKeyframe:
+            return "Delete Transform Keyframe"
         case .addTrack:
             return "Add Track"
         case .removeTrack:
@@ -371,7 +442,9 @@ extension EditReducer {
         case .addClip, .insertClip, .overwriteClip, .appendClip,
             .removeClip, .replaceClipSource, .threePointEdit, .bladeClip,
             .rippleTrimClip, .rollEdit, .slipClip, .slideClip, .rippleDeleteClip,
-            .liftClip, .moveClip, .trimClip, .setClipTransform:
+            .liftClip, .moveClip, .trimClip, .setClipTransform,
+            .addClipTransformKeyframe, .moveClipTransformKeyframe,
+            .deleteClipTransformKeyframe:
             return try applyClipCommand(command, to: project)
         case .setTrackState(let sequenceID, let trackID, let state):
             return try setTrackState(

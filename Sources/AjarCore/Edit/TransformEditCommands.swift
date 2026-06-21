@@ -38,7 +38,7 @@ extension EditReducer {
         }
     }
 
-    private static func validateTransform(
+    static func validateTransform(
         _ transform: ClipTransform,
         clipID: UUID,
         frame: PixelDimensions

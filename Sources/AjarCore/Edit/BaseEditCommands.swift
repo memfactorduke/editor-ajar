@@ -453,9 +453,13 @@ extension EditReducer {
         timelineRange: TimeRange? = nil,
         name: String? = nil,
         linkGroupID: UUID?? = nil,
-        transform: ClipTransform? = nil
+        transform: ClipTransform? = nil,
+        transformAnimation: AnimatableClipTransform? = nil
     ) -> Clip {
-        Clip(
+        let replacementTransform = transform ?? clip.transform
+        let replacementAnimation = transformAnimation
+            ?? (transform == nil ? clip.transformAnimation : .constant(replacementTransform))
+        return Clip(
             id: clip.id,
             source: source ?? clip.source,
             sourceRange: sourceRange ?? clip.sourceRange,
@@ -463,7 +467,8 @@ extension EditReducer {
             kind: clip.kind,
             name: name ?? clip.name,
             linkGroupID: linkGroupID ?? clip.linkGroupID,
-            transform: transform ?? clip.transform
+            transform: replacementTransform,
+            transformAnimation: replacementAnimation
         )
     }
 }
