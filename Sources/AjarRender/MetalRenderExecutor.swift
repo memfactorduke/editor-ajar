@@ -135,6 +135,30 @@ public struct RenderedFrame {
 
     /// Command buffer that writes `texture` when `cacheHit` is false.
     public let commandBuffer: MTLCommandBuffer?
+
+    private let completion: RenderCompletion?
+    private let retainedSourceProvider: Any?
+
+    init(
+        texture: MTLTexture,
+        contentHash: ContentHash,
+        cacheHit: Bool,
+        commandBuffer: MTLCommandBuffer?,
+        completion: RenderCompletion?,
+        retainedSourceProvider: Any?
+    ) {
+        self.texture = texture
+        self.contentHash = contentHash
+        self.cacheHit = cacheHit
+        self.commandBuffer = commandBuffer
+        self.completion = completion
+        self.retainedSourceProvider = retainedSourceProvider
+    }
+
+    /// Waits until the render command buffer has completed.
+    public func waitForCompletion() async throws {
+        try await completion?.wait()
+    }
 }
 
 /// Metal executor for the M2 single-source render graph.
@@ -191,12 +215,16 @@ public final class MetalRenderExecutor {
                 texture: cachedTexture,
                 contentHash: outputNode.contentHash,
                 cacheHit: true,
-                commandBuffer: nil
+                commandBuffer: nil,
+                completion: nil,
+                retainedSourceProvider: nil
             )
         }
 
         let texture = try makeOutputTexture(output)
         let commandBuffer = try makeCommandBuffer()
+        let completion = RenderCompletion()
+        completion.attach(to: commandBuffer)
         try encode(
             graph: graph,
             outputNode: outputNode,
@@ -211,7 +239,9 @@ public final class MetalRenderExecutor {
             texture: texture,
             contentHash: outputNode.contentHash,
             cacheHit: false,
-            commandBuffer: commandBuffer
+            commandBuffer: commandBuffer,
+            completion: completion,
+            retainedSourceProvider: sourceProvider
         )
     }
 
@@ -413,4 +443,51 @@ public final class MetalRenderExecutor {
             return sourceTexture.sample(sourceSampler, in.uv);
         }
         """
+}
+
+final class RenderCompletion {
+    private typealias CompletionContinuation = CheckedContinuation<Void, Error>
+
+    private let lock = NSLock()
+    private var result: Result<Void, Error>?
+    private var continuations: [CompletionContinuation] = []
+
+    func attach(to commandBuffer: MTLCommandBuffer) {
+        commandBuffer.addCompletedHandler { [weak self] completedBuffer in
+            self?.complete(error: completedBuffer.error)
+        }
+    }
+
+    func wait() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CompletionContinuation) in
+            lock.lock()
+            if let result {
+                lock.unlock()
+                continuation.resume(with: result)
+                return
+            }
+
+            continuations.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    private func complete(error: Error?) {
+        let result: Result<Void, Error> = error.map(Result.failure) ?? .success(())
+
+        lock.lock()
+        guard self.result == nil else {
+            lock.unlock()
+            return
+        }
+
+        self.result = result
+        let continuations = continuations
+        self.continuations.removeAll()
+        lock.unlock()
+
+        for continuation in continuations {
+            continuation.resume(with: result)
+        }
+    }
 }

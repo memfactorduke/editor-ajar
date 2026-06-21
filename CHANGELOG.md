@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Metal-backed program monitor playback in the macOS app for the synthetic single-clip sequence
+  (FR-PLAY-001/003), including display-link play/pause, stepping, and scrubbing.
 - `ajar render --frame` PNG output plus the first manifest-driven golden-frame gate in CI
   (TESTING §2, ADR-0011, NFR-QUAL-001).
 - `AjarRender` Metal render graph executor for single-clip composites with content-hash frame

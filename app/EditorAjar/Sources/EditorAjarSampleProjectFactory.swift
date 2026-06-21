@@ -1,0 +1,237 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import AVFoundation
+import AjarCore
+import CoreVideo
+import Foundation
+
+enum EditorAjarSampleProjectFactory {
+    static func makeSampleProject() throws -> Project {
+        let frameRate = try FrameRate(frames: 30)
+        let width = 320
+        let height = 180
+        let frameCount: Int64 = 90
+        let mediaURL = try sampleMovieURL()
+        try writeMovie(
+            to: mediaURL,
+            width: width,
+            height: height,
+            frameCount: Int(frameCount),
+            frameRate: Int32(frameRate.frames)
+        )
+
+        let duration = try frameRate.duration(ofFrames: frameCount)
+        let mediaID = try uuid("00000000-0000-0000-0000-000000000025")
+        let clipID = try uuid("00000000-0000-0000-0000-000000000125")
+        let media = MediaRef(
+            id: mediaID,
+            sourceURL: mediaURL,
+            contentHash: ContentHash.sha256(data: Data("editor-ajar-sample-playback".utf8)),
+            metadata: MediaMetadata(
+                codecID: "prores4444",
+                pixelDimensions: PixelDimensions(width: width, height: height),
+                frameRate: frameRate,
+                duration: duration,
+                colorSpace: .rec709,
+                audioChannelLayout: nil,
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        let clip = Clip(
+            id: clipID,
+            source: .media(id: mediaID),
+            sourceRange: try TimeRange(start: .zero, duration: duration),
+            timelineRange: try TimeRange(start: .zero, duration: duration),
+            kind: .video,
+            name: "Sample Playback Clip"
+        )
+        let sequence = Sequence(
+            id: try uuid("00000000-0000-0000-0000-000000000225"),
+            name: "Sample Playback Sequence",
+            videoTracks: [
+                Track(
+                    id: try uuid("00000000-0000-0000-0000-000000000325"),
+                    kind: .video,
+                    items: [.clip(clip)]
+                )
+            ],
+            audioTracks: [
+                Track(
+                    id: try uuid("00000000-0000-0000-0000-000000000425"),
+                    kind: .audio,
+                    items: []
+                )
+            ],
+            markers: [],
+            timebase: frameRate
+        )
+
+        return Project(
+            schemaVersion: 1,
+            settings: ProjectSettings(
+                frameRate: frameRate,
+                resolution: PixelDimensions(width: width, height: height),
+                colorSpace: .rec709,
+                audioSampleRate: 48_000
+            ),
+            mediaPool: [media],
+            sequences: [sequence]
+        )
+    }
+
+    private static func sampleMovieURL() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("editor-ajar-sample-media", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("single-clip-playback.mov")
+    }
+
+    private static func writeMovie(
+        to url: URL,
+        width: Int,
+        height: Int,
+        frameCount: Int,
+        frameRate: Int32
+    ) throws {
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        var outputSettings: [String: Any] = [:]
+        outputSettings[AVVideoCodecKey] = AVVideoCodecType.proRes4444
+        outputSettings[AVVideoWidthKey] = width
+        outputSettings[AVVideoHeightKey] = height
+
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: outputSettings)
+        input.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input,
+            sourcePixelBufferAttributes: pixelBufferAttributes(width: width, height: height)
+        )
+
+        guard writer.canAdd(input) else {
+            throw EditorAjarSampleProjectError.cannotAddVideoInput
+        }
+        writer.add(input)
+        guard writer.startWriting() else {
+            throw EditorAjarSampleProjectError.writerFailed(writer.errorDescription)
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        for frameIndex in 0..<frameCount {
+            let pixelBuffer = try makePixelBuffer(width: width, height: height, frameIndex: frameIndex)
+            let presentationTime = CMTime(value: Int64(frameIndex), timescale: frameRate)
+            guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
+                throw EditorAjarSampleProjectError.writerFailed(writer.errorDescription)
+            }
+        }
+
+        input.markAsFinished()
+        let semaphore = DispatchSemaphore(value: 0)
+        writer.finishWriting {
+            semaphore.signal()
+        }
+        semaphore.wait()
+
+        guard writer.status == .completed else {
+            throw EditorAjarSampleProjectError.writerFailed(writer.errorDescription)
+        }
+    }
+
+    private static func pixelBufferAttributes(width: Int, height: Int) -> [String: Any] {
+        var attributes: [String: Any] = [:]
+        attributes[kCVPixelBufferPixelFormatTypeKey as String] = kCVPixelFormatType_32BGRA
+        attributes[kCVPixelBufferWidthKey as String] = width
+        attributes[kCVPixelBufferHeightKey as String] = height
+        attributes[kCVPixelBufferMetalCompatibilityKey as String] = true
+        attributes[kCVPixelBufferIOSurfacePropertiesKey as String] = [:]
+        return attributes
+    }
+
+    private static func makePixelBuffer(
+        width: Int,
+        height: Int,
+        frameIndex: Int
+    ) throws -> CVPixelBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        let result = CVPixelBufferCreate(
+            nil,
+            width,
+            height,
+            kCVPixelFormatType_32BGRA,
+            pixelBufferAttributes(width: width, height: height) as CFDictionary,
+            &pixelBuffer
+        )
+
+        guard result == kCVReturnSuccess, let pixelBuffer else {
+            throw EditorAjarSampleProjectError.pixelBufferCreationFailed(result)
+        }
+
+        try fill(pixelBuffer: pixelBuffer, frameIndex: frameIndex)
+        return pixelBuffer
+    }
+
+    private static func fill(pixelBuffer: CVPixelBuffer, frameIndex: Int) throws {
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        defer {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+        }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
+            throw EditorAjarSampleProjectError.missingBaseAddress
+        }
+
+        let rowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let bytes = baseAddress.bindMemory(to: UInt8.self, capacity: rowBytes * height)
+
+        for yPosition in 0..<height {
+            for xPosition in 0..<width {
+                let offset = yPosition * rowBytes + xPosition * 4
+                bytes[offset] = UInt8((xPosition + frameIndex * 3) % 256)
+                bytes[offset + 1] = UInt8((yPosition * 2 + frameIndex * 5) % 256)
+                bytes[offset + 2] = UInt8((180 + frameIndex * 2) % 256)
+                bytes[offset + 3] = 255
+            }
+        }
+    }
+
+    private static func uuid(_ value: String) throws -> UUID {
+        guard let uuid = UUID(uuidString: value) else {
+            throw EditorAjarSampleProjectError.invalidFixtureUUID(value)
+        }
+        return uuid
+    }
+}
+
+enum EditorAjarSampleProjectError: Error, CustomStringConvertible {
+    case invalidFixtureUUID(String)
+    case cannotAddVideoInput
+    case writerFailed(String)
+    case pixelBufferCreationFailed(Int32)
+    case missingBaseAddress
+
+    var description: String {
+        switch self {
+        case .invalidFixtureUUID(let value):
+            "invalid sample UUID \(value)"
+        case .cannotAddVideoInput:
+            "sample movie writer cannot add video input"
+        case .writerFailed(let message):
+            "sample movie writer failed: \(message)"
+        case .pixelBufferCreationFailed(let code):
+            "sample pixel buffer creation failed with code \(code)"
+        case .missingBaseAddress:
+            "sample pixel buffer has no base address"
+        }
+    }
+}
+
+private extension AVAssetWriter {
+    var errorDescription: String {
+        error.map(String.init(describing:)) ?? "unknown writer error"
+    }
+}

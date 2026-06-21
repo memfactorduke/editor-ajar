@@ -26,6 +26,10 @@ targets:
     dependencies:
       - package: EditorAjarPackage
         product: AjarCore
+      - package: EditorAjarPackage
+        product: AjarRender
+      - package: EditorAjarPackage
+        product: AjarMedia
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

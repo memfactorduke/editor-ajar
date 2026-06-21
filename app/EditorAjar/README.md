@@ -21,8 +21,9 @@ The generated project is checked in:
 open app/EditorAjar/EditorAjar.xcodeproj
 ```
 
-Then select the `EditorAjar` scheme and run it. The shell opens a sample `AjarCore.Project` and
-shows the M2 NLE skeleton: media/effects panel, program monitor, inspector, transport, and timeline.
+Then select the `EditorAjar` scheme and run it. The shell opens a synthetic single-clip
+`AjarCore.Project`, decodes it through `AjarMedia`, renders it through `AjarRender`, and presents
+the resulting Metal texture in the program monitor.
 
 To regenerate the project after editing `project.yml`:
 
@@ -39,7 +40,8 @@ xcodebuild -project app/EditorAjar/EditorAjar.xcodeproj -scheme EditorAjar -dest
 
 ## M2 controls
 
-- Play/pause button: toggles the app shell playback state.
-- Step backward / step forward buttons: move one frame and pause playback.
+- Play/pause button: starts or stops the display-link playback loop (FR-PLAY-001).
+- Step backward / step forward buttons: move one frame, render that frame, and pause playback.
+- Scrub slider: moves the playhead to the selected frame and renders it (FR-PLAY-003).
 - Keyboard: space toggles play/pause; left/right arrows step by one frame.
 - Accessibility: transport controls and panels are VoiceOver-labelled for NFR-A11Y-001.
