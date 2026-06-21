@@ -4,7 +4,15 @@ import SwiftUI
 
 @main
 struct EditorAjarApp: App {
-    @StateObject private var model = EditorAjarAppModel()
+    @StateObject private var model: EditorAjarAppModel
+
+    init() {
+        _model = StateObject(
+            wrappedValue: EditorAjarAppModel(
+                autosavePackageURL: EditorAjarAppModel.defaultAutosavePackageURL()
+            )
+        )
+    }
 
     var body: some Scene {
         WindowGroup {

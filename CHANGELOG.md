@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` auto-save snapshot, command journal, and best-effort recovery helpers with app
+  launch/checkpoint wiring for FR-TL-014 and NFR-STAB-002.
 - Timeline zoom, selection, range, and snapping interaction state in the macOS app with pure
   helper tests for FR-TL-006/007/010.
 - Multi-track timeline lanes in the macOS app with reducer-backed track enable, lock, hide,

@@ -250,6 +250,58 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(model.timelineSnappingEnabled)
     }
 
+    func testFRTL014NFRSTAB002AppLaunchRecoversAutosavePackage() throws {
+        let packageURL = try temporaryAutosavePackageURL(named: "LaunchRecovery.ajar")
+        defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
+
+        let sampleProject = try EditorAjarAppModel.makeSampleProject().get()
+        let command = try autosaveTrackStateCommand(project: sampleProject)
+        let recoveredProject = try apply(command, to: sampleProject)
+        try AjarAutosaveStore.writeSnapshot(
+            sampleProject,
+            appliedCommandCount: 0,
+            to: packageURL
+        )
+        try AjarAutosaveStore.appendJournalEntry(
+            command: command,
+            sequenceNumber: 1,
+            to: packageURL
+        )
+
+        let model = EditorAjarAppModel(
+            autosavePackageURL: packageURL,
+            autosaveIntervalSeconds: 0
+        )
+
+        XCTAssertEqual(model.project, recoveredProject)
+    }
+
+    func testFRTL014AppAutosavesSignificantEditToRecoverablePackage() async throws {
+        let packageURL = try temporaryAutosavePackageURL(named: "EditAutosave.ajar")
+        defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
+
+        let model = EditorAjarAppModel(
+            autosavePackageURL: packageURL,
+            autosaveIntervalSeconds: 0
+        )
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: videoTrack.id,
+            enabled: false,
+            locked: true,
+            hidden: true
+        )
+        await model.autosaveCheckpointForTesting()
+
+        let recovered = try AjarAutosaveStore.recoverProject(from: packageURL)
+        XCTAssertTrue(recovered.isComplete)
+        XCTAssertEqual(recovered.latestCommandCount, 1)
+        XCTAssertEqual(recovered.project, model.project)
+    }
+
     private func makeInteractionSequence() throws -> AjarCore.Sequence {
         let frameRate = try FrameRate(frames: 30)
         let trackID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000a001"))
@@ -317,5 +369,25 @@ final class EditorAjarAppModelTests: XCTestCase {
             kind: .video,
             name: name
         )
+    }
+
+    private func autosaveTrackStateCommand(project: Project) throws -> EditCommand {
+        let sequence = try XCTUnwrap(project.sequences.first)
+        let track = try XCTUnwrap(sequence.videoTracks.first)
+        return .setTrackState(
+            sequenceID: sequence.id,
+            trackID: track.id,
+            state: TrackStatePatch(enabled: false, locked: true, hidden: true)
+        )
+    }
+
+    private func temporaryAutosavePackageURL(named name: String) throws -> URL {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("editor-ajar-app-autosave-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: true
+        )
+        return directoryURL.appendingPathComponent(name, isDirectory: true)
     }
 }
