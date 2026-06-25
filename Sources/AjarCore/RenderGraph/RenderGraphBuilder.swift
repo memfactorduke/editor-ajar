@@ -104,7 +104,7 @@ public enum RenderGraphBuilder {
             RenderCompositeNodeInput(
                 node: try sourceNode(for: clip, at: time, in: project),
                 transform: clip.transformAnimation.value(at: time),
-                effects: clip.effects
+                effects: clip.effectsAnimation.value(at: time)
             )
         }
         let compositeNode = try RenderNodeFactory.makeCompositeNode(

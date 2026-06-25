@@ -1,0 +1,84 @@
+{
+  "clips" : [
+    {
+      "effects" : {
+        "chromaKey" : {
+          "choke" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "edgeSoftness" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "enabled" : true,
+          "keyColor" : {
+            "blue" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "green" : {
+              "denominator" : 1,
+              "numerator" : 1
+            },
+            "red" : {
+              "denominator" : 1,
+              "numerator" : 0
+            }
+          },
+          "spillSuppression" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "tolerance" : {
+            "denominator" : 10,
+            "numerator" : 1
+          },
+          "viewMatte" : true
+        }
+      },
+      "syntheticMedia" : {
+        "bgra" : [
+          0,
+          0,
+          0,
+          0
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "pixelsBGRA" : [
+          0,
+          255,
+          0,
+          255,
+          0,
+          0,
+          255,
+          255
+        ],
+        "width" : 2
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "chroma-key-view-matte",
+  "outputDimensions" : {
+    "height" : 1,
+    "width" : 2
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-001",
+    "FR-COMP-002",
+    "ADR-0006",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

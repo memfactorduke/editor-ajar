@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarRender` GPU chroma-key shader with linear-light matte evaluation, de-spill, choke,
+  view-matte preview, evaluated effect cache keys, and golden coverage for FR-COMP-001/002.
 - `AjarRender` linear-light compositing with half-float working textures, explicit color-space
   transfer/primary conversion, cache-key color metadata, and golden coverage for FR-COMP-007,
   FR-COL-005/008, ADR-0010, and NFR-QUAL-002.

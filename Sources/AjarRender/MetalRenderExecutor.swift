@@ -343,6 +343,7 @@ public final class MetalRenderExecutor {
         let source: RenderSourceNode
         let texture: MTLTexture
         let transform: ClipTransform
+        let effects: ClipEffects
         let sourceColorSpace: MediaColorSpace
     }
 
@@ -364,6 +365,7 @@ public final class MetalRenderExecutor {
                 source: source,
                 texture: try sourceProvider.texture(for: source),
                 transform: input.transform,
+                effects: input.effects,
                 sourceColorSpace: source.colorSpace
             )
         } catch {
@@ -439,8 +441,11 @@ public final class MetalRenderExecutor {
             transform: sourceInput.transform,
             sourceTexture: sourceInput.texture,
             outputTexture: outputTexture,
-            sourceColorSpace: sourceInput.sourceColorSpace,
-            workingColorSpace: composite.workingColorSpace
+            colorPipeline: CompositeColorPipeline(
+                source: sourceInput.sourceColorSpace,
+                working: composite.workingColorSpace
+            ),
+            effects: sourceInput.effects
         )
         encoder.setFragmentTexture(sourceInput.texture, index: 0)
         encoder.setFragmentTexture(destinationTexture, index: 1)
@@ -583,10 +588,11 @@ public final class MetalRenderExecutor {
         transform: ClipTransform,
         sourceTexture: MTLTexture,
         outputTexture: MTLTexture,
-        sourceColorSpace: MediaColorSpace,
-        workingColorSpace: MediaColorSpace
+        colorPipeline: CompositeColorPipeline,
+        effects: ClipEffects
     ) -> AjarCompositeUniforms {
-        AjarCompositeUniforms(
+        let chromaKey = effects.chromaKey
+        return AjarCompositeUniforms(
             outputSize: SIMD2<Float>(Float(outputTexture.width), Float(outputTexture.height)),
             sourceSize: SIMD2<Float>(Float(sourceTexture.width), Float(sourceTexture.height)),
             position: simdPoint(transform.position),
@@ -603,10 +609,26 @@ public final class MetalRenderExecutor {
             flipHorizontal: transform.flip.horizontal ? 1 : 0,
             flipVertical: transform.flip.vertical ? 1 : 0,
             blendMode: blendModeValue(transform.blendMode),
-            sourceTransfer: colorTransferValue(sourceColorSpace),
-            sourcePrimaries: colorPrimariesValue(sourceColorSpace),
-            workingPrimaries: colorPrimariesValue(workingColorSpace),
-            padding: 0
+            sourceTransfer: colorTransferValue(colorPipeline.source),
+            sourcePrimaries: colorPrimariesValue(colorPipeline.source),
+            workingPrimaries: colorPrimariesValue(colorPipeline.working),
+            padding: 0,
+            chromaKeyColorAndTolerance: SIMD4<Float>(
+                clamp01(floatValue(chromaKey.keyColor.red)),
+                clamp01(floatValue(chromaKey.keyColor.green)),
+                clamp01(floatValue(chromaKey.keyColor.blue)),
+                clamp01(floatValue(chromaKey.tolerance))
+            ),
+            chromaKeyControls: SIMD4<Float>(
+                chromaKey.enabled ? 1.0 : 0.0,
+                clamp01(floatValue(chromaKey.edgeSoftness)),
+                clamp01(floatValue(chromaKey.spillSuppression)),
+                clamp01(floatValue(chromaKey.choke))
+            ),
+            chromaKeyMode: chromaKey.viewMatte ? 1 : 0,
+            chromaKeyPadding0: 0,
+            chromaKeyPadding1: 0,
+            chromaKeyPadding2: 0
         )
     }
 
@@ -688,6 +710,11 @@ public final class MetalRenderExecutor {
         let pixelFormatRawValue: UInt
     }
 
+    private struct CompositeColorPipeline {
+        let source: MediaColorSpace
+        let working: MediaColorSpace
+    }
+
     private struct AjarCompositeUniforms {
         var outputSize: SIMD2<Float>
         var sourceSize: SIMD2<Float>
@@ -704,6 +731,12 @@ public final class MetalRenderExecutor {
         var sourcePrimaries: UInt32
         var workingPrimaries: UInt32
         var padding: UInt32
+        var chromaKeyColorAndTolerance: SIMD4<Float>
+        var chromaKeyControls: SIMD4<Float>
+        var chromaKeyMode: UInt32
+        var chromaKeyPadding0: UInt32
+        var chromaKeyPadding1: UInt32
+        var chromaKeyPadding2: UInt32
     }
 
     private struct AjarPresentUniforms {
@@ -762,6 +795,12 @@ public final class MetalRenderExecutor {
             uint sourcePrimaries;
             uint workingPrimaries;
             uint padding;
+            float4 chromaKeyColorAndTolerance;
+            float4 chromaKeyControls;
+            uint chromaKeyMode;
+            uint chromaKeyPadding0;
+            uint chromaKeyPadding1;
+            uint chromaKeyPadding2;
         };
 
         struct AjarPresentUniforms {
@@ -938,6 +977,70 @@ public final class MetalRenderExecutor {
             return saturate(float4(outputRGB, outputAlpha));
         }
 
+        static float ajar_key_alpha(float distance, float tolerance, float edgeSoftness) {
+            float width = max(edgeSoftness, 0.0001);
+            float alpha = saturate((distance - tolerance) / width);
+            return alpha * alpha * (3.0 - (2.0 * alpha));
+        }
+
+        static float ajar_apply_choke(float alpha, float choke) {
+            if (choke <= 0.0) {
+                return alpha;
+            }
+            return saturate((alpha - choke) / max(1.0 - choke, 0.0001));
+        }
+
+        static float3 ajar_chroma_key_color(
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            float3 encoded = uniforms.chromaKeyColorAndTolerance.rgb;
+            return ajar_source_to_working_linear(encoded, uniforms);
+        }
+
+        static float ajar_chroma_matte_alpha(
+            float3 sourceLinear,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            if (uniforms.chromaKeyControls.x <= 0.0) {
+                return 1.0;
+            }
+
+            float3 keyColor = ajar_chroma_key_color(uniforms);
+            float distanceFromKey = distance(saturate(sourceLinear), saturate(keyColor));
+            float alpha = ajar_key_alpha(
+                distanceFromKey,
+                uniforms.chromaKeyColorAndTolerance.a,
+                uniforms.chromaKeyControls.y
+            );
+            return ajar_apply_choke(alpha, uniforms.chromaKeyControls.w);
+        }
+
+        static float3 ajar_despill(
+            float3 sourceLinear,
+            float3 keyColor,
+            float amount
+        ) {
+            if (amount <= 0.0) {
+                return sourceLinear;
+            }
+
+            float3 result = sourceLinear;
+            if (keyColor.g >= keyColor.r && keyColor.g >= keyColor.b) {
+                float replacement = max(result.r, result.b);
+                result.g = mix(result.g, min(result.g, replacement), amount);
+                return result;
+            }
+            if (keyColor.b >= keyColor.r && keyColor.b >= keyColor.g) {
+                float replacement = max(result.r, result.g);
+                result.b = mix(result.b, min(result.b, replacement), amount);
+                return result;
+            }
+
+            float replacement = max(result.g, result.b);
+            result.r = mix(result.r, min(result.r, replacement), amount);
+            return result;
+        }
+
         fragment float4 ajar_transform_fragment(
             AjarVertexOut in [[stage_in]],
             texture2d<float> sourceTexture [[texture(0)]],
@@ -979,8 +1082,21 @@ public final class MetalRenderExecutor {
             }
 
             float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
-            float sourceAlpha = saturate(sampledSource.a * uniforms.opacity);
             float3 sourceLinear = ajar_source_to_working_linear(sampledSource.rgb, uniforms);
+            float matteAlpha = ajar_chroma_matte_alpha(sourceLinear, uniforms);
+            if (uniforms.chromaKeyMode != 0) {
+                return ajar_composite(float4(float3(matteAlpha), 1.0), destination, 0);
+            }
+
+            if (uniforms.chromaKeyControls.x > 0.0) {
+                sourceLinear = ajar_despill(
+                    sourceLinear,
+                    ajar_chroma_key_color(uniforms),
+                    uniforms.chromaKeyControls.z
+                );
+            }
+
+            float sourceAlpha = saturate(sampledSource.a * uniforms.opacity * matteAlpha);
             float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
             return ajar_composite(source, destination, uniforms.blendMode);
         }
