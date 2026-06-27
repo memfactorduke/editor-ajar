@@ -592,6 +592,7 @@ public final class MetalRenderExecutor {
         effects: ClipEffects
     ) -> AjarCompositeUniforms {
         let chromaKey = effects.chromaKey
+        let lumaKey = effects.lumaKey
         let colorCorrection = colorCorrectionUniforms(effects.colorCorrection)
         let masks = maskUniforms(effects.masks)
         return AjarCompositeUniforms(
@@ -615,22 +616,14 @@ public final class MetalRenderExecutor {
             sourcePrimaries: colorPrimariesValue(colorPipeline.source),
             workingPrimaries: colorPrimariesValue(colorPipeline.working),
             padding: 0,
-            chromaKeyColorAndTolerance: SIMD4<Float>(
-                clamp01(floatValue(chromaKey.keyColor.red)),
-                clamp01(floatValue(chromaKey.keyColor.green)),
-                clamp01(floatValue(chromaKey.keyColor.blue)),
-                clamp01(floatValue(chromaKey.tolerance))
-            ),
-            chromaKeyControls: SIMD4<Float>(
-                chromaKey.enabled ? 1.0 : 0.0,
-                clamp01(floatValue(chromaKey.edgeSoftness)),
-                clamp01(floatValue(chromaKey.spillSuppression)),
-                clamp01(floatValue(chromaKey.choke))
-            ),
+            chromaKeyColorAndTolerance: chromaKeyColorAndTolerance(chromaKey),
+            chromaKeyControls: chromaKeyControls(chromaKey),
             chromaKeyMode: chromaKey.viewMatte ? 1 : 0,
             chromaKeyPadding0: 0,
             chromaKeyPadding1: 0,
             chromaKeyPadding2: 0,
+            lumaKeyThresholds: lumaKeyThresholds(lumaKey),
+            lumaKeyControls: lumaKeyControls(lumaKey),
             colorCorrectionControls: colorCorrection.controls,
             colorCorrectionWhiteBalance: colorCorrection.whiteBalance,
             colorCorrectionLift: colorCorrection.lift,
@@ -644,6 +637,42 @@ public final class MetalRenderExecutor {
             mask1: masks[1],
             mask2: masks[2],
             mask3: masks[3]
+        )
+    }
+
+    private func chromaKeyColorAndTolerance(_ key: ClipChromaKeySettings) -> SIMD4<Float> {
+        SIMD4<Float>(
+            clamp01(floatValue(key.keyColor.red)),
+            clamp01(floatValue(key.keyColor.green)),
+            clamp01(floatValue(key.keyColor.blue)),
+            clamp01(floatValue(key.tolerance))
+        )
+    }
+
+    private func chromaKeyControls(_ key: ClipChromaKeySettings) -> SIMD4<Float> {
+        SIMD4<Float>(
+            key.enabled ? 1.0 : 0.0,
+            clamp01(floatValue(key.edgeSoftness)),
+            clamp01(floatValue(key.spillSuppression)),
+            clamp01(floatValue(key.choke))
+        )
+    }
+
+    private func lumaKeyThresholds(_ key: ClipLumaKeySettings) -> SIMD4<Float> {
+        SIMD4<Float>(
+            clamp01(floatValue(key.lowThreshold)),
+            clamp01(floatValue(key.highThreshold)),
+            clamp01(floatValue(key.softness)),
+            0
+        )
+    }
+
+    private func lumaKeyControls(_ key: ClipLumaKeySettings) -> SIMD4<Float> {
+        SIMD4<Float>(
+            key.enabled ? 1.0 : 0.0,
+            key.invert ? 1.0 : 0.0,
+            0,
+            0
         )
     }
 
@@ -904,6 +933,8 @@ public final class MetalRenderExecutor {
         var chromaKeyPadding0: UInt32
         var chromaKeyPadding1: UInt32
         var chromaKeyPadding2: UInt32
+        var lumaKeyThresholds: SIMD4<Float>
+        var lumaKeyControls: SIMD4<Float>
         var colorCorrectionControls: SIMD4<Float>
         var colorCorrectionWhiteBalance: SIMD4<Float>
         var colorCorrectionLift: SIMD4<Float>
@@ -1037,6 +1068,8 @@ public final class MetalRenderExecutor {
             uint chromaKeyPadding0;
             uint chromaKeyPadding1;
             uint chromaKeyPadding2;
+            float4 lumaKeyThresholds;
+            float4 lumaKeyControls;
             float4 colorCorrectionControls;
             float4 colorCorrectionWhiteBalance;
             float4 colorCorrectionLift;
@@ -1262,6 +1295,30 @@ public final class MetalRenderExecutor {
                 uniforms.chromaKeyControls.y
             );
             return ajar_apply_choke(alpha, uniforms.chromaKeyControls.w);
+        }
+
+        static float ajar_luma_matte_alpha(
+            float3 sourceLinear,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            if (uniforms.lumaKeyControls.x <= 0.0) {
+                return 1.0;
+            }
+
+            constexpr float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
+            float lowThreshold = saturate(uniforms.lumaKeyThresholds.x);
+            float highThreshold = max(lowThreshold, saturate(uniforms.lumaKeyThresholds.y));
+            float softness = saturate(uniforms.lumaKeyThresholds.z);
+            float luma = dot(saturate(sourceLinear), lumaWeights);
+            float outsideDistance = max(lowThreshold - luma, luma - highThreshold);
+            float alpha = outsideDistance > 0.0 ? 1.0 : 0.0;
+            if (softness > 0.0 && outsideDistance > 0.0) {
+                alpha = smoothstep(0.0, softness, outsideDistance);
+            }
+            if (uniforms.lumaKeyControls.y > 0.0) {
+                alpha = 1.0 - alpha;
+            }
+            return saturate(alpha);
         }
 
         static float3 ajar_despill(
@@ -1522,8 +1579,13 @@ public final class MetalRenderExecutor {
             }
 
             float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
-            float3 sourceLinear = ajar_source_to_working_linear(sampledSource.rgb, uniforms);
-            float matteAlpha = ajar_chroma_matte_alpha(sourceLinear, uniforms);
+            float sourceTextureAlpha = saturate(sampledSource.a);
+            float3 sourceEncoded = sourceTextureAlpha > 0.00001
+                ? saturate(sampledSource.rgb / sourceTextureAlpha)
+                : float3(0.0);
+            float3 sourceLinear = ajar_source_to_working_linear(sourceEncoded, uniforms);
+            float matteAlpha = ajar_chroma_matte_alpha(sourceLinear, uniforms)
+                * ajar_luma_matte_alpha(sourceLinear, uniforms);
             float maskAlpha = ajar_masks_matte_alpha(localPoint, uniforms);
             float combinedMatteAlpha = matteAlpha * maskAlpha;
             if (uniforms.chromaKeyMode != 0) {
@@ -1539,7 +1601,9 @@ public final class MetalRenderExecutor {
             }
             sourceLinear = ajar_apply_color_correction(sourceLinear, uniforms);
 
-            float sourceAlpha = saturate(sampledSource.a * uniforms.opacity * combinedMatteAlpha);
+            float sourceAlpha = saturate(
+                sourceTextureAlpha * uniforms.opacity * combinedMatteAlpha
+            );
             float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
             return ajar_composite(source, destination, uniforms.blendMode);
         }

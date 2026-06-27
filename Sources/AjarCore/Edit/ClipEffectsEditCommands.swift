@@ -10,6 +10,13 @@ extension EditReducer {
         let settings: ClipChromaKeySettings
     }
 
+    struct SetClipLumaKeyEdit {
+        let sequenceID: UUID
+        let trackID: UUID
+        let clipID: UUID
+        let settings: ClipLumaKeySettings
+    }
+
     struct SetClipColorCorrectionEdit {
         let sequenceID: UUID
         let trackID: UUID
@@ -56,6 +63,34 @@ extension EditReducer {
             in: project
         ) { clip in
             clip.effects.replacing(chromaKey: edit.settings)
+        }
+    }
+
+    static func setClipLumaKey(
+        _ edit: SetClipLumaKeyEdit,
+        in project: Project
+    ) throws -> Project {
+        try updateClipEffects(
+            sequenceID: edit.sequenceID,
+            trackID: edit.trackID,
+            clipID: edit.clipID,
+            in: project
+        ) { clip in
+            clip.effects.replacing(lumaKey: edit.settings)
+        }
+    }
+
+    static func clearClipLumaKey(
+        _ edit: ClipEffectsEditTarget,
+        in project: Project
+    ) throws -> Project {
+        try updateClipEffects(
+            sequenceID: edit.sequenceID,
+            trackID: edit.trackID,
+            clipID: edit.clipID,
+            in: project
+        ) { clip in
+            clip.effects.replacing(lumaKey: .disabled)
         }
     }
 

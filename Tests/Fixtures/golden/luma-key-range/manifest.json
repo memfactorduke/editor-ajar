@@ -1,0 +1,88 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          255,
+          0,
+          0,
+          255
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 4
+      }
+    },
+    {
+      "effects" : {
+        "lumaKey" : {
+          "enabled" : true,
+          "highThreshold" : {
+            "denominator" : 4,
+            "numerator" : 3
+          },
+          "invert" : false,
+          "lowThreshold" : {
+            "denominator" : 4,
+            "numerator" : 1
+          },
+          "softness" : {
+            "denominator" : 1,
+            "numerator" : 0
+          }
+        }
+      },
+      "syntheticMedia" : {
+        "bgra" : [
+          0,
+          0,
+          0,
+          0
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "pixelsBGRA" : [
+          0,
+          0,
+          0,
+          255,
+          96,
+          96,
+          96,
+          255,
+          180,
+          180,
+          180,
+          255,
+          255,
+          255,
+          255,
+          255
+        ],
+        "width" : 4
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "luma-key-range",
+  "outputDimensions" : {
+    "height" : 1,
+    "width" : 4
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-005",
+    "FR-COMP-007",
+    "ADR-0010",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

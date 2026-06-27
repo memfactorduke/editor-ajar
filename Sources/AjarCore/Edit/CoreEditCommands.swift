@@ -43,7 +43,7 @@ extension EditReducer {
             return try applyRangeClipCommand(command, to: project)
         case .setClipTransform, .addClipTransformKeyframe, .moveClipTransformKeyframe,
             .deleteClipTransformKeyframe, .setClipChromaKey, .setClipColorCorrection,
-            .clearClipColorCorrection:
+            .clearClipColorCorrection, .setClipLumaKey, .clearClipLumaKey:
             return try applyTransformClipCommand(command, to: project)
         case .addClipMask, .removeClipMask, .moveClipMask, .setClipMask:
             return try applyClipMaskCommand(command, to: project)

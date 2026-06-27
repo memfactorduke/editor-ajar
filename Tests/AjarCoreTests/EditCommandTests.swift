@@ -394,8 +394,50 @@ private func makeTransformCommandCases(
             )
         )
     ] + (try makeTransformKeyframeCommandCases(fixture: fixture))
+        + (try makeLumaKeyCommandCases(fixture: fixture))
         + (try makeColorCorrectionCommandCases(fixture: fixture))
         + (try makeMaskCommandCases(fixture: fixture))
+}
+
+private func makeLumaKeyCommandCases(
+    fixture: EditFixture
+) throws -> [EditCommandCase] {
+    let settings = ClipLumaKeySettings(
+        enabled: true,
+        lowThreshold: try RationalValue(numerator: 1, denominator: 5),
+        highThreshold: try RationalValue(numerator: 4, denominator: 5),
+        softness: try RationalValue(numerator: 1, denominator: 10),
+        invert: true
+    )
+    let lumaKeyProject = try apply(
+        .setClipLumaKey(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clipID: fixture.clipID,
+            settings: settings
+        ),
+        to: fixture.project
+    )
+
+    return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .setClipLumaKey(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                settings: settings
+            )
+        ),
+        EditCommandCase(
+            project: lumaKeyProject,
+            command: .clearClipLumaKey(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID
+            )
+        )
+    ]
 }
 
 private func makeColorCorrectionCommandCases(
