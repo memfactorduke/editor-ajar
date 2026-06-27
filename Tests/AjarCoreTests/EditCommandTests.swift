@@ -394,6 +394,104 @@ private func makeTransformCommandCases(
             )
         )
     ] + (try makeTransformKeyframeCommandCases(fixture: fixture))
+        + (try makeMaskCommandCases(fixture: fixture))
+}
+
+private func makeMaskCommandCases(
+    fixture: EditFixture
+) throws -> [EditCommandCase] {
+    let context = try makeUndoMaskCommandContext(fixture: fixture)
+
+    return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .addClipMask(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                mask: context.firstMask
+            )
+        ),
+        EditCommandCase(
+            project: context.projectWithFirstMask,
+            command: .setClipMask(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                mask: context.replacementMask
+            )
+        ),
+        EditCommandCase(
+            project: context.projectWithTwoMasks,
+            command: .moveClipMask(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                maskID: context.firstMask.id,
+                destinationIndex: 1
+            )
+        ),
+        EditCommandCase(
+            project: context.projectWithTwoMasks,
+            command: .removeClipMask(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                maskID: context.secondMask.id
+            )
+        )
+    ]
+}
+
+private struct UndoMaskCommandContext {
+    let firstMask: ClipMask
+    let secondMask: ClipMask
+    let replacementMask: ClipMask
+    let projectWithFirstMask: Project
+    let projectWithTwoMasks: Project
+}
+
+private func makeUndoMaskCommandContext(
+    fixture: EditFixture
+) throws -> UndoMaskCommandContext {
+    let firstMask = makeUndoRectangleMask(id: try editUUID(910_100), x: 0, width: 10)
+    let secondMask = makeUndoRectangleMask(id: try editUUID(910_101), x: 2, width: 6)
+    let replacementMask = makeUndoRectangleMask(
+        id: firstMask.id,
+        x: 1,
+        width: 8,
+        invert: true
+    )
+    let projectWithFirstMask = try addingUndoMask(firstMask, to: fixture.project, fixture: fixture)
+    let projectWithTwoMasks = try addingUndoMask(
+        secondMask,
+        to: projectWithFirstMask,
+        fixture: fixture
+    )
+
+    return UndoMaskCommandContext(
+        firstMask: firstMask,
+        secondMask: secondMask,
+        replacementMask: replacementMask,
+        projectWithFirstMask: projectWithFirstMask,
+        projectWithTwoMasks: projectWithTwoMasks
+    )
+}
+
+private func addingUndoMask(
+    _ mask: ClipMask,
+    to project: Project,
+    fixture: EditFixture
+) throws -> Project {
+    try apply(
+        .addClipMask(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clipID: fixture.clipID,
+            mask: mask
+        ),
+        to: project
+    )
 }
 
 private func makeTransformKeyframeCommandCases(
@@ -585,4 +683,24 @@ private func makeProjectCommandCases(
         EditCommandCase(project: fixture.project, command: .setProjectSettings(settings))
     )
     return cases
+}
+
+private func makeUndoRectangleMask(
+    id: UUID,
+    x: Int64,
+    width: Int64,
+    invert: Bool = false
+) -> ClipMask {
+    ClipMask(
+        id: id,
+        shape: .rectangle(
+            ClipRectangleMask(
+                x: RationalValue(x),
+                y: .zero,
+                width: RationalValue(width),
+                height: RationalValue(10)
+            )
+        ),
+        invert: invert
+    )
 }

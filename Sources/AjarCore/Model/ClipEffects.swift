@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Foundation
+
 /// RGB color values stored in normalized 0...1 clip-effect space.
 public struct ClipRGBColor: Codable, Equatable, Sendable {
     /// Red channel.
@@ -230,17 +232,41 @@ public struct ClipEffects: Codable, Equatable, Sendable {
     /// Chroma-key settings.
     public let chromaKey: ClipChromaKeySettings
 
+    /// Ordered masks applied to the clip matte.
+    public let masks: [ClipMask]
+
+    private enum CodingKeys: String, CodingKey {
+        case chromaKey
+        case masks
+    }
+
     /// No active effects.
-    public static let none = ClipEffects(chromaKey: .disabled)
+    public static let none = ClipEffects(chromaKey: .disabled, masks: [])
 
     /// Creates clip effects.
-    public init(chromaKey: ClipChromaKeySettings = .disabled) {
+    public init(chromaKey: ClipChromaKeySettings = .disabled, masks: [ClipMask] = []) {
         self.chromaKey = chromaKey
+        self.masks = masks
+    }
+
+    /// Decodes clip effects from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        chromaKey = try container.decodeIfPresent(
+            ClipChromaKeySettings.self,
+            forKey: .chromaKey
+        ) ?? .disabled
+        masks = try container.decodeIfPresent([ClipMask].self, forKey: .masks) ?? []
     }
 
     /// Returns effects with a replacement chroma key while preserving other effect slots.
     public func replacing(chromaKey: ClipChromaKeySettings) -> ClipEffects {
-        ClipEffects(chromaKey: chromaKey)
+        ClipEffects(chromaKey: chromaKey, masks: masks)
+    }
+
+    /// Returns effects with a replacement mask list while preserving other effect slots.
+    public func replacing(masks: [ClipMask]) -> ClipEffects {
+        ClipEffects(chromaKey: chromaKey, masks: masks)
     }
 }
 
@@ -249,27 +275,58 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     /// Keyframable chroma-key controls.
     public let chromaKey: AnimatableClipChromaKeySettings
 
+    /// Keyframable masks.
+    public let masks: [AnimatableClipMask]
+
+    private enum CodingKeys: String, CodingKey {
+        case chromaKey
+        case masks
+    }
+
     /// No active effects.
-    public static let none = AnimatableClipEffects(chromaKey: .disabled)
+    public static let none = AnimatableClipEffects(chromaKey: .disabled, masks: [])
 
     /// Creates keyframable effects.
-    public init(chromaKey: AnimatableClipChromaKeySettings = .disabled) {
+    public init(
+        chromaKey: AnimatableClipChromaKeySettings = .disabled,
+        masks: [AnimatableClipMask] = []
+    ) {
         self.chromaKey = chromaKey
+        self.masks = masks
+    }
+
+    /// Decodes keyframable effects from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        chromaKey = try container.decodeIfPresent(
+            AnimatableClipChromaKeySettings.self,
+            forKey: .chromaKey
+        ) ?? .disabled
+        masks = try container.decodeIfPresent([AnimatableClipMask].self, forKey: .masks) ?? []
     }
 
     /// Creates keyframable effects with constant values.
     public static func constant(_ effects: ClipEffects) -> AnimatableClipEffects {
-        AnimatableClipEffects(chromaKey: .constant(effects.chromaKey))
+        AnimatableClipEffects(
+            chromaKey: .constant(effects.chromaKey),
+            masks: effects.masks.map(AnimatableClipMask.constant)
+        )
     }
 
     /// Evaluates all keyframable effects at a sequence time.
     public func value(at time: RationalTime) -> ClipEffects {
-        ClipEffects(chromaKey: chromaKey.value(at: time))
+        ClipEffects(
+            chromaKey: chromaKey.value(at: time),
+            masks: masks.map { mask in mask.value(at: time) }
+        )
     }
 
     /// Static effects represented by base keyframe values.
     public var baseEffects: ClipEffects {
-        ClipEffects(chromaKey: chromaKey.baseSettings)
+        ClipEffects(
+            chromaKey: chromaKey.baseSettings,
+            masks: masks.map { mask in mask.value(at: .zero) }
+        )
     }
 }
 
@@ -289,6 +346,21 @@ public enum ClipEffectsValidationError: Equatable, Sendable {
 
     /// Chroma-key choke must stay in the normalized 0...1 range.
     case chromaKeyChokeOutOfRange(RationalValue)
+
+    /// A clip has more masks than the M5 render path supports.
+    case clipMaskCountOutOfRange(count: Int, maximum: Int)
+
+    /// Mask feather radius must be non-negative.
+    case clipMaskFeatherRadiusNegative(maskID: UUID, RationalValue)
+
+    /// Rectangle mask width and height must be positive.
+    case clipMaskRectangleSizeInvalid(maskID: UUID)
+
+    /// Ellipse mask radii must be positive.
+    case clipMaskEllipseRadiusInvalid(maskID: UUID)
+
+    /// Polygon masks must have a supported point count.
+    case clipMaskPolygonPointCountInvalid(maskID: UUID, count: Int, maximum: Int)
 }
 
 enum ClipEffectsValidator {
@@ -316,6 +388,7 @@ enum ClipEffectsValidator {
             to: &errors,
             error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
         )
+        errors.append(contentsOf: ClipMaskValidator.errors(for: effects.masks))
 
         return errors
     }
@@ -343,6 +416,7 @@ enum ClipEffectsValidator {
             to: &errors,
             error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
         )
+        errors.append(contentsOf: ClipMaskValidator.errors(for: effects.masks))
 
         return errors
     }

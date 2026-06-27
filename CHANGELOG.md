@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` and `AjarRender` clip masks with rectangle, ellipse, and polygon/Bézier-point-list
+  shapes, feathering, invert, add/subtract/intersect combine modes, undoable reducer commands,
+  `.ajar` compatibility, render-graph cache invalidation, and golden coverage for FR-COMP-003.
 - `AjarRender` GPU chroma-key shader with linear-light matte evaluation, de-spill, choke,
   view-matte preview, evaluated effect cache keys, and golden coverage for FR-COMP-001/002.
 - `AjarRender` linear-light compositing with half-float working textures, explicit color-space

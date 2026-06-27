@@ -1,0 +1,93 @@
+{
+  "clips" : [
+    {
+      "effects" : {
+        "masks" : [
+          {
+            "combine" : "add",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "id" : "00000000-0000-0000-0000-000000000803",
+            "invert" : false,
+            "shape" : {
+              "polygon" : {
+                "_0" : {
+                  "points" : [
+                    {
+                      "x" : {
+                        "denominator" : 1,
+                        "numerator" : 0
+                      },
+                      "y" : {
+                        "denominator" : 1,
+                        "numerator" : 0
+                      }
+                    },
+                    {
+                      "x" : {
+                        "denominator" : 1,
+                        "numerator" : 2
+                      },
+                      "y" : {
+                        "denominator" : 1,
+                        "numerator" : 0
+                      }
+                    },
+                    {
+                      "x" : {
+                        "denominator" : 1,
+                        "numerator" : 2
+                      },
+                      "y" : {
+                        "denominator" : 1,
+                        "numerator" : 2
+                      }
+                    },
+                    {
+                      "x" : {
+                        "denominator" : 1,
+                        "numerator" : 0
+                      },
+                      "y" : {
+                        "denominator" : 1,
+                        "numerator" : 2
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "syntheticMedia" : {
+        "bgra" : [255, 255, 255, 255],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 3,
+        "width" : 3
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "mask-bezier-polygon",
+  "outputDimensions" : {
+    "height" : 3,
+    "width" : 3
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-003",
+    "ADR-0006",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

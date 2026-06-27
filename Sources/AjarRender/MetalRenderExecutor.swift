@@ -592,6 +592,7 @@ public final class MetalRenderExecutor {
         effects: ClipEffects
     ) -> AjarCompositeUniforms {
         let chromaKey = effects.chromaKey
+        let masks = maskUniforms(effects.masks)
         return AjarCompositeUniforms(
             outputSize: SIMD2<Float>(Float(outputTexture.width), Float(outputTexture.height)),
             sourceSize: SIMD2<Float>(Float(sourceTexture.width), Float(sourceTexture.height)),
@@ -628,8 +629,129 @@ public final class MetalRenderExecutor {
             chromaKeyMode: chromaKey.viewMatte ? 1 : 0,
             chromaKeyPadding0: 0,
             chromaKeyPadding1: 0,
-            chromaKeyPadding2: 0
+            chromaKeyPadding2: 0,
+            maskCount: UInt32(min(effects.masks.count, ClipMaskLimits.maximumMasksPerClip)),
+            maskPadding0: 0,
+            maskPadding1: 0,
+            maskPadding2: 0,
+            mask0: masks[0],
+            mask1: masks[1],
+            mask2: masks[2],
+            mask3: masks[3]
         )
+    }
+
+    private func maskUniforms(_ masks: [ClipMask]) -> [AjarMaskUniform] {
+        var uniforms = Array(
+            repeating: AjarMaskUniform.empty,
+            count: ClipMaskLimits.maximumMasksPerClip
+        )
+        for (index, mask) in masks.prefix(ClipMaskLimits.maximumMasksPerClip).enumerated() {
+            uniforms[index] = maskUniform(mask)
+        }
+        return uniforms
+    }
+
+    private func maskUniform(_ mask: ClipMask) -> AjarMaskUniform {
+        let shape = maskShapeUniform(mask.shape)
+        return AjarMaskUniform(
+            shapeKind: shape.kind,
+            combineMode: maskCombineMode(mask.combine),
+            invert: mask.invert ? 1 : 0,
+            pointCount: shape.pointCount,
+            featherRadius: max(floatValue(mask.featherRadius), 0),
+            maskPadding0: 0,
+            maskPadding1: 0,
+            maskPadding2: 0,
+            params0: shape.params0,
+            points0: shape.points0,
+            points1: shape.points1,
+            points2: shape.points2,
+            points3: shape.points3
+        )
+    }
+
+    private struct MaskShapeUniform {
+        let kind: UInt32
+        let pointCount: UInt32
+        let params0: SIMD4<Float>
+        let points0: SIMD4<Float>
+        let points1: SIMD4<Float>
+        let points2: SIMD4<Float>
+        let points3: SIMD4<Float>
+    }
+
+    private func maskShapeUniform(_ shape: ClipMaskShape) -> MaskShapeUniform {
+        switch shape {
+        case .rectangle(let rectangle):
+            let minX = floatValue(rectangle.x)
+            let minY = floatValue(rectangle.y)
+            return MaskShapeUniform(
+                kind: 1,
+                pointCount: 0,
+                params0: SIMD4<Float>(
+                    minX,
+                    minY,
+                    minX + floatValue(rectangle.width),
+                    minY + floatValue(rectangle.height)
+                ),
+                points0: .zero,
+                points1: .zero,
+                points2: .zero,
+                points3: .zero
+            )
+        case .ellipse(let ellipse):
+            return MaskShapeUniform(
+                kind: 2,
+                pointCount: 0,
+                params0: SIMD4<Float>(
+                    floatValue(ellipse.centerX),
+                    floatValue(ellipse.centerY),
+                    floatValue(ellipse.radiusX),
+                    floatValue(ellipse.radiusY)
+                ),
+                points0: .zero,
+                points1: .zero,
+                points2: .zero,
+                points3: .zero
+            )
+        case .polygon(let polygon):
+            let points = polygon.points.prefix(ClipMaskLimits.maximumPolygonPointCount)
+                .map(simdPoint)
+            return MaskShapeUniform(
+                kind: 3,
+                pointCount: UInt32(points.count),
+                params0: .zero,
+                points0: packedPoints(points, offset: 0),
+                points1: packedPoints(points, offset: 2),
+                points2: packedPoints(points, offset: 4),
+                points3: packedPoints(points, offset: 6)
+            )
+        }
+    }
+
+    private func packedPoints(_ points: [SIMD2<Float>], offset: Int) -> SIMD4<Float> {
+        let first = point(points, at: offset)
+        let second = point(points, at: offset + 1)
+        return SIMD4<Float>(first.x, first.y, second.x, second.y)
+    }
+
+    private func point(_ points: [SIMD2<Float>], at index: Int) -> SIMD2<Float> {
+        guard points.indices.contains(index) else {
+            return .zero
+        }
+        return points[index]
+    }
+
+    private func maskCombineMode(_ operation: ClipMaskCombineOperation) -> UInt32 {
+        switch operation {
+        case .add:
+            return 0
+        case .subtract:
+            return 1
+        case .intersect:
+            return 2
+        }
     }
 
     private func presentUniforms(composite: RenderCompositeNode) -> AjarPresentUniforms {
@@ -737,6 +859,46 @@ public final class MetalRenderExecutor {
         var chromaKeyPadding0: UInt32
         var chromaKeyPadding1: UInt32
         var chromaKeyPadding2: UInt32
+        var maskCount: UInt32
+        var maskPadding0: UInt32
+        var maskPadding1: UInt32
+        var maskPadding2: UInt32
+        var mask0: AjarMaskUniform
+        var mask1: AjarMaskUniform
+        var mask2: AjarMaskUniform
+        var mask3: AjarMaskUniform
+    }
+
+    private struct AjarMaskUniform {
+        var shapeKind: UInt32
+        var combineMode: UInt32
+        var invert: UInt32
+        var pointCount: UInt32
+        var featherRadius: Float
+        var maskPadding0: Float
+        var maskPadding1: Float
+        var maskPadding2: Float
+        var params0: SIMD4<Float>
+        var points0: SIMD4<Float>
+        var points1: SIMD4<Float>
+        var points2: SIMD4<Float>
+        var points3: SIMD4<Float>
+
+        static let empty = AjarMaskUniform(
+            shapeKind: 0,
+            combineMode: 0,
+            invert: 0,
+            pointCount: 0,
+            featherRadius: 0,
+            maskPadding0: 0,
+            maskPadding1: 0,
+            maskPadding2: 0,
+            params0: .zero,
+            points0: .zero,
+            points1: .zero,
+            points2: .zero,
+            points3: .zero
+        )
     }
 
     private struct AjarPresentUniforms {
@@ -779,6 +941,22 @@ public final class MetalRenderExecutor {
             return out;
         }
 
+        struct AjarMaskUniform {
+            uint shapeKind;
+            uint combineMode;
+            uint invert;
+            uint pointCount;
+            float featherRadius;
+            float maskPadding0;
+            float maskPadding1;
+            float maskPadding2;
+            float4 params0;
+            float4 points0;
+            float4 points1;
+            float4 points2;
+            float4 points3;
+        };
+
         struct AjarCompositeUniforms {
             float2 outputSize;
             float2 sourceSize;
@@ -801,6 +979,14 @@ public final class MetalRenderExecutor {
             uint chromaKeyPadding0;
             uint chromaKeyPadding1;
             uint chromaKeyPadding2;
+            uint maskCount;
+            uint maskPadding0;
+            uint maskPadding1;
+            uint maskPadding2;
+            AjarMaskUniform mask0;
+            AjarMaskUniform mask1;
+            AjarMaskUniform mask2;
+            AjarMaskUniform mask3;
         };
 
         struct AjarPresentUniforms {
@@ -1041,6 +1227,149 @@ public final class MetalRenderExecutor {
             return result;
         }
 
+        static AjarMaskUniform ajar_mask_at(
+            constant AjarCompositeUniforms &uniforms,
+            uint index
+        ) {
+            switch (index) {
+            case 0:
+                return uniforms.mask0;
+            case 1:
+                return uniforms.mask1;
+            case 2:
+                return uniforms.mask2;
+            default:
+                return uniforms.mask3;
+            }
+        }
+
+        static float2 ajar_mask_point(AjarMaskUniform mask, uint index) {
+            switch (index / 2) {
+            case 0:
+                return index % 2 == 0 ? mask.points0.xy : mask.points0.zw;
+            case 1:
+                return index % 2 == 0 ? mask.points1.xy : mask.points1.zw;
+            case 2:
+                return index % 2 == 0 ? mask.points2.xy : mask.points2.zw;
+            default:
+                return index % 2 == 0 ? mask.points3.xy : mask.points3.zw;
+            }
+        }
+
+        static float ajar_feathered_alpha(float signedDistance, float feather) {
+            if (feather <= 0.0) {
+                return signedDistance >= 0.0 ? 1.0 : 0.0;
+            }
+            return smoothstep(-feather, feather, signedDistance);
+        }
+
+        static float ajar_rectangle_mask_alpha(float2 localPoint, AjarMaskUniform mask) {
+            float2 minPoint = mask.params0.xy;
+            float2 maxPoint = mask.params0.zw;
+            float2 halfSize = max((maxPoint - minPoint) * 0.5, float2(0.0));
+            float2 center = (minPoint + maxPoint) * 0.5;
+            float2 q = abs(localPoint - center) - halfSize;
+            float outsideDistance = length(max(q, float2(0.0)));
+            float insideDistance = min(max(q.x, q.y), 0.0);
+            float signedDistance = -(outsideDistance + insideDistance);
+            return ajar_feathered_alpha(signedDistance, mask.featherRadius);
+        }
+
+        static float ajar_ellipse_mask_alpha(float2 localPoint, AjarMaskUniform mask) {
+            float2 center = mask.params0.xy;
+            float2 radius = max(mask.params0.zw, float2(0.0001));
+            float normalizedDistance = length((localPoint - center) / radius);
+            float signedDistance = (1.0 - normalizedDistance) * min(radius.x, radius.y);
+            return ajar_feathered_alpha(signedDistance, mask.featherRadius);
+        }
+
+        static float ajar_segment_distance(float2 point, float2 first, float2 second) {
+            float2 segment = second - first;
+            float denominator = max(dot(segment, segment), 0.0001);
+            float t = saturate(dot(point - first, segment) / denominator);
+            return length(point - (first + (segment * t)));
+        }
+
+        static float ajar_polygon_mask_alpha(float2 localPoint, AjarMaskUniform mask) {
+            if (mask.pointCount < 3) {
+                return 0.0;
+            }
+
+            bool inside = false;
+            float minDistance = 1000000.0;
+            float2 previous = ajar_mask_point(mask, mask.pointCount - 1);
+            for (uint index = 0; index < mask.pointCount; index++) {
+                float2 current = ajar_mask_point(mask, index);
+                minDistance = min(
+                    minDistance,
+                    ajar_segment_distance(localPoint, previous, current)
+                );
+
+                bool crosses = ((current.y > localPoint.y) != (previous.y > localPoint.y));
+                if (crosses) {
+                    float denominator = previous.y - current.y;
+                    if (abs(denominator) < 0.0001) {
+                        denominator = denominator < 0.0 ? -0.0001 : 0.0001;
+                    }
+                    float xIntersection = (
+                        ((previous.x - current.x) * (localPoint.y - current.y))
+                            / denominator
+                    ) + current.x;
+                    if (localPoint.x < xIntersection) {
+                        inside = !inside;
+                    }
+                }
+                previous = current;
+            }
+
+            float signedDistance = inside ? minDistance : -minDistance;
+            return ajar_feathered_alpha(signedDistance, mask.featherRadius);
+        }
+
+        static float ajar_mask_shape_alpha(float2 localPoint, AjarMaskUniform mask) {
+            switch (mask.shapeKind) {
+            case 1:
+                return ajar_rectangle_mask_alpha(localPoint, mask);
+            case 2:
+                return ajar_ellipse_mask_alpha(localPoint, mask);
+            case 3:
+                return ajar_polygon_mask_alpha(localPoint, mask);
+            default:
+                return 0.0;
+            }
+        }
+
+        static float ajar_masks_matte_alpha(
+            float2 localPoint,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            if (uniforms.maskCount == 0) {
+                return 1.0;
+            }
+
+            float combined = 0.0;
+            uint count = min(uniforms.maskCount, 4u);
+            for (uint index = 0; index < count; index++) {
+                AjarMaskUniform mask = ajar_mask_at(uniforms, index);
+                float alpha = ajar_mask_shape_alpha(localPoint, mask);
+                if (mask.invert != 0) {
+                    alpha = 1.0 - alpha;
+                }
+
+                if (index == 0) {
+                    combined = alpha;
+                } else if (mask.combineMode == 1) {
+                    combined = combined * (1.0 - alpha);
+                } else if (mask.combineMode == 2) {
+                    combined = min(combined, alpha);
+                } else {
+                    combined = max(combined, alpha);
+                }
+            }
+
+            return saturate(combined);
+        }
+
         fragment float4 ajar_transform_fragment(
             AjarVertexOut in [[stage_in]],
             texture2d<float> sourceTexture [[texture(0)]],
@@ -1084,8 +1413,10 @@ public final class MetalRenderExecutor {
             float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
             float3 sourceLinear = ajar_source_to_working_linear(sampledSource.rgb, uniforms);
             float matteAlpha = ajar_chroma_matte_alpha(sourceLinear, uniforms);
+            float maskAlpha = ajar_masks_matte_alpha(localPoint, uniforms);
+            float combinedMatteAlpha = matteAlpha * maskAlpha;
             if (uniforms.chromaKeyMode != 0) {
-                return ajar_composite(float4(float3(matteAlpha), 1.0), destination, 0);
+                return ajar_composite(float4(float3(combinedMatteAlpha), 1.0), destination, 0);
             }
 
             if (uniforms.chromaKeyControls.x > 0.0) {
@@ -1096,7 +1427,7 @@ public final class MetalRenderExecutor {
                 );
             }
 
-            float sourceAlpha = saturate(sampledSource.a * uniforms.opacity * matteAlpha);
+            float sourceAlpha = saturate(sampledSource.a * uniforms.opacity * combinedMatteAlpha);
             float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
             return ajar_composite(source, destination, uniforms.blendMode);
         }

@@ -1,0 +1,67 @@
+{
+  "clips" : [
+    {
+      "effects" : {
+        "masks" : [
+          {
+            "combine" : "add",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "id" : "00000000-0000-0000-0000-000000000802",
+            "invert" : false,
+            "shape" : {
+              "ellipse" : {
+                "_0" : {
+                  "centerX" : {
+                    "denominator" : 2,
+                    "numerator" : 3
+                  },
+                  "centerY" : {
+                    "denominator" : 2,
+                    "numerator" : 3
+                  },
+                  "radiusX" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "radiusY" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "syntheticMedia" : {
+        "bgra" : [255, 255, 255, 255],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 3,
+        "width" : 3
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "mask-ellipse",
+  "outputDimensions" : {
+    "height" : 3,
+    "width" : 3
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-003",
+    "ADR-0006",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

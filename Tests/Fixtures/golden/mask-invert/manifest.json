@@ -1,0 +1,76 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [255, 0, 0, 255],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 4
+      }
+    },
+    {
+      "effects" : {
+        "masks" : [
+          {
+            "combine" : "add",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "id" : "00000000-0000-0000-0000-000000000805",
+            "invert" : true,
+            "shape" : {
+              "rectangle" : {
+                "_0" : {
+                  "height" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "width" : {
+                    "denominator" : 1,
+                    "numerator" : 2
+                  },
+                  "x" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "y" : {
+                    "denominator" : 1,
+                    "numerator" : 0
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "syntheticMedia" : {
+        "bgra" : [0, 0, 255, 255],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 4
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "mask-invert",
+  "outputDimensions" : {
+    "height" : 1,
+    "width" : 4
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-003",
+    "ADR-0006",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}
