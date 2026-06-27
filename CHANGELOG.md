@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` and `AjarRender` luma-key settings with undoable set/clear commands, typed
+  validation, `.ajar` compatibility, GPU luma matte evaluation, premultiplied alpha passthrough,
+  evaluated effect cache keys, and golden coverage for FR-COMP-005.
 - `AjarCore` and `AjarRender` primary color correction with lift/gamma/gain, exposure,
   contrast, saturation, temperature/tint, vibrance, undoable set/clear commands, `.ajar`
   compatibility, render-graph cache invalidation, and golden coverage for FR-COL-001.

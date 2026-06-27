@@ -18,6 +18,16 @@ extension EditReducer {
             )
         case .addClipTransformKeyframe, .moveClipTransformKeyframe, .deleteClipTransformKeyframe:
             return try applyTransformKeyframeCommand(command, to: project)
+        default:
+            return try applyClipEffectCommand(command, to: project)
+        }
+    }
+
+    private static func applyClipEffectCommand(
+        _ command: EditCommand,
+        to project: Project
+    ) throws -> Project {
+        switch command {
         case .setClipChromaKey(let sequenceID, let trackID, let clipID, let settings):
             return try setClipChromaKey(
                 SetClipChromaKeyEdit(
@@ -25,6 +35,25 @@ extension EditReducer {
                     trackID: trackID,
                     clipID: clipID,
                     settings: settings
+                ),
+                in: project
+            )
+        case .setClipLumaKey(let sequenceID, let trackID, let clipID, let settings):
+            return try setClipLumaKey(
+                SetClipLumaKeyEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    settings: settings
+                ),
+                in: project
+            )
+        case .clearClipLumaKey(let sequenceID, let trackID, let clipID):
+            return try clearClipLumaKey(
+                ClipEffectsEditTarget(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID
                 ),
                 in: project
             )

@@ -232,6 +232,9 @@ public struct ClipEffects: Codable, Equatable, Sendable {
     /// Chroma-key settings.
     public let chromaKey: ClipChromaKeySettings
 
+    /// Luma-key settings.
+    public let lumaKey: ClipLumaKeySettings
+
     /// Primary color-correction settings.
     public let colorCorrection: ClipColorCorrection
 
@@ -240,6 +243,7 @@ public struct ClipEffects: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case chromaKey
+        case lumaKey
         case colorCorrection
         case masks
     }
@@ -247,6 +251,7 @@ public struct ClipEffects: Codable, Equatable, Sendable {
     /// No active effects.
     public static let none = ClipEffects(
         chromaKey: .disabled,
+        lumaKey: .disabled,
         colorCorrection: .identity,
         masks: []
     )
@@ -254,10 +259,12 @@ public struct ClipEffects: Codable, Equatable, Sendable {
     /// Creates clip effects.
     public init(
         chromaKey: ClipChromaKeySettings = .disabled,
+        lumaKey: ClipLumaKeySettings = .disabled,
         colorCorrection: ClipColorCorrection = .identity,
         masks: [ClipMask] = []
     ) {
         self.chromaKey = chromaKey
+        self.lumaKey = lumaKey
         self.colorCorrection = colorCorrection
         self.masks = masks
     }
@@ -269,6 +276,10 @@ public struct ClipEffects: Codable, Equatable, Sendable {
             ClipChromaKeySettings.self,
             forKey: .chromaKey
         ) ?? .disabled
+        lumaKey = try container.decodeIfPresent(
+            ClipLumaKeySettings.self,
+            forKey: .lumaKey
+        ) ?? .disabled
         colorCorrection = try container.decodeIfPresent(
             ClipColorCorrection.self,
             forKey: .colorCorrection
@@ -278,17 +289,42 @@ public struct ClipEffects: Codable, Equatable, Sendable {
 
     /// Returns effects with a replacement chroma key while preserving other effect slots.
     public func replacing(chromaKey: ClipChromaKeySettings) -> ClipEffects {
-        ClipEffects(chromaKey: chromaKey, colorCorrection: colorCorrection, masks: masks)
+        ClipEffects(
+            chromaKey: chromaKey,
+            lumaKey: lumaKey,
+            colorCorrection: colorCorrection,
+            masks: masks
+        )
+    }
+
+    /// Returns effects with a replacement luma key while preserving other effect slots.
+    public func replacing(lumaKey: ClipLumaKeySettings) -> ClipEffects {
+        ClipEffects(
+            chromaKey: chromaKey,
+            lumaKey: lumaKey,
+            colorCorrection: colorCorrection,
+            masks: masks
+        )
     }
 
     /// Returns effects with replacement color correction while preserving other effect slots.
     public func replacing(colorCorrection: ClipColorCorrection) -> ClipEffects {
-        ClipEffects(chromaKey: chromaKey, colorCorrection: colorCorrection, masks: masks)
+        ClipEffects(
+            chromaKey: chromaKey,
+            lumaKey: lumaKey,
+            colorCorrection: colorCorrection,
+            masks: masks
+        )
     }
 
     /// Returns effects with a replacement mask list while preserving other effect slots.
     public func replacing(masks: [ClipMask]) -> ClipEffects {
-        ClipEffects(chromaKey: chromaKey, colorCorrection: colorCorrection, masks: masks)
+        ClipEffects(
+            chromaKey: chromaKey,
+            lumaKey: lumaKey,
+            colorCorrection: colorCorrection,
+            masks: masks
+        )
     }
 }
 
@@ -296,6 +332,9 @@ public struct ClipEffects: Codable, Equatable, Sendable {
 public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     /// Keyframable chroma-key controls.
     public let chromaKey: AnimatableClipChromaKeySettings
+
+    /// Keyframable luma-key controls.
+    public let lumaKey: AnimatableClipLumaKeySettings
 
     /// Keyframable primary color-correction controls.
     public let colorCorrection: AnimatableClipColorCorrection
@@ -305,6 +344,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case chromaKey
+        case lumaKey
         case colorCorrection
         case masks
     }
@@ -312,6 +352,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     /// No active effects.
     public static let none = AnimatableClipEffects(
         chromaKey: .disabled,
+        lumaKey: .disabled,
         colorCorrection: .identity,
         masks: []
     )
@@ -319,10 +360,12 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     /// Creates keyframable effects.
     public init(
         chromaKey: AnimatableClipChromaKeySettings = .disabled,
+        lumaKey: AnimatableClipLumaKeySettings = .disabled,
         colorCorrection: AnimatableClipColorCorrection = .identity,
         masks: [AnimatableClipMask] = []
     ) {
         self.chromaKey = chromaKey
+        self.lumaKey = lumaKey
         self.colorCorrection = colorCorrection
         self.masks = masks
     }
@@ -333,6 +376,10 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
         chromaKey = try container.decodeIfPresent(
             AnimatableClipChromaKeySettings.self,
             forKey: .chromaKey
+        ) ?? .disabled
+        lumaKey = try container.decodeIfPresent(
+            AnimatableClipLumaKeySettings.self,
+            forKey: .lumaKey
         ) ?? .disabled
         colorCorrection = try container.decodeIfPresent(
             AnimatableClipColorCorrection.self,
@@ -345,6 +392,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     public static func constant(_ effects: ClipEffects) -> AnimatableClipEffects {
         AnimatableClipEffects(
             chromaKey: .constant(effects.chromaKey),
+            lumaKey: .constant(effects.lumaKey),
             colorCorrection: .constant(effects.colorCorrection),
             masks: effects.masks.map(AnimatableClipMask.constant)
         )
@@ -354,6 +402,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     public func value(at time: RationalTime) -> ClipEffects {
         ClipEffects(
             chromaKey: chromaKey.value(at: time),
+            lumaKey: lumaKey.value(at: time),
             colorCorrection: colorCorrection.value(at: time),
             masks: masks.map { mask in mask.value(at: time) }
         )
@@ -363,6 +412,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     public var baseEffects: ClipEffects {
         ClipEffects(
             chromaKey: chromaKey.baseSettings,
+            lumaKey: lumaKey.baseSettings,
             colorCorrection: colorCorrection.baseCorrection,
             masks: masks.map { mask in mask.value(at: .zero) }
         )
@@ -385,6 +435,20 @@ public enum ClipEffectsValidationError: Equatable, Sendable {
 
     /// Chroma-key choke must stay in the normalized 0...1 range.
     case chromaKeyChokeOutOfRange(RationalValue)
+
+    /// A scalar luma-key parameter is outside its supported range.
+    case lumaKeyParameterOutOfRange(
+        parameter: ClipLumaKeyParameter,
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
+    /// Luma-key low threshold must not exceed the high threshold.
+    case lumaKeyThresholdOrderInvalid(
+        lowThreshold: RationalValue,
+        highThreshold: RationalValue
+    )
 
     /// A scalar color-correction parameter is outside its supported range.
     case colorCorrectionParameterOutOfRange(

@@ -157,6 +157,54 @@ final class RenderGraphChromaKeyTests: XCTestCase {
         )
         XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
     }
+
+    func testFRCOMP005ADR0009EvaluatedLumaKeyParamsInvalidateCompositeHash() throws {
+        let mediaID = try uuid(8)
+        let clipID = try uuid(9)
+        let effectsAnimation = try AnimatableClipEffects(
+            lumaKey: AnimatableClipLumaKeySettings(
+                enabled: true,
+                lowThreshold: Animatable(
+                    base: try rationalValue(1, 10),
+                    keyframes: [
+                        Keyframe(
+                            time: try time(0),
+                            value: try rationalValue(1, 10),
+                            interpolation: .linear
+                        ),
+                        Keyframe(
+                            time: try time(12),
+                            value: try rationalValue(1, 4),
+                            interpolation: .hold
+                        )
+                    ]
+                ),
+                highThreshold: .constant(try rationalValue(9, 10)),
+                softness: .constant(try rationalValue(1, 10))
+            )
+        )
+        let clip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            effectsAnimation: effectsAnimation
+        )
+        let sequence = try makeSequence(with: clip)
+        let project = try makeProject(mediaPool: [makeMediaRef(id: mediaID)], sequences: [sequence])
+
+        let firstGraph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+        let repeatedFirstGraph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+        let secondGraph = try buildRenderGraph(for: sequence, at: try time(12), in: project)
+        let firstInput = try compositeInput(in: firstGraph)
+        let secondInput = try compositeInput(in: secondGraph)
+
+        XCTAssertEqual(firstInput.effects.lumaKey.lowThreshold, try rationalValue(1, 10))
+        XCTAssertEqual(secondInput.effects.lumaKey.lowThreshold, try rationalValue(1, 4))
+        XCTAssertEqual(
+            firstGraph.outputNode?.contentHash,
+            repeatedFirstGraph.outputNode?.contentHash
+        )
+        XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
+    }
 }
 
 private func compositeInput(in graph: RenderGraph) throws -> RenderCompositeInput {

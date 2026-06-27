@@ -10,6 +10,7 @@ extension EditReducer {
             .liftClip, .moveClip, .trimClip, .setClipTransform,
             .addClipTransformKeyframe, .moveClipTransformKeyframe,
             .deleteClipTransformKeyframe, .setClipChromaKey,
+            .setClipLumaKey, .clearClipLumaKey,
             .setClipColorCorrection, .clearClipColorCorrection,
             .addClipMask, .removeClipMask, .moveClipMask, .setClipMask:
             return try applyClipCommand(command, to: project)

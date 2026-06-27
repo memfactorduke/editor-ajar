@@ -25,6 +25,7 @@ enum ClipEffectsValidator {
             to: &errors,
             error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
         )
+        appendLumaKeyErrors(effects.lumaKey, to: &errors)
         appendColorCorrectionErrors(effects.colorCorrection, to: &errors)
         errors.append(contentsOf: ClipMaskValidator.errors(for: effects.masks))
 
@@ -54,6 +55,7 @@ enum ClipEffectsValidator {
             to: &errors,
             error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
         )
+        appendLumaKeyKeyframeErrors(effects.lumaKey, to: &errors)
         appendColorCorrectionKeyframeErrors(effects.colorCorrection, to: &errors)
         errors.append(contentsOf: ClipMaskValidator.errors(for: effects.masks))
 
@@ -93,5 +95,114 @@ enum ClipEffectsValidator {
         for keyframe in parameter.keyframes {
             appendUnitIntervalError(keyframe.value, to: &errors, error: error)
         }
+    }
+
+    private static func appendLumaKeyErrors(
+        _ settings: ClipLumaKeySettings,
+        to errors: inout [ClipEffectsValidationError]
+    ) {
+        appendLumaKeyUnitIntervalError(
+            settings.lowThreshold,
+            parameter: .lowThreshold,
+            to: &errors
+        )
+        appendLumaKeyUnitIntervalError(
+            settings.highThreshold,
+            parameter: .highThreshold,
+            to: &errors
+        )
+        appendLumaKeyUnitIntervalError(settings.softness, parameter: .softness, to: &errors)
+        appendLumaKeyThresholdOrderError(
+            lowThreshold: settings.lowThreshold,
+            highThreshold: settings.highThreshold,
+            to: &errors
+        )
+    }
+
+    private static func appendLumaKeyKeyframeErrors(
+        _ settings: AnimatableClipLumaKeySettings,
+        to errors: inout [ClipEffectsValidationError]
+    ) {
+        appendLumaKeyUnitIntervalErrors(
+            settings.lowThreshold,
+            parameter: .lowThreshold,
+            to: &errors
+        )
+        appendLumaKeyUnitIntervalErrors(
+            settings.highThreshold,
+            parameter: .highThreshold,
+            to: &errors
+        )
+        appendLumaKeyUnitIntervalErrors(settings.softness, parameter: .softness, to: &errors)
+        for time in lumaKeyKeyframeTimes(settings) {
+            let value = settings.value(at: time)
+            appendLumaKeyThresholdOrderError(
+                lowThreshold: value.lowThreshold,
+                highThreshold: value.highThreshold,
+                to: &errors
+            )
+        }
+    }
+
+    private static func appendLumaKeyUnitIntervalError(
+        _ value: RationalValue,
+        parameter: ClipLumaKeyParameter,
+        to errors: inout [ClipEffectsValidationError]
+    ) {
+        appendUnitIntervalError(value, to: &errors) { invalidValue in
+            .lumaKeyParameterOutOfRange(
+                parameter: parameter,
+                value: invalidValue,
+                minimum: .zero,
+                maximum: .one
+            )
+        }
+    }
+
+    private static func appendLumaKeyUnitIntervalErrors(
+        _ parameter: Animatable<RationalValue>,
+        parameter lumaParameter: ClipLumaKeyParameter,
+        to errors: inout [ClipEffectsValidationError]
+    ) {
+        appendUnitIntervalErrors(parameter, to: &errors) { value in
+            .lumaKeyParameterOutOfRange(
+                parameter: lumaParameter,
+                value: value,
+                minimum: .zero,
+                maximum: .one
+            )
+        }
+    }
+
+    private static func appendLumaKeyThresholdOrderError(
+        lowThreshold: RationalValue,
+        highThreshold: RationalValue,
+        to errors: inout [ClipEffectsValidationError]
+    ) {
+        guard isGreaterThan(lowThreshold, highThreshold) else {
+            return
+        }
+
+        errors.append(
+            .lumaKeyThresholdOrderInvalid(
+                lowThreshold: lowThreshold,
+                highThreshold: highThreshold
+            )
+        )
+    }
+
+    private static func lumaKeyKeyframeTimes(
+        _ settings: AnimatableClipLumaKeySettings
+    ) -> [RationalTime] {
+        Set(
+            settings.lowThreshold.keyframes.map(\.time)
+                + settings.highThreshold.keyframes.map(\.time)
+        ).sorted()
+    }
+
+    private static func isGreaterThan(_ left: RationalValue, _ right: RationalValue) -> Bool {
+        let leftValue = Double(left.numerator) / Double(left.denominator)
+        let rightValue = Double(right.numerator) / Double(right.denominator)
+        return leftValue > rightValue
     }
 }

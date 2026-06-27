@@ -164,6 +164,21 @@ public enum EditCommand: Codable, Equatable, Sendable {
         settings: ClipChromaKeySettings
     )
 
+    /// Replaces a clip's luma-key settings.
+    case setClipLumaKey(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        settings: ClipLumaKeySettings
+    )
+
+    /// Clears a clip's luma key back to disabled defaults.
+    case clearClipLumaKey(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID
+    )
+
     /// Replaces a clip's primary color-correction settings.
     case setClipColorCorrection(
         sequenceID: UUID,
@@ -432,6 +447,10 @@ public extension EditCommand {
             return "Delete Transform Keyframe"
         case .setClipChromaKey:
             return "Set Chroma Key"
+        case .setClipLumaKey:
+            return "Set Luma Key"
+        case .clearClipLumaKey:
+            return "Clear Luma Key"
         case .setClipColorCorrection:
             return "Set Color Correction"
         case .clearClipColorCorrection:
