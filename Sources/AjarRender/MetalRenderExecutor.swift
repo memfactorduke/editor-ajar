@@ -113,6 +113,48 @@ public struct RenderOutputDescriptor: Equatable, Sendable {
     }
 }
 
+struct AjarCompositeUniformLayout: Equatable, Sendable {
+    let stride: Int
+    let alignment: Int
+    let maskStride: Int
+    let outputSize: Int
+    let sourceSize: Int
+    let position: Int
+    let scale: Int
+    let anchorPoint: Int
+    let crop: Int
+    let rotationRadians: Int
+    let opacity: Int
+    let flipHorizontal: Int
+    let flipVertical: Int
+    let blendMode: Int
+    let sourceTransfer: Int
+    let sourcePrimaries: Int
+    let workingPrimaries: Int
+    let outputTransfer: Int
+    let chromaKeyColorAndTolerance: Int
+    let chromaKeyControls: Int
+    let chromaKeyMode: Int
+    let chromaKeyPadding0: Int
+    let chromaKeyPadding1: Int
+    let chromaKeyPadding2: Int
+    let lumaKeyThresholds: Int
+    let lumaKeyControls: Int
+    let colorCorrectionControls: Int
+    let colorCorrectionWhiteBalance: Int
+    let colorCorrectionLift: Int
+    let colorCorrectionGamma: Int
+    let colorCorrectionGain: Int
+    let maskCount: Int
+    let maskPadding0: Int
+    let maskPadding1: Int
+    let maskPadding2: Int
+    let mask0: Int
+    let mask1: Int
+    let mask2: Int
+    let mask3: Int
+}
+
 /// Supplies GPU-resident source textures for source render nodes.
 public protocol RenderSourceTextureProvider {
     /// Returns the source texture for a resolved source node.
@@ -466,7 +508,8 @@ public final class MetalRenderExecutor {
             input: sourceInput,
             sourceTexture: sourceInput.texture,
             outputTexture: outputTexture,
-            workingColorSpace: composite.workingColorSpace
+            workingColorSpace: composite.workingColorSpace,
+            outputColorSpace: composite.outputColorSpace
         )
         encoder.setFragmentTexture(sourceInput.texture, index: 0)
         encoder.setFragmentTexture(destinationTexture, index: 1)
@@ -609,7 +652,8 @@ public final class MetalRenderExecutor {
         input: SourceCompositeInput,
         sourceTexture: MTLTexture,
         outputTexture: MTLTexture,
-        workingColorSpace: MediaColorSpace
+        workingColorSpace: MediaColorSpace,
+        outputColorSpace: MediaColorSpace
     ) -> AjarCompositeUniforms {
         let transform = input.transform
         let effects = input.effects
@@ -648,7 +692,7 @@ public final class MetalRenderExecutor {
             sourceTransfer: colorTransferValue(colorPipeline.source),
             sourcePrimaries: colorPrimariesValue(colorPipeline.source),
             workingPrimaries: colorPrimariesValue(colorPipeline.working),
-            padding: 0,
+            outputTransfer: colorTransferValue(outputColorSpace),
             chromaKeyColorAndTolerance: chromaKeyColorAndTolerance(chromaKey),
             chromaKeyControls: chromaKeyControls(chromaKey),
             chromaKeyMode: chromaKey.viewMatte ? 1 : 0,
@@ -936,6 +980,72 @@ public final class MetalRenderExecutor {
         let working: MediaColorSpace
     }
 
+    static var compositeUniformLayout: AjarCompositeUniformLayout {
+        AjarCompositeUniformLayout(
+            stride: MemoryLayout<AjarCompositeUniforms>.stride,
+            alignment: MemoryLayout<AjarCompositeUniforms>.alignment,
+            maskStride: MemoryLayout<AjarMaskUniform>.stride,
+            outputSize: MemoryLayout<AjarCompositeUniforms>.offset(of: \.outputSize) ?? -1,
+            sourceSize: MemoryLayout<AjarCompositeUniforms>.offset(of: \.sourceSize) ?? -1,
+            position: MemoryLayout<AjarCompositeUniforms>.offset(of: \.position) ?? -1,
+            scale: MemoryLayout<AjarCompositeUniforms>.offset(of: \.scale) ?? -1,
+            anchorPoint: MemoryLayout<AjarCompositeUniforms>.offset(of: \.anchorPoint) ?? -1,
+            crop: MemoryLayout<AjarCompositeUniforms>.offset(of: \.crop) ?? -1,
+            rotationRadians: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.rotationRadians) ?? -1,
+            opacity: MemoryLayout<AjarCompositeUniforms>.offset(of: \.opacity) ?? -1,
+            flipHorizontal: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.flipHorizontal) ?? -1,
+            flipVertical: MemoryLayout<AjarCompositeUniforms>.offset(of: \.flipVertical) ?? -1,
+            blendMode: MemoryLayout<AjarCompositeUniforms>.offset(of: \.blendMode) ?? -1,
+            sourceTransfer: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.sourceTransfer) ?? -1,
+            sourcePrimaries: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.sourcePrimaries) ?? -1,
+            workingPrimaries: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.workingPrimaries) ?? -1,
+            outputTransfer: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.outputTransfer) ?? -1,
+            chromaKeyColorAndTolerance: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.chromaKeyColorAndTolerance) ?? -1,
+            chromaKeyControls: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.chromaKeyControls) ?? -1,
+            chromaKeyMode: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.chromaKeyMode) ?? -1,
+            chromaKeyPadding0: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.chromaKeyPadding0) ?? -1,
+            chromaKeyPadding1: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.chromaKeyPadding1) ?? -1,
+            chromaKeyPadding2: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.chromaKeyPadding2) ?? -1,
+            lumaKeyThresholds: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.lumaKeyThresholds) ?? -1,
+            lumaKeyControls: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.lumaKeyControls) ?? -1,
+            colorCorrectionControls: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.colorCorrectionControls) ?? -1,
+            colorCorrectionWhiteBalance: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.colorCorrectionWhiteBalance) ?? -1,
+            colorCorrectionLift: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.colorCorrectionLift) ?? -1,
+            colorCorrectionGamma: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.colorCorrectionGamma) ?? -1,
+            colorCorrectionGain: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.colorCorrectionGain) ?? -1,
+            maskCount: MemoryLayout<AjarCompositeUniforms>.offset(of: \.maskCount) ?? -1,
+            maskPadding0: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.maskPadding0) ?? -1,
+            maskPadding1: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.maskPadding1) ?? -1,
+            maskPadding2: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.maskPadding2) ?? -1,
+            mask0: MemoryLayout<AjarCompositeUniforms>.offset(of: \.mask0) ?? -1,
+            mask1: MemoryLayout<AjarCompositeUniforms>.offset(of: \.mask1) ?? -1,
+            mask2: MemoryLayout<AjarCompositeUniforms>.offset(of: \.mask2) ?? -1,
+            mask3: MemoryLayout<AjarCompositeUniforms>.offset(of: \.mask3) ?? -1
+        )
+    }
+
     private struct AjarCompositeUniforms {
         var outputSize: SIMD2<Float>
         var sourceSize: SIMD2<Float>
@@ -951,7 +1061,7 @@ public final class MetalRenderExecutor {
         var sourceTransfer: UInt32
         var sourcePrimaries: UInt32
         var workingPrimaries: UInt32
-        var padding: UInt32
+        var outputTransfer: UInt32
         var chromaKeyColorAndTolerance: SIMD4<Float>
         var chromaKeyControls: SIMD4<Float>
         var chromaKeyMode: UInt32
@@ -1086,7 +1196,7 @@ public final class MetalRenderExecutor {
             uint sourceTransfer;
             uint sourcePrimaries;
             uint workingPrimaries;
-            uint padding;
+            uint outputTransfer;
             float4 chromaKeyColorAndTolerance;
             float4 chromaKeyControls;
             uint chromaKeyMode;
@@ -1380,13 +1490,6 @@ public final class MetalRenderExecutor {
             return alpha * alpha * (3.0 - (2.0 * alpha));
         }
 
-        static float ajar_apply_choke(float alpha, float choke) {
-            if (choke <= 0.0) {
-                return alpha;
-            }
-            return saturate((alpha - choke) / max(1.0 - choke, 0.0001));
-        }
-
         static float3 ajar_chroma_key_color(
             constant AjarCompositeUniforms &uniforms
         ) {
@@ -1394,22 +1497,102 @@ public final class MetalRenderExecutor {
             return ajar_source_to_working_linear(encoded, uniforms);
         }
 
-        static float ajar_chroma_matte_alpha(
+        static float2 ajar_normalized_chroma(float3 color) {
+            constexpr float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
+            float3 nonnegative = max(color, float3(0.0));
+            float chromaSum = max(nonnegative.r + nonnegative.g + nonnegative.b, 0.0001);
+            float3 chromaticity = nonnegative / chromaSum;
+            float luma = dot(chromaticity, lumaWeights);
+            return float2(
+                (chromaticity.b - luma) / 1.8556,
+                (chromaticity.r - luma) / 1.5748
+            );
+        }
+
+        static float ajar_chroma_distance(float3 sourceLinear, float3 keyColor) {
+            return distance(
+                ajar_normalized_chroma(sourceLinear),
+                ajar_normalized_chroma(keyColor)
+            );
+        }
+
+        static float3 ajar_sample_source_linear(
+            texture2d<float> sourceTexture,
+            sampler sourceSampler,
+            float2 sourceUV,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
+            float sourceTextureAlpha = saturate(sampledSource.a);
+            float3 sourceEncoded = sourceTextureAlpha > 0.00001
+                ? saturate(sampledSource.rgb / sourceTextureAlpha)
+                : float3(0.0);
+            return ajar_source_to_working_linear(sourceEncoded, uniforms);
+        }
+
+        static float ajar_chroma_base_alpha(
             float3 sourceLinear,
+            float3 keyColor,
             constant AjarCompositeUniforms &uniforms
         ) {
             if (uniforms.chromaKeyControls.x <= 0.0) {
                 return 1.0;
             }
 
-            float3 keyColor = ajar_chroma_key_color(uniforms);
-            float distanceFromKey = distance(saturate(sourceLinear), saturate(keyColor));
-            float alpha = ajar_key_alpha(
+            float distanceFromKey = ajar_chroma_distance(sourceLinear, keyColor);
+            return ajar_key_alpha(
                 distanceFromKey,
                 uniforms.chromaKeyColorAndTolerance.a,
                 uniforms.chromaKeyControls.y
             );
-            return ajar_apply_choke(alpha, uniforms.chromaKeyControls.w);
+        }
+
+        static float ajar_chroma_matte_alpha(
+            texture2d<float> sourceTexture,
+            sampler sourceSampler,
+            float2 sourceUV,
+            float3 sourceLinear,
+            float3 keyColor,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            float alpha = ajar_chroma_base_alpha(sourceLinear, keyColor, uniforms);
+            float choke = saturate(uniforms.chromaKeyControls.w);
+            if (uniforms.chromaKeyControls.x <= 0.0 || choke <= 0.0) {
+                return alpha;
+            }
+
+            float2 texel = 1.0 / max(uniforms.sourceSize, float2(1.0));
+            float erodedAlpha = alpha;
+            for (int yOffset = -1; yOffset <= 1; yOffset++) {
+                for (int xOffset = -1; xOffset <= 1; xOffset++) {
+                    float2 neighborUV = sourceUV + (float2(xOffset, yOffset) * texel);
+                    float neighborAlpha = 0.0;
+                    if (neighborUV.x >= 0.0 && neighborUV.y >= 0.0
+                        && neighborUV.x <= 1.0 && neighborUV.y <= 1.0) {
+                        float3 neighborLinear = ajar_sample_source_linear(
+                            sourceTexture,
+                            sourceSampler,
+                            neighborUV,
+                            uniforms
+                        );
+                        neighborAlpha = ajar_chroma_base_alpha(
+                            neighborLinear,
+                            keyColor,
+                            uniforms
+                        );
+                    }
+                    erodedAlpha = min(erodedAlpha, neighborAlpha);
+                }
+            }
+
+            return mix(alpha, erodedAlpha, choke);
+        }
+
+        static float3 ajar_matte_preview_linear(
+            float alpha,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            return ajar_decode_transfer(float3(saturate(alpha)), uniforms.outputTransfer);
         }
 
         static float ajar_luma_matte_alpha(
@@ -1699,18 +1882,29 @@ public final class MetalRenderExecutor {
                 ? saturate(sampledSource.rgb / sourceTextureAlpha)
                 : float3(0.0);
             float3 sourceLinear = ajar_source_to_working_linear(sourceEncoded, uniforms);
-            float matteAlpha = ajar_chroma_matte_alpha(sourceLinear, uniforms)
+            float3 keyColor = float3(0.0);
+            if (uniforms.chromaKeyControls.x > 0.0) {
+                keyColor = ajar_chroma_key_color(uniforms);
+            }
+            float matteAlpha = ajar_chroma_matte_alpha(
+                sourceTexture,
+                sourceSampler,
+                sourceUV,
+                sourceLinear,
+                keyColor,
+                uniforms
+            )
                 * ajar_luma_matte_alpha(sourceLinear, uniforms);
             float maskAlpha = ajar_masks_matte_alpha(localPoint, uniforms);
             float combinedMatteAlpha = matteAlpha * maskAlpha;
             if (uniforms.chromaKeyMode != 0) {
-                return ajar_composite(float4(float3(combinedMatteAlpha), 1.0), destination, 0);
+                return float4(ajar_matte_preview_linear(combinedMatteAlpha, uniforms), 1.0);
             }
 
             if (uniforms.chromaKeyControls.x > 0.0) {
                 sourceLinear = ajar_despill(
                     sourceLinear,
-                    ajar_chroma_key_color(uniforms),
+                    keyColor,
                     uniforms.chromaKeyControls.z
                 );
             }

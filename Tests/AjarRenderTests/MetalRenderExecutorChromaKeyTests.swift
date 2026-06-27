@@ -1,12 +1,62 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// swiftlint:disable file_length
+
 import AjarCore
-import AjarRender
 import Foundation
 import Metal
 import XCTest
 
+@testable import AjarRender
+
 final class MetalRenderExecutorChromaKeyTests: XCTestCase {
+    func testFRCOMP001002CompositeUniformLayoutMatchesMSLABI() {
+        XCTAssertEqual(
+            MetalRenderExecutor.compositeUniformLayout,
+            AjarCompositeUniformLayout(
+                stride: 736,
+                alignment: 16,
+                maskStride: 112,
+                outputSize: 0,
+                sourceSize: 8,
+                position: 16,
+                scale: 24,
+                anchorPoint: 32,
+                crop: 48,
+                rotationRadians: 64,
+                opacity: 68,
+                flipHorizontal: 72,
+                flipVertical: 76,
+                blendMode: 80,
+                sourceTransfer: 84,
+                sourcePrimaries: 88,
+                workingPrimaries: 92,
+                outputTransfer: 96,
+                chromaKeyColorAndTolerance: 112,
+                chromaKeyControls: 128,
+                chromaKeyMode: 144,
+                chromaKeyPadding0: 148,
+                chromaKeyPadding1: 152,
+                chromaKeyPadding2: 156,
+                lumaKeyThresholds: 160,
+                lumaKeyControls: 176,
+                colorCorrectionControls: 192,
+                colorCorrectionWhiteBalance: 208,
+                colorCorrectionLift: 224,
+                colorCorrectionGamma: 240,
+                colorCorrectionGain: 256,
+                maskCount: 272,
+                maskPadding0: 276,
+                maskPadding1: 280,
+                maskPadding2: 284,
+                mask0: 288,
+                mask1: 400,
+                mask2: 512,
+                mask3: 624
+            )
+        )
+    }
+
     func testFRCOMP001ChromaKeyCompositesSubjectOverBackground() throws {
         let device = try chromaMetalDeviceOrSkip()
         let graph = try makeChromaTwoClipGraph(
@@ -49,6 +99,97 @@ final class MetalRenderExecutorChromaKeyTests: XCTestCase {
                 255, 0, 0, 255,
                 0, 0, 255, 255
             ]
+        )
+    }
+
+    func testFRCOMP001ChromaDistanceIgnoresGreenScreenLumaVariation() throws {
+        let device = try chromaMetalDeviceOrSkip()
+        let graph = try makeChromaTwoClipGraph(
+            topEffects: try makeChromaKeyEffects(
+                tolerance: try RationalValue(numerator: 1, denominator: 20)
+            )
+        )
+        let bottomTexture = try makeChromaTexture(
+            device: device,
+            width: 3,
+            height: 1,
+            bgraPixels: repeatedChromaBGRA([255, 0, 0, 255], count: 3)
+        )
+        let topTexture = try makeChromaTexture(
+            device: device,
+            width: 3,
+            height: 1,
+            bgraPixels: [
+                0, 64, 0, 255,
+                0, 230, 0, 255,
+                0, 0, 255, 255
+            ]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 3, height: 1)),
+            sourceProvider: ChromaClipTextureProvider(
+                textures: [
+                    try chromaUUID(ChromaTestIDs.bottomClip): bottomTexture,
+                    try chromaUUID(ChromaTestIDs.topClip): topTexture
+                ]
+            )
+        )
+
+        try waitForChromaRender(frame)
+
+        XCTAssertEqual(
+            try readChromaBGRA8(texture: frame.texture, device: device),
+            [
+                255, 0, 0, 255,
+                255, 0, 0, 255,
+                0, 0, 255, 255
+            ]
+        )
+    }
+
+    func testFRCOMP002ChokeErodesHardBinaryMatteSpatially() throws {
+        let device = try chromaMetalDeviceOrSkip()
+        let graph = try makeChromaTwoClipGraph(
+            topEffects: try makeChromaKeyEffects(
+                tolerance: try RationalValue(numerator: 1, denominator: 10),
+                choke: .one
+            )
+        )
+        let bottomTexture = try makeChromaTexture(
+            device: device,
+            width: 3,
+            height: 3,
+            bgraPixels: repeatedChromaBGRA([255, 0, 0, 255], count: 9)
+        )
+        let topTexture = try makeChromaTexture(
+            device: device,
+            width: 3,
+            height: 3,
+            bgraPixels: chromaPixelsBGRA(width: 3, height: 3) { xPosition, yPosition in
+                xPosition == 1 && yPosition == 1
+                    ? [0, 0, 255, 255]
+                    : [0, 255, 0, 255]
+            }
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 3, height: 3)),
+            sourceProvider: ChromaClipTextureProvider(
+                textures: [
+                    try chromaUUID(ChromaTestIDs.bottomClip): bottomTexture,
+                    try chromaUUID(ChromaTestIDs.topClip): topTexture
+                ]
+            )
+        )
+
+        try waitForChromaRender(frame)
+
+        XCTAssertEqual(
+            try readChromaBGRA8(texture: frame.texture, device: device),
+            repeatedChromaBGRA([255, 0, 0, 255], count: 9)
         )
     }
 
@@ -109,6 +250,36 @@ final class MetalRenderExecutorChromaKeyTests: XCTestCase {
                 255, 255, 255, 255
             ]
         )
+    }
+
+    func testFRCOMP002ViewMatteOutputsMidRangeAlphaFaithfully() throws {
+        let device = try chromaMetalDeviceOrSkip()
+        let graph = try makeChromaSingleClipGraph(
+            effects: try makeChromaKeyEffects(
+                edgeSoftness: try RationalValue(numerator: 39, denominator: 40),
+                viewMatte: true
+            )
+        )
+        let sourceTexture = try makeChromaTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [128, 128, 0, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1)),
+            sourceProvider: ChromaCountingTextureProvider(texture: sourceTexture)
+        )
+
+        try waitForChromaRender(frame)
+
+        let pixel = try readChromaBGRA8(texture: frame.texture, device: device)
+        XCTAssertTrue((124...132).contains(Int(pixel[0])))
+        XCTAssertTrue((124...132).contains(Int(pixel[1])))
+        XCTAssertTrue((124...132).contains(Int(pixel[2])))
+        XCTAssertEqual(pixel[3], 255)
     }
 }
 
@@ -342,6 +513,21 @@ private func repeatedChromaBGRA(_ pixel: [UInt8], count: Int) -> [UInt8] {
     pixels.reserveCapacity(pixel.count * count)
     for _ in 0..<count {
         pixels.append(contentsOf: pixel)
+    }
+    return pixels
+}
+
+private func chromaPixelsBGRA(
+    width: Int,
+    height: Int,
+    pixel: (_ xPosition: Int, _ yPosition: Int) -> [UInt8]
+) -> [UInt8] {
+    var pixels: [UInt8] = []
+    pixels.reserveCapacity(width * height * 4)
+    for yPosition in 0..<height {
+        for xPosition in 0..<width {
+            pixels.append(contentsOf: pixel(xPosition, yPosition))
+        }
     }
     return pixels
 }
