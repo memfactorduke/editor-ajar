@@ -244,6 +244,32 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
         XCTAssertEqual(videoClip.effects, .none)
     }
+
+    func testFRPROJ005FRCOMP001LegacyChromaKeyDefaultsNewNestedFields() throws {
+        let project = try makeCodecProject(seed: 195)
+        let effects = try makeCodecClipEffects()
+        let effectsProject = try replacingFirstCodecClipEffects(
+            in: project,
+            with: effects
+        )
+        let package = try AjarProjectCodec.encode(effectsProject)
+        let legacyProjectJSON = try projectJSONWithoutChromaKeyChokeAndViewMatte(
+            package.projectJSON
+        )
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(videoClip.effects.chromaKey.choke, .zero)
+        XCTAssertEqual(videoClip.effects.chromaKey.viewMatte, false)
+        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
+    }
 }
 
 final class AjarProjectCodecVersioningTests: XCTestCase {
@@ -444,6 +470,39 @@ private func projectJSONWithoutClipEffectsField(_ projectJSON: Data) throws -> D
     document["schemaVersion"] = 1
     clipPayload.removeValue(forKey: "effects")
     clipItem["clip"] = clipPayload
+    items[0] = clipItem
+    videoTrack["items"] = items
+    videoTracks[0] = videoTrack
+    sequence["videoTracks"] = videoTracks
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func projectJSONWithoutChromaKeyChokeAndViewMatte(_ projectJSON: Data) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var videoTracks = try XCTUnwrap(sequence["videoTracks"] as? [[String: Any]])
+    var videoTrack = try XCTUnwrap(videoTracks.first)
+    var items = try XCTUnwrap(videoTrack["items"] as? [[String: Any]])
+    var clipItem = try XCTUnwrap(items.first)
+    var clipWrapper = try XCTUnwrap(clipItem["clip"] as? [String: Any])
+    var clipPayload = try XCTUnwrap(clipWrapper["_0"] as? [String: Any])
+    var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
+    var chromaKey = try XCTUnwrap(effects["chromaKey"] as? [String: Any])
+
+    document["schemaVersion"] = 1
+    chromaKey.removeValue(forKey: "choke")
+    chromaKey.removeValue(forKey: "viewMatte")
+    effects["chromaKey"] = chromaKey
+    clipPayload["effects"] = effects
+    clipPayload.removeValue(forKey: "effectsAnimation")
+    clipWrapper["_0"] = clipPayload
+    clipItem["clip"] = clipWrapper
     items[0] = clipItem
     videoTrack["items"] = items
     videoTracks[0] = videoTrack

@@ -57,6 +57,16 @@ public struct ClipChromaKeySettings: Codable, Equatable, Sendable {
     /// Shows the resolved matte as grayscale instead of the keyed composite.
     public let viewMatte: Bool
 
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case keyColor
+        case tolerance
+        case edgeSoftness
+        case spillSuppression
+        case choke
+        case viewMatte
+    }
+
     /// Disabled keyer with stable default values.
     public static let disabled = ClipChromaKeySettings(
         enabled: false,
@@ -86,6 +96,18 @@ public struct ClipChromaKeySettings: Codable, Equatable, Sendable {
         self.choke = choke
         self.viewMatte = viewMatte
     }
+
+    /// Decodes chroma-key settings from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        keyColor = try container.decode(ClipRGBColor.self, forKey: .keyColor)
+        tolerance = try container.decode(RationalValue.self, forKey: .tolerance)
+        edgeSoftness = try container.decode(RationalValue.self, forKey: .edgeSoftness)
+        spillSuppression = try container.decode(RationalValue.self, forKey: .spillSuppression)
+        choke = try container.decodeIfPresent(RationalValue.self, forKey: .choke) ?? .zero
+        viewMatte = try container.decodeIfPresent(Bool.self, forKey: .viewMatte) ?? false
+    }
 }
 
 /// Keyframable chroma-key controls that evaluate to static render settings.
@@ -111,6 +133,16 @@ public struct AnimatableClipChromaKeySettings: Codable, Equatable, Sendable {
     /// Shows the matte as grayscale instead of the keyed composite.
     public let viewMatte: Bool
 
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case keyColor
+        case tolerance
+        case edgeSoftness
+        case spillSuppression
+        case choke
+        case viewMatte
+    }
+
     /// Disabled keyer with stable default values.
     public static let disabled = AnimatableClipChromaKeySettings.constant(.disabled)
 
@@ -131,6 +163,24 @@ public struct AnimatableClipChromaKeySettings: Codable, Equatable, Sendable {
         self.spillSuppression = spillSuppression
         self.choke = choke
         self.viewMatte = viewMatte
+    }
+
+    /// Decodes keyframable chroma-key settings from current and legacy schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        keyColor = try container.decode(ClipRGBColor.self, forKey: .keyColor)
+        tolerance = try container.decode(Animatable<RationalValue>.self, forKey: .tolerance)
+        edgeSoftness = try container.decode(Animatable<RationalValue>.self, forKey: .edgeSoftness)
+        spillSuppression = try container.decode(
+            Animatable<RationalValue>.self,
+            forKey: .spillSuppression
+        )
+        choke = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .choke
+        ) ?? .constant(.zero)
+        viewMatte = try container.decodeIfPresent(Bool.self, forKey: .viewMatte) ?? false
     }
 
     /// Creates keyframable settings with constant values.
