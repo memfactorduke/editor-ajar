@@ -1,0 +1,129 @@
+{
+  "clips" : [
+    {
+      "effects" : {
+        "colorCorrection" : {
+          "contrast" : {
+            "denominator" : 1,
+            "numerator" : 1
+          },
+          "exposure" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "gain" : {
+            "blue" : {
+              "denominator" : 10,
+              "numerator" : 11
+            },
+            "green" : {
+              "denominator" : 20,
+              "numerator" : 19
+            },
+            "red" : {
+              "denominator" : 5,
+              "numerator" : 6
+            }
+          },
+          "gamma" : {
+            "blue" : {
+              "denominator" : 4,
+              "numerator" : 5
+            },
+            "green" : {
+              "denominator" : 10,
+              "numerator" : 11
+            },
+            "red" : {
+              "denominator" : 10,
+              "numerator" : 9
+            }
+          },
+          "lift" : {
+            "blue" : {
+              "denominator" : 25,
+              "numerator" : 1
+            },
+            "green" : {
+              "denominator" : 40,
+              "numerator" : -1
+            },
+            "red" : {
+              "denominator" : 20,
+              "numerator" : 1
+            }
+          },
+          "saturation" : {
+            "denominator" : 1,
+            "numerator" : 1
+          },
+          "temperature" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "tint" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "vibrance" : {
+            "denominator" : 1,
+            "numerator" : 0
+          }
+        }
+      },
+      "syntheticMedia" : {
+        "bgra" : [
+          0,
+          0,
+          0,
+          0
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "pixelsBGRA" : [
+          48,
+          80,
+          112,
+          255,
+          96,
+          112,
+          144,
+          255,
+          160,
+          128,
+          96,
+          255,
+          220,
+          180,
+          140,
+          255
+        ],
+        "width" : 4
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "color-correction-lift-gamma-gain",
+  "outputDimensions" : {
+    "height" : 1,
+    "width" : 4
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COL-001",
+    "FR-COMP-007",
+    "FR-COL-005",
+    "FR-COL-008",
+    "ADR-0010",
+    "ADR-0011",
+    "NFR-QUAL-001",
+    "NFR-QUAL-002"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}
