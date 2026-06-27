@@ -164,6 +164,21 @@ public enum EditCommand: Codable, Equatable, Sendable {
         settings: ClipChromaKeySettings
     )
 
+    /// Replaces a clip's primary color-correction settings.
+    case setClipColorCorrection(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        correction: ClipColorCorrection
+    )
+
+    /// Clears a clip's primary color correction back to identity.
+    case clearClipColorCorrection(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID
+    )
+
     /// Adds a clip mask to the end of the ordered mask list.
     case addClipMask(
         sequenceID: UUID,
@@ -417,6 +432,10 @@ public extension EditCommand {
             return "Delete Transform Keyframe"
         case .setClipChromaKey:
             return "Set Chroma Key"
+        case .setClipColorCorrection:
+            return "Set Color Correction"
+        case .clearClipColorCorrection:
+            return "Clear Color Correction"
         case .addClipMask:
             return "Add Clip Mask"
         case .removeClipMask:

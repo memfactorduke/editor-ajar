@@ -793,6 +793,29 @@ private func makeCodecClipEffects() throws -> ClipEffects {
             tolerance: try RationalValue(numerator: 1, denominator: 4),
             edgeSoftness: try RationalValue(numerator: 1, denominator: 8),
             spillSuppression: try RationalValue(numerator: 3, denominator: 5)
+        ),
+        colorCorrection: ClipColorCorrection(
+            lift: ClipColorChannels(
+                red: try RationalValue(numerator: 1, denominator: 20),
+                green: .zero,
+                blue: try RationalValue(numerator: -1, denominator: 20)
+            ),
+            gamma: ClipColorChannels(
+                red: .one,
+                green: try RationalValue(numerator: 11, denominator: 10),
+                blue: .one
+            ),
+            gain: ClipColorChannels(
+                red: try RationalValue(numerator: 6, denominator: 5),
+                green: .one,
+                blue: try RationalValue(numerator: 9, denominator: 10)
+            ),
+            exposure: try RationalValue(numerator: 1, denominator: 2),
+            contrast: try RationalValue(numerator: 6, denominator: 5),
+            saturation: try RationalValue(numerator: 7, denominator: 5),
+            temperature: try RationalValue(numerator: 1, denominator: 4),
+            tint: try RationalValue(numerator: -1, denominator: 5),
+            vibrance: try RationalValue(numerator: 1, denominator: 3)
         )
     )
 }

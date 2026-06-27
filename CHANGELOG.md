@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` and `AjarRender` primary color correction with lift/gamma/gain, exposure,
+  contrast, saturation, temperature/tint, vibrance, undoable set/clear commands, `.ajar`
+  compatibility, render-graph cache invalidation, and golden coverage for FR-COL-001.
 - `AjarCore` and `AjarRender` clip masks with rectangle, ellipse, and polygon/Bézier-point-list
   shapes, feathering, invert, add/subtract/intersect combine modes, undoable reducer commands,
   `.ajar` compatibility, render-graph cache invalidation, and golden coverage for FR-COMP-003.

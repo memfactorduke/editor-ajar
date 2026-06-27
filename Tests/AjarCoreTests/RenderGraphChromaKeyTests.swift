@@ -111,6 +111,52 @@ final class RenderGraphChromaKeyTests: XCTestCase {
         )
         XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
     }
+
+    func testFRCOL001ADR0009EvaluatedColorCorrectionInvalidatesCompositeHash() throws {
+        let mediaID = try uuid(6)
+        let clipID = try uuid(7)
+        let effectsAnimation = try AnimatableClipEffects(
+            colorCorrection: AnimatableClipColorCorrection(
+                exposure: Animatable(
+                    base: .zero,
+                    keyframes: [
+                        Keyframe(
+                            time: try time(0),
+                            value: .zero,
+                            interpolation: .linear
+                        ),
+                        Keyframe(
+                            time: try time(12),
+                            value: try rationalValue(1, 1),
+                            interpolation: .hold
+                        )
+                    ]
+                ),
+                saturation: .constant(try rationalValue(3, 2))
+            )
+        )
+        let clip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            effectsAnimation: effectsAnimation
+        )
+        let sequence = try makeSequence(with: clip)
+        let project = try makeProject(mediaPool: [makeMediaRef(id: mediaID)], sequences: [sequence])
+
+        let firstGraph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+        let repeatedFirstGraph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+        let secondGraph = try buildRenderGraph(for: sequence, at: try time(12), in: project)
+        let firstInput = try compositeInput(in: firstGraph)
+        let secondInput = try compositeInput(in: secondGraph)
+
+        XCTAssertEqual(firstInput.effects.colorCorrection.exposure, .zero)
+        XCTAssertEqual(secondInput.effects.colorCorrection.exposure, try rationalValue(1, 1))
+        XCTAssertEqual(
+            firstGraph.outputNode?.contentHash,
+            repeatedFirstGraph.outputNode?.contentHash
+        )
+        XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
+    }
 }
 
 private func compositeInput(in graph: RenderGraph) throws -> RenderCompositeInput {

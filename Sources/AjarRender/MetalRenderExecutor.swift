@@ -592,6 +592,7 @@ public final class MetalRenderExecutor {
         effects: ClipEffects
     ) -> AjarCompositeUniforms {
         let chromaKey = effects.chromaKey
+        let colorCorrection = colorCorrectionUniforms(effects.colorCorrection)
         let masks = maskUniforms(effects.masks)
         return AjarCompositeUniforms(
             outputSize: SIMD2<Float>(Float(outputTexture.width), Float(outputTexture.height)),
@@ -630,6 +631,11 @@ public final class MetalRenderExecutor {
             chromaKeyPadding0: 0,
             chromaKeyPadding1: 0,
             chromaKeyPadding2: 0,
+            colorCorrectionControls: colorCorrection.controls,
+            colorCorrectionWhiteBalance: colorCorrection.whiteBalance,
+            colorCorrectionLift: colorCorrection.lift,
+            colorCorrectionGamma: colorCorrection.gamma,
+            colorCorrectionGain: colorCorrection.gain,
             maskCount: UInt32(min(effects.masks.count, ClipMaskLimits.maximumMasksPerClip)),
             maskPadding0: 0,
             maskPadding1: 0,
@@ -638,6 +644,41 @@ public final class MetalRenderExecutor {
             mask1: masks[1],
             mask2: masks[2],
             mask3: masks[3]
+        )
+    }
+
+    private func colorCorrectionUniforms(
+        _ correction: ClipColorCorrection
+    ) -> AjarColorCorrectionUniforms {
+        AjarColorCorrectionUniforms(
+            controls: SIMD4<Float>(
+                clamp(floatValue(correction.exposure), minimum: -10, maximum: 10),
+                clamp(floatValue(correction.contrast), minimum: 0, maximum: 4),
+                clamp(floatValue(correction.saturation), minimum: 0, maximum: 4),
+                clamp(floatValue(correction.vibrance), minimum: -1, maximum: 1)
+            ),
+            whiteBalance: SIMD4<Float>(
+                clamp(floatValue(correction.temperature), minimum: -1, maximum: 1),
+                clamp(floatValue(correction.tint), minimum: -1, maximum: 1),
+                0,
+                0
+            ),
+            lift: colorCorrectionChannels(correction.lift, minimum: -1, maximum: 1),
+            gamma: colorCorrectionChannels(correction.gamma, minimum: 0.01, maximum: 4),
+            gain: colorCorrectionChannels(correction.gain, minimum: 0, maximum: 4)
+        )
+    }
+
+    private func colorCorrectionChannels(
+        _ channels: ClipColorChannels,
+        minimum: Float,
+        maximum: Float
+    ) -> SIMD4<Float> {
+        SIMD4<Float>(
+            clamp(floatValue(channels.red), minimum: minimum, maximum: maximum),
+            clamp(floatValue(channels.green), minimum: minimum, maximum: maximum),
+            clamp(floatValue(channels.blue), minimum: minimum, maximum: maximum),
+            0
         )
     }
 
@@ -788,6 +829,10 @@ public final class MetalRenderExecutor {
         min(max(value, 0), 1)
     }
 
+    private func clamp(_ value: Float, minimum: Float, maximum: Float) -> Float {
+        min(max(value, minimum), maximum)
+    }
+
     private func blendModeValue(_ blendMode: ClipBlendMode) -> UInt32 {
         switch blendMode {
         case .normal:
@@ -859,6 +904,11 @@ public final class MetalRenderExecutor {
         var chromaKeyPadding0: UInt32
         var chromaKeyPadding1: UInt32
         var chromaKeyPadding2: UInt32
+        var colorCorrectionControls: SIMD4<Float>
+        var colorCorrectionWhiteBalance: SIMD4<Float>
+        var colorCorrectionLift: SIMD4<Float>
+        var colorCorrectionGamma: SIMD4<Float>
+        var colorCorrectionGain: SIMD4<Float>
         var maskCount: UInt32
         var maskPadding0: UInt32
         var maskPadding1: UInt32
@@ -867,6 +917,14 @@ public final class MetalRenderExecutor {
         var mask1: AjarMaskUniform
         var mask2: AjarMaskUniform
         var mask3: AjarMaskUniform
+    }
+
+    private struct AjarColorCorrectionUniforms {
+        var controls: SIMD4<Float>
+        var whiteBalance: SIMD4<Float>
+        var lift: SIMD4<Float>
+        var gamma: SIMD4<Float>
+        var gain: SIMD4<Float>
     }
 
     private struct AjarMaskUniform {
@@ -979,6 +1037,11 @@ public final class MetalRenderExecutor {
             uint chromaKeyPadding0;
             uint chromaKeyPadding1;
             uint chromaKeyPadding2;
+            float4 colorCorrectionControls;
+            float4 colorCorrectionWhiteBalance;
+            float4 colorCorrectionLift;
+            float4 colorCorrectionGamma;
+            float4 colorCorrectionGain;
             uint maskCount;
             uint maskPadding0;
             uint maskPadding1;
@@ -1227,6 +1290,54 @@ public final class MetalRenderExecutor {
             return result;
         }
 
+        static float3 ajar_apply_color_correction(
+            float3 sourceLinear,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            float exposure = uniforms.colorCorrectionControls.x;
+            float contrast = uniforms.colorCorrectionControls.y;
+            float saturation = uniforms.colorCorrectionControls.z;
+            float vibrance = uniforms.colorCorrectionControls.w;
+            float temperature = uniforms.colorCorrectionWhiteBalance.x;
+            float tint = uniforms.colorCorrectionWhiteBalance.y;
+
+            float3 result = max(sourceLinear, float3(0.0));
+            result *= exp2(exposure);
+            result = max(result + uniforms.colorCorrectionLift.rgb, float3(0.0));
+            result = pow(
+                max(result, float3(0.0)),
+                1.0 / max(uniforms.colorCorrectionGamma.rgb, float3(0.01))
+            );
+            result *= max(uniforms.colorCorrectionGain.rgb, float3(0.0));
+
+            constexpr float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
+            result = max(((result - 0.18) * contrast) + 0.18, float3(0.0));
+
+            float warm = max(temperature, 0.0);
+            float cool = max(-temperature, 0.0);
+            float3 temperatureScale = float3(
+                1.0 + (warm * 0.20) - (cool * 0.10),
+                1.0,
+                1.0 - (warm * 0.10) + (cool * 0.20)
+            );
+            float magenta = max(tint, 0.0);
+            float green = max(-tint, 0.0);
+            float3 tintScale = float3(
+                1.0 + (magenta * 0.08),
+                1.0 + (green * 0.10) - (magenta * 0.08),
+                1.0 + (magenta * 0.08)
+            );
+            result *= max(temperatureScale * tintScale, float3(0.0));
+
+            float luma = dot(result, lumaWeights);
+            result = mix(float3(luma), result, saturation);
+            float chroma = max(result.r, max(result.g, result.b))
+                - min(result.r, min(result.g, result.b));
+            float vibranceSaturation = 1.0 + (vibrance * (1.0 - saturate(chroma)));
+            result = mix(float3(luma), result, vibranceSaturation);
+            return max(result, float3(0.0));
+        }
+
         static AjarMaskUniform ajar_mask_at(
             constant AjarCompositeUniforms &uniforms,
             uint index
@@ -1426,6 +1537,7 @@ public final class MetalRenderExecutor {
                     uniforms.chromaKeyControls.z
                 );
             }
+            sourceLinear = ajar_apply_color_correction(sourceLinear, uniforms);
 
             float sourceAlpha = saturate(sampledSource.a * uniforms.opacity * combinedMatteAlpha);
             float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
