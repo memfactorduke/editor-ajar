@@ -294,7 +294,9 @@ public enum GoldenFrameHarness {
             kind: .video,
             name: "Golden \(context.manifestID) \(index)",
             transform: clipSpec.transform ?? .identity,
-            transformAnimation: clipSpec.transformAnimation
+            transformAnimation: clipSpec.transformAnimation,
+            effects: clipSpec.effects ?? .none,
+            effectsAnimation: clipSpec.effectsAnimation
         )
     }
 
@@ -373,7 +375,9 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
                 GoldenFrameClipSpec(
                     syntheticMedia: syntheticMedia,
                     transform: nil,
-                    transformAnimation: nil
+                    transformAnimation: nil,
+                    effects: nil,
+                    effectsAnimation: nil
                 )
             ]
         }
@@ -385,6 +389,8 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let syntheticMedia: SyntheticMovieSpec
     let transform: ClipTransform?
     let transformAnimation: AnimatableClipTransform?
+    let effects: ClipEffects?
+    let effectsAnimation: AnimatableClipEffects?
 }
 
 private struct GoldenFrameCaseResult {

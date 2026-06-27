@@ -51,13 +51,31 @@ public struct ClipChromaKeySettings: Codable, Equatable, Sendable {
     /// Spill suppression amount, 0...1.
     public let spillSuppression: RationalValue
 
+    /// Matte choke/shrink amount, 0...1.
+    public let choke: RationalValue
+
+    /// Shows the resolved matte as grayscale instead of the keyed composite.
+    public let viewMatte: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case keyColor
+        case tolerance
+        case edgeSoftness
+        case spillSuppression
+        case choke
+        case viewMatte
+    }
+
     /// Disabled keyer with stable default values.
     public static let disabled = ClipChromaKeySettings(
         enabled: false,
         keyColor: .green,
         tolerance: .zero,
         edgeSoftness: .zero,
-        spillSuppression: .zero
+        spillSuppression: .zero,
+        choke: .zero,
+        viewMatte: false
     )
 
     /// Creates chroma-key settings.
@@ -66,13 +84,144 @@ public struct ClipChromaKeySettings: Codable, Equatable, Sendable {
         keyColor: ClipRGBColor = .green,
         tolerance: RationalValue,
         edgeSoftness: RationalValue,
-        spillSuppression: RationalValue
+        spillSuppression: RationalValue,
+        choke: RationalValue = .zero,
+        viewMatte: Bool = false
     ) {
         self.enabled = enabled
         self.keyColor = keyColor
         self.tolerance = tolerance
         self.edgeSoftness = edgeSoftness
         self.spillSuppression = spillSuppression
+        self.choke = choke
+        self.viewMatte = viewMatte
+    }
+
+    /// Decodes chroma-key settings from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        keyColor = try container.decode(ClipRGBColor.self, forKey: .keyColor)
+        tolerance = try container.decode(RationalValue.self, forKey: .tolerance)
+        edgeSoftness = try container.decode(RationalValue.self, forKey: .edgeSoftness)
+        spillSuppression = try container.decode(RationalValue.self, forKey: .spillSuppression)
+        choke = try container.decodeIfPresent(RationalValue.self, forKey: .choke) ?? .zero
+        viewMatte = try container.decodeIfPresent(Bool.self, forKey: .viewMatte) ?? false
+    }
+}
+
+/// Keyframable chroma-key controls that evaluate to static render settings.
+public struct AnimatableClipChromaKeySettings: Codable, Equatable, Sendable {
+    /// Whether the keyer participates in rendering.
+    public let enabled: Bool
+
+    /// Sampled color to remove.
+    public let keyColor: ClipRGBColor
+
+    /// Key color acceptance range.
+    public let tolerance: Animatable<RationalValue>
+
+    /// Matte edge softening amount.
+    public let edgeSoftness: Animatable<RationalValue>
+
+    /// De-spill amount.
+    public let spillSuppression: Animatable<RationalValue>
+
+    /// Matte choke/shrink amount.
+    public let choke: Animatable<RationalValue>
+
+    /// Shows the matte as grayscale instead of the keyed composite.
+    public let viewMatte: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case keyColor
+        case tolerance
+        case edgeSoftness
+        case spillSuppression
+        case choke
+        case viewMatte
+    }
+
+    /// Disabled keyer with stable default values.
+    public static let disabled = AnimatableClipChromaKeySettings.constant(.disabled)
+
+    /// Creates keyframable chroma-key settings.
+    public init(
+        enabled: Bool,
+        keyColor: ClipRGBColor = .green,
+        tolerance: Animatable<RationalValue>,
+        edgeSoftness: Animatable<RationalValue>,
+        spillSuppression: Animatable<RationalValue>,
+        choke: Animatable<RationalValue> = .constant(.zero),
+        viewMatte: Bool = false
+    ) {
+        self.enabled = enabled
+        self.keyColor = keyColor
+        self.tolerance = tolerance
+        self.edgeSoftness = edgeSoftness
+        self.spillSuppression = spillSuppression
+        self.choke = choke
+        self.viewMatte = viewMatte
+    }
+
+    /// Decodes keyframable chroma-key settings from current and legacy schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        keyColor = try container.decode(ClipRGBColor.self, forKey: .keyColor)
+        tolerance = try container.decode(Animatable<RationalValue>.self, forKey: .tolerance)
+        edgeSoftness = try container.decode(Animatable<RationalValue>.self, forKey: .edgeSoftness)
+        spillSuppression = try container.decode(
+            Animatable<RationalValue>.self,
+            forKey: .spillSuppression
+        )
+        choke = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .choke
+        ) ?? .constant(.zero)
+        viewMatte = try container.decodeIfPresent(Bool.self, forKey: .viewMatte) ?? false
+    }
+
+    /// Creates keyframable settings with constant values.
+    public static func constant(
+        _ settings: ClipChromaKeySettings
+    ) -> AnimatableClipChromaKeySettings {
+        AnimatableClipChromaKeySettings(
+            enabled: settings.enabled,
+            keyColor: settings.keyColor,
+            tolerance: .constant(settings.tolerance),
+            edgeSoftness: .constant(settings.edgeSoftness),
+            spillSuppression: .constant(settings.spillSuppression),
+            choke: .constant(settings.choke),
+            viewMatte: settings.viewMatte
+        )
+    }
+
+    /// Evaluates keyframable controls at a sequence time.
+    public func value(at time: RationalTime) -> ClipChromaKeySettings {
+        ClipChromaKeySettings(
+            enabled: enabled,
+            keyColor: keyColor,
+            tolerance: tolerance.value(at: time),
+            edgeSoftness: edgeSoftness.value(at: time),
+            spillSuppression: spillSuppression.value(at: time),
+            choke: choke.value(at: time),
+            viewMatte: viewMatte
+        )
+    }
+
+    /// Static settings represented by base keyframe values.
+    public var baseSettings: ClipChromaKeySettings {
+        ClipChromaKeySettings(
+            enabled: enabled,
+            keyColor: keyColor,
+            tolerance: tolerance.base,
+            edgeSoftness: edgeSoftness.base,
+            spillSuppression: spillSuppression.base,
+            choke: choke.base,
+            viewMatte: viewMatte
+        )
     }
 }
 
@@ -95,6 +244,35 @@ public struct ClipEffects: Codable, Equatable, Sendable {
     }
 }
 
+/// Keyframable visual effects attached to a clip.
+public struct AnimatableClipEffects: Codable, Equatable, Sendable {
+    /// Keyframable chroma-key controls.
+    public let chromaKey: AnimatableClipChromaKeySettings
+
+    /// No active effects.
+    public static let none = AnimatableClipEffects(chromaKey: .disabled)
+
+    /// Creates keyframable effects.
+    public init(chromaKey: AnimatableClipChromaKeySettings = .disabled) {
+        self.chromaKey = chromaKey
+    }
+
+    /// Creates keyframable effects with constant values.
+    public static func constant(_ effects: ClipEffects) -> AnimatableClipEffects {
+        AnimatableClipEffects(chromaKey: .constant(effects.chromaKey))
+    }
+
+    /// Evaluates all keyframable effects at a sequence time.
+    public func value(at time: RationalTime) -> ClipEffects {
+        ClipEffects(chromaKey: chromaKey.value(at: time))
+    }
+
+    /// Static effects represented by base keyframe values.
+    public var baseEffects: ClipEffects {
+        ClipEffects(chromaKey: chromaKey.baseSettings)
+    }
+}
+
 /// Typed validation failures for clip effects.
 public enum ClipEffectsValidationError: Equatable, Sendable {
     /// A color channel must stay in the normalized 0...1 range.
@@ -108,6 +286,9 @@ public enum ClipEffectsValidationError: Equatable, Sendable {
 
     /// Chroma-key spill suppression must stay in the normalized 0...1 range.
     case chromaKeySpillSuppressionOutOfRange(RationalValue)
+
+    /// Chroma-key choke must stay in the normalized 0...1 range.
+    case chromaKeyChokeOutOfRange(RationalValue)
 }
 
 enum ClipEffectsValidator {
@@ -129,6 +310,38 @@ enum ClipEffectsValidator {
             effects.chromaKey.spillSuppression,
             to: &errors,
             error: ClipEffectsValidationError.chromaKeySpillSuppressionOutOfRange
+        )
+        appendUnitIntervalError(
+            effects.chromaKey.choke,
+            to: &errors,
+            error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
+        )
+
+        return errors
+    }
+
+    static func errors(for effects: AnimatableClipEffects) -> [ClipEffectsValidationError] {
+        var errors = errors(for: effects.baseEffects)
+
+        appendUnitIntervalErrors(
+            effects.chromaKey.tolerance,
+            to: &errors,
+            error: ClipEffectsValidationError.chromaKeyToleranceOutOfRange
+        )
+        appendUnitIntervalErrors(
+            effects.chromaKey.edgeSoftness,
+            to: &errors,
+            error: ClipEffectsValidationError.chromaKeyEdgeSoftnessOutOfRange
+        )
+        appendUnitIntervalErrors(
+            effects.chromaKey.spillSuppression,
+            to: &errors,
+            error: ClipEffectsValidationError.chromaKeySpillSuppressionOutOfRange
+        )
+        appendUnitIntervalErrors(
+            effects.chromaKey.choke,
+            to: &errors,
+            error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
         )
 
         return errors
@@ -156,6 +369,16 @@ enum ClipEffectsValidator {
     ) {
         if value.isNegative || value.isGreaterThanOne {
             errors.append(error(value))
+        }
+    }
+
+    private static func appendUnitIntervalErrors(
+        _ parameter: Animatable<RationalValue>,
+        to errors: inout [ClipEffectsValidationError],
+        error: (RationalValue) -> ClipEffectsValidationError
+    ) {
+        for keyframe in parameter.keyframes {
+            appendUnitIntervalError(keyframe.value, to: &errors, error: error)
         }
     }
 }

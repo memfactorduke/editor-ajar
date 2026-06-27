@@ -393,7 +393,10 @@ private final class CVMetalTextureFixture {
 private let clear: [UInt8] = [0, 0, 0, 0]
 private let red: [UInt8] = [0, 0, 255, 255]
 
-private func makeSingleClipGraph(transform: ClipTransform = .identity) throws -> RenderGraph {
+private func makeSingleClipGraph(
+    transform: ClipTransform = .identity,
+    effects: ClipEffects = .none
+) throws -> RenderGraph {
     let mediaID = try testUUID(TestIDs.media)
     let clipID = try testUUID(TestIDs.clip)
     let media = MediaRef(
@@ -418,7 +421,8 @@ private func makeSingleClipGraph(transform: ClipTransform = .identity) throws ->
         timelineRange: try range(startFrame: 0, durationFrames: 24),
         kind: .video,
         name: "Synthetic",
-        transform: transform
+        transform: transform,
+        effects: effects
     )
     let sequence = Sequence(
         id: UUID(),
@@ -443,7 +447,10 @@ private func makeSingleClipGraph(transform: ClipTransform = .identity) throws ->
     return try buildRenderGraph(for: sequence, at: try time(0), in: project)
 }
 
-private func makeTwoClipGraph(topTransform: ClipTransform = .identity) throws -> RenderGraph {
+private func makeTwoClipGraph(
+    topTransform: ClipTransform = .identity,
+    topEffects: ClipEffects = .none
+) throws -> RenderGraph {
     let bottomMediaID = try testUUID(TestIDs.bottomMedia)
     let topMediaID = try testUUID(TestIDs.topMedia)
     let bottomClip = try makeRenderClip(
@@ -453,7 +460,8 @@ private func makeTwoClipGraph(topTransform: ClipTransform = .identity) throws ->
     let topClip = try makeRenderClip(
         id: try testUUID(TestIDs.topClip),
         mediaID: topMediaID,
-        transform: topTransform
+        transform: topTransform,
+        effects: topEffects
     )
     let sequence = Sequence(
         id: UUID(),
@@ -505,7 +513,8 @@ private func makeRenderMedia(id: UUID) throws -> MediaRef {
 private func makeRenderClip(
     id: UUID,
     mediaID: UUID,
-    transform: ClipTransform = .identity
+    transform: ClipTransform = .identity,
+    effects: ClipEffects = .none
 ) throws -> Clip {
     Clip(
         id: id,
@@ -514,7 +523,8 @@ private func makeRenderClip(
         timelineRange: try range(startFrame: 0, durationFrames: 24),
         kind: .video,
         name: "Synthetic",
-        transform: transform
+        transform: transform,
+        effects: effects
     )
 }
 

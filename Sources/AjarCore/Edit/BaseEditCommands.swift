@@ -455,11 +455,15 @@ extension EditReducer {
         linkGroupID: UUID?? = nil,
         transform: ClipTransform? = nil,
         transformAnimation: AnimatableClipTransform? = nil,
-        effects: ClipEffects? = nil
+        effects: ClipEffects? = nil,
+        effectsAnimation: AnimatableClipEffects? = nil
     ) -> Clip {
         let replacementTransform = transform ?? clip.transform
         let replacementAnimation = transformAnimation
             ?? (transform == nil ? clip.transformAnimation : .constant(replacementTransform))
+        let replacementEffects = effects ?? clip.effects
+        let replacementEffectsAnimation = effectsAnimation
+            ?? (effects == nil ? clip.effectsAnimation : .constant(replacementEffects))
         return Clip(
             id: clip.id,
             source: source ?? clip.source,
@@ -470,7 +474,8 @@ extension EditReducer {
             linkGroupID: linkGroupID ?? clip.linkGroupID,
             transform: replacementTransform,
             transformAnimation: replacementAnimation,
-            effects: effects ?? clip.effects
+            effects: replacementEffects,
+            effectsAnimation: replacementEffectsAnimation
         )
     }
 }

@@ -151,6 +151,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Per-clip visual effects.
     public let effects: ClipEffects
 
+    /// Keyframable visual effects. Evaluates to `effects` when constant.
+    public let effectsAnimation: AnimatableClipEffects
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -162,7 +165,8 @@ public struct Clip: Codable, Equatable, Sendable {
         linkGroupID: UUID? = nil,
         transform: ClipTransform = .identity,
         transformAnimation: AnimatableClipTransform? = nil,
-        effects: ClipEffects = .none
+        effects: ClipEffects = .none,
+        effectsAnimation: AnimatableClipEffects? = nil
     ) {
         self.id = id
         self.source = source
@@ -174,6 +178,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.transform = transform
         self.transformAnimation = transformAnimation ?? .constant(transform)
         self.effects = effects
+        self.effectsAnimation = effectsAnimation ?? .constant(effects)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -187,6 +192,7 @@ public struct Clip: Codable, Equatable, Sendable {
         case transform
         case transformAnimation
         case effects
+        case effectsAnimation
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -206,6 +212,10 @@ public struct Clip: Codable, Equatable, Sendable {
             forKey: .transformAnimation
         ) ?? .constant(transform)
         effects = try container.decodeIfPresent(ClipEffects.self, forKey: .effects) ?? .none
+        effectsAnimation = try container.decodeIfPresent(
+            AnimatableClipEffects.self,
+            forKey: .effectsAnimation
+        ) ?? .constant(effects)
     }
 
     /// Encodes the complete clip payload.
@@ -221,6 +231,7 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(transform, forKey: .transform)
         try container.encode(transformAnimation, forKey: .transformAnimation)
         try container.encode(effects, forKey: .effects)
+        try container.encode(effectsAnimation, forKey: .effectsAnimation)
     }
 }
 

@@ -10,7 +10,9 @@ extension ProjectValidator {
             return
         }
 
-        for error in ClipEffectsValidator.errors(for: clip.effects) {
+        let errors = ClipEffectsValidator.errors(for: clip.effects)
+            + ClipEffectsValidator.errors(for: clip.effectsAnimation)
+        for error in errors {
             state.errors.append(
                 .invalidClipEffects(
                     sequenceID: context.sequenceID,
