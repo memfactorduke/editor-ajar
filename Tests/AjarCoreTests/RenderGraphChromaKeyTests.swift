@@ -55,6 +55,62 @@ final class RenderGraphChromaKeyTests: XCTestCase {
         )
         XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
     }
+
+    func testFRCOMP003ADR0009EvaluatedMaskParamsInvalidateCompositeHash() throws {
+        let mediaID = try uuid(3)
+        let clipID = try uuid(4)
+        let effectsAnimation = try AnimatableClipEffects(
+            masks: [
+                AnimatableClipMask(
+                    id: try uuid(5),
+                    shape: .rectangle(
+                        AnimatableClipRectangleMask(
+                            x: .constant(.zero),
+                            y: .constant(.zero),
+                            width: Animatable(
+                                base: try rationalValue(1, 1),
+                                keyframes: [
+                                    Keyframe(
+                                        time: try time(0),
+                                        value: try rationalValue(1, 1),
+                                        interpolation: .linear
+                                    ),
+                                    Keyframe(
+                                        time: try time(12),
+                                        value: try rationalValue(4, 1),
+                                        interpolation: .hold
+                                    )
+                                ]
+                            ),
+                            height: .constant(try rationalValue(1, 1))
+                        )
+                    ),
+                    featherRadius: .constant(.zero)
+                )
+            ]
+        )
+        let clip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            effectsAnimation: effectsAnimation
+        )
+        let sequence = try makeSequence(with: clip)
+        let project = try makeProject(mediaPool: [makeMediaRef(id: mediaID)], sequences: [sequence])
+
+        let firstGraph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+        let repeatedFirstGraph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+        let secondGraph = try buildRenderGraph(for: sequence, at: try time(12), in: project)
+        let firstRectangle = try rectangleMask(in: firstGraph)
+        let secondRectangle = try rectangleMask(in: secondGraph)
+
+        XCTAssertEqual(firstRectangle.width, try rationalValue(1, 1))
+        XCTAssertEqual(secondRectangle.width, try rationalValue(4, 1))
+        XCTAssertEqual(
+            firstGraph.outputNode?.contentHash,
+            repeatedFirstGraph.outputNode?.contentHash
+        )
+        XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
+    }
 }
 
 private func compositeInput(in graph: RenderGraph) throws -> RenderCompositeInput {
@@ -63,6 +119,15 @@ private func compositeInput(in graph: RenderGraph) throws -> RenderCompositeInpu
         throw TestGraphError.expectedComposite
     }
     return try XCTUnwrap(composite.inputs.first)
+}
+
+private func rectangleMask(in graph: RenderGraph) throws -> ClipRectangleMask {
+    let input = try compositeInput(in: graph)
+    let mask = try XCTUnwrap(input.effects.masks.first)
+    guard case .rectangle(let rectangle) = mask.shape else {
+        throw TestGraphError.expectedRectangleMask
+    }
+    return rectangle
 }
 
 private func makeProject(mediaPool: [MediaRef], sequences: [Sequence]) throws -> Project {
@@ -144,4 +209,5 @@ private func uuid(_ value: Int) throws -> UUID {
 
 private enum TestGraphError: Error {
     case expectedComposite
+    case expectedRectangleMask
 }

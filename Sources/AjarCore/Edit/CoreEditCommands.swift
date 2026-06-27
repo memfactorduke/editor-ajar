@@ -44,6 +44,8 @@ extension EditReducer {
         case .setClipTransform, .addClipTransformKeyframe, .moveClipTransformKeyframe,
             .deleteClipTransformKeyframe, .setClipChromaKey:
             return try applyTransformClipCommand(command, to: project)
+        case .addClipMask, .removeClipMask, .moveClipMask, .setClipMask:
+            return try applyClipMaskCommand(command, to: project)
         case .addClip(let sequenceID, let trackID, let clip):
             return try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
         case .removeClip(let sequenceID, let trackID, let clipID):
@@ -82,6 +84,63 @@ extension EditReducer {
                     trackID: trackID,
                     clipID: clipID,
                     settings: settings
+                ),
+                in: project
+            )
+        default:
+            throw EditReducerError.validationFailed([])
+        }
+    }
+
+    static func applyClipMaskCommand(
+        _ command: EditCommand,
+        to project: Project
+    ) throws -> Project {
+        switch command {
+        case .addClipMask(let sequenceID, let trackID, let clipID, let mask):
+            return try addClipMask(
+                ClipMaskEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    mask: mask
+                ),
+                in: project
+            )
+        case .removeClipMask(let sequenceID, let trackID, let clipID, let maskID):
+            return try removeClipMask(
+                RemoveClipMaskEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    maskID: maskID
+                ),
+                in: project
+            )
+        case .moveClipMask(
+            let sequenceID,
+            let trackID,
+            let clipID,
+            let maskID,
+            let destinationIndex
+        ):
+            return try moveClipMask(
+                MoveClipMaskEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    maskID: maskID,
+                    destinationIndex: destinationIndex
+                ),
+                in: project
+            )
+        case .setClipMask(let sequenceID, let trackID, let clipID, let mask):
+            return try setClipMask(
+                ClipMaskEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    mask: mask
                 ),
                 in: project
             )

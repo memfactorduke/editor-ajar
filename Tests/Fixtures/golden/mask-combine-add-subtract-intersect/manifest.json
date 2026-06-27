@@ -1,0 +1,169 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [255, 0, 0, 255],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 5
+      }
+    },
+    {
+      "effects" : {
+        "masks" : [
+          {
+            "combine" : "add",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "id" : "00000000-0000-0000-0000-000000000806",
+            "invert" : false,
+            "shape" : {
+              "rectangle" : {
+                "_0" : {
+                  "height" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "width" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "x" : {
+                    "denominator" : 1,
+                    "numerator" : 0
+                  },
+                  "y" : {
+                    "denominator" : 1,
+                    "numerator" : 0
+                  }
+                }
+              }
+            }
+          },
+          {
+            "combine" : "add",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "id" : "00000000-0000-0000-0000-000000000807",
+            "invert" : false,
+            "shape" : {
+              "rectangle" : {
+                "_0" : {
+                  "height" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "width" : {
+                    "denominator" : 1,
+                    "numerator" : 3
+                  },
+                  "x" : {
+                    "denominator" : 1,
+                    "numerator" : 2
+                  },
+                  "y" : {
+                    "denominator" : 1,
+                    "numerator" : 0
+                  }
+                }
+              }
+            }
+          },
+          {
+            "combine" : "subtract",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "id" : "00000000-0000-0000-0000-000000000808",
+            "invert" : false,
+            "shape" : {
+              "rectangle" : {
+                "_0" : {
+                  "height" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "width" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "x" : {
+                    "denominator" : 1,
+                    "numerator" : 3
+                  },
+                  "y" : {
+                    "denominator" : 1,
+                    "numerator" : 0
+                  }
+                }
+              }
+            }
+          },
+          {
+            "combine" : "intersect",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "id" : "00000000-0000-0000-0000-000000000809",
+            "invert" : false,
+            "shape" : {
+              "rectangle" : {
+                "_0" : {
+                  "height" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "width" : {
+                    "denominator" : 1,
+                    "numerator" : 3
+                  },
+                  "x" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "y" : {
+                    "denominator" : 1,
+                    "numerator" : 0
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "syntheticMedia" : {
+        "bgra" : [0, 0, 255, 255],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 5
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "mask-combine-add-subtract-intersect",
+  "outputDimensions" : {
+    "height" : 1,
+    "width" : 5
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-003",
+    "ADR-0006",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

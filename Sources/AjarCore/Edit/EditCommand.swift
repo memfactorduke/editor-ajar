@@ -164,6 +164,39 @@ public enum EditCommand: Codable, Equatable, Sendable {
         settings: ClipChromaKeySettings
     )
 
+    /// Adds a clip mask to the end of the ordered mask list.
+    case addClipMask(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        mask: ClipMask
+    )
+
+    /// Removes a clip mask by stable mask ID.
+    case removeClipMask(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        maskID: UUID
+    )
+
+    /// Moves a clip mask to a new ordered index.
+    case moveClipMask(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        maskID: UUID,
+        destinationIndex: Int
+    )
+
+    /// Replaces an existing clip mask with the same stable mask ID.
+    case setClipMask(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        mask: ClipMask
+    )
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 
@@ -315,6 +348,12 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A clip effect failed semantic validation.
     case invalidClipEffects(clipID: UUID, error: ClipEffectsValidationError)
+
+    /// A clip mask edit referenced a missing mask.
+    case clipMaskNotFound(clipID: UUID, maskID: UUID)
+
+    /// A clip mask reorder target was outside the mask list.
+    case clipMaskDestinationIndexOutOfRange(clipID: UUID, index: Int, count: Int)
 }
 
 /// Pure reducer entry point required by ADR-0008.
@@ -378,6 +417,14 @@ public extension EditCommand {
             return "Delete Transform Keyframe"
         case .setClipChromaKey:
             return "Set Chroma Key"
+        case .addClipMask:
+            return "Add Clip Mask"
+        case .removeClipMask:
+            return "Remove Clip Mask"
+        case .moveClipMask:
+            return "Reorder Clip Mask"
+        case .setClipMask:
+            return "Set Clip Mask"
         case .addTrack:
             return "Add Track"
         case .removeTrack:
@@ -402,68 +449,6 @@ public extension EditCommand {
             return "Detach Audio"
         case .setProjectSettings:
             return "Change Project Settings"
-        }
-    }
-}
-
-extension EditReducer {
-    // swiftlint:disable:next cyclomatic_complexity
-    static func applyUnchecked(_ command: EditCommand, to project: Project) throws -> Project {
-        switch command {
-        case .addClip, .insertClip, .overwriteClip, .appendClip,
-            .removeClip, .replaceClipSource, .threePointEdit, .bladeClip,
-            .rippleTrimClip, .rollEdit, .slipClip, .slideClip, .rippleDeleteClip,
-            .liftClip, .moveClip, .trimClip, .setClipTransform,
-            .addClipTransformKeyframe, .moveClipTransformKeyframe,
-            .deleteClipTransformKeyframe, .setClipChromaKey:
-            return try applyClipCommand(command, to: project)
-        case .setTrackState(let sequenceID, let trackID, let state):
-            return try setTrackState(
-                TrackStateEdit(sequenceID: sequenceID, trackID: trackID, state: state),
-                in: project
-            )
-        case .addTrack(let sequenceID, let track):
-            return try addTrack(track, sequenceID: sequenceID, to: project)
-        case .removeTrack(let sequenceID, let trackID):
-            return try removeTrack(trackID: trackID, sequenceID: sequenceID, from: project)
-        case .addSequence(let sequence):
-            return try addSequence(sequence, to: project)
-        case .removeSequence(let sequenceID):
-            return try removeSequence(sequenceID: sequenceID, from: project)
-        case .duplicateSequence(let sourceSequenceID, let duplicate):
-            return try duplicateSequence(
-                sourceSequenceID: sourceSequenceID,
-                duplicate: duplicate,
-                in: project
-            )
-        case .renameSequence(let sequenceID, let name):
-            return try renameSequence(sequenceID: sequenceID, name: name, in: project)
-        case .addMarker(let sequenceID, let marker):
-            return try addMarker(marker, sequenceID: sequenceID, to: project)
-        case .removeMarker(let sequenceID, let markerID):
-            return try removeMarker(markerID: markerID, sequenceID: sequenceID, from: project)
-        case .updateMarker(let sequenceID, let marker):
-            return try updateMarker(marker, sequenceID: sequenceID, in: project)
-        case .linkClips(let sequenceID, let linkGroupID, let clips):
-            return try linkClips(
-                sequenceID: sequenceID,
-                linkGroupID: linkGroupID,
-                clips: clips,
-                in: project
-            )
-        case .unlinkClips(let sequenceID, let linkGroupID):
-            return try unlinkClips(
-                sequenceID: sequenceID,
-                linkGroupID: linkGroupID,
-                in: project
-            )
-        case .setProjectSettings(let settings):
-            return Project(
-                schemaVersion: project.schemaVersion,
-                settings: settings,
-                mediaPool: project.mediaPool,
-                sequences: project.sequences
-            )
         }
     }
 }

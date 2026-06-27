@@ -1,0 +1,101 @@
+{
+  "clips" : [
+    {
+      "effects" : {
+        "chromaKey" : {
+          "choke" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "edgeSoftness" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "enabled" : false,
+          "keyColor" : {
+            "blue" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "green" : {
+              "denominator" : 1,
+              "numerator" : 1
+            },
+            "red" : {
+              "denominator" : 1,
+              "numerator" : 0
+            }
+          },
+          "spillSuppression" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "tolerance" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "viewMatte" : true
+        },
+        "masks" : [
+          {
+            "combine" : "add",
+            "featherRadius" : {
+              "denominator" : 1,
+              "numerator" : 1
+            },
+            "id" : "00000000-0000-0000-0000-000000000804",
+            "invert" : false,
+            "shape" : {
+              "rectangle" : {
+                "_0" : {
+                  "height" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "width" : {
+                    "denominator" : 1,
+                    "numerator" : 2
+                  },
+                  "x" : {
+                    "denominator" : 1,
+                    "numerator" : 1
+                  },
+                  "y" : {
+                    "denominator" : 1,
+                    "numerator" : 0
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "syntheticMedia" : {
+        "bgra" : [255, 255, 255, 255],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 1,
+        "width" : 4
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "mask-feather",
+  "outputDimensions" : {
+    "height" : 1,
+    "width" : 4
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-003",
+    "ADR-0006",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

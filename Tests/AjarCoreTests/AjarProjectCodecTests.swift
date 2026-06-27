@@ -270,6 +270,51 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(videoClip.effects.chromaKey.viewMatte, false)
         XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
     }
+
+    func testFRCOMP003ClipMasksRoundTripThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 196)
+        let effects = try makeCodecClipMaskEffects()
+        let effectsProject = try replacingFirstCodecClipEffects(
+            in: project,
+            with: effects
+        )
+
+        let package = try AjarProjectCodec.encode(effectsProject)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject, effectsProject)
+        XCTAssertEqual(videoClip.effects.masks, effects.masks)
+        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
+    }
+
+    func testFRPROJ005FRCOMP003LegacyEffectsWithoutMasksDefaultToEmpty() throws {
+        let project = try makeCodecProject(seed: 197)
+        let effectsProject = try replacingFirstCodecClipEffects(
+            in: project,
+            with: try makeCodecClipEffects()
+        )
+        let package = try AjarProjectCodec.encode(effectsProject)
+        let legacyProjectJSON = try projectJSONWithoutClipEffectMasks(package.projectJSON)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(videoClip.effects.masks, [])
+        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
+    }
 }
 
 final class AjarProjectCodecVersioningTests: XCTestCase {
@@ -513,6 +558,50 @@ private func projectJSONWithoutChromaKeyChokeAndViewMatte(_ projectJSON: Data) t
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
 }
 
+private func projectJSONWithoutClipEffectMasks(_ projectJSON: Data) throws -> Data {
+    try updatingFirstClipPayload(projectJSON) { clipPayload in
+        var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
+        effects.removeValue(forKey: "masks")
+        clipPayload["effects"] = effects
+        clipPayload.removeValue(forKey: "effectsAnimation")
+    }
+}
+
+private func updatingFirstClipPayload(
+    _ projectJSON: Data,
+    update: (inout [String: Any]) throws -> Void
+) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var videoTracks = try XCTUnwrap(sequence["videoTracks"] as? [[String: Any]])
+    var videoTrack = try XCTUnwrap(videoTracks.first)
+    var items = try XCTUnwrap(videoTrack["items"] as? [[String: Any]])
+    var clipItem = try XCTUnwrap(items.first)
+    var clipWrapper = try XCTUnwrap(clipItem["clip"] as? [String: Any])
+
+    document["schemaVersion"] = 1
+    if var clipPayload = clipWrapper["_0"] as? [String: Any] {
+        try update(&clipPayload)
+        clipWrapper["_0"] = clipPayload
+        clipItem["clip"] = clipWrapper
+    } else {
+        try update(&clipWrapper)
+        clipItem["clip"] = clipWrapper
+    }
+
+    items[0] = clipItem
+    videoTrack["items"] = items
+    videoTracks[0] = videoTrack
+    sequence["videoTracks"] = videoTracks
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
 private func replacingFirstCodecClipTransformAnimation(
     in project: Project,
     with animation: AnimatableClipTransform
@@ -705,6 +794,52 @@ private func makeCodecClipEffects() throws -> ClipEffects {
             edgeSoftness: try RationalValue(numerator: 1, denominator: 8),
             spillSuppression: try RationalValue(numerator: 3, denominator: 5)
         )
+    )
+}
+
+private func makeCodecClipMaskEffects() throws -> ClipEffects {
+    ClipEffects(
+        chromaKey: try makeCodecClipEffects().chromaKey,
+        masks: [
+            ClipMask(
+                id: try codecUUID(196_100),
+                shape: .rectangle(
+                    ClipRectangleMask(
+                        x: .zero,
+                        y: .zero,
+                        width: RationalValue(16),
+                        height: RationalValue(9)
+                    )
+                ),
+                featherRadius: try RationalValue(numerator: 1, denominator: 2)
+            ),
+            ClipMask(
+                id: try codecUUID(196_101),
+                shape: .ellipse(
+                    ClipEllipseMask(
+                        centerX: RationalValue(8),
+                        centerY: RationalValue(4),
+                        radiusX: RationalValue(4),
+                        radiusY: RationalValue(2)
+                    )
+                ),
+                invert: true,
+                combine: .subtract
+            ),
+            ClipMask(
+                id: try codecUUID(196_102),
+                shape: .polygon(
+                    ClipPolygonMask(
+                        points: [
+                            CanvasPoint(x: .zero, y: .zero),
+                            CanvasPoint(x: RationalValue(16), y: .zero),
+                            CanvasPoint(x: RationalValue(8), y: RationalValue(9))
+                        ]
+                    )
+                ),
+                combine: .intersect
+            )
+        ]
     )
 }
 
