@@ -11,6 +11,7 @@ final class EditClipEffectsCommandTests: XCTestCase {
 
         XCTAssertEqual(clip.effects, .none)
         XCTAssertEqual(clip.effects.chromaKey, .disabled)
+        XCTAssertEqual(clip.effects.colorCorrection, .identity)
     }
 
     func testFRCOMP001SetClipChromaKeyRoutesThroughUndoableHistory() throws {

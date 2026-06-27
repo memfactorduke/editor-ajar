@@ -232,20 +232,33 @@ public struct ClipEffects: Codable, Equatable, Sendable {
     /// Chroma-key settings.
     public let chromaKey: ClipChromaKeySettings
 
+    /// Primary color-correction settings.
+    public let colorCorrection: ClipColorCorrection
+
     /// Ordered masks applied to the clip matte.
     public let masks: [ClipMask]
 
     private enum CodingKeys: String, CodingKey {
         case chromaKey
+        case colorCorrection
         case masks
     }
 
     /// No active effects.
-    public static let none = ClipEffects(chromaKey: .disabled, masks: [])
+    public static let none = ClipEffects(
+        chromaKey: .disabled,
+        colorCorrection: .identity,
+        masks: []
+    )
 
     /// Creates clip effects.
-    public init(chromaKey: ClipChromaKeySettings = .disabled, masks: [ClipMask] = []) {
+    public init(
+        chromaKey: ClipChromaKeySettings = .disabled,
+        colorCorrection: ClipColorCorrection = .identity,
+        masks: [ClipMask] = []
+    ) {
         self.chromaKey = chromaKey
+        self.colorCorrection = colorCorrection
         self.masks = masks
     }
 
@@ -256,17 +269,26 @@ public struct ClipEffects: Codable, Equatable, Sendable {
             ClipChromaKeySettings.self,
             forKey: .chromaKey
         ) ?? .disabled
+        colorCorrection = try container.decodeIfPresent(
+            ClipColorCorrection.self,
+            forKey: .colorCorrection
+        ) ?? .identity
         masks = try container.decodeIfPresent([ClipMask].self, forKey: .masks) ?? []
     }
 
     /// Returns effects with a replacement chroma key while preserving other effect slots.
     public func replacing(chromaKey: ClipChromaKeySettings) -> ClipEffects {
-        ClipEffects(chromaKey: chromaKey, masks: masks)
+        ClipEffects(chromaKey: chromaKey, colorCorrection: colorCorrection, masks: masks)
+    }
+
+    /// Returns effects with replacement color correction while preserving other effect slots.
+    public func replacing(colorCorrection: ClipColorCorrection) -> ClipEffects {
+        ClipEffects(chromaKey: chromaKey, colorCorrection: colorCorrection, masks: masks)
     }
 
     /// Returns effects with a replacement mask list while preserving other effect slots.
     public func replacing(masks: [ClipMask]) -> ClipEffects {
-        ClipEffects(chromaKey: chromaKey, masks: masks)
+        ClipEffects(chromaKey: chromaKey, colorCorrection: colorCorrection, masks: masks)
     }
 }
 
@@ -275,23 +297,33 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     /// Keyframable chroma-key controls.
     public let chromaKey: AnimatableClipChromaKeySettings
 
+    /// Keyframable primary color-correction controls.
+    public let colorCorrection: AnimatableClipColorCorrection
+
     /// Keyframable masks.
     public let masks: [AnimatableClipMask]
 
     private enum CodingKeys: String, CodingKey {
         case chromaKey
+        case colorCorrection
         case masks
     }
 
     /// No active effects.
-    public static let none = AnimatableClipEffects(chromaKey: .disabled, masks: [])
+    public static let none = AnimatableClipEffects(
+        chromaKey: .disabled,
+        colorCorrection: .identity,
+        masks: []
+    )
 
     /// Creates keyframable effects.
     public init(
         chromaKey: AnimatableClipChromaKeySettings = .disabled,
+        colorCorrection: AnimatableClipColorCorrection = .identity,
         masks: [AnimatableClipMask] = []
     ) {
         self.chromaKey = chromaKey
+        self.colorCorrection = colorCorrection
         self.masks = masks
     }
 
@@ -302,6 +334,10 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
             AnimatableClipChromaKeySettings.self,
             forKey: .chromaKey
         ) ?? .disabled
+        colorCorrection = try container.decodeIfPresent(
+            AnimatableClipColorCorrection.self,
+            forKey: .colorCorrection
+        ) ?? .identity
         masks = try container.decodeIfPresent([AnimatableClipMask].self, forKey: .masks) ?? []
     }
 
@@ -309,6 +345,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     public static func constant(_ effects: ClipEffects) -> AnimatableClipEffects {
         AnimatableClipEffects(
             chromaKey: .constant(effects.chromaKey),
+            colorCorrection: .constant(effects.colorCorrection),
             masks: effects.masks.map(AnimatableClipMask.constant)
         )
     }
@@ -317,6 +354,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     public func value(at time: RationalTime) -> ClipEffects {
         ClipEffects(
             chromaKey: chromaKey.value(at: time),
+            colorCorrection: colorCorrection.value(at: time),
             masks: masks.map { mask in mask.value(at: time) }
         )
     }
@@ -325,6 +363,7 @@ public struct AnimatableClipEffects: Codable, Equatable, Sendable {
     public var baseEffects: ClipEffects {
         ClipEffects(
             chromaKey: chromaKey.baseSettings,
+            colorCorrection: colorCorrection.baseCorrection,
             masks: masks.map { mask in mask.value(at: .zero) }
         )
     }
@@ -347,6 +386,23 @@ public enum ClipEffectsValidationError: Equatable, Sendable {
     /// Chroma-key choke must stay in the normalized 0...1 range.
     case chromaKeyChokeOutOfRange(RationalValue)
 
+    /// A scalar color-correction parameter is outside its supported range.
+    case colorCorrectionParameterOutOfRange(
+        parameter: ClipColorCorrectionParameter,
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
+    /// A color-correction channel is outside its supported range.
+    case colorCorrectionChannelOutOfRange(
+        group: ClipColorCorrectionChannelGroup,
+        channel: ClipColorChannel,
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
     /// A clip has more masks than the M5 render path supports.
     case clipMaskCountOutOfRange(count: Int, maximum: Int)
 
@@ -361,98 +417,4 @@ public enum ClipEffectsValidationError: Equatable, Sendable {
 
     /// Polygon masks must have a supported point count.
     case clipMaskPolygonPointCountInvalid(maskID: UUID, count: Int, maximum: Int)
-}
-
-enum ClipEffectsValidator {
-    static func errors(for effects: ClipEffects) -> [ClipEffectsValidationError] {
-        var errors: [ClipEffectsValidationError] = []
-
-        appendColorErrors(effects.chromaKey.keyColor, to: &errors)
-        appendUnitIntervalError(
-            effects.chromaKey.tolerance,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeyToleranceOutOfRange
-        )
-        appendUnitIntervalError(
-            effects.chromaKey.edgeSoftness,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeyEdgeSoftnessOutOfRange
-        )
-        appendUnitIntervalError(
-            effects.chromaKey.spillSuppression,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeySpillSuppressionOutOfRange
-        )
-        appendUnitIntervalError(
-            effects.chromaKey.choke,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
-        )
-        errors.append(contentsOf: ClipMaskValidator.errors(for: effects.masks))
-
-        return errors
-    }
-
-    static func errors(for effects: AnimatableClipEffects) -> [ClipEffectsValidationError] {
-        var errors = errors(for: effects.baseEffects)
-
-        appendUnitIntervalErrors(
-            effects.chromaKey.tolerance,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeyToleranceOutOfRange
-        )
-        appendUnitIntervalErrors(
-            effects.chromaKey.edgeSoftness,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeyEdgeSoftnessOutOfRange
-        )
-        appendUnitIntervalErrors(
-            effects.chromaKey.spillSuppression,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeySpillSuppressionOutOfRange
-        )
-        appendUnitIntervalErrors(
-            effects.chromaKey.choke,
-            to: &errors,
-            error: ClipEffectsValidationError.chromaKeyChokeOutOfRange
-        )
-        errors.append(contentsOf: ClipMaskValidator.errors(for: effects.masks))
-
-        return errors
-    }
-
-    private static func appendColorErrors(
-        _ color: ClipRGBColor,
-        to errors: inout [ClipEffectsValidationError]
-    ) {
-        appendUnitIntervalError(color.red, to: &errors) { value in
-            .colorChannelOutOfRange(channel: .red, value: value)
-        }
-        appendUnitIntervalError(color.green, to: &errors) { value in
-            .colorChannelOutOfRange(channel: .green, value: value)
-        }
-        appendUnitIntervalError(color.blue, to: &errors) { value in
-            .colorChannelOutOfRange(channel: .blue, value: value)
-        }
-    }
-
-    private static func appendUnitIntervalError(
-        _ value: RationalValue,
-        to errors: inout [ClipEffectsValidationError],
-        error: (RationalValue) -> ClipEffectsValidationError
-    ) {
-        if value.isNegative || value.isGreaterThanOne {
-            errors.append(error(value))
-        }
-    }
-
-    private static func appendUnitIntervalErrors(
-        _ parameter: Animatable<RationalValue>,
-        to errors: inout [ClipEffectsValidationError],
-        error: (RationalValue) -> ClipEffectsValidationError
-    ) {
-        for keyframe in parameter.keyframes {
-            appendUnitIntervalError(keyframe.value, to: &errors, error: error)
-        }
-    }
 }

@@ -394,7 +394,47 @@ private func makeTransformCommandCases(
             )
         )
     ] + (try makeTransformKeyframeCommandCases(fixture: fixture))
+        + (try makeColorCorrectionCommandCases(fixture: fixture))
         + (try makeMaskCommandCases(fixture: fixture))
+}
+
+private func makeColorCorrectionCommandCases(
+    fixture: EditFixture
+) throws -> [EditCommandCase] {
+    let correction = ClipColorCorrection(
+        exposure: try RationalValue(numerator: 1, denominator: 2),
+        saturation: try RationalValue(numerator: 3, denominator: 2),
+        temperature: try RationalValue(numerator: 1, denominator: 5)
+    )
+    let correctedProject = try apply(
+        .setClipColorCorrection(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clipID: fixture.clipID,
+            correction: correction
+        ),
+        to: fixture.project
+    )
+
+    return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .setClipColorCorrection(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                correction: correction
+            )
+        ),
+        EditCommandCase(
+            project: correctedProject,
+            command: .clearClipColorCorrection(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID
+            )
+        )
+    ]
 }
 
 private func makeMaskCommandCases(

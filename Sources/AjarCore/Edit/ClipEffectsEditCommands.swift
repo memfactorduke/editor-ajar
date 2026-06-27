@@ -10,6 +10,19 @@ extension EditReducer {
         let settings: ClipChromaKeySettings
     }
 
+    struct SetClipColorCorrectionEdit {
+        let sequenceID: UUID
+        let trackID: UUID
+        let clipID: UUID
+        let correction: ClipColorCorrection
+    }
+
+    struct ClipEffectsEditTarget {
+        let sequenceID: UUID
+        let trackID: UUID
+        let clipID: UUID
+    }
+
     struct ClipMaskEdit {
         let sequenceID: UUID
         let trackID: UUID
@@ -36,27 +49,41 @@ extension EditReducer {
         _ edit: SetClipChromaKeyEdit,
         in project: Project
     ) throws -> Project {
-        try validateEffects(
-            ClipEffects(chromaKey: edit.settings),
-            clipID: edit.clipID
-        )
+        try updateClipEffects(
+            sequenceID: edit.sequenceID,
+            trackID: edit.trackID,
+            clipID: edit.clipID,
+            in: project
+        ) { clip in
+            clip.effects.replacing(chromaKey: edit.settings)
+        }
+    }
 
-        return try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
-            var items = track.items
-            guard
-                let index = clipIndex(edit.clipID, in: items),
-                case .clip(let clip) = items[index]
-            else {
-                throw EditReducerError.clipNotFound(
-                    sequenceID: edit.sequenceID,
-                    trackID: edit.trackID,
-                    clipID: edit.clipID
-                )
-            }
+    static func setClipColorCorrection(
+        _ edit: SetClipColorCorrectionEdit,
+        in project: Project
+    ) throws -> Project {
+        try updateClipEffects(
+            sequenceID: edit.sequenceID,
+            trackID: edit.trackID,
+            clipID: edit.clipID,
+            in: project
+        ) { clip in
+            clip.effects.replacing(colorCorrection: edit.correction)
+        }
+    }
 
-            let effects = clip.effects.replacing(chromaKey: edit.settings)
-            items[index] = .clip(copying(clip, effects: effects))
-            return copying(track, items: items)
+    static func clearClipColorCorrection(
+        _ edit: ClipEffectsEditTarget,
+        in project: Project
+    ) throws -> Project {
+        try updateClipEffects(
+            sequenceID: edit.sequenceID,
+            trackID: edit.trackID,
+            clipID: edit.clipID,
+            in: project
+        ) { clip in
+            clip.effects.replacing(colorCorrection: .identity)
         }
     }
 
