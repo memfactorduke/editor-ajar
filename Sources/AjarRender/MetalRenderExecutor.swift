@@ -1657,6 +1657,11 @@ public final class MetalRenderExecutor {
             float tint = uniforms.colorCorrectionWhiteBalance.y;
 
             float3 result = max(sourceLinear, float3(0.0));
+            // FR-COL-001 grading order is intentional and golden-tested:
+            // exposure, lift, gamma, gain, contrast, white balance, saturation, vibrance.
+            // White balance currently uses a bounded linear-light channel adaptation
+            // rather than a full chromatic-adaptation transform, so later grading work
+            // can replace this block without ambiguity about where it belongs.
             result *= exp2(exposure);
             result = max(result + uniforms.colorCorrectionLift.rgb, float3(0.0));
             result = pow(

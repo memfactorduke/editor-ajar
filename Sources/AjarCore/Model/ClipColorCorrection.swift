@@ -87,6 +87,18 @@ public struct ClipColorCorrection: Codable, Equatable, Sendable {
     /// Selective saturation, valid -1...1.
     public let vibrance: RationalValue
 
+    private enum CodingKeys: String, CodingKey {
+        case lift
+        case gamma
+        case gain
+        case exposure
+        case contrast
+        case saturation
+        case temperature
+        case tint
+        case vibrance
+    }
+
     /// Neutral color correction that leaves pixels unchanged.
     public static let identity = ClipColorCorrection()
 
@@ -111,6 +123,32 @@ public struct ClipColorCorrection: Codable, Equatable, Sendable {
         self.temperature = temperature
         self.tint = tint
         self.vibrance = vibrance
+    }
+
+    /// Decodes primary color correction from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        lift = try container.decodeIfPresent(ClipColorChannels.self, forKey: .lift) ?? .zero
+        gamma = try container.decodeIfPresent(ClipColorChannels.self, forKey: .gamma) ?? .one
+        gain = try container.decodeIfPresent(ClipColorChannels.self, forKey: .gain) ?? .one
+        exposure = try container.decodeIfPresent(
+            RationalValue.self,
+            forKey: .exposure
+        ) ?? .zero
+        contrast = try container.decodeIfPresent(
+            RationalValue.self,
+            forKey: .contrast
+        ) ?? .one
+        saturation = try container.decodeIfPresent(
+            RationalValue.self,
+            forKey: .saturation
+        ) ?? .one
+        temperature = try container.decodeIfPresent(
+            RationalValue.self,
+            forKey: .temperature
+        ) ?? .zero
+        tint = try container.decodeIfPresent(RationalValue.self, forKey: .tint) ?? .zero
+        vibrance = try container.decodeIfPresent(RationalValue.self, forKey: .vibrance) ?? .zero
     }
 }
 
@@ -195,6 +233,18 @@ public struct AnimatableClipColorCorrection: Codable, Equatable, Sendable {
     /// Selective saturation.
     public let vibrance: Animatable<RationalValue>
 
+    private enum CodingKeys: String, CodingKey {
+        case lift
+        case gamma
+        case gain
+        case exposure
+        case contrast
+        case saturation
+        case temperature
+        case tint
+        case vibrance
+    }
+
     /// Neutral keyframable color correction.
     public static let identity = AnimatableClipColorCorrection.constant(.identity)
 
@@ -219,6 +269,47 @@ public struct AnimatableClipColorCorrection: Codable, Equatable, Sendable {
         self.temperature = temperature
         self.tint = tint
         self.vibrance = vibrance
+    }
+
+    /// Decodes keyframable primary color correction from current and legacy schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        lift = try container.decodeIfPresent(
+            AnimatableClipColorChannels.self,
+            forKey: .lift
+        ) ?? .zero
+        gamma = try container.decodeIfPresent(
+            AnimatableClipColorChannels.self,
+            forKey: .gamma
+        ) ?? .one
+        gain = try container.decodeIfPresent(
+            AnimatableClipColorChannels.self,
+            forKey: .gain
+        ) ?? .one
+        exposure = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .exposure
+        ) ?? .constant(.zero)
+        contrast = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .contrast
+        ) ?? .constant(.one)
+        saturation = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .saturation
+        ) ?? .constant(.one)
+        temperature = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .temperature
+        ) ?? .constant(.zero)
+        tint = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .tint
+        ) ?? .constant(.zero)
+        vibrance = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .vibrance
+        ) ?? .constant(.zero)
     }
 
     /// Creates keyframable controls with constant values.

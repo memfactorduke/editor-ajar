@@ -42,6 +42,23 @@ final class MetalRenderExecutorColorCorrectionTests: XCTestCase {
         XCTAssertLessThanOrEqual(abs(Int(pixel[1]) - Int(pixel[2])), 2)
     }
 
+    func testFRCOL001VibranceSelectivelyIncreasesMutedChroma() throws {
+        let neutral = try renderColorCorrectionPixel(
+            sourceBGRA: [104, 116, 132, 255],
+            correction: .identity
+        )
+        let vibrant = try renderColorCorrectionPixel(
+            sourceBGRA: [104, 116, 132, 255],
+            correction: ClipColorCorrection(vibrance: .one)
+        )
+
+        XCTAssertGreaterThan(
+            colorCorrectionChannelSpread(vibrant),
+            colorCorrectionChannelSpread(neutral)
+        )
+        XCTAssertEqual(vibrant[3], 255)
+    }
+
     func testFRCOL001TemperatureTintShiftNeutralPatch() throws {
         let pixel = try renderColorCorrectionPixel(
             sourceBGRA: [128, 128, 128, 255],
@@ -225,6 +242,13 @@ private func readColorCorrectionBGRA8(texture: MTLTexture, device: MTLDevice) th
 
     let pointer = buffer.contents().bindMemory(to: UInt8.self, capacity: 4)
     return Array(UnsafeBufferPointer(start: pointer, count: 4))
+}
+
+private func colorCorrectionChannelSpread(_ pixel: [UInt8]) -> Int {
+    let blue = Int(pixel[0])
+    let green = Int(pixel[1])
+    let red = Int(pixel[2])
+    return max(red, max(green, blue)) - min(red, min(green, blue))
 }
 
 private func colorCorrectionMetalDeviceOrSkip() throws -> MTLDevice {

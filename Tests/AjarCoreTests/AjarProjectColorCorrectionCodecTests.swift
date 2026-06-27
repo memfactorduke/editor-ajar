@@ -40,6 +40,78 @@ final class AjarProjectColorCorrectionCodecTests: XCTestCase {
         XCTAssertEqual(videoClip.effects.colorCorrection, .identity)
         XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
     }
+
+    func testFRPROJ005FRCOL001SparseColorCorrectionDefaultsMissingControls() throws {
+        let json = """
+        {
+          "exposure" : {
+            "denominator" : 2,
+            "numerator" : 1
+          },
+          "gain" : {
+            "blue" : {
+              "denominator" : 10,
+              "numerator" : 9
+            },
+            "green" : {
+              "denominator" : 1,
+              "numerator" : 1
+            },
+            "red" : {
+              "denominator" : 5,
+              "numerator" : 6
+            }
+          }
+        }
+        """
+
+        let correction = try JSONDecoder().decode(
+            ClipColorCorrection.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(correction.lift, .zero)
+        XCTAssertEqual(correction.gamma, .one)
+        XCTAssertEqual(
+            correction.gain,
+            ClipColorChannels(
+                red: try RationalValue(numerator: 6, denominator: 5),
+                green: .one,
+                blue: try RationalValue(numerator: 9, denominator: 10)
+            )
+        )
+        XCTAssertEqual(correction.exposure, try RationalValue(numerator: 1, denominator: 2))
+        XCTAssertEqual(correction.contrast, .one)
+        XCTAssertEqual(correction.saturation, .one)
+        XCTAssertEqual(correction.temperature, .zero)
+        XCTAssertEqual(correction.tint, .zero)
+        XCTAssertEqual(correction.vibrance, .zero)
+    }
+
+    func testFRPROJ005FRCOL001SparseAnimatableColorCorrectionDefaultsMissingControls() throws {
+        let json = """
+        {
+          "vibrance" : {
+            "base" : {
+              "denominator" : 3,
+              "numerator" : 1
+            },
+            "keyframes" : []
+          }
+        }
+        """
+
+        let correction = try JSONDecoder().decode(
+            AnimatableClipColorCorrection.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(
+            correction.baseCorrection,
+            ClipColorCorrection(vibrance: try RationalValue(numerator: 1, denominator: 3))
+        )
+        XCTAssertEqual(correction.value(at: .zero), correction.baseCorrection)
+    }
 }
 
 private func makeColorCorrectionCodecProject() throws -> Project {
