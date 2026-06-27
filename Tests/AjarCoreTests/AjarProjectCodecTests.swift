@@ -317,6 +317,71 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
     }
 }
 
+final class AjarProjectTrackCompositingCodecTests: XCTestCase {
+    func testFRCOMP006TrackCompositingRoundTripsThroughProjectCodec() throws {
+        let project = try makeCodecProject(seed: 155)
+        let opacity = try Animatable(
+            base: RationalValue.one,
+            keyframes: [
+                Keyframe(
+                    time: try codecTime(0),
+                    value: RationalValue.one,
+                    interpolation: .linear
+                ),
+                Keyframe(
+                    time: try codecTime(8),
+                    value: try RationalValue(numerator: 3, denominator: 4),
+                    interpolation: .hold
+                )
+            ]
+        )
+        let compositedProject = try replacingFirstCodecVideoTrack(in: project) { track in
+            Track(
+                id: track.id,
+                kind: track.kind,
+                items: track.items,
+                enabled: track.enabled,
+                locked: track.locked,
+                muted: track.muted,
+                solo: track.solo,
+                hidden: track.hidden,
+                opacity: opacity,
+                blendMode: .softLight
+            )
+        }
+
+        let package = try AjarProjectCodec.encode(compositedProject)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let videoTrack = try XCTUnwrap(loadedProject.sequences.first?.videoTracks.first)
+
+        XCTAssertEqual(loadedProject, compositedProject)
+        XCTAssertEqual(videoTrack.opacity, opacity)
+        XCTAssertEqual(videoTrack.blendMode, .softLight)
+    }
+
+    func testFRPROJ005FRCOMP006LegacyTrackCompositingDefaultsToOpaqueNormal() throws {
+        let project = try makeCodecProject(seed: 156)
+        let package = try AjarProjectCodec.encode(project)
+        let legacyProjectJSON = try projectJSONWithoutTrackCompositingFields(package.projectJSON)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let videoTrack = try XCTUnwrap(loadedProject.sequences.first?.videoTracks.first)
+
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(videoTrack.opacity, .constant(.one))
+        XCTAssertEqual(videoTrack.blendMode, .normal)
+    }
+}
+
 final class AjarProjectCodecVersioningTests: XCTestCase {
     func testFRPROJ005OlderFixtureMigratesForwardToCurrentSchema() throws {
         let legacyProject = try makeCodecProject(seed: 200, schemaVersion: 0)
@@ -500,6 +565,26 @@ private func projectJSONWithoutClipTransformFields(_ projectJSON: Data) throws -
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
 }
 
+private func projectJSONWithoutTrackCompositingFields(_ projectJSON: Data) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var videoTracks = try XCTUnwrap(sequence["videoTracks"] as? [[String: Any]])
+    var videoTrack = try XCTUnwrap(videoTracks.first)
+
+    document["schemaVersion"] = 1
+    videoTrack.removeValue(forKey: "opacity")
+    videoTrack.removeValue(forKey: "blendMode")
+    videoTracks[0] = videoTrack
+    sequence["videoTracks"] = videoTracks
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
 private func projectJSONWithoutClipEffectsField(_ projectJSON: Data) throws -> Data {
     var document = try XCTUnwrap(
         JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
@@ -600,6 +685,30 @@ private func updatingFirstClipPayload(
     document["sequences"] = sequences
 
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func replacingFirstCodecVideoTrack(
+    in project: Project,
+    update: (Track) throws -> Track
+) throws -> Project {
+    let sequence = try XCTUnwrap(project.sequences.first)
+    let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
+    let replacementTrack = try update(videoTrack)
+    let replacementSequence = Sequence(
+        id: sequence.id,
+        name: sequence.name,
+        videoTracks: [replacementTrack] + Array(sequence.videoTracks.dropFirst()),
+        audioTracks: sequence.audioTracks,
+        markers: sequence.markers,
+        timebase: sequence.timebase
+    )
+
+    return Project(
+        schemaVersion: project.schemaVersion,
+        settings: project.settings,
+        mediaPool: project.mediaPool,
+        sequences: [replacementSequence] + Array(project.sequences.dropFirst())
+    )
 }
 
 private func replacingFirstCodecClipTransformAnimation(

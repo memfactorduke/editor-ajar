@@ -1,0 +1,126 @@
+{
+  "clips": [
+    {
+      "syntheticMedia": {
+        "bgra": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "frameCount": 1,
+        "frameRate": 24,
+        "height": 1,
+        "pixelsBGRA": [
+          64,
+          128,
+          192,
+          255,
+          200,
+          80,
+          40,
+          255
+        ],
+        "width": 2
+      }
+    },
+    {
+      "syntheticMedia": {
+        "bgra": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "frameCount": 1,
+        "frameRate": 24,
+        "height": 1,
+        "pixelsBGRA": [
+          32,
+          200,
+          96,
+          255,
+          160,
+          60,
+          220,
+          255
+        ],
+        "width": 2
+      },
+      "transform": {
+        "anchorPoint": {
+          "x": {
+            "denominator": 1,
+            "numerator": 0
+          },
+          "y": {
+            "denominator": 1,
+            "numerator": 0
+          }
+        },
+        "blendMode": "saturation",
+        "crop": {
+          "bottom": 0,
+          "left": 0,
+          "right": 0,
+          "top": 0
+        },
+        "flip": {
+          "horizontal": false,
+          "vertical": false
+        },
+        "opacity": {
+          "denominator": 1,
+          "numerator": 1
+        },
+        "position": {
+          "x": {
+            "denominator": 1,
+            "numerator": 0
+          },
+          "y": {
+            "denominator": 1,
+            "numerator": 0
+          }
+        },
+        "rotation": {
+          "degrees": {
+            "denominator": 1,
+            "numerator": 0
+          },
+          "revolutions": 0
+        },
+        "scale": {
+          "x": {
+            "denominator": 1,
+            "numerator": 1
+          },
+          "y": {
+            "denominator": 1,
+            "numerator": 1
+          }
+        }
+      }
+    }
+  ],
+  "frame": "0/24",
+  "id": "blend-mode-saturation",
+  "outputDimensions": {
+    "height": 1,
+    "width": 2
+  },
+  "referencePNG": "reference.png",
+  "requirements": [
+    "FR-COMP-006",
+    "FR-COMP-007",
+    "ADR-0010",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion": 1,
+  "tolerance": {
+    "maximumAlphaDelta": 1,
+    "maximumDeltaE": 1,
+    "minimumSSIM": 0.99
+  }
+}

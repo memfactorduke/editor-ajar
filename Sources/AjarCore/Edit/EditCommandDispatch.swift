@@ -14,11 +14,8 @@ extension EditReducer {
             .setClipColorCorrection, .clearClipColorCorrection,
             .addClipMask, .removeClipMask, .moveClipMask, .setClipMask:
             return try applyClipCommand(command, to: project)
-        case .setTrackState(let sequenceID, let trackID, let state):
-            return try setTrackState(
-                TrackStateEdit(sequenceID: sequenceID, trackID: trackID, state: state),
-                in: project
-            )
+        case .setTrackState, .setTrackCompositing:
+            return try applyTrackCommand(command, to: project)
         case .addTrack(let sequenceID, let track):
             return try addTrack(track, sequenceID: sequenceID, to: project)
         case .removeTrack(let sequenceID, let trackID):

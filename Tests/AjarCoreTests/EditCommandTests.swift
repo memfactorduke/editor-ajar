@@ -214,7 +214,7 @@ private func makeValidCommandCases(seed: Int) throws -> [EditCommandCase] {
 
     return try makeClipCommandCases(fixture: fixture, addClip: addClip, seed: seed)
         + makeLinkedClipCommandCases(seed: seed)
-        + makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID)
+        + (try makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID))
         + makeMarkerCommandCases(fixture: fixture, seed: seed)
         + makeProjectCommandCases(fixture: fixture, seed: seed)
 }
@@ -661,7 +661,7 @@ private func makeThreePointCommandCase(
 private func makeTrackCommandCases(
     fixture: EditFixture,
     addTrackID: UUID
-) -> [EditCommandCase] {
+) throws -> [EditCommandCase] {
     var cases: [EditCommandCase] = []
     cases.append(
         EditCommandCase(
@@ -695,6 +695,19 @@ private func makeTrackCommandCases(
                 sequenceID: fixture.sequenceID,
                 trackID: fixture.audioTrackID,
                 state: TrackStatePatch(locked: true, muted: true, solo: true)
+            )
+        )
+    )
+    cases.append(
+        EditCommandCase(
+            project: fixture.project,
+            command: .setTrackCompositing(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                compositing: TrackCompositingPatch(
+                    opacity: .constant(try RationalValue(numerator: 3, denominator: 4)),
+                    blendMode: .softLight
+                )
             )
         )
     )

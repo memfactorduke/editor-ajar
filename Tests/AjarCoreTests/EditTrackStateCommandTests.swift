@@ -45,6 +45,51 @@ final class EditTrackStateCommandTests: XCTestCase {
         XCTAssertEqual(try history.redo(), edited)
     }
 
+    func testFRCOMP006SetTrackCompositingRoutesThroughUndoableHistory() throws {
+        let fixture = try makeEditFixture(seed: 333)
+        let opacity = Animatable.constant(try RationalValue(numerator: 3, denominator: 4))
+        let command = EditCommand.setTrackCompositing(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            compositing: TrackCompositingPatch(opacity: opacity, blendMode: .colorDodge)
+        )
+        var history = EditHistory(project: fixture.project)
+        let edited = try history.apply(command)
+        let track = try projectTrack(edited, fixture: fixture)
+
+        XCTAssertEqual(track.opacity, opacity)
+        XCTAssertEqual(track.blendMode, .colorDodge)
+        XCTAssertEqual(history.undo(), fixture.project)
+        XCTAssertEqual(try history.redo(), edited)
+    }
+
+    func testFRCOMP006InvalidTrackOpacityReturnsTypedValidationError() throws {
+        let fixture = try makeEditFixture(seed: 334)
+        let invalidOpacity = Animatable.constant(RationalValue(2))
+
+        XCTAssertThrowsError(
+            try apply(
+                .setTrackCompositing(
+                    sequenceID: fixture.sequenceID,
+                    trackID: fixture.videoTrackID,
+                    compositing: TrackCompositingPatch(opacity: invalidOpacity)
+                ),
+                to: fixture.project
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? EditReducerError,
+                .validationFailed([
+                    .invalidTrackOpacity(
+                        sequenceID: fixture.sequenceID,
+                        trackID: fixture.videoTrackID,
+                        value: RationalValue(2)
+                    )
+                ])
+            )
+        }
+    }
+
     func testNFRSTAB003SetTrackStateReturnsTypedMissingTrackError() throws {
         let fixture = try makeEditFixture(seed: 332)
         let missingTrackID = try editUUID(332_999)

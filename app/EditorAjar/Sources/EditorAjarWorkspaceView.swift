@@ -720,6 +720,28 @@ private extension ClipBlendMode {
             return "Darken"
         case .lighten:
             return "Lighten"
+        case .colorDodge:
+            return "Color Dodge"
+        case .colorBurn:
+            return "Color Burn"
+        case .hardLight:
+            return "Hard Light"
+        case .softLight:
+            return "Soft Light"
+        case .difference:
+            return "Difference"
+        case .exclusion:
+            return "Exclusion"
+        case .subtract:
+            return "Subtract"
+        case .hue:
+            return "Hue"
+        case .saturation:
+            return "Saturation"
+        case .color:
+            return "Color"
+        case .luminosity:
+            return "Luminosity"
         }
     }
 }

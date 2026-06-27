@@ -319,6 +319,83 @@ final class MetalRenderExecutorTests: XCTestCase {
     }
 }
 
+final class MetalRenderExecutorBlendModeTests: XCTestCase {
+    func testFRCOMP006NewBlendModesMatchLinearLightFormulas() throws {
+        let device = try metalDeviceOrSkip()
+        let destinationBGRA: [UInt8] = [64, 128, 192, 255]
+        let sourceBGRA: [UInt8] = [32, 200, 96, 255]
+        let modes: [ClipBlendMode] = [
+            .colorDodge, .colorBurn, .hardLight, .softLight, .difference, .exclusion,
+            .subtract, .hue, .saturation, .color, .luminosity
+        ]
+
+        for mode in modes {
+            let pixels = try renderBlendFixture(
+                device: device,
+                sourceBGRA: sourceBGRA,
+                destinationBGRA: destinationBGRA,
+                blendMode: mode
+            )
+            XCTAssertBGRA8(
+                pixels,
+                approximatelyEquals: expectedCompositeBGRA(
+                    sourceBGRA: sourceBGRA,
+                    destinationBGRA: destinationBGRA,
+                    blendMode: mode
+                ),
+                channelTolerance: 2
+            )
+        }
+    }
+
+    func testFRCOMP006TrackBlendAndOpacityCompositeOverLowerTrack() throws {
+        let device = try metalDeviceOrSkip()
+        let opacity = try RationalValue(numerator: 1, denominator: 2)
+        let sourceBGRA: [UInt8] = [32, 200, 96, 255]
+        let destinationBGRA: [UInt8] = [64, 128, 192, 255]
+        let pixels = try renderBlendFixture(
+            device: device,
+            sourceBGRA: sourceBGRA,
+            destinationBGRA: destinationBGRA,
+            trackOpacity: .constant(opacity),
+            trackBlendMode: .difference
+        )
+
+        XCTAssertBGRA8(
+            pixels,
+            approximatelyEquals: expectedCompositeBGRA(
+                sourceBGRA: sourceBGRA,
+                destinationBGRA: destinationBGRA,
+                blendMode: .difference,
+                opacity: Double(opacity.numerator) / Double(opacity.denominator)
+            ),
+            channelTolerance: 2
+        )
+    }
+
+    func testFRCOMP006PremultipliedAlphaNormalOverOpaqueHasNoFringe() throws {
+        let device = try metalDeviceOrSkip()
+        let pixels = try renderBlendFixture(
+            device: device,
+            sourceBGRA: [0, 0, 128, 128],
+            destinationBGRA: [255, 0, 0, 255],
+            blendMode: .normal
+        )
+
+        XCTAssertBGRA8(
+            pixels,
+            approximatelyEquals: expectedCompositeBGRA(
+                sourceBGRA: [0, 0, 128, 128],
+                destinationBGRA: [255, 0, 0, 255],
+                blendMode: .normal
+            ),
+            channelTolerance: 2
+        )
+        XCTAssertGreaterThan(pixels[0], 160)
+        XCTAssertGreaterThan(pixels[2], 160)
+    }
+}
+
 private enum TestIDs {
     static let media = "00000000-0000-0000-0000-000000000017"
     static let clip = "00000000-0000-0000-0000-000000000117"
@@ -449,7 +526,9 @@ private func makeSingleClipGraph(
 
 private func makeTwoClipGraph(
     topTransform: ClipTransform = .identity,
-    topEffects: ClipEffects = .none
+    topEffects: ClipEffects = .none,
+    topTrackOpacity: Animatable<RationalValue> = .constant(.one),
+    topTrackBlendMode: ClipBlendMode = .normal
 ) throws -> RenderGraph {
     let bottomMediaID = try testUUID(TestIDs.bottomMedia)
     let topMediaID = try testUUID(TestIDs.topMedia)
@@ -468,7 +547,13 @@ private func makeTwoClipGraph(
         name: "Composite",
         videoTracks: [
             Track(id: UUID(), kind: .video, items: [.clip(bottomClip)]),
-            Track(id: UUID(), kind: .video, items: [.clip(topClip)])
+            Track(
+                id: UUID(),
+                kind: .video,
+                items: [.clip(topClip)],
+                opacity: topTrackOpacity,
+                blendMode: topTrackBlendMode
+            )
         ],
         audioTracks: [],
         markers: [],
@@ -490,6 +575,65 @@ private func makeTwoClipGraph(
     )
 
     return try buildRenderGraph(for: sequence, at: try time(0), in: project)
+}
+
+private func renderBlendFixture(
+    device: MTLDevice,
+    sourceBGRA: [UInt8],
+    destinationBGRA: [UInt8],
+    blendMode: ClipBlendMode,
+    trackOpacity: Animatable<RationalValue> = .constant(.one),
+    trackBlendMode: ClipBlendMode = .normal
+) throws -> [UInt8] {
+    try renderBlendFixture(
+        device: device,
+        sourceBGRA: sourceBGRA,
+        destinationBGRA: destinationBGRA,
+        topTransform: ClipTransform(blendMode: blendMode),
+        trackOpacity: trackOpacity,
+        trackBlendMode: trackBlendMode
+    )
+}
+
+private func renderBlendFixture(
+    device: MTLDevice,
+    sourceBGRA: [UInt8],
+    destinationBGRA: [UInt8],
+    topTransform: ClipTransform = .identity,
+    trackOpacity: Animatable<RationalValue> = .constant(.one),
+    trackBlendMode: ClipBlendMode = .normal
+) throws -> [UInt8] {
+    let graph = try makeTwoClipGraph(
+        topTransform: topTransform,
+        topTrackOpacity: trackOpacity,
+        topTrackBlendMode: trackBlendMode
+    )
+    let bottomTexture = try makeTexture(
+        device: device,
+        width: 1,
+        height: 1,
+        bgraPixels: destinationBGRA
+    )
+    let topTexture = try makeTexture(
+        device: device,
+        width: 1,
+        height: 1,
+        bgraPixels: sourceBGRA
+    )
+    let executor = try MetalRenderExecutor(device: device)
+    let frame = try executor.render(
+        graph: graph,
+        output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1)),
+        sourceProvider: ClipTextureProvider(
+            textures: [
+                try testUUID(TestIDs.bottomClip): bottomTexture,
+                try testUUID(TestIDs.topClip): topTexture
+            ]
+        )
+    )
+
+    try waitForRender(frame)
+    return try readBGRA8(texture: frame.texture, device: device)
 }
 
 private func makeRenderMedia(id: UUID) throws -> MediaRef {
@@ -730,6 +874,186 @@ private func XCTAssertBGRA8(
         let delta = abs(Int(actual[index]) - Int(expected[index]))
         XCTAssertLessThanOrEqual(delta, Int(channelTolerance), file: file, line: line)
     }
+}
+
+private func expectedCompositeBGRA(
+    sourceBGRA: [UInt8],
+    destinationBGRA: [UInt8],
+    blendMode: ClipBlendMode,
+    opacity: Double = 1
+) -> [UInt8] {
+    let sourceAlpha = alpha(sourceBGRA) * opacity
+    let destinationAlpha = alpha(destinationBGRA)
+    let source = linearRGB(sourceBGRA)
+    let destination = linearRGB(destinationBGRA)
+    let blended = blend(source: source, destination: destination, mode: blendMode)
+    let outputAlpha = sourceAlpha + (destinationAlpha * (1 - sourceAlpha))
+    let outputLinear = (0..<3).map { index in
+        (blended[index] * sourceAlpha * destinationAlpha)
+            + (source[index] * sourceAlpha * (1 - destinationAlpha))
+            + (destination[index] * destinationAlpha * (1 - sourceAlpha))
+    }
+    let straight = outputAlpha > 0 ? outputLinear.map { $0 / outputAlpha } : [0, 0, 0]
+
+    return [
+        byte(encodeRec709(straight[2])),
+        byte(encodeRec709(straight[1])),
+        byte(encodeRec709(straight[0])),
+        byte(outputAlpha)
+    ]
+}
+
+private func linearRGB(_ bgra: [UInt8]) -> [Double] {
+    let colorAlpha = alpha(bgra)
+    guard colorAlpha > 0 else {
+        return [0, 0, 0]
+    }
+
+    return [
+        decodeRec709((Double(bgra[2]) / 255) / colorAlpha),
+        decodeRec709((Double(bgra[1]) / 255) / colorAlpha),
+        decodeRec709((Double(bgra[0]) / 255) / colorAlpha)
+    ]
+}
+
+private func alpha(_ bgra: [UInt8]) -> Double {
+    Double(bgra[3]) / 255
+}
+
+private func blend(source: [Double], destination: [Double], mode: ClipBlendMode) -> [Double] {
+    switch mode {
+    case .normal:
+        return source
+    case .multiply:
+        return zip(source, destination).map(*)
+    case .screen:
+        return zip(source, destination).map { 1 - ((1 - $0) * (1 - $1)) }
+    case .overlay:
+        return zip(source, destination).map { overlay(source: $0, destination: $1) }
+    case .add:
+        return zip(source, destination).map { min($0 + $1, 1) }
+    case .darken:
+        return zip(source, destination).map(min)
+    case .lighten:
+        return zip(source, destination).map(max)
+    default:
+        return extendedBlend(source: source, destination: destination, mode: mode)
+    }
+}
+
+private func extendedBlend(
+    source: [Double],
+    destination: [Double],
+    mode: ClipBlendMode
+) -> [Double] {
+    switch mode {
+    case .colorDodge:
+        return zip(source, destination).map {
+            $0 >= 1 ? 1 : min($1 / max(1 - $0, 0.00001), 1)
+        }
+    case .colorBurn:
+        return zip(source, destination).map {
+            $0 <= 0 ? 0 : 1 - min((1 - $1) / max($0, 0.00001), 1)
+        }
+    case .hardLight:
+        return zip(source, destination).map { hardLight(source: $0, destination: $1) }
+    case .softLight:
+        return zip(source, destination).map { softLight(source: $0, destination: $1) }
+    case .difference:
+        return zip(source, destination).map { abs($1 - $0) }
+    case .exclusion:
+        return zip(source, destination).map { $1 + $0 - (2 * $1 * $0) }
+    case .subtract:
+        return zip(source, destination).map { max($1 - $0, 0) }
+    case .hue, .saturation, .color, .luminosity:
+        return hslBlend(source: source, destination: destination, mode: mode)
+    default:
+        return source
+    }
+}
+
+private func overlay(source: Double, destination: Double) -> Double {
+    destination <= 0.5
+        ? 2 * source * destination
+        : 1 - (2 * (1 - source) * (1 - destination))
+}
+
+private func hardLight(source: Double, destination: Double) -> Double {
+    source <= 0.5
+        ? 2 * source * destination
+        : 1 - (2 * (1 - source) * (1 - destination))
+}
+
+private func softLight(source: Double, destination: Double) -> Double {
+    if source <= 0.5 {
+        return destination - ((1 - (2 * source)) * destination * (1 - destination))
+    }
+    let curve = destination <= 0.25
+        ? (((16 * destination) - 12) * destination + 4) * destination
+        : sqrt(destination)
+    return destination + (((2 * source) - 1) * (curve - destination))
+}
+
+private func hslBlend(source: [Double], destination: [Double], mode: ClipBlendMode) -> [Double] {
+    switch mode {
+    case .hue:
+        return setLum(setSat(source, saturation(destination)), luminosity(destination))
+    case .saturation:
+        return setLum(setSat(destination, saturation(source)), luminosity(destination))
+    case .color:
+        return setLum(source, luminosity(destination))
+    case .luminosity:
+        return setLum(destination, luminosity(source))
+    default:
+        return source
+    }
+}
+
+private func luminosity(_ color: [Double]) -> Double {
+    (0.2126 * color[0]) + (0.7152 * color[1]) + (0.0722 * color[2])
+}
+
+private func saturation(_ color: [Double]) -> Double {
+    (color.max() ?? 0) - (color.min() ?? 0)
+}
+
+private func setLum(_ color: [Double], _ lum: Double) -> [Double] {
+    clipColor(color.map { $0 + (lum - luminosity(color)) })
+}
+
+private func clipColor(_ color: [Double]) -> [Double] {
+    let lum = luminosity(color)
+    let minColor = color.min() ?? 0
+    let lowClipped = minColor < 0
+        ? color.map { lum + ((($0 - lum) * lum) / max(lum - minColor, 0.00001)) }
+        : color
+    let highMax = lowClipped.max() ?? 0
+    return highMax > 1
+        ? lowClipped.map { lum + ((($0 - lum) * (1 - lum)) / max(highMax - lum, 0.00001)) }
+        : lowClipped
+}
+
+private func setSat(_ color: [Double], _ sat: Double) -> [Double] {
+    let minColor = color.min() ?? 0
+    let maxColor = color.max() ?? 0
+    guard maxColor > minColor else {
+        return [0, 0, 0]
+    }
+    return color.map { ($0 - minColor) * (sat / (maxColor - minColor)) }
+}
+
+private func decodeRec709(_ encoded: Double) -> Double {
+    let value = min(max(encoded, 0), 1)
+    return value < 0.081 ? value / 4.5 : pow((value + 0.099) / 1.099, 1 / 0.45)
+}
+
+private func encodeRec709(_ linear: Double) -> Double {
+    let value = min(max(linear, 0), 1)
+    return value < 0.018 ? value * 4.5 : (1.099 * pow(value, 0.45)) - 0.099
+}
+
+private func byte(_ value: Double) -> UInt8 {
+    UInt8(clamping: Int((min(max(value, 0), 1) * 255).rounded()))
 }
 
 private func waitForRender(_ frame: RenderedFrame) throws {

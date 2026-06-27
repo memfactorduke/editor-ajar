@@ -210,22 +210,7 @@ public enum GoldenFrameHarness {
                 index: index
             )
         }
-        let tracks = try clipSpecs.indices.map { index in
-            Track(
-                id: try numberedUUID(318 + index),
-                kind: .video,
-                items: [
-                    .clip(
-                        try makeClip(
-                            context: context,
-                            clipSpec: clipSpecs[index],
-                            mediaID: media[index].id,
-                            index: index
-                        )
-                    )
-                ]
-            )
-        }
+        let tracks = try makeTracks(context: context, clipSpecs: clipSpecs, media: media)
         let sequence = Sequence(
             id: try uuid("00000000-0000-0000-0000-000000000218"),
             name: "Golden \(manifest.id)",
@@ -246,6 +231,31 @@ public enum GoldenFrameHarness {
             mediaPool: media,
             sequences: [sequence]
         )
+    }
+
+    private static func makeTracks(
+        context: GoldenFrameBuildContext,
+        clipSpecs: [GoldenFrameClipSpec],
+        media: [MediaRef]
+    ) throws -> [Track] {
+        try clipSpecs.indices.map { index in
+            Track(
+                id: try numberedUUID(318 + index),
+                kind: .video,
+                items: [
+                    .clip(
+                        try makeClip(
+                            context: context,
+                            clipSpec: clipSpecs[index],
+                            mediaID: media[index].id,
+                            index: index
+                        )
+                    )
+                ],
+                opacity: clipSpecs[index].trackOpacity ?? .constant(.one),
+                blendMode: clipSpecs[index].trackBlendMode ?? .normal
+            )
+        }
     }
 
     private struct GoldenFrameBuildContext {
@@ -377,7 +387,9 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
                     transform: nil,
                     transformAnimation: nil,
                     effects: nil,
-                    effectsAnimation: nil
+                    effectsAnimation: nil,
+                    trackOpacity: nil,
+                    trackBlendMode: nil
                 )
             ]
         }
@@ -391,6 +403,8 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let transformAnimation: AnimatableClipTransform?
     let effects: ClipEffects?
     let effectsAnimation: AnimatableClipEffects?
+    let trackOpacity: Animatable<RationalValue>?
+    let trackBlendMode: ClipBlendMode?
 }
 
 private struct GoldenFrameCaseResult {
