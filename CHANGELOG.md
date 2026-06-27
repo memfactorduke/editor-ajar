@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarRender` chroma-key hardening with chroma-normalized matte distance, spatial choke
+  erosion for hard mattes, faithful mid-range view-matte preview output, Swift/Metal uniform ABI
+  guard coverage, and golden coverage for FR-COMP-001/002.
 - `AjarCore` and `AjarRender` complete standard blend-mode set with track-level
   blend/opacity, premultiplied-alpha-correct Metal compositing, cache invalidation, and
   golden coverage for FR-COMP-006.

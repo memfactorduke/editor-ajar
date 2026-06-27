@@ -1,0 +1,127 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          255,
+          0,
+          0,
+          255
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 3,
+        "width" : 3
+      }
+    },
+    {
+      "effects" : {
+        "chromaKey" : {
+          "choke" : {
+            "denominator" : 1,
+            "numerator" : 1
+          },
+          "edgeSoftness" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "enabled" : true,
+          "keyColor" : {
+            "blue" : {
+              "denominator" : 1,
+              "numerator" : 0
+            },
+            "green" : {
+              "denominator" : 1,
+              "numerator" : 1
+            },
+            "red" : {
+              "denominator" : 1,
+              "numerator" : 0
+            }
+          },
+          "spillSuppression" : {
+            "denominator" : 1,
+            "numerator" : 0
+          },
+          "tolerance" : {
+            "denominator" : 10,
+            "numerator" : 1
+          },
+          "viewMatte" : false
+        }
+      },
+      "syntheticMedia" : {
+        "bgra" : [
+          0,
+          0,
+          0,
+          0
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 3,
+        "pixelsBGRA" : [
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          0,
+          255,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255,
+          0,
+          255
+        ],
+        "width" : 3
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "chroma-key-choke-erodes-hard-matte",
+  "outputDimensions" : {
+    "height" : 3,
+    "width" : 3
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-COMP-001",
+    "FR-COMP-002",
+    "FR-COMP-007",
+    "ADR-0006",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}
