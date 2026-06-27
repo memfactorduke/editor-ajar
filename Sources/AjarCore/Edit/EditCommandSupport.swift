@@ -41,3 +41,21 @@ public struct TrackStatePatch: Codable, Equatable, Sendable {
         self.hidden = hidden
     }
 }
+
+/// Optional track-compositing fields changed by `EditCommand.setTrackCompositing`.
+public struct TrackCompositingPatch: Codable, Equatable, Sendable {
+    /// Replacement track opacity animation, or `nil` to leave it unchanged.
+    public let opacity: Animatable<RationalValue>?
+
+    /// Replacement track blend mode, or `nil` to leave it unchanged.
+    public let blendMode: ClipBlendMode?
+
+    /// Creates a track-compositing patch.
+    public init(
+        opacity: Animatable<RationalValue>? = nil,
+        blendMode: ClipBlendMode? = nil
+    ) {
+        self.opacity = opacity
+        self.blendMode = blendMode
+    }
+}

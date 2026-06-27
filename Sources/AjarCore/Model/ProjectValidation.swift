@@ -27,6 +27,17 @@ public enum ProjectValidationError: Equatable, Sendable {
     /// A timeline item kind does not match its containing track.
     case itemKindMismatch(sequenceID: UUID, trackID: UUID, itemIndex: Int, itemKind: TrackKind)
 
+    /// Track opacity is outside the normalized 0...1 range.
+    case invalidTrackOpacity(sequenceID: UUID, trackID: UUID, value: RationalValue)
+
+    /// A track opacity keyframe is outside the normalized 0...1 range.
+    case invalidTrackOpacityKeyframe(
+        sequenceID: UUID,
+        trackID: UUID,
+        time: RationalTime,
+        value: RationalValue
+    )
+
     /// Timeline items are not sorted by start time.
     case itemsNotSorted(sequenceID: UUID, trackID: UUID, previousIndex: Int, itemIndex: Int)
 
@@ -173,6 +184,7 @@ enum ProjectValidator {
                 )
             }
 
+            validateTrackCompositing(track, context: context, state: &state)
             validateTrackItems(
                 track.items,
                 context: context,

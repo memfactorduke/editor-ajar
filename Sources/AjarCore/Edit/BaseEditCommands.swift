@@ -425,7 +425,9 @@ extension EditReducer {
             locked: state.locked ?? track.locked,
             muted: state.muted ?? track.muted,
             solo: state.solo ?? track.solo,
-            hidden: state.hidden ?? track.hidden
+            hidden: state.hidden ?? track.hidden,
+            opacity: track.opacity,
+            blendMode: track.blendMode
         )
     }
 

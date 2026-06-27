@@ -344,8 +344,31 @@ public final class MetalRenderExecutor {
         let texture: MTLTexture
         let transform: ClipTransform
         let effects: ClipEffects
+        let trackOpacity: RationalValue
+        let trackBlendMode: ClipBlendMode
         let sourceColorSpace: MediaColorSpace
     }
+
+    private static let blendModeValues: [ClipBlendMode: UInt32] = [
+        .normal: 0,
+        .multiply: 1,
+        .screen: 2,
+        .overlay: 3,
+        .add: 4,
+        .darken: 5,
+        .lighten: 6,
+        .colorDodge: 7,
+        .colorBurn: 8,
+        .hardLight: 9,
+        .softLight: 10,
+        .difference: 11,
+        .exclusion: 12,
+        .subtract: 13,
+        .hue: 14,
+        .saturation: 15,
+        .color: 16,
+        .luminosity: 17
+    ]
 
     private func sourceInput(
         graph: RenderGraph,
@@ -366,6 +389,8 @@ public final class MetalRenderExecutor {
                 texture: try sourceProvider.texture(for: source),
                 transform: input.transform,
                 effects: input.effects,
+                trackOpacity: input.trackOpacity,
+                trackBlendMode: input.trackBlendMode,
                 sourceColorSpace: source.colorSpace
             )
         } catch {
@@ -438,14 +463,10 @@ public final class MetalRenderExecutor {
             )
         )
         var uniforms = uniforms(
-            transform: sourceInput.transform,
+            input: sourceInput,
             sourceTexture: sourceInput.texture,
             outputTexture: outputTexture,
-            colorPipeline: CompositeColorPipeline(
-                source: sourceInput.sourceColorSpace,
-                working: composite.workingColorSpace
-            ),
-            effects: sourceInput.effects
+            workingColorSpace: composite.workingColorSpace
         )
         encoder.setFragmentTexture(sourceInput.texture, index: 0)
         encoder.setFragmentTexture(destinationTexture, index: 1)
@@ -585,16 +606,23 @@ public final class MetalRenderExecutor {
     }
 
     private func uniforms(
-        transform: ClipTransform,
+        input: SourceCompositeInput,
         sourceTexture: MTLTexture,
         outputTexture: MTLTexture,
-        colorPipeline: CompositeColorPipeline,
-        effects: ClipEffects
+        workingColorSpace: MediaColorSpace
     ) -> AjarCompositeUniforms {
+        let transform = input.transform
+        let effects = input.effects
         let chromaKey = effects.chromaKey
         let lumaKey = effects.lumaKey
         let colorCorrection = colorCorrectionUniforms(effects.colorCorrection)
         let masks = maskUniforms(effects.masks)
+        let colorPipeline = CompositeColorPipeline(
+            source: input.sourceColorSpace,
+            working: workingColorSpace
+        )
+        let effectiveOpacity = clamp01(floatValue(transform.opacity))
+            * clamp01(floatValue(input.trackOpacity))
         return AjarCompositeUniforms(
             outputSize: SIMD2<Float>(Float(outputTexture.width), Float(outputTexture.height)),
             sourceSize: SIMD2<Float>(Float(sourceTexture.width), Float(sourceTexture.height)),
@@ -608,10 +636,15 @@ public final class MetalRenderExecutor {
                 Float(transform.crop.bottom)
             ),
             rotationRadians: radians(from: transform.rotation),
-            opacity: clamp01(floatValue(transform.opacity)),
+            opacity: effectiveOpacity,
             flipHorizontal: transform.flip.horizontal ? 1 : 0,
             flipVertical: transform.flip.vertical ? 1 : 0,
-            blendMode: blendModeValue(transform.blendMode),
+            blendMode: blendModeValue(
+                effectiveBlendMode(
+                    clipBlendMode: transform.blendMode,
+                    trackBlendMode: input.trackBlendMode
+                )
+            ),
             sourceTransfer: colorTransferValue(colorPipeline.source),
             sourcePrimaries: colorPrimariesValue(colorPipeline.source),
             workingPrimaries: colorPrimariesValue(colorPipeline.working),
@@ -862,23 +895,15 @@ public final class MetalRenderExecutor {
         min(max(value, minimum), maximum)
     }
 
+    private func effectiveBlendMode(
+        clipBlendMode: ClipBlendMode,
+        trackBlendMode: ClipBlendMode
+    ) -> ClipBlendMode {
+        trackBlendMode == .normal ? clipBlendMode : trackBlendMode
+    }
+
     private func blendModeValue(_ blendMode: ClipBlendMode) -> UInt32 {
-        switch blendMode {
-        case .normal:
-            return 0
-        case .multiply:
-            return 1
-        case .screen:
-            return 2
-        case .overlay:
-            return 3
-        case .add:
-            return 4
-        case .darken:
-            return 5
-        case .lighten:
-            return 6
-        }
+        Self.blendModeValues[blendMode] ?? 0
     }
 
     private func colorTransferValue(_ colorSpace: MediaColorSpace) -> UInt32 {
@@ -1212,6 +1237,51 @@ public final class MetalRenderExecutor {
             return color.rgb / color.a;
         }
 
+        static float ajar_blend_lum(float3 color) {
+            return dot(color, float3(0.2126, 0.7152, 0.0722));
+        }
+
+        static float ajar_blend_sat(float3 color) {
+            return max(max(color.r, color.g), color.b) - min(min(color.r, color.g), color.b);
+        }
+
+        static float3 ajar_blend_clip_color(float3 color) {
+            float lum = ajar_blend_lum(color);
+            float minColor = min(min(color.r, color.g), color.b);
+            float maxColor = max(max(color.r, color.g), color.b);
+            if (minColor < 0.0) {
+                color = lum + (((color - lum) * lum) / max(lum - minColor, 0.00001));
+            }
+            if (maxColor > 1.0) {
+                color = lum + (((color - lum) * (1.0 - lum)) / max(maxColor - lum, 0.00001));
+            }
+            return saturate(color);
+        }
+
+        static float3 ajar_blend_set_lum(float3 color, float lum) {
+            return ajar_blend_clip_color(color + (lum - ajar_blend_lum(color)));
+        }
+
+        static float3 ajar_blend_set_sat(float3 color, float sat) {
+            float minColor = min(min(color.r, color.g), color.b);
+            float maxColor = max(max(color.r, color.g), color.b);
+            if (maxColor <= minColor) {
+                return float3(0.0);
+            }
+            return (color - minColor) * (sat / (maxColor - minColor));
+        }
+
+        static float ajar_soft_light_component(float source, float destination) {
+            if (source <= 0.5) {
+                return destination - ((1.0 - (2.0 * source)) * destination * (1.0 - destination));
+            }
+
+            float curve = destination <= 0.25
+                ? (((16.0 * destination) - 12.0) * destination + 4.0) * destination
+                : sqrt(destination);
+            return destination + (((2.0 * source) - 1.0) * (curve - destination));
+        }
+
         static float3 ajar_blend_color(uint mode, float3 source, float3 destination) {
             switch (mode) {
             case 1:
@@ -1230,6 +1300,50 @@ public final class MetalRenderExecutor {
                 return min(source, destination);
             case 6:
                 return max(source, destination);
+            case 7:
+                return select(
+                    min(destination / max(1.0 - source, 0.00001), 1.0),
+                    float3(1.0),
+                    source >= 1.0
+                );
+            case 8:
+                return select(
+                    1.0 - min((1.0 - destination) / max(source, 0.00001), 1.0),
+                    float3(0.0),
+                    source <= 0.0
+                );
+            case 9:
+                return select(
+                    1.0 - (2.0 * (1.0 - source) * (1.0 - destination)),
+                    2.0 * source * destination,
+                    source <= 0.5
+                );
+            case 10:
+                return float3(
+                    ajar_soft_light_component(source.r, destination.r),
+                    ajar_soft_light_component(source.g, destination.g),
+                    ajar_soft_light_component(source.b, destination.b)
+                );
+            case 11:
+                return abs(destination - source);
+            case 12:
+                return destination + source - (2.0 * destination * source);
+            case 13:
+                return max(destination - source, 0.0);
+            case 14:
+                return ajar_blend_set_lum(
+                    ajar_blend_set_sat(source, ajar_blend_sat(destination)),
+                    ajar_blend_lum(destination)
+                );
+            case 15:
+                return ajar_blend_set_lum(
+                    ajar_blend_set_sat(destination, ajar_blend_sat(source)),
+                    ajar_blend_lum(destination)
+                );
+            case 16:
+                return ajar_blend_set_lum(source, ajar_blend_lum(destination));
+            case 17:
+                return ajar_blend_set_lum(destination, ajar_blend_lum(source));
             default:
                 return source;
             }
@@ -1250,6 +1364,7 @@ public final class MetalRenderExecutor {
                 ));
             }
 
+            // Blend formulas require straight linear RGB; `ajar_composite` re-premultiplies.
             float3 sourceStraight = source.rgb / sourceAlpha;
             float3 destinationStraight = ajar_unpremultiply(destination);
             float3 blended = ajar_blend_color(blendMode, sourceStraight, destinationStraight);

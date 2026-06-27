@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-
 import Foundation
 
 /// A deterministic edit operation applied to an immutable `Project`.
@@ -98,6 +97,13 @@ public enum EditCommand: Codable, Equatable, Sendable {
         sequenceID: UUID,
         trackID: UUID,
         state: TrackStatePatch
+    )
+
+    /// Updates track-level blend and opacity without changing track items or order.
+    case setTrackCompositing(
+        sequenceID: UUID,
+        trackID: UUID,
+        compositing: TrackCompositingPatch
     )
 
     /// Moves a clip to a new track/range.
@@ -433,6 +439,8 @@ public extension EditCommand {
             return "Lift Clip"
         case .setTrackState:
             return "Change Track State"
+        case .setTrackCompositing:
+            return "Set Track Compositing"
         case .moveClip:
             return "Move Clip"
         case .trimClip:

@@ -37,6 +37,12 @@ public struct Track: Codable, Equatable, Sendable {
     /// Whether video is hidden. Meaningful for video tracks.
     public let hidden: Bool
 
+    /// Track-level opacity, evaluated at render time for video compositing.
+    public let opacity: Animatable<RationalValue>
+
+    /// Track-level blend mode for compositing this track onto lower video tracks.
+    public let blendMode: ClipBlendMode
+
     /// Creates a timeline track.
     public init(
         id: UUID,
@@ -46,7 +52,9 @@ public struct Track: Codable, Equatable, Sendable {
         locked: Bool = false,
         muted: Bool = false,
         solo: Bool = false,
-        hidden: Bool = false
+        hidden: Bool = false,
+        opacity: Animatable<RationalValue> = .constant(.one),
+        blendMode: ClipBlendMode = .normal
     ) {
         self.id = id
         self.kind = kind
@@ -56,6 +64,55 @@ public struct Track: Codable, Equatable, Sendable {
         self.muted = muted
         self.solo = solo
         self.hidden = hidden
+        self.opacity = opacity
+        self.blendMode = blendMode
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case items
+        case enabled
+        case locked
+        case muted
+        case solo
+        case hidden
+        case opacity
+        case blendMode
+    }
+
+    /// Decodes tracks from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        kind = try container.decode(TrackKind.self, forKey: .kind)
+        items = try container.decode([TimelineItem].self, forKey: .items)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        locked = try container.decodeIfPresent(Bool.self, forKey: .locked) ?? false
+        muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
+        solo = try container.decodeIfPresent(Bool.self, forKey: .solo) ?? false
+        hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        opacity = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .opacity
+        ) ?? .constant(.one)
+        blendMode = try container.decodeIfPresent(ClipBlendMode.self, forKey: .blendMode)
+            ?? .normal
+    }
+
+    /// Encodes the complete track payload.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(items, forKey: .items)
+        try container.encode(enabled, forKey: .enabled)
+        try container.encode(locked, forKey: .locked)
+        try container.encode(muted, forKey: .muted)
+        try container.encode(solo, forKey: .solo)
+        try container.encode(hidden, forKey: .hidden)
+        try container.encode(opacity, forKey: .opacity)
+        try container.encode(blendMode, forKey: .blendMode)
     }
 }
 

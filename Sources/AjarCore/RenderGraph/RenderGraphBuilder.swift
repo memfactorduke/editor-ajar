@@ -54,11 +54,13 @@ public enum RenderGraphBuilder {
             return try transparentGraph(outputColorSpace: project.settings.colorSpace)
         }
 
-        return try graph(for: candidates.map(\.clip), at: time, in: project)
+        return try graph(for: candidates, at: time, in: project)
     }
 
     private struct ActiveClipCandidate {
         let clip: Clip
+        let trackOpacity: RationalValue
+        let trackBlendMode: ClipBlendMode
     }
 
     private static func activeMediaClips(
@@ -75,7 +77,13 @@ public enum RenderGraphBuilder {
 
                 do {
                     if try clip.timelineRange.contains(time) {
-                        candidates.append(ActiveClipCandidate(clip: clip))
+                        candidates.append(
+                            ActiveClipCandidate(
+                                clip: clip,
+                                trackOpacity: track.opacity.value(at: time),
+                                trackBlendMode: track.blendMode
+                            )
+                        )
                     }
                 } catch let error as RationalTimeError {
                     throw RenderGraphBuildError.timeMappingFailed(error)
@@ -96,15 +104,17 @@ public enum RenderGraphBuilder {
     }
 
     private static func graph(
-        for clips: [Clip],
+        for candidates: [ActiveClipCandidate],
         at time: RationalTime,
         in project: Project
     ) throws -> RenderGraph {
-        let sourceInputs = try clips.map { clip in
+        let sourceInputs = try candidates.map { candidate in
             RenderCompositeNodeInput(
-                node: try sourceNode(for: clip, at: time, in: project),
-                transform: clip.transformAnimation.value(at: time),
-                effects: clip.effectsAnimation.value(at: time)
+                node: try sourceNode(for: candidate.clip, at: time, in: project),
+                transform: candidate.clip.transformAnimation.value(at: time),
+                effects: candidate.clip.effectsAnimation.value(at: time),
+                trackOpacity: candidate.trackOpacity,
+                trackBlendMode: candidate.trackBlendMode
             )
         }
         let compositeNode = try RenderNodeFactory.makeCompositeNode(

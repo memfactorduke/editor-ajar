@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` and `AjarRender` complete standard blend-mode set with track-level
+  blend/opacity, premultiplied-alpha-correct Metal compositing, cache invalidation, and
+  golden coverage for FR-COMP-006.
 - `AjarCore` and `AjarRender` luma-key settings with undoable set/clear commands, typed
   validation, `.ajar` compatibility, GPU luma matte evaluation, premultiplied alpha passthrough,
   evaluated effect cache keys, and golden coverage for FR-COMP-005.

@@ -167,6 +167,39 @@ public enum ClipBlendMode: String, Codable, CaseIterable, Equatable, Sendable {
 
     /// Lighten blend.
     case lighten
+
+    /// Color-dodge blend.
+    case colorDodge
+
+    /// Color-burn blend.
+    case colorBurn
+
+    /// Hard-light blend.
+    case hardLight
+
+    /// Soft-light blend.
+    case softLight
+
+    /// Difference blend.
+    case difference
+
+    /// Exclusion blend.
+    case exclusion
+
+    /// Subtract source color from destination color.
+    case subtract
+
+    /// Uses source hue with destination saturation and luminosity.
+    case hue
+
+    /// Uses source saturation with destination hue and luminosity.
+    case saturation
+
+    /// Uses source hue and saturation with destination luminosity.
+    case color
+
+    /// Uses source luminosity with destination hue and saturation.
+    case luminosity
 }
 
 /// Crop inset edge names used in validation errors.

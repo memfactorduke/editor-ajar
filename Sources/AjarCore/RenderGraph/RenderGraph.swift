@@ -35,15 +35,25 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
     /// Clip effects to apply while compositing the source.
     public let effects: ClipEffects
 
+    /// Evaluated track opacity to apply while compositing the track result.
+    public let trackOpacity: RationalValue
+
+    /// Track blend mode to use when compositing this track onto lower tracks.
+    public let trackBlendMode: ClipBlendMode
+
     /// Creates a composite input.
     public init(
         sourceNodeID: RenderNodeID,
         transform: ClipTransform,
-        effects: ClipEffects = .none
+        effects: ClipEffects = .none,
+        trackOpacity: RationalValue = .one,
+        trackBlendMode: ClipBlendMode = .normal
     ) {
         self.sourceNodeID = sourceNodeID
         self.transform = transform
         self.effects = effects
+        self.trackOpacity = trackOpacity
+        self.trackBlendMode = trackBlendMode
     }
 }
 
@@ -51,6 +61,8 @@ struct RenderCompositeNodeInput {
     let node: RenderNode
     let transform: ClipTransform
     let effects: ClipEffects
+    let trackOpacity: RationalValue
+    let trackBlendMode: ClipBlendMode
 }
 
 /// Resolved media source parameters for a source render node.
@@ -205,7 +217,9 @@ enum RenderNodeFactory {
             RenderCompositeInput(
                 sourceNodeID: input.node.id,
                 transform: input.transform,
-                effects: input.effects
+                effects: input.effects,
+                trackOpacity: input.trackOpacity,
+                trackBlendMode: input.trackBlendMode
             )
         }
         return try makeNode(
