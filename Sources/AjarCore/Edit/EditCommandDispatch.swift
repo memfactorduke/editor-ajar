@@ -13,7 +13,8 @@ extension EditReducer {
             .setClipLumaKey, .clearClipLumaKey,
             .setClipColorCorrection, .clearClipColorCorrection,
             .addClipMask, .removeClipMask, .moveClipMask, .setClipMask,
-            .setClipAudioMix, .clearClipAudioMix:
+            .setClipAudioMix, .clearClipAudioMix,
+            .detachClipAudio, .replaceClipAudioSource:
             return try applyClipCommand(command, to: project)
         case .setTrackState, .setTrackCompositing, .setTrackAudioMix, .clearTrackAudioMix:
             return try applyTrackCommand(command, to: project)

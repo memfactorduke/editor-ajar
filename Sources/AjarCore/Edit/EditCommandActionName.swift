@@ -74,6 +74,10 @@ public extension EditCommand {
             return "Set Clip Audio Mix"
         case .clearClipAudioMix:
             return "Clear Clip Audio Mix"
+        case .detachClipAudio:
+            return "Detach Audio"
+        case .replaceClipAudioSource:
+            return "Replace Clip Audio"
         case .addTrack:
             return "Add Track"
         case .removeTrack:

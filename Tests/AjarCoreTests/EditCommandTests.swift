@@ -214,6 +214,7 @@ private func makeValidCommandCases(seed: Int) throws -> [EditCommandCase] {
 
     return try makeClipCommandCases(fixture: fixture, addClip: addClip, seed: seed)
         + makeAudioMixCommandCases(seed: seed)
+        + makeClipAudioSourceCommandCases(seed: seed)
         + makeLinkedClipCommandCases(seed: seed)
         + (try makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID))
         + makeMarkerCommandCases(fixture: fixture, seed: seed)

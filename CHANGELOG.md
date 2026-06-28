@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` detach/replace audio edit commands for FR-AUD-008 with undoable linked-audio
+  detaching, audio-source replacement validation, and `.ajar` round-trip coverage.
 - Hardened FR-AUD-001 audio model follow-ups with animation-preserving clip audio edits,
   sparse `.ajar` audio-mix decoding coverage, video-track audio-field round trips, and
   typed pre-validation for invalid track audio patches.
