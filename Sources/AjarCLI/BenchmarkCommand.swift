@@ -70,6 +70,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Render a 4K30 two-layer frame with chroma key and choke enabled.
     case twoLayerChromaKeyChoke4K30Playback = "two-layer-chroma-key-choke-4k30-playback"
 
+    /// Compute FR-COL-003 scopes for one display-encoded frame.
+    case scopeAnalyzerCompute = "scope-analyzer-compute"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -82,6 +85,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "NFR-PERF-003"
         case .twoLayerChromaKeyChoke4K30Playback:
             "NFR-PERF-004"
+        case .scopeAnalyzerCompute:
+            "FR-COL-003"
         }
     }
 }
@@ -154,6 +159,8 @@ public enum BenchmarkCommand {
             value = try await measureMultiLayerTransformPlayback(projectURL: projectURL)
         case .twoLayerChromaKeyChoke4K30Playback:
             value = try await measureTwoLayerChromaKeyChoke4K30Playback()
+        case .scopeAnalyzerCompute:
+            value = try await measureScopeAnalyzerCompute()
         }
 
         return BenchmarkResult(
@@ -248,6 +255,20 @@ public enum BenchmarkCommand {
                 output: RenderOutputDescriptor(pixelDimensions: fixture.dimensions),
                 sourceProvider: fixture.sourceProvider
             )
+            try await frame.waitForCompletion()
+        }
+    }
+
+    private static func measureScopeAnalyzerCompute() async throws -> Double {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw MetalRenderError.metalDeviceUnavailable
+        }
+
+        let fixture = try BenchmarkScopeAnalyzerFixture(device: device)
+        let analyzer = try MetalScopeAnalyzer(device: device)
+
+        return try await medianMilliseconds {
+            let frame = try analyzer.analyze(displayEncodedTexture: fixture.texture)
             try await frame.waitForCompletion()
         }
     }

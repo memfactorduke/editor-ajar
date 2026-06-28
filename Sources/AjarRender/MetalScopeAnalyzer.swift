@@ -172,13 +172,50 @@ public struct MetalScopeFrame {
 
     /// Rendered vectorscope occupancy texture.
     public let vectorscopeTexture: MTLTexture
+
+    private let completion: RenderCompletion?
+    private let resourceLease: AnyObject?
+
+    fileprivate init(
+        sourceDimensions: PixelDimensions,
+        commandBuffer: MTLCommandBuffer,
+        histogramBuffer: MTLBuffer,
+        waveformBuffer: MTLBuffer,
+        rgbParadeBuffer: MTLBuffer,
+        vectorscopeBuffer: MTLBuffer,
+        histogramTexture: MTLTexture,
+        waveformTexture: MTLTexture,
+        rgbParadeTexture: MTLTexture,
+        vectorscopeTexture: MTLTexture,
+        completion: RenderCompletion?,
+        resourceLease: AnyObject?
+    ) {
+        self.sourceDimensions = sourceDimensions
+        self.commandBuffer = commandBuffer
+        self.histogramBuffer = histogramBuffer
+        self.waveformBuffer = waveformBuffer
+        self.rgbParadeBuffer = rgbParadeBuffer
+        self.vectorscopeBuffer = vectorscopeBuffer
+        self.histogramTexture = histogramTexture
+        self.waveformTexture = waveformTexture
+        self.rgbParadeTexture = rgbParadeTexture
+        self.vectorscopeTexture = vectorscopeTexture
+        self.completion = completion
+        self.resourceLease = resourceLease
+    }
+
+    /// Waits until the scope analysis command buffer has completed.
+    public func waitForCompletion() async throws {
+        try await completion?.wait()
+    }
 }
 
 /// GPU scope analyzer for FR-COL-003 waveform, vectorscope, RGB parade, and histogram data.
-public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_length
+public final class MetalScopeAnalyzer {  // swiftlint:disable:this type_body_length
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let library: MTLLibrary
+    private let resourcePool = ScopeResourcePool(ringDepth: 3)
     private var pipelines: [String: MTLComputePipelineState] = [:]
 
     /// Creates a scope analyzer with the default Metal device.
@@ -206,12 +243,16 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
         }
     }
 
-    /// Schedules GPU scope analysis for `texture` and returns GPU-resident scope outputs.
+    /// Schedules GPU scope analysis for display-encoded `texture`.
+    ///
+    /// Input contract: `texture` must contain display-encoded RGB samples, not the linear-light
+    /// compositor working texture. The kernels intentionally compute Rec.709 luma and Cb/Cr from
+    /// raw display-encoded sample values to match broadcast scope behavior.
     ///
     /// This method intentionally returns immediately after committing a command buffer. It never
     /// blocks on completion and never reads scope data back to the CPU, so it can be scheduled
     /// beside playback without adding a synchronous readback to the render hot path.
-    public func analyze(texture: MTLTexture) throws -> MetalScopeFrame {
+    public func analyze(displayEncodedTexture texture: MTLTexture) throws -> MetalScopeFrame {
         guard texture.width > 0, texture.height > 0 else {
             throw MetalScopeError.invalidSourceDimensions(
                 width: texture.width,
@@ -219,12 +260,68 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
             )
         }
 
-        let buffers = try makeBuffers(width: texture.width)
-        let textures = try makeTextures(width: texture.width)
+        let resourceSet = try resourcePool.acquire(
+            width: texture.width,
+            makeBuffers: makeBuffers(width:),
+            makeTextures: makeTextures(width:)
+        )
+        let buffers = resourceSet.buffers
+        let textures = resourceSet.textures
+
+        do {
+            let commandBuffer = try makeCommandBuffer()
+            try encodeScopeAnalysis(
+                commandBuffer: commandBuffer,
+                sourceTexture: texture,
+                buffers: buffers,
+                textures: textures
+            )
+
+            let lease = ScopeResourceLease(pool: resourcePool, resourceSet: resourceSet)
+            let completion = RenderCompletion()
+            completion.attach(to: commandBuffer)
+            commandBuffer.addCompletedHandler { [lease] _ in
+                lease.keepAlive()
+            }
+            commandBuffer.commit()
+
+            return makeScopeFrame(
+                texture: texture,
+                commandBuffer: commandBuffer,
+                resourceSet: resourceSet,
+                completion: completion,
+                lease: lease
+            )
+        } catch {
+            resourcePool.release(resourceSet)
+            throw error
+        }
+    }
+
+    /// Deprecated compile-time guard for callers that do not state the scope input color-space.
+    @available(
+        *,
+        unavailable,
+        message:
+            "Scopes require display-encoded Rec.709 input; call analyze(displayEncodedTexture:)."
+    )
+    public func analyze(texture: MTLTexture) throws -> MetalScopeFrame {
+        try analyze(displayEncodedTexture: texture)
+    }
+
+    private func makeCommandBuffer() throws -> MTLCommandBuffer {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             throw MetalScopeError.commandBufferCreationFailed
         }
+        return commandBuffer
+    }
 
+    private func encodeScopeAnalysis(
+        commandBuffer: MTLCommandBuffer,
+        sourceTexture texture: MTLTexture,
+        buffers: ScopeBuffers,
+        textures: ScopeTextures
+    ) throws {
         try encodeClears(commandBuffer: commandBuffer, buffers: buffers)
         try encodeAccumulate(
             commandBuffer: commandBuffer,
@@ -255,9 +352,17 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
             texture: textures.vectorscope,
             buffers: [buffers.vectorscope]
         )
+    }
 
-        commandBuffer.commit()
-
+    private func makeScopeFrame(
+        texture: MTLTexture,
+        commandBuffer: MTLCommandBuffer,
+        resourceSet: ScopeResourceSet,
+        completion: RenderCompletion,
+        lease: ScopeResourceLease
+    ) -> MetalScopeFrame {
+        let buffers = resourceSet.buffers
+        let textures = resourceSet.textures
         return MetalScopeFrame(
             sourceDimensions: PixelDimensions(width: texture.width, height: texture.height),
             commandBuffer: commandBuffer,
@@ -268,7 +373,9 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
             histogramTexture: textures.histogram,
             waveformTexture: textures.waveform,
             rgbParadeTexture: textures.rgbParade,
-            vectorscopeTexture: textures.vectorscope
+            vectorscopeTexture: textures.vectorscope,
+            completion: completion,
+            resourceLease: lease
         )
     }
 
@@ -455,6 +562,92 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
         let vectorscope: MTLTexture
     }
 
+    private final class ScopeResourceSet {
+        let buffers: ScopeBuffers
+        let textures: ScopeTextures
+        var isLeased = false
+
+        init(buffers: ScopeBuffers, textures: ScopeTextures) {
+            self.buffers = buffers
+            self.textures = textures
+        }
+    }
+
+    private final class ScopeResourceLease {
+        private let pool: ScopeResourcePool
+        private let resourceSet: ScopeResourceSet
+
+        init(pool: ScopeResourcePool, resourceSet: ScopeResourceSet) {
+            self.pool = pool
+            self.resourceSet = resourceSet
+        }
+
+        func keepAlive() {}
+
+        deinit {
+            pool.release(resourceSet)
+        }
+    }
+
+    private final class ScopeResourcePool {
+        private let ringDepth: Int
+        private let lock = NSLock()
+        private var setsByWidth: [Int: [ScopeResourceSet]] = [:]
+        private var nextIndexByWidth: [Int: Int] = [:]
+
+        init(ringDepth: Int) {
+            self.ringDepth = max(1, ringDepth)
+        }
+
+        func acquire(
+            width: Int,
+            makeBuffers: (Int) throws -> ScopeBuffers,
+            makeTextures: (Int) throws -> ScopeTextures
+        ) throws -> ScopeResourceSet {
+            lock.lock()
+            defer {
+                lock.unlock()
+            }
+
+            var sets = setsByWidth[width] ?? []
+            if sets.count < ringDepth {
+                let resourceSet = ScopeResourceSet(
+                    buffers: try makeBuffers(width),
+                    textures: try makeTextures(width)
+                )
+                resourceSet.isLeased = true
+                sets.append(resourceSet)
+                setsByWidth[width] = sets
+                nextIndexByWidth[width] = sets.count % ringDepth
+                return resourceSet
+            }
+
+            let startIndex = nextIndexByWidth[width] ?? 0
+            for offset in 0..<sets.count {
+                let index = (startIndex + offset) % sets.count
+                let resourceSet = sets[index]
+                if !resourceSet.isLeased {
+                    resourceSet.isLeased = true
+                    nextIndexByWidth[width] = (index + 1) % sets.count
+                    return resourceSet
+                }
+            }
+
+            let overflowSet = ScopeResourceSet(
+                buffers: try makeBuffers(width),
+                textures: try makeTextures(width)
+            )
+            overflowSet.isLeased = true
+            return overflowSet
+        }
+
+        func release(_ resourceSet: ScopeResourceSet) {
+            lock.lock()
+            resourceSet.isLeased = false
+            lock.unlock()
+        }
+    }
+
     private static let shaderSource = """
         #include <metal_stdlib>
         using namespace metal;
@@ -490,19 +683,24 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
             return uint2(ajar_scope_bin(cb + 0.5f), ajar_scope_bin(cr + 0.5f));
         }
 
+        static float ajar_scope_density(uint count) {
+            return count == 0u ? 0.0f : saturate(log2(float(count) + 1.0f) * 0.25f);
+        }
+
         static float4 ajar_scope_histogram_color(uint row, uint count) {
             if (count == 0u) {
                 return float4(0.0f, 0.0f, 0.0f, 1.0f);
             }
+            float density = ajar_scope_density(count);
             switch (row) {
             case 0:
-                return float4(1.0f, 0.0f, 0.0f, 1.0f);
+                return float4(density, 0.0f, 0.0f, 1.0f);
             case 1:
-                return float4(0.0f, 1.0f, 0.0f, 1.0f);
+                return float4(0.0f, density, 0.0f, 1.0f);
             case 2:
-                return float4(0.0f, 0.0f, 1.0f, 1.0f);
+                return float4(0.0f, 0.0f, density, 1.0f);
             default:
-                return float4(1.0f, 1.0f, 1.0f, 1.0f);
+                return float4(density, density, density, 1.0f);
             }
         }
 
@@ -518,6 +716,9 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
                 return;
             }
 
+            // Scope inputs are display-encoded samples, not the compositor's linear-light
+            // working texture. Broadcast-style luma/Cb/Cr math below intentionally operates on
+            // these raw sample values.
             float3 rgb = clamp(sourceTexture.read(gid).rgb, float3(0.0f), float3(1.0f));
             uint redBin = ajar_scope_bin(rgb.r);
             uint greenBin = ajar_scope_bin(rgb.g);
@@ -596,7 +797,7 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
 
             uint index = ajar_scope_waveform_index(gid.x, gid.y);
             uint count = atomic_load_explicit(&waveform[index], memory_order_relaxed);
-            float value = count > 0u ? 1.0f : 0.0f;
+            float value = ajar_scope_density(count);
             outputTexture.write(float4(value, value, value, 1.0f), gid);
         }
 
@@ -622,7 +823,7 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
             float3 color = channel == 0u
                 ? float3(1.0f, 0.0f, 0.0f)
                 : (channel == 1u ? float3(0.0f, 1.0f, 0.0f) : float3(0.0f, 0.0f, 1.0f));
-            outputTexture.write(float4(color, 1.0f), gid);
+            outputTexture.write(float4(color * ajar_scope_density(count), 1.0f), gid);
         }
 
         kernel void ajar_scope_render_vectorscope(
@@ -636,7 +837,7 @@ public final class MetalScopeAnalyzer { // swiftlint:disable:this type_body_leng
 
             uint index = ajar_scope_vectorscope_index(gid.x, gid.y);
             uint count = atomic_load_explicit(&vectorscope[index], memory_order_relaxed);
-            float value = count > 0u ? 1.0f : 0.0f;
+            float value = ajar_scope_density(count);
             outputTexture.write(float4(value, value, value, 1.0f), gid);
         }
         """
