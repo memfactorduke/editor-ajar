@@ -32,7 +32,9 @@ extension EditReducer {
             solo: track.solo,
             hidden: track.hidden,
             opacity: compositing.opacity ?? track.opacity,
-            blendMode: compositing.blendMode ?? track.blendMode
+            blendMode: compositing.blendMode ?? track.blendMode,
+            audioGain: track.audioGain,
+            audioPan: track.audioPan
         )
     }
 }

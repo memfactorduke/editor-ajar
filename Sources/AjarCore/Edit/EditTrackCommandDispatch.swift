@@ -19,6 +19,16 @@ extension EditReducer {
                 compositing: compositing,
                 to: project
             )
+        case .setTrackAudioMix(let sequenceID, let trackID, let audio):
+            return try setTrackAudioMix(
+                TrackAudioMixEdit(sequenceID: sequenceID, trackID: trackID, audio: audio),
+                in: project
+            )
+        case .clearTrackAudioMix(let sequenceID, let trackID):
+            return try clearTrackAudioMix(
+                TrackAudioMixTarget(sequenceID: sequenceID, trackID: trackID),
+                in: project
+            )
         default:
             throw TrackCommandDispatchError.unsupported(command)
         }

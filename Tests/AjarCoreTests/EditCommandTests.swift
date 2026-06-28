@@ -213,6 +213,7 @@ private func makeValidCommandCases(seed: Int) throws -> [EditCommandCase] {
     let addClip = try makeEditClip(id: addClipID, mediaID: fixture.mediaID, startFrame: 20)
 
     return try makeClipCommandCases(fixture: fixture, addClip: addClip, seed: seed)
+        + makeAudioMixCommandCases(seed: seed)
         + makeLinkedClipCommandCases(seed: seed)
         + (try makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID))
         + makeMarkerCommandCases(fixture: fixture, seed: seed)
@@ -397,6 +398,40 @@ private func makeTransformCommandCases(
         + (try makeLumaKeyCommandCases(fixture: fixture))
         + (try makeColorCorrectionCommandCases(fixture: fixture))
         + (try makeMaskCommandCases(fixture: fixture))
+}
+
+private func makeAudioMixCommandCases(seed: Int) throws -> [EditCommandCase] {
+    let fixture = try makeLinkedEditFixture(seed: seed + 500)
+    let audioMix = try makeUndoAudioMix()
+    let audioProject = try apply(
+        .setClipAudioMix(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.audioTrackID,
+            clipID: fixture.audioClipID,
+            audioMix: audioMix
+        ),
+        to: fixture.project
+    )
+
+    return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .setClipAudioMix(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.audioTrackID,
+                clipID: fixture.audioClipID,
+                audioMix: audioMix
+            )
+        ),
+        EditCommandCase(
+            project: audioProject,
+            command: .clearClipAudioMix(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.audioTrackID,
+                clipID: fixture.audioClipID
+            )
+        )
+    ]
 }
 
 private func makeLumaKeyCommandCases(
@@ -662,23 +697,33 @@ private func makeTrackCommandCases(
     fixture: EditFixture,
     addTrackID: UUID
 ) throws -> [EditCommandCase] {
-    var cases: [EditCommandCase] = []
-    cases.append(
+    try makeTrackStructureCommandCases(fixture: fixture, addTrackID: addTrackID)
+        + makeTrackStateCommandCases(fixture: fixture)
+        + makeTrackCompositingCommandCases(fixture: fixture)
+        + makeTrackAudioCommandCases(fixture: fixture)
+}
+
+private func makeTrackStructureCommandCases(
+    fixture: EditFixture,
+    addTrackID: UUID
+) -> [EditCommandCase] {
+    [
         EditCommandCase(
             project: fixture.project,
             command: .addTrack(
                 sequenceID: fixture.sequenceID,
                 track: Track(id: addTrackID, kind: .video, items: [])
             )
-        )
-    )
-    cases.append(
+        ),
         EditCommandCase(
             project: fixture.project,
             command: .removeTrack(sequenceID: fixture.sequenceID, trackID: fixture.audioTrackID)
         )
-    )
-    cases.append(
+    ]
+}
+
+private func makeTrackStateCommandCases(fixture: EditFixture) -> [EditCommandCase] {
+    [
         EditCommandCase(
             project: fixture.project,
             command: .setTrackState(
@@ -686,9 +731,7 @@ private func makeTrackCommandCases(
                 trackID: fixture.videoTrackID,
                 state: TrackStatePatch(enabled: false, locked: true, hidden: true)
             )
-        )
-    )
-    cases.append(
+        ),
         EditCommandCase(
             project: fixture.project,
             command: .setTrackState(
@@ -697,8 +740,11 @@ private func makeTrackCommandCases(
                 state: TrackStatePatch(locked: true, muted: true, solo: true)
             )
         )
-    )
-    cases.append(
+    ]
+}
+
+private func makeTrackCompositingCommandCases(fixture: EditFixture) throws -> [EditCommandCase] {
+    [
         EditCommandCase(
             project: fixture.project,
             command: .setTrackCompositing(
@@ -710,8 +756,40 @@ private func makeTrackCommandCases(
                 )
             )
         )
+    ]
+}
+
+private func makeTrackAudioCommandCases(fixture: EditFixture) throws -> [EditCommandCase] {
+    let patch = TrackAudioMixPatch(
+        gain: .constant(try RationalValue(numerator: 3, denominator: 4)),
+        pan: .constant(try RationalValue(numerator: 1, denominator: 4))
     )
-    return cases
+    let audioTrackProject = try apply(
+        .setTrackAudioMix(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.audioTrackID,
+            audio: patch
+        ),
+        to: fixture.project
+    )
+
+    return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .setTrackAudioMix(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.audioTrackID,
+                audio: patch
+            )
+        ),
+        EditCommandCase(
+            project: audioTrackProject,
+            command: .clearTrackAudioMix(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.audioTrackID
+            )
+        )
+    ]
 }
 
 private func makeProjectCommandCases(
@@ -797,5 +875,28 @@ private func makeUndoRectangleMask(
             )
         ),
         invert: invert
+    )
+}
+
+private func makeUndoAudioMix() throws -> ClipAudioMix {
+    ClipAudioMix(
+        gain: try Animatable(
+            base: .one,
+            keyframes: [
+                Keyframe(
+                    time: try editTime(0),
+                    value: .one,
+                    interpolation: .linear
+                ),
+                Keyframe(
+                    time: try editTime(6),
+                    value: try RationalValue(numerator: 5, denominator: 4),
+                    interpolation: .hold
+                )
+            ]
+        ),
+        pan: .constant(try RationalValue(numerator: -1, denominator: 2)),
+        fadeIn: ClipAudioFade(duration: try editTime(2)),
+        fadeOut: ClipAudioFade(duration: try editTime(2), curve: .easeOut)
     )
 }

@@ -12,9 +12,10 @@ extension EditReducer {
             .deleteClipTransformKeyframe, .setClipChromaKey,
             .setClipLumaKey, .clearClipLumaKey,
             .setClipColorCorrection, .clearClipColorCorrection,
-            .addClipMask, .removeClipMask, .moveClipMask, .setClipMask:
+            .addClipMask, .removeClipMask, .moveClipMask, .setClipMask,
+            .setClipAudioMix, .clearClipAudioMix:
             return try applyClipCommand(command, to: project)
-        case .setTrackState, .setTrackCompositing:
+        case .setTrackState, .setTrackCompositing, .setTrackAudioMix, .clearTrackAudioMix:
             return try applyTrackCommand(command, to: project)
         case .addTrack(let sequenceID, let track):
             return try addTrack(track, sequenceID: sequenceID, to: project)

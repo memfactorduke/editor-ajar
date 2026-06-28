@@ -153,7 +153,8 @@ func makeEditClip(
     transform: ClipTransform = .identity,
     transformAnimation: AnimatableClipTransform? = nil,
     effects: ClipEffects = .none,
-    effectsAnimation: AnimatableClipEffects? = nil
+    effectsAnimation: AnimatableClipEffects? = nil,
+    audioMix: ClipAudioMix = .identity
 ) throws -> Clip {
     Clip(
         id: id,
@@ -166,7 +167,8 @@ func makeEditClip(
         transform: transform,
         transformAnimation: transformAnimation,
         effects: effects,
-        effectsAnimation: effectsAnimation
+        effectsAnimation: effectsAnimation,
+        audioMix: audioMix
     )
 }
 

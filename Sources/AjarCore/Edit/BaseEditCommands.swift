@@ -427,7 +427,9 @@ extension EditReducer {
             solo: state.solo ?? track.solo,
             hidden: state.hidden ?? track.hidden,
             opacity: track.opacity,
-            blendMode: track.blendMode
+            blendMode: track.blendMode,
+            audioGain: track.audioGain,
+            audioPan: track.audioPan
         )
     }
 
@@ -458,7 +460,8 @@ extension EditReducer {
         transform: ClipTransform? = nil,
         transformAnimation: AnimatableClipTransform? = nil,
         effects: ClipEffects? = nil,
-        effectsAnimation: AnimatableClipEffects? = nil
+        effectsAnimation: AnimatableClipEffects? = nil,
+        audioMix: ClipAudioMix? = nil
     ) -> Clip {
         let replacementTransform = transform ?? clip.transform
         let replacementAnimation = transformAnimation
@@ -482,7 +485,8 @@ extension EditReducer {
             transform: replacementTransform,
             transformAnimation: replacementAnimation,
             effects: replacementEffects,
-            effectsAnimation: replacementEffectsAnimation
+            effectsAnimation: replacementEffectsAnimation,
+            audioMix: audioMix ?? clip.audioMix
         )
     }
 }

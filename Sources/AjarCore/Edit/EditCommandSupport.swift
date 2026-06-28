@@ -59,3 +59,21 @@ public struct TrackCompositingPatch: Codable, Equatable, Sendable {
         self.blendMode = blendMode
     }
 }
+
+/// Optional track-audio fields changed by `EditCommand.setTrackAudioMix`.
+public struct TrackAudioMixPatch: Codable, Equatable, Sendable {
+    /// Replacement track gain animation, or `nil` to leave it unchanged.
+    public let gain: Animatable<RationalValue>?
+
+    /// Replacement track pan animation, or `nil` to leave it unchanged.
+    public let pan: Animatable<RationalValue>?
+
+    /// Creates a track-audio patch.
+    public init(
+        gain: Animatable<RationalValue>? = nil,
+        pan: Animatable<RationalValue>? = nil
+    ) {
+        self.gain = gain
+        self.pan = pan
+    }
+}
