@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AjarCore` audio mix model for FR-AUD-001 with keyframable clip and track gain/pan,
   clip fade and crossfade metadata, typed validation, undoable set/clear commands, and
   `.ajar` legacy defaults.
+- Hardened FR-COMP-001/002 chroma-key choke coverage with fractional multi-pixel matte
+  assertions, documented normalized-chroma/border-erosion limits, and a report-only 4K30
+  two-layer choke benchmark for NFR-PERF-004.
 - Hardened FR-COMP-003 mask follow-ups with effect-animation-preserving edits, narrowed legacy
   animatable effect decoding tests, mask cache-key field coverage, pinned flip/mask render
   behavior, de-duplicated mask validation errors, and source-space polygon documentation.

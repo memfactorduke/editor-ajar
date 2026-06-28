@@ -11,6 +11,9 @@ import XCTest
 
 final class MetalRenderExecutorChromaKeyTests: XCTestCase {
     func testFRCOMP001002CompositeUniformLayoutMatchesMSLABI() {
+        // These constants encode the inline MSL `AjarCompositeUniforms` ABI contract.
+        // Keep them in sync with the Swift struct and shader declarations until a runtime
+        // argument-buffer cross-check replaces the duplicated layout fixture.
         XCTAssertEqual(
             MetalRenderExecutor.compositeUniformLayout,
             AjarCompositeUniformLayout(
@@ -283,6 +286,60 @@ final class MetalRenderExecutorChromaKeyTests: XCTestCase {
     }
 }
 
+extension MetalRenderExecutorChromaKeyTests {
+    func testFRCOMP002FractionalChokeBlendsEdgesAndPreservesInteriorMatte() throws {
+        let device = try chromaMetalDeviceOrSkip()
+        let graph = try makeChromaSingleClipGraph(
+            effects: try makeChromaKeyEffects(
+                tolerance: try RationalValue(numerator: 1, denominator: 10),
+                choke: try RationalValue(numerator: 1, denominator: 2),
+                viewMatte: true
+            )
+        )
+        let sourceTexture = try makeChromaTexture(
+            device: device,
+            width: 5,
+            height: 5,
+            bgraPixels: chromaPixelsBGRA(width: 5, height: 5) { xPosition, yPosition in
+                (1...3).contains(xPosition) && (1...3).contains(yPosition)
+                    ? [0, 0, 255, 255]
+                    : [0, 255, 0, 255]
+            }
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 5, height: 5)),
+            sourceProvider: ChromaCountingTextureProvider(texture: sourceTexture)
+        )
+
+        try waitForChromaRender(frame)
+
+        let pixels = try readChromaBGRA8(texture: frame.texture, device: device)
+        assertChromaPixel(
+            pixels,
+            width: 5,
+            x: 2,
+            y: 2,
+            matches: [255, 255, 255, 255]
+        )
+        for yPosition in 0..<5 {
+            for xPosition in 0..<5 {
+                guard xPosition != 2 || yPosition != 2 else {
+                    continue
+                }
+
+                let pixel = chromaPixel(in: pixels, width: 5, x: xPosition, y: yPosition)
+                if (1...3).contains(xPosition) && (1...3).contains(yPosition) {
+                    assertChromaPixel(pixel, channelsIn: 124...132, alpha: 255)
+                } else {
+                    XCTAssertEqual(pixel, [0, 0, 0, 255])
+                }
+            }
+        }
+    }
+}
+
 private enum ChromaTestIDs {
     static let media = "00000000-0000-0000-0000-000000000217"
     static let clip = "00000000-0000-0000-0000-000000000317"
@@ -530,6 +587,47 @@ private func chromaPixelsBGRA(
         }
     }
     return pixels
+}
+
+private func chromaPixel(
+    in pixels: [UInt8],
+    width: Int,
+    x: Int,
+    y: Int
+) -> [UInt8] {
+    let offset = ((y * width) + x) * 4
+    return Array(pixels[offset..<(offset + 4)])
+}
+
+private func assertChromaPixel(
+    _ pixels: [UInt8],
+    width: Int,
+    x: Int,
+    y: Int,
+    matches expected: [UInt8],
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(
+        chromaPixel(in: pixels, width: width, x: x, y: y),
+        expected,
+        file: file,
+        line: line
+    )
+}
+
+private func assertChromaPixel(
+    _ pixel: [UInt8],
+    channelsIn range: ClosedRange<Int>,
+    alpha expectedAlpha: UInt8,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(pixel.count, 4, file: file, line: line)
+    XCTAssertTrue(range.contains(Int(pixel[0])), file: file, line: line)
+    XCTAssertTrue(range.contains(Int(pixel[1])), file: file, line: line)
+    XCTAssertTrue(range.contains(Int(pixel[2])), file: file, line: line)
+    XCTAssertEqual(pixel[3], expectedAlpha, file: file, line: line)
 }
 
 private func readChromaBGRA8(texture: MTLTexture, device: MTLDevice) throws -> [UInt8] {

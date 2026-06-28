@@ -97,7 +97,8 @@ final class AjarCommandTests: XCTestCase {
             "single-frame-render-seek-latency": "NFR-PERF-005",
             "project-open-decode-load": "NFR-PERF-002",
             "cold-start-proxy": "NFR-PERF-001",
-            "multi-layer-transform-playback": "NFR-PERF-003"
+            "multi-layer-transform-playback": "NFR-PERF-003",
+            "two-layer-chroma-key-choke-4k30-playback": "NFR-PERF-004"
         ]
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))
