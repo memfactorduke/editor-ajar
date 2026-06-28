@@ -39,6 +39,8 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
                 throw AjarCLIError.decodedTextureUnavailable(source.mediaID)
             }
 
+            // This CLI path currently exercises opaque fixtures. Transparent-media import must
+            // premultiply decoded colors before handing textures to `MetalRenderExecutor`.
             textures[RenderSourceKey(source)] = texture
             retainedFrames.append(frame)
         }

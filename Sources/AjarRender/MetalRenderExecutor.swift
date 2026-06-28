@@ -158,6 +158,12 @@ struct AjarCompositeUniformLayout: Equatable, Sendable {
 /// Supplies GPU-resident source textures for source render nodes.
 public protocol RenderSourceTextureProvider {
     /// Returns the source texture for a resolved source node.
+    ///
+    /// Textures supplied to the compositor must store display-encoded color channels
+    /// premultiplied by alpha. The Metal composite shader unpremultiplies before transfer
+    /// conversion and treats straight-alpha texture data as invalid input. Opaque sources satisfy
+    /// the contract with alpha `1`; importers for transparent formats such as PNG or ProRes 4444
+    /// must premultiply before exposing textures through this provider.
     func texture(for source: RenderSourceNode) throws -> MTLTexture
 }
 

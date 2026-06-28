@@ -205,6 +205,47 @@ final class RenderGraphChromaKeyTests: XCTestCase {
         )
         XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
     }
+
+    func testFRCOMP005ADR0009AllLumaKeyFieldsInvalidateCompositeHash() throws {
+        let baseSettings = try lumaKeySettings(
+            enabled: true,
+            lowThreshold: rationalValue(1, 10),
+            highThreshold: rationalValue(9, 10),
+            softness: rationalValue(1, 10),
+            invert: false
+        )
+        let baseHash = try lumaKeyCompositeHash(settings: baseSettings)
+        let variations: [(String, ClipLumaKeySettings)] = try [
+            (
+                "enabled",
+                lumaKeySettings(enabled: false)
+            ),
+            (
+                "lowThreshold",
+                lumaKeySettings(lowThreshold: rationalValue(1, 5))
+            ),
+            (
+                "highThreshold",
+                lumaKeySettings(highThreshold: rationalValue(4, 5))
+            ),
+            (
+                "softness",
+                lumaKeySettings(softness: rationalValue(1, 5))
+            ),
+            (
+                "invert",
+                lumaKeySettings(invert: true)
+            )
+        ]
+
+        for (field, settings) in variations {
+            XCTAssertNotEqual(
+                baseHash,
+                try lumaKeyCompositeHash(settings: settings),
+                "\(field) should perturb the composite content hash"
+            )
+        }
+    }
 }
 
 private func compositeInput(in graph: RenderGraph) throws -> RenderCompositeInput {
@@ -281,6 +322,36 @@ private func makeClip(
         name: "Chroma key graph clip",
         effects: effectsAnimation.baseEffects,
         effectsAnimation: effectsAnimation
+    )
+}
+
+private func lumaKeyCompositeHash(settings: ClipLumaKeySettings) throws -> ContentHash? {
+    let mediaID = try uuid(810)
+    let clipID = try uuid(811)
+    let effects = ClipEffects(lumaKey: settings)
+    let clip = try makeClip(
+        id: clipID,
+        mediaID: mediaID,
+        effectsAnimation: .constant(effects)
+    )
+    let sequence = try makeSequence(with: clip)
+    let project = try makeProject(mediaPool: [makeMediaRef(id: mediaID)], sequences: [sequence])
+    return try buildRenderGraph(for: sequence, at: try time(0), in: project).outputNode?.contentHash
+}
+
+private func lumaKeySettings(
+    enabled: Bool = true,
+    lowThreshold: RationalValue? = nil,
+    highThreshold: RationalValue? = nil,
+    softness: RationalValue? = nil,
+    invert: Bool = false
+) throws -> ClipLumaKeySettings {
+    ClipLumaKeySettings(
+        enabled: enabled,
+        lowThreshold: try lowThreshold ?? rationalValue(1, 10),
+        highThreshold: try highThreshold ?? rationalValue(9, 10),
+        softness: try softness ?? rationalValue(1, 10),
+        invert: invert
     )
 }
 

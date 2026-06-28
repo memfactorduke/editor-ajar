@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened luma-key/alpha passthrough follow-ups for FR-COMP-005 with sparse `.ajar`
+  decode defaults, full-field cache-key coverage, a documented premultiplied source-texture
+  contract, and spatial alpha-edge Metal coverage.
 - `AjarRender` GPU scope analyzer for FR-COL-003 with histogram, waveform, RGB parade, and
   vectorscope buffers plus rendered scope textures and deterministic Metal coverage.
 - `AjarRender` chroma-key hardening with chroma-normalized matte distance, spatial choke

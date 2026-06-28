@@ -56,7 +56,10 @@ public struct ClipChromaKeySettings: Codable, Equatable, Sendable {
     /// Matte choke/shrink amount, 0...1.
     public let choke: RationalValue
 
-    /// Shows the resolved matte as grayscale instead of the keyed composite.
+    /// Shows the resolved combined clip matte as grayscale instead of the keyed composite.
+    ///
+    /// The preview includes chroma key, luma key, and clip masks because the renderer folds those
+    /// controls into one matte before compositing.
     public let viewMatte: Bool
 
     private enum CodingKeys: String, CodingKey {
@@ -132,7 +135,10 @@ public struct AnimatableClipChromaKeySettings: Codable, Equatable, Sendable {
     /// Matte choke/shrink amount.
     public let choke: Animatable<RationalValue>
 
-    /// Shows the matte as grayscale instead of the keyed composite.
+    /// Shows the resolved combined clip matte as grayscale instead of the keyed composite.
+    ///
+    /// The preview includes chroma key, luma key, and clip masks because the renderer folds those
+    /// controls into one matte before compositing.
     public let viewMatte: Bool
 
     private enum CodingKeys: String, CodingKey {
