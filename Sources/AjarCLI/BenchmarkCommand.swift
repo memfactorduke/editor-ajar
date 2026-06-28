@@ -67,6 +67,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Render a transformed four-layer frame as a report-only proxy for timeline playback.
     case multiLayerTransformPlayback = "multi-layer-transform-playback"
 
+    /// Render a 4K30 two-layer frame with chroma key and choke enabled.
+    case twoLayerChromaKeyChoke4K30Playback = "two-layer-chroma-key-choke-4k30-playback"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -77,6 +80,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "NFR-PERF-001"
         case .multiLayerTransformPlayback:
             "NFR-PERF-003"
+        case .twoLayerChromaKeyChoke4K30Playback:
+            "NFR-PERF-004"
         }
     }
 }
@@ -147,6 +152,8 @@ public enum BenchmarkCommand {
             value = try await measureColdStartProxy()
         case .multiLayerTransformPlayback:
             value = try await measureMultiLayerTransformPlayback(projectURL: projectURL)
+        case .twoLayerChromaKeyChoke4K30Playback:
+            value = try await measureTwoLayerChromaKeyChoke4K30Playback()
         }
 
         return BenchmarkResult(
@@ -215,6 +222,31 @@ public enum BenchmarkCommand {
                 graph: graph,
                 output: RenderOutputDescriptor(pixelDimensions: project.settings.resolution),
                 sourceProvider: sourceProvider
+            )
+            try await frame.waitForCompletion()
+        }
+    }
+
+    private static func measureTwoLayerChromaKeyChoke4K30Playback() async throws -> Double {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw MetalRenderError.metalDeviceUnavailable
+        }
+
+        let fixture = try BenchmarkChromaKeyChokeFixture(device: device)
+        let executor = try MetalRenderExecutor(device: device)
+        let renderTime = try RationalTime.atFrame(0, frameRate: fixture.project.settings.frameRate)
+
+        return try await medianMilliseconds {
+            executor.removeAllCachedFrames()
+            let graph = try buildRenderGraph(
+                for: fixture.sequence,
+                at: renderTime,
+                in: fixture.project
+            )
+            let frame = try executor.render(
+                graph: graph,
+                output: RenderOutputDescriptor(pixelDimensions: fixture.dimensions),
+                sourceProvider: fixture.sourceProvider
             )
             try await frame.waitForCompletion()
         }

@@ -1511,6 +1511,9 @@ public final class MetalRenderExecutor {
         }
 
         static float2 ajar_normalized_chroma(float3 color) {
+            // The keyer compares normalized chroma so green-screen brightness changes do not
+            // move the matte. Near-black noisy pixels can still normalize to saturated chroma,
+            // so callers should denoise or lift crushed footage before keying/de-spill.
             constexpr float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
             float3 nonnegative = max(color, float3(0.0));
             float chromaSum = max(nonnegative.r + nonnegative.g + nonnegative.b, 0.0001);
@@ -1576,6 +1579,8 @@ public final class MetalRenderExecutor {
 
             float2 texel = 1.0 / max(uniforms.sourceSize, float2(1.0));
             float erodedAlpha = alpha;
+            // Off-frame samples are treated as background, so foreground touching the source
+            // border erodes inward under choke instead of clamping an opaque edge.
             for (int yOffset = -1; yOffset <= 1; yOffset++) {
                 for (int xOffset = -1; xOffset <= 1; xOffset++) {
                     float2 neighborUV = sourceUV + (float2(xOffset, yOffset) * texel);
