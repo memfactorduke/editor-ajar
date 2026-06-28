@@ -200,6 +200,19 @@ public enum ClipBlendMode: String, Codable, CaseIterable, Equatable, Sendable {
 
     /// Uses source luminosity with destination hue and saturation.
     case luminosity
+
+    /// Decodes unknown future blend modes as `.normal` so newer projects remain loadable.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = ClipBlendMode(rawValue: rawValue) ?? .normal
+    }
+
+    /// Encodes the stable project-schema raw value.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 /// Crop inset edge names used in validation errors.

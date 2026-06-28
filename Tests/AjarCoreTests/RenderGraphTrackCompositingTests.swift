@@ -6,7 +6,7 @@ import XCTest
 @testable import AjarCore
 
 final class RenderGraphTrackCompositingTests: XCTestCase {
-    func testFRCOMP006TrackBlendAndOpacityPropagateAndInvalidateCompositeHash() throws {
+    func testFRCOMP006TrackOpacityPropagatesAndInvalidatesCompositeHashOnly() throws {
         let mediaID = try trackCompositingUUID(77)
         let clipID = try trackCompositingUUID(78)
         let trackID = try trackCompositingUUID(79)
@@ -15,38 +15,93 @@ final class RenderGraphTrackCompositingTests: XCTestCase {
             mediaID: mediaID,
             durationFrames: 24
         )
-        let defaultSequence = try makeTrackCompositingSequence(
-            id: try trackCompositingUUID(91),
-            track: Track(id: trackID, kind: .video, items: [.clip(clip)])
-        )
-        let compositingSequence = try makeTrackCompositingSequence(
-            id: try trackCompositingUUID(92),
-            track: try makeCompositingTrack(id: trackID, clip: clip)
+        let defaultTrack = Track(id: trackID, kind: .video, items: [.clip(clip)])
+        let compositingTrack = try makeCompositingTrack(
+            id: trackID,
+            clip: clip,
+            opacity: makeCompositingOpacity()
         )
         let media = try makeTrackCompositingMediaRef(id: mediaID)
-        let defaultProject = try makeTrackCompositingProject(
-            media: media,
-            sequence: defaultSequence
-        )
-        let compositingProject = try makeTrackCompositingProject(
-            media: media,
-            sequence: compositingSequence
-        )
 
-        let defaultGraph = try RenderGraphBuilder.build(
-            for: defaultSequence,
-            at: try trackCompositingTime(12),
-            in: defaultProject
-        )
-        let compositingGraph = try RenderGraphBuilder.build(
-            for: compositingSequence,
-            at: try trackCompositingTime(12),
-            in: compositingProject
+        let defaultGraph = try makeTrackCompositingGraph(track: defaultTrack, media: media)
+        let compositingGraph = try makeTrackCompositingGraph(
+            track: compositingTrack,
+            media: media
         )
         let input = try XCTUnwrap(trackCompositingComposite(compositingGraph).inputs.first)
 
         XCTAssertEqual(input.trackOpacity, try RationalValue(numerator: 1, denominator: 2))
+        XCTAssertEqual(input.trackBlendMode, .normal)
+        XCTAssertEqual(
+            try trackCompositingSourceNode(defaultGraph).contentHash,
+            try trackCompositingSourceNode(compositingGraph).contentHash
+        )
+        XCTAssertNotEqual(
+            defaultGraph.outputNode?.contentHash,
+            compositingGraph.outputNode?.contentHash
+        )
+    }
+
+    func testFRCOMP006TrackBlendModePropagatesAndInvalidatesCompositeHashOnly() throws {
+        let mediaID = try trackCompositingUUID(80)
+        let clipID = try trackCompositingUUID(81)
+        let trackID = try trackCompositingUUID(82)
+        let clip = try makeTrackCompositingClip(
+            id: clipID,
+            mediaID: mediaID,
+            durationFrames: 24
+        )
+        let defaultTrack = Track(id: trackID, kind: .video, items: [.clip(clip)])
+        let compositingTrack = try makeCompositingTrack(
+            id: trackID,
+            clip: clip,
+            blendMode: .hardLight
+        )
+        let media = try makeTrackCompositingMediaRef(id: mediaID)
+
+        let defaultGraph = try makeTrackCompositingGraph(track: defaultTrack, media: media)
+        let compositingGraph = try makeTrackCompositingGraph(
+            track: compositingTrack,
+            media: media
+        )
+        let input = try XCTUnwrap(trackCompositingComposite(compositingGraph).inputs.first)
+
+        XCTAssertEqual(input.trackOpacity, .one)
         XCTAssertEqual(input.trackBlendMode, .hardLight)
+        XCTAssertEqual(
+            try trackCompositingSourceNode(defaultGraph).contentHash,
+            try trackCompositingSourceNode(compositingGraph).contentHash
+        )
+        XCTAssertNotEqual(
+            defaultGraph.outputNode?.contentHash,
+            compositingGraph.outputNode?.contentHash
+        )
+    }
+
+    func testFRCOMP006ClipBlendModeInvalidatesCompositeHashOnly() throws {
+        let mediaID = try trackCompositingUUID(83)
+        let defaultClip = try makeTrackCompositingClip(
+            id: try trackCompositingUUID(84),
+            mediaID: mediaID,
+            durationFrames: 24
+        )
+        let blendedClip = try makeTrackCompositingClip(
+            id: defaultClip.id,
+            mediaID: mediaID,
+            durationFrames: 24,
+            transform: ClipTransform(blendMode: .softLight)
+        )
+        let defaultTrack = Track(
+            id: try trackCompositingUUID(85),
+            kind: .video,
+            items: [.clip(defaultClip)]
+        )
+        let blendedTrack = Track(id: defaultTrack.id, kind: .video, items: [.clip(blendedClip)])
+        let media = try makeTrackCompositingMediaRef(id: mediaID)
+
+        let defaultGraph = try makeTrackCompositingGraph(track: defaultTrack, media: media)
+        let compositingGraph = try makeTrackCompositingGraph(track: blendedTrack, media: media)
+
         XCTAssertEqual(
             try trackCompositingSourceNode(defaultGraph).contentHash,
             try trackCompositingSourceNode(compositingGraph).contentHash
@@ -58,23 +113,45 @@ final class RenderGraphTrackCompositingTests: XCTestCase {
     }
 }
 
-private func makeCompositingTrack(id: UUID, clip: Clip) throws -> Track {
+private func makeCompositingTrack(
+    id: UUID,
+    clip: Clip,
+    opacity: Animatable<RationalValue> = .constant(.one),
+    blendMode: ClipBlendMode = .normal
+) throws -> Track {
     Track(
         id: id,
         kind: .video,
         items: [.clip(clip)],
-        opacity: try Animatable(
-            base: .one,
-            keyframes: [
-                Keyframe(time: try trackCompositingTime(0), value: .one, interpolation: .linear),
-                Keyframe(
-                    time: try trackCompositingTime(12),
-                    value: try RationalValue(numerator: 1, denominator: 2),
-                    interpolation: .hold
-                )
-            ]
-        ),
-        blendMode: .hardLight
+        opacity: opacity,
+        blendMode: blendMode
+    )
+}
+
+private func makeCompositingOpacity() throws -> Animatable<RationalValue> {
+    try Animatable(
+        base: .one,
+        keyframes: [
+            Keyframe(time: try trackCompositingTime(0), value: .one, interpolation: .linear),
+            Keyframe(
+                time: try trackCompositingTime(12),
+                value: try RationalValue(numerator: 1, denominator: 2),
+                interpolation: .hold
+            )
+        ]
+    )
+}
+
+private func makeTrackCompositingGraph(track: Track, media: MediaRef) throws -> RenderGraph {
+    let sequence = try makeTrackCompositingSequence(
+        id: try trackCompositingUUID(91),
+        track: track
+    )
+    let project = try makeTrackCompositingProject(media: media, sequence: sequence)
+    return try RenderGraphBuilder.build(
+        for: sequence,
+        at: try trackCompositingTime(12),
+        in: project
     )
 }
 
@@ -106,7 +183,8 @@ private func makeTrackCompositingSequence(id: UUID, track: Track) throws -> Sequ
 private func makeTrackCompositingClip(
     id: UUID,
     mediaID: UUID,
-    durationFrames: Int64
+    durationFrames: Int64,
+    transform: ClipTransform = .identity
 ) throws -> Clip {
     Clip(
         id: id,
@@ -114,7 +192,8 @@ private func makeTrackCompositingClip(
         sourceRange: try trackCompositingRange(durationFrames: durationFrames),
         timelineRange: try trackCompositingRange(durationFrames: durationFrames),
         kind: .video,
-        name: "RenderGraph track compositing clip"
+        name: "RenderGraph track compositing clip",
+        transform: transform
     )
 }
 

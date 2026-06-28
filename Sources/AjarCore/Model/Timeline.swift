@@ -38,9 +38,17 @@ public struct Track: Codable, Equatable, Sendable {
     public let hidden: Bool
 
     /// Track-level opacity, evaluated at render time for video compositing.
+    ///
+    /// The current renderer can multiply this with clip opacity because project validation keeps
+    /// timeline items non-overlapping inside a track. Future intra-track overlap must isolate the
+    /// track before blending it over lower tracks.
     public let opacity: Animatable<RationalValue>
 
     /// Track-level blend mode for compositing this track onto lower video tracks.
+    ///
+    /// A non-normal track blend mode currently takes precedence over the selected clip's blend
+    /// mode. This is exact while one active clip per track is enforced; future intra-track stacking
+    /// will need separate clip-then-track blend stages.
     public let blendMode: ClipBlendMode
 
     /// Creates a timeline track.
