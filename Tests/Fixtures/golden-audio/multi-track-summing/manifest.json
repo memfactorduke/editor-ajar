@@ -1,0 +1,69 @@
+{
+  "id": "multi-track-summing",
+  "sampleRate": 4,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [2.0, 2.0, 2.0, 2.0]
+    },
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [100.0, 100.0, 100.0, 100.0]
+    }
+  ],
+  "tracks": [
+    {
+      "gain": 0.5,
+      "pan": -0.5,
+      "clips": [
+        {
+          "sourceIndex": 0,
+          "duration": "1"
+        }
+      ]
+    },
+    {
+      "pan": 0.5,
+      "clips": [
+        {
+          "sourceIndex": 1,
+          "duration": "1"
+        }
+      ]
+    },
+    {
+      "muted": true,
+      "clips": [
+        {
+          "sourceIndex": 2,
+          "duration": "1"
+        }
+      ]
+    },
+    {
+      "enabled": false,
+      "clips": [
+        {
+          "sourceIndex": 2,
+          "duration": "1"
+        }
+      ]
+    }
+  ],
+  "referenceSamples": [
+    1.5, 2.25,
+    1.5, 2.25,
+    1.5, 2.25,
+    1.5, 2.25
+  ]
+}

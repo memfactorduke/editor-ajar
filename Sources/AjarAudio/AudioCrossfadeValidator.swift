@@ -5,7 +5,7 @@ import Foundation
 
 extension OfflineAudioMixer {
     static func validateCrossfades(in sequence: Sequence) throws {
-        for track in sequence.audioTracks where track.kind == .audio {
+        for track in selectedAudioTracks(sequence.audioTracks) {
             try validateCrossfades(in: track.items)
         }
     }
@@ -14,7 +14,7 @@ extension OfflineAudioMixer {
 private extension OfflineAudioMixer {
     static func validateCrossfades(in items: [TimelineItem]) throws {
         for index in items.indices {
-            guard case .clip(let clip) = items[index] else {
+            guard case .clip(let clip) = items[index], clip.kind == .audio else {
                 continue
             }
             try validateCrossfade(

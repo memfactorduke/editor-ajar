@@ -96,10 +96,18 @@ enum AudioBufferValidator {
             )
         }
 
-        guard samples.count == frameCount * format.channelCount else {
+        guard frameCount <= Int.max / format.channelCount else {
+            throw AudioRenderError.sampleCountOverflow(
+                frameCount: frameCount,
+                channelCount: format.channelCount
+            )
+        }
+
+        let expectedSampleCount = frameCount * format.channelCount
+        guard samples.count == expectedSampleCount else {
             throw AudioRenderError.invalidBufferSampleCount(
                 actual: samples.count,
-                expected: frameCount * format.channelCount
+                expected: expectedSampleCount
             )
         }
     }

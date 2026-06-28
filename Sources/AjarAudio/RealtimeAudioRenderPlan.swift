@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Prepared storage kind used by a realtime audio callback plan.
+public enum RealtimeAudioStorageKind: Equatable, Sendable {
+    /// Samples were copied off-thread into plan-owned pointer memory.
+    case ownedPointer
+}
+
 /// Static safety contract for a prepared realtime audio callback plan.
 public struct RealtimeAudioSafetyReport: Equatable, Sendable {
     /// Whether the render callback uses locks.
@@ -11,29 +17,39 @@ public struct RealtimeAudioSafetyReport: Equatable, Sendable {
     /// Number of frames held by the immutable prepared plan.
     public let preparedFrameCount: Int
 
+    /// The prepared PCM storage shape used by the callback.
+    public let storageKind: RealtimeAudioStorageKind
+
+    /// Whether output memory is supplied by the caller instead of allocated by the callback.
+    public let usesCallerOwnedOutput: Bool
+
     /// Creates a safety report.
     public init(
         usesLocks: Bool,
         allocatesDuringRender: Bool,
-        preparedFrameCount: Int
+        preparedFrameCount: Int,
+        storageKind: RealtimeAudioStorageKind = .ownedPointer,
+        usesCallerOwnedOutput: Bool = true
     ) {
         self.usesLocks = usesLocks
         self.allocatesDuringRender = allocatesDuringRender
         self.preparedFrameCount = preparedFrameCount
+        self.storageKind = storageKind
+        self.usesCallerOwnedOutput = usesCallerOwnedOutput
     }
 }
 
 /// Prepared realtime callback plan backed by immutable PCM and caller-owned output memory.
 public struct RealtimeAudioRenderPlan: Sendable {
     private let format: AudioRenderFormat
-    private let samples: [Float]
+    private let storage: RealtimeAudioSampleStorage
     private let frameCount: Int
     private var nextFrame: Int
 
     /// Creates a callback plan from an already-rendered buffer.
     public init(buffer: RenderedAudioBuffer) {
         format = buffer.format
-        samples = buffer.samples
+        storage = RealtimeAudioSampleStorage(samples: buffer.samples)
         frameCount = buffer.frameCount
         nextFrame = 0
     }
@@ -41,9 +57,11 @@ public struct RealtimeAudioRenderPlan: Sendable {
     /// Returns the realtime-safety contract for this plan.
     public func safetyReport() -> RealtimeAudioSafetyReport {
         RealtimeAudioSafetyReport(
-            usesLocks: false,
-            allocatesDuringRender: false,
-            preparedFrameCount: frameCount
+            usesLocks: storage.requiresRenderLocking,
+            allocatesDuringRender: storage.requiresRenderAllocation,
+            preparedFrameCount: frameCount,
+            storageKind: storage.kind,
+            usesCallerOwnedOutput: true
         )
     }
 
@@ -72,7 +90,7 @@ public struct RealtimeAudioRenderPlan: Sendable {
             return
         }
         for sampleIndex in 0..<sampleCount {
-            output[sampleIndex] = samples[sourceOffset + sampleIndex]
+            output[sampleIndex] = storage.sample(at: sourceOffset + sampleIndex)
         }
     }
 
@@ -87,5 +105,38 @@ public struct RealtimeAudioRenderPlan: Sendable {
         for sampleIndex in start..<output.count {
             output[sampleIndex] = 0
         }
+    }
+}
+
+private final class RealtimeAudioSampleStorage: @unchecked Sendable {
+    let kind = RealtimeAudioStorageKind.ownedPointer
+    let requiresRenderLocking = false
+    let requiresRenderAllocation = false
+
+    private let pointer: UnsafeMutablePointer<Float>
+    private let sampleCount: Int
+
+    init(samples: [Float]) {
+        sampleCount = samples.count
+        pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(sampleCount, 1))
+        guard sampleCount > 0 else {
+            return
+        }
+
+        samples.withUnsafeBufferPointer { source in
+            guard let baseAddress = source.baseAddress else {
+                return
+            }
+            pointer.initialize(from: baseAddress, count: source.count)
+        }
+    }
+
+    deinit {
+        pointer.deinitialize(count: sampleCount)
+        pointer.deallocate()
+    }
+
+    func sample(at index: Int) -> Float {
+        pointer[index]
     }
 }

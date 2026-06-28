@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-AUD-003/007 audio mixer follow-ups with multi-clip and multi-track summation
+  golden-audio fixtures, pointer-backed realtime render plans, crossfade ramp rendering,
+  selected-track crossfade validation, 5.1-to-stereo downmixing, and overflow-safe sample counts.
 - `AjarCore` detach/replace audio edit commands for FR-AUD-008 with undoable linked-audio
   detaching, audio-source replacement validation, and `.ajar` round-trip coverage.
 - Hardened FR-AUD-001 audio model follow-ups with animation-preserving clip audio edits,

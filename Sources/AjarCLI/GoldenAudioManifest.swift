@@ -12,7 +12,33 @@ struct GoldenAudioManifest: Decodable, Equatable {
     let tolerance: Float
     let sources: [GoldenAudioSourceSpec]
     let clips: [GoldenAudioClipSpec]
+    let tracks: [GoldenAudioTrackSpec]
     let referenceSamples: [Float]
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case sampleRate
+        case channelCount
+        case duration
+        case tolerance
+        case sources
+        case clips
+        case tracks
+        case referenceSamples
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        sampleRate = try container.decode(Int.self, forKey: .sampleRate)
+        channelCount = try container.decode(Int.self, forKey: .channelCount)
+        duration = try container.decode(String.self, forKey: .duration)
+        tolerance = try container.decode(Float.self, forKey: .tolerance)
+        sources = try container.decode([GoldenAudioSourceSpec].self, forKey: .sources)
+        clips = try container.decodeIfPresent([GoldenAudioClipSpec].self, forKey: .clips) ?? []
+        tracks = try container.decodeIfPresent([GoldenAudioTrackSpec].self, forKey: .tracks) ?? []
+        referenceSamples = try container.decode([Float].self, forKey: .referenceSamples)
+    }
 
     static func load(from url: URL) throws -> GoldenAudioManifest {
         do {
@@ -31,6 +57,16 @@ struct GoldenAudioManifest: Decodable, Equatable {
         try Self.rationalTime(duration)
     }
 
+    func trackSpecs() throws -> [GoldenAudioTrackSpec] {
+        if !tracks.isEmpty {
+            return tracks
+        }
+        guard !clips.isEmpty else {
+            throw AjarCLIError.invalidGoldenManifest("golden-audio manifest has no clips")
+        }
+        return [GoldenAudioTrackSpec(clips: clips)]
+    }
+
     static func rationalTime(_ rawValue: String) throws -> RationalTime {
         if rawValue.contains("/") {
             let parts = rawValue.split(separator: "/", omittingEmptySubsequences: false)
@@ -47,6 +83,56 @@ struct GoldenAudioManifest: Decodable, Equatable {
             throw AjarCLIError.invalidGoldenManifest("invalid audio time '\(rawValue)'")
         }
         return try RationalTime(value: seconds, timescale: 1)
+    }
+}
+
+struct GoldenAudioTrackSpec: Decodable, Equatable {
+    let enabled: Bool
+    let muted: Bool
+    let solo: Bool
+    let gain: Double
+    let pan: Double
+    let clips: [GoldenAudioClipSpec]
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case muted
+        case solo
+        case gain
+        case pan
+        case clips
+    }
+
+    init(clips: [GoldenAudioClipSpec]) {
+        enabled = true
+        muted = false
+        solo = false
+        gain = 1
+        pan = 0
+        self.clips = clips
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
+        solo = try container.decodeIfPresent(Bool.self, forKey: .solo) ?? false
+        gain = try container.decodeIfPresent(Double.self, forKey: .gain) ?? 1
+        pan = try container.decodeIfPresent(Double.self, forKey: .pan) ?? 0
+        clips = try container.decode([GoldenAudioClipSpec].self, forKey: .clips)
+    }
+
+    func track(id: UUID, items: [TimelineItem]) -> Track {
+        Track(
+            id: id,
+            kind: .audio,
+            items: items,
+            enabled: enabled,
+            muted: muted,
+            solo: solo,
+            audioGain: .constant(RationalValue.approximating(gain)),
+            audioPan: .constant(RationalValue.approximating(pan))
+        )
     }
 }
 

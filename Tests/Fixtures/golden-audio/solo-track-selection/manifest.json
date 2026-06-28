@@ -1,0 +1,44 @@
+{
+  "id": "solo-track-selection",
+  "sampleRate": 4,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [100.0, 100.0, 100.0, 100.0]
+    },
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [3.0, 3.0, 3.0, 3.0]
+    }
+  ],
+  "tracks": [
+    {
+      "clips": [
+        {
+          "sourceIndex": 0,
+          "duration": "1"
+        }
+      ]
+    },
+    {
+      "solo": true,
+      "clips": [
+        {
+          "sourceIndex": 1,
+          "duration": "1"
+        }
+      ]
+    }
+  ],
+  "referenceSamples": [
+    3.0, 3.0,
+    3.0, 3.0,
+    3.0, 3.0,
+    3.0, 3.0
+  ]
+}

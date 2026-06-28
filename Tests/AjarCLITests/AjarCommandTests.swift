@@ -129,7 +129,41 @@ final class AjarCommandTests: XCTestCase {
         let diagnosticOutput = (output.lines + errorOutput.lines).joined(separator: "\n")
         XCTAssertEqual(exitCode, 0, diagnosticOutput)
         XCTAssertTrue(output.lines.contains { line in line.contains("PASS gain-pan-fade") })
+        XCTAssertTrue(output.lines.contains { line in line.contains("PASS multi-track-summing") })
+        XCTAssertTrue(output.lines.contains { line in line.contains("PASS solo-track-selection") })
+        XCTAssertTrue(output.lines.contains { line in
+            line.contains("PASS same-track-multiple-clips")
+        })
         XCTAssertTrue(output.lines.contains { line in line.contains("golden-audio passed") })
+    }
+
+    func testGoldenAudioHarnessRecordsFormatMismatchAsFailureArtifact() async throws {
+        let directory = try temporaryDirectory()
+        let manifestDirectory = directory.appendingPathComponent("format-mismatch")
+        let manifestURL = manifestDirectory.appendingPathComponent("manifest.json")
+        try FileManager.default.createDirectory(
+            at: manifestDirectory,
+            withIntermediateDirectories: true
+        )
+        try Data(formatMismatchGoldenAudioManifest().utf8).write(to: manifestURL)
+
+        let output = BufferedTextOutput()
+        let errorOutput = BufferedTextOutput()
+        let exitCode = await AjarCommand.run(
+            arguments: ["golden-audio", manifestURL.path],
+            standardOutput: output,
+            standardError: errorOutput
+        )
+        let actualURL = manifestDirectory
+            .appendingPathComponent("_actual")
+            .appendingPathComponent("format-mismatch.wav")
+
+        let diagnosticOutput = (output.lines + errorOutput.lines).joined(separator: "\n")
+        XCTAssertEqual(exitCode, 1, diagnosticOutput)
+        XCTAssertTrue(output.lines.contains { line in line.contains("FAIL format-mismatch") })
+        XCTAssertTrue(output.lines.contains { line in line.contains("formatMismatch") })
+        XCTAssertTrue(errorOutput.lines.contains { line in line.contains("golden-audio failed") })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: actualURL.path))
     }
 
     func testBenchmarkAllEmitsReportOnlyPerformanceJSON() async throws {
@@ -214,6 +248,34 @@ private func fixtureGoldenAudioDirectory() -> URL {
         .deletingLastPathComponent()
         .appendingPathComponent("Fixtures")
         .appendingPathComponent("golden-audio")
+}
+
+private func formatMismatchGoldenAudioManifest() -> String {
+    """
+    {
+      "id": "format-mismatch",
+      "sampleRate": 4,
+      "channelCount": 2,
+      "duration": "1",
+      "tolerance": 0.00001,
+      "sources": [
+        {
+          "sampleRate": 4,
+          "channelCount": 1,
+          "samples": [1.0, 1.0, 1.0, 1.0]
+        }
+      ],
+      "clips": [
+        {
+          "sourceIndex": 0,
+          "duration": "1"
+        }
+      ],
+      "referenceSamples": [
+        1.0, 1.0
+      ]
+    }
+    """
 }
 
 private func makeProject(mediaURL: URL, movieSpec: SyntheticMovieSpec) throws -> Project {

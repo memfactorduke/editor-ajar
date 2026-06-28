@@ -75,13 +75,19 @@ private struct GoldenAudioCaseResult {
     }
 
     var failLine: String {
-        "FAIL \(id) maxAbsError=" + String(format: "%.8f", comparison.maximumAbsoluteError)
+        let error = "FAIL \(id) maxAbsError="
+            + String(format: "%.8f", comparison.maximumAbsoluteError)
+        guard let diagnostic = comparison.diagnostic else {
+            return error
+        }
+        return "\(error) \(diagnostic)"
     }
 }
 
 private struct GoldenAudioComparison {
     let passed: Bool
     let maximumAbsoluteError: Float
+    let diagnostic: String?
 }
 
 private extension GoldenAudioHarness {
@@ -140,7 +146,7 @@ private extension GoldenAudioHarness {
         return GoldenAudioCaseResult(
             id: manifest.id,
             actual: actual,
-            comparison: try compare(
+            comparison: compare(
                 actual: actual,
                 expected: expected,
                 tolerance: manifest.tolerance
@@ -155,19 +161,13 @@ private extension GoldenAudioHarness {
         workingDirectory: URL
     ) throws -> Project {
         let media = try makeMedia(manifest: manifest, workingDirectory: workingDirectory)
-        let clips = try makeClips(manifest: manifest, media: media)
+        let tracks = try makeTracks(manifest: manifest, media: media)
         let frameRate = try FrameRate(frames: Int64(manifest.sampleRate))
         let sequence = Sequence(
             id: try numberedUUID(72_100),
             name: "Golden Audio \(manifest.id)",
             videoTracks: [],
-            audioTracks: [
-                Track(
-                    id: try numberedUUID(72_200),
-                    kind: .audio,
-                    items: clips.map { .clip($0) }
-                )
-            ],
+            audioTracks: tracks,
             markers: [],
             timebase: frameRate
         )
@@ -201,16 +201,35 @@ private extension GoldenAudioHarness {
         }
     }
 
-    static func makeClips(
+    static func makeTracks(
         manifest: GoldenAudioManifest,
         media: [MediaRef]
+    ) throws -> [Track] {
+        let trackSpecs = try manifest.trackSpecs()
+        return try trackSpecs.enumerated().map { trackIndex, trackSpec in
+            let clips = try makeClips(
+                trackSpec.clips,
+                trackIndex: trackIndex,
+                media: media
+            )
+            return trackSpec.track(
+                id: try numberedUUID(72_200 + trackIndex),
+                items: clips.map { .clip($0) }
+            )
+        }
+    }
+
+    static func makeClips(
+        _ clipSpecs: [GoldenAudioClipSpec],
+        trackIndex: Int,
+        media: [MediaRef]
     ) throws -> [Clip] {
-        try manifest.clips.enumerated().map { index, clipSpec in
+        try clipSpecs.enumerated().map { clipIndex, clipSpec in
             guard clipSpec.sourceIndex >= 0, clipSpec.sourceIndex < media.count else {
                 throw AjarCLIError.invalidGoldenManifest("clip sourceIndex is out of range")
             }
             return try clipSpec.clip(
-                id: numberedUUID(72_400 + index),
+                id: numberedUUID(72_400 + (trackIndex * 100) + clipIndex),
                 mediaID: media[clipSpec.sourceIndex].id
             )
         }
@@ -263,9 +282,13 @@ private extension GoldenAudioHarness {
         actual: RenderedAudioBuffer,
         expected: RenderedAudioBuffer,
         tolerance: Float
-    ) throws -> GoldenAudioComparison {
+    ) -> GoldenAudioComparison {
         guard actual.format == expected.format, actual.frameCount == expected.frameCount else {
-            throw AjarCLIError.audioFailed("actual audio format does not match reference")
+            return GoldenAudioComparison(
+                passed: false,
+                maximumAbsoluteError: .infinity,
+                diagnostic: formatMismatchDiagnostic(actual: actual, expected: expected)
+            )
         }
 
         var maximumError = Float(0)
@@ -274,8 +297,19 @@ private extension GoldenAudioHarness {
         }
         return GoldenAudioComparison(
             passed: maximumError <= tolerance,
-            maximumAbsoluteError: maximumError
+            maximumAbsoluteError: maximumError,
+            diagnostic: nil
         )
+    }
+
+    static func formatMismatchDiagnostic(
+        actual: RenderedAudioBuffer,
+        expected: RenderedAudioBuffer
+    ) -> String {
+        "formatMismatch actual=\(actual.format.sampleRate)Hz/"
+            + "\(actual.format.channelCount)ch/\(actual.frameCount)f"
+            + " expected=\(expected.format.sampleRate)Hz/"
+            + "\(expected.format.channelCount)ch/\(expected.frameCount)f"
     }
 
     static func writeFailureArtifacts(

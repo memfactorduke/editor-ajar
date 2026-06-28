@@ -40,32 +40,6 @@ final class OfflineAudioMixerTests: XCTestCase {
         assertSamples(buffer.samples, equal: [0, 0, 0.5, 0.5, 1, 1, 1, 1])
     }
 
-    func testFRAUD007RealtimePlanReportsNoLocksOrRenderAllocation() throws {
-        let buffer = try RenderedAudioBuffer(
-            format: AudioRenderFormat(sampleRate: 4, channelCount: 2),
-            frameCount: 2,
-            samples: [1, 2, 3, 4]
-        )
-        var plan = RealtimeAudioRenderPlan(buffer: buffer)
-
-        XCTAssertEqual(
-            plan.safetyReport(),
-            RealtimeAudioSafetyReport(
-                usesLocks: false,
-                allocatesDuringRender: false,
-                preparedFrameCount: 2
-            )
-        )
-
-        var output = [Float](repeating: -1, count: 6)
-        let copied = output.withUnsafeMutableBufferPointer { pointer in
-            plan.render(into: pointer)
-        }
-
-        XCTAssertEqual(copied, 2)
-        XCTAssertEqual(output, [1, 2, 3, 4, 0, 0])
-    }
-
     func testCrossfadePartnerMustBeRealAdjacentClip() throws {
         let firstClipID = try uuid("00000000-0000-0000-0000-000000085101")
         let secondClipID = try uuid("00000000-0000-0000-0000-000000085102")
@@ -139,66 +113,7 @@ final class OfflineAudioMixerTests: XCTestCase {
             )
         }
     }
-}
 
-private func render(
-    clip: Clip,
-    mediaID: UUID,
-    sourceSamples: [Float],
-    sourceSampleRate: Int
-) throws -> RenderedAudioBuffer {
-    let source = try AudioSourceBuffer(
-        format: AudioRenderFormat(sampleRate: sourceSampleRate, channelCount: 1),
-        frameCount: sourceSamples.count,
-        samples: sourceSamples
-    )
-    return try OfflineAudioMixer.render(
-        sequence: makeSequence(items: [.clip(clip)]),
-        range: TimeRange(start: .zero, duration: time(1, 1)),
-        format: AudioRenderFormat(sampleRate: 4, channelCount: 2),
-        sourceProvider: InMemoryAudioSourceProvider(sources: [mediaID: source])
-    )
-}
-
-private func makeClip(
-    id: UUID? = nil,
-    mediaID: UUID,
-    timelineStart: RationalTime = .zero,
-    duration: RationalTime,
-    audioMix: ClipAudioMix = .identity
-) throws -> Clip {
-    let clipID: UUID
-    if let id {
-        clipID = id
-    } else {
-        clipID = try uuid("00000000-0000-0000-0000-000000085301")
-    }
-    return Clip(
-        id: clipID,
-        source: .media(id: mediaID),
-        sourceRange: try TimeRange(start: .zero, duration: duration),
-        timelineRange: try TimeRange(start: timelineStart, duration: duration),
-        kind: .audio,
-        name: "Audio",
-        audioMix: audioMix
-    )
-}
-
-private func makeSequence(items: [TimelineItem]) throws -> Sequence {
-    Sequence(
-        id: try uuid("00000000-0000-0000-0000-000000085401"),
-        name: "Audio Mix",
-        videoTracks: [],
-        audioTracks: [
-            Track(
-                id: try uuid("00000000-0000-0000-0000-000000085402"),
-                kind: .audio,
-                items: items
-            )
-        ],
-        markers: [],
-        timebase: try FrameRate(frames: 4)
-    )
 }
 
 private func overshootingGain() throws -> Animatable<RationalValue> {
@@ -219,24 +134,4 @@ private func overshootingGain() throws -> Animatable<RationalValue> {
             Keyframe(time: time(1, 2), value: RationalValue(4), interpolation: .linear)
         ]
     )
-}
-
-private func assertSamples(
-    _ actual: [Float],
-    equal expected: [Float],
-    file: StaticString = #filePath,
-    line: UInt = #line
-) {
-    XCTAssertEqual(actual.count, expected.count, file: file, line: line)
-    for index in actual.indices {
-        XCTAssertEqual(actual[index], expected[index], accuracy: 0.00001, file: file, line: line)
-    }
-}
-
-private func time(_ value: Int64, _ timescale: Int64) throws -> RationalTime {
-    try RationalTime(value: value, timescale: timescale)
-}
-
-private func uuid(_ value: String) throws -> UUID {
-    try XCTUnwrap(UUID(uuidString: value))
 }
