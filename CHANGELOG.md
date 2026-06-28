@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-AUD-001 audio model follow-ups with animation-preserving clip audio edits,
+  sparse `.ajar` audio-mix decoding coverage, video-track audio-field round trips, and
+  typed pre-validation for invalid track audio patches.
 - `AjarAudio` deterministic offline audio mixer with gain/pan/fade evaluation, mix-time
   automation clamping, crossfade adjacency validation, sample-rate/channel mapping,
   `ajar render-audio` WAV output, a golden-audio harness, and CI coverage for FR-AUD-003/007/009.

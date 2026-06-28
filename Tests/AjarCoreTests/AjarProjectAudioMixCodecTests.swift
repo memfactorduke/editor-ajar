@@ -42,6 +42,44 @@ final class AjarProjectAudioMixCodecTests: XCTestCase {
         XCTAssertEqual(audioTrack.audioPan, .constant(.zero))
         XCTAssertEqual(audioClip.audioMix, .identity)
     }
+
+    func testFRPROJ005FRAUD001PartialClipAudioMixDefaultsMissingFields() throws {
+        let project = try makeAudioCodecProject()
+        let package = try AjarProjectCodec.encode(project)
+        let partialProjectJSON = try audioCodecProjectJSONWithGainOnlyClipMix(package.projectJSON)
+        let loadedProject = try editableAudioCodecProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: partialProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let audioClip = try firstAudioCodecClip(in: loadedProject)
+
+        XCTAssertEqual(audioClip.audioMix.gain, try audioCodecClipMix().gain)
+        XCTAssertEqual(audioClip.audioMix.pan, .constant(.zero))
+        XCTAssertEqual(audioClip.audioMix.fadeIn, .none)
+        XCTAssertEqual(audioClip.audioMix.fadeOut, .none)
+        XCTAssertNil(audioClip.audioMix.leadingCrossfade)
+        XCTAssertNil(audioClip.audioMix.trailingCrossfade)
+    }
+
+    func testFRAUD001VideoTrackAndClipAudioFieldsRoundTripThroughProjectCodec() throws {
+        let project = try makeVideoAudioCodecProject()
+        let package = try AjarProjectCodec.encode(project)
+        let loadedProject = try editableAudioCodecProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: package.projectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let videoTrack = try firstVideoCodecTrack(in: loadedProject)
+        let videoClip = try firstVideoCodecClip(in: loadedProject)
+
+        XCTAssertEqual(loadedProject, project)
+        XCTAssertEqual(videoTrack.audioGain, try audioCodecTrackGain())
+        XCTAssertEqual(videoTrack.audioPan, try audioCodecTrackPan())
+        XCTAssertEqual(videoClip.audioMix, try audioCodecClipMix())
+    }
 }
 
 private func makeAudioCodecProject() throws -> Project {
@@ -60,6 +98,31 @@ private func makeAudioCodecProject() throws -> Project {
         .setTrackAudioMix(
             sequenceID: fixture.sequenceID,
             trackID: fixture.audioTrackID,
+            audio: TrackAudioMixPatch(
+                gain: try audioCodecTrackGain(),
+                pan: try audioCodecTrackPan()
+            )
+        ),
+        to: withClipAudio
+    )
+}
+
+private func makeVideoAudioCodecProject() throws -> Project {
+    let fixture = try makeLinkedEditFixture(seed: 621)
+    let withClipAudio = try apply(
+        .setClipAudioMix(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clipID: fixture.videoClipID,
+            audioMix: try audioCodecClipMix()
+        ),
+        to: fixture.project
+    )
+
+    return try apply(
+        .setTrackAudioMix(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
             audio: TrackAudioMixPatch(
                 gain: try audioCodecTrackGain(),
                 pan: try audioCodecTrackPan()
@@ -134,6 +197,43 @@ private func audioCodecProjectJSONWithoutAudioKeys(_ projectJSON: Data) throws -
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
 }
 
+private func audioCodecProjectJSONWithGainOnlyClipMix(_ projectJSON: Data) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var audioTracks = try XCTUnwrap(sequence["audioTracks"] as? [[String: Any]])
+    var audioTrack = try XCTUnwrap(audioTracks.first)
+    var items = try XCTUnwrap(audioTrack["items"] as? [[String: Any]])
+    var clipItem = try XCTUnwrap(items.first)
+    var clipWrapper = try XCTUnwrap(clipItem["clip"] as? [String: Any])
+
+    if let clipPayload = clipWrapper["_0"] as? [String: Any] {
+        clipWrapper["_0"] = try clipPayloadWithGainOnlyAudioMix(clipPayload)
+    } else {
+        clipWrapper = try clipPayloadWithGainOnlyAudioMix(clipWrapper)
+    }
+
+    clipItem["clip"] = clipWrapper
+    items[0] = clipItem
+    audioTrack["items"] = items
+    audioTracks[0] = audioTrack
+    sequence["audioTracks"] = audioTracks
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func clipPayloadWithGainOnlyAudioMix(_ payload: [String: Any]) throws -> [String: Any] {
+    var clipPayload = payload
+    let audioMix = try XCTUnwrap(clipPayload["audioMix"] as? [String: Any])
+    let gain = try XCTUnwrap(audioMix["gain"])
+    clipPayload["audioMix"] = ["gain": gain]
+    return clipPayload
+}
+
 private func editableAudioCodecProject(from result: AjarProjectLoadResult) throws -> Project {
     guard case .editable(let project) = result else {
         XCTFail("Expected editable project")
@@ -157,7 +257,23 @@ private func firstAudioCodecClip(in project: Project) throws -> Clip {
     throw AudioCodecError.expectedAudioClip
 }
 
+private func firstVideoCodecTrack(in project: Project) throws -> Track {
+    let sequence = try XCTUnwrap(project.sequences.first)
+    return try XCTUnwrap(sequence.videoTracks.first)
+}
+
+private func firstVideoCodecClip(in project: Project) throws -> Clip {
+    let track = try firstVideoCodecTrack(in: project)
+    for item in track.items {
+        if case .clip(let clip) = item {
+            return clip
+        }
+    }
+    throw AudioCodecError.expectedVideoClip
+}
+
 private enum AudioCodecError: Error {
     case expectedEditableProject
     case expectedAudioClip
+    case expectedVideoClip
 }

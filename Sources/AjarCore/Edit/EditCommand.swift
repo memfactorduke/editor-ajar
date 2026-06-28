@@ -413,6 +413,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// A clip audio mix failed semantic validation.
     case invalidClipAudioMix(clipID: UUID, error: AudioMixValidationError)
 
+    /// A track audio mix failed semantic validation.
+    case invalidTrackAudioMix(trackID: UUID, error: AudioMixValidationError)
+
     /// A clip mask edit referenced a missing mask.
     case clipMaskNotFound(clipID: UUID, maskID: UUID)
 
