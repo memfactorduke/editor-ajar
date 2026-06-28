@@ -51,6 +51,12 @@ public struct Track: Codable, Equatable, Sendable {
     /// will need separate clip-then-track blend stages.
     public let blendMode: ClipBlendMode
 
+    /// Track-level keyframable linear audio gain. Meaningful for audio tracks.
+    public let audioGain: Animatable<RationalValue>
+
+    /// Track-level keyframable audio pan. Meaningful for audio tracks.
+    public let audioPan: Animatable<RationalValue>
+
     /// Creates a timeline track.
     public init(
         id: UUID,
@@ -62,7 +68,9 @@ public struct Track: Codable, Equatable, Sendable {
         solo: Bool = false,
         hidden: Bool = false,
         opacity: Animatable<RationalValue> = .constant(.one),
-        blendMode: ClipBlendMode = .normal
+        blendMode: ClipBlendMode = .normal,
+        audioGain: Animatable<RationalValue> = .constant(.one),
+        audioPan: Animatable<RationalValue> = .constant(.zero)
     ) {
         self.id = id
         self.kind = kind
@@ -74,6 +82,8 @@ public struct Track: Codable, Equatable, Sendable {
         self.hidden = hidden
         self.opacity = opacity
         self.blendMode = blendMode
+        self.audioGain = audioGain
+        self.audioPan = audioPan
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -87,6 +97,8 @@ public struct Track: Codable, Equatable, Sendable {
         case hidden
         case opacity
         case blendMode
+        case audioGain
+        case audioPan
     }
 
     /// Decodes tracks from current and legacy project schemas.
@@ -106,6 +118,14 @@ public struct Track: Codable, Equatable, Sendable {
         ) ?? .constant(.one)
         blendMode = try container.decodeIfPresent(ClipBlendMode.self, forKey: .blendMode)
             ?? .normal
+        audioGain = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .audioGain
+        ) ?? .constant(.one)
+        audioPan = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .audioPan
+        ) ?? .constant(.zero)
     }
 
     /// Encodes the complete track payload.
@@ -121,6 +141,8 @@ public struct Track: Codable, Equatable, Sendable {
         try container.encode(hidden, forKey: .hidden)
         try container.encode(opacity, forKey: .opacity)
         try container.encode(blendMode, forKey: .blendMode)
+        try container.encode(audioGain, forKey: .audioGain)
+        try container.encode(audioPan, forKey: .audioPan)
     }
 }
 
@@ -219,6 +241,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Keyframable visual effects. Evaluates to `effects` when constant.
     public let effectsAnimation: AnimatableClipEffects
 
+    /// Per-clip audio automation and fade metadata.
+    public let audioMix: ClipAudioMix
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -231,7 +256,8 @@ public struct Clip: Codable, Equatable, Sendable {
         transform: ClipTransform = .identity,
         transformAnimation: AnimatableClipTransform? = nil,
         effects: ClipEffects = .none,
-        effectsAnimation: AnimatableClipEffects? = nil
+        effectsAnimation: AnimatableClipEffects? = nil,
+        audioMix: ClipAudioMix = .identity
     ) {
         self.id = id
         self.source = source
@@ -244,6 +270,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.transformAnimation = transformAnimation ?? .constant(transform)
         self.effects = effects
         self.effectsAnimation = effectsAnimation ?? .constant(effects)
+        self.audioMix = audioMix
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -258,6 +285,7 @@ public struct Clip: Codable, Equatable, Sendable {
         case transformAnimation
         case effects
         case effectsAnimation
+        case audioMix
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -281,6 +309,8 @@ public struct Clip: Codable, Equatable, Sendable {
             AnimatableClipEffects.self,
             forKey: .effectsAnimation
         ) ?? .constant(effects)
+        audioMix = try container.decodeIfPresent(ClipAudioMix.self, forKey: .audioMix)
+            ?? .identity
     }
 
     /// Encodes the complete clip payload.
@@ -297,6 +327,7 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(transformAnimation, forKey: .transformAnimation)
         try container.encode(effects, forKey: .effects)
         try container.encode(effectsAnimation, forKey: .effectsAnimation)
+        try container.encode(audioMix, forKey: .audioMix)
     }
 }
 

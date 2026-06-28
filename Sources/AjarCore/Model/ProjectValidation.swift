@@ -38,6 +38,13 @@ public enum ProjectValidationError: Equatable, Sendable {
         value: RationalValue
     )
 
+    /// Track audio gain or pan is outside the supported range.
+    case invalidTrackAudioMix(
+        sequenceID: UUID,
+        trackID: UUID,
+        error: AudioMixValidationError
+    )
+
     /// Timeline items are not sorted by start time.
     case itemsNotSorted(sequenceID: UUID, trackID: UUID, previousIndex: Int, itemIndex: Int)
 
@@ -101,6 +108,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         trackID: UUID,
         clipID: UUID,
         error: ClipEffectsValidationError
+    )
+
+    /// A clip audio mix is outside the supported range.
+    case invalidClipAudioMix(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: AudioMixValidationError
     )
 }
 
@@ -185,6 +200,7 @@ enum ProjectValidator {
             }
 
             validateTrackCompositing(track, context: context, state: &state)
+            validateTrackAudioMix(track, context: context, state: &state)
             validateTrackItems(
                 track.items,
                 context: context,
@@ -211,6 +227,7 @@ enum ProjectValidator {
             validateClipSource(item, context: context, state: &state)
             validateClipTransform(item, context: context, state: &state)
             validateClipEffects(item, context: context, state: &state)
+            validateClipAudioMix(item, context: context, state: &state)
             validateItemOrder(
                 item,
                 itemIndex: itemIndex,

@@ -106,6 +106,16 @@ public enum EditCommand: Codable, Equatable, Sendable {
         compositing: TrackCompositingPatch
     )
 
+    /// Updates track-level audio gain and pan without changing track items or order.
+    case setTrackAudioMix(
+        sequenceID: UUID,
+        trackID: UUID,
+        audio: TrackAudioMixPatch
+    )
+
+    /// Clears track-level audio gain and pan back to unity/center defaults.
+    case clearTrackAudioMix(sequenceID: UUID, trackID: UUID)
+
     /// Moves a clip to a new track/range.
     case moveClip(
         sequenceID: UUID,
@@ -231,6 +241,21 @@ public enum EditCommand: Codable, Equatable, Sendable {
         trackID: UUID,
         clipID: UUID,
         mask: ClipMask
+    )
+
+    /// Replaces a clip's audio gain, pan, fades, and crossfade metadata.
+    case setClipAudioMix(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        audioMix: ClipAudioMix
+    )
+
+    /// Clears a clip's audio mix back to unity gain, center pan, and no fades.
+    case clearClipAudioMix(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID
     )
 
     /// Adds a video or audio track to a sequence.
@@ -385,6 +410,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// A clip effect failed semantic validation.
     case invalidClipEffects(clipID: UUID, error: ClipEffectsValidationError)
 
+    /// A clip audio mix failed semantic validation.
+    case invalidClipAudioMix(clipID: UUID, error: AudioMixValidationError)
+
     /// A clip mask edit referenced a missing mask.
     case clipMaskNotFound(clipID: UUID, maskID: UUID)
 
@@ -402,99 +430,5 @@ public enum EditReducer {
     /// Applies `command` to `project`, returning a new validated project.
     public static func apply(_ command: EditCommand, to project: Project) throws -> Project {
         try validated(try applyUnchecked(command, to: project))
-    }
-}
-
-public extension EditCommand {
-    /// Human-readable action name for menus, autosave logs, and diagnostics.
-    var actionName: String {
-        switch self {
-        case .addClip:
-            return "Add Clip"
-        case .insertClip:
-            return "Insert Clip"
-        case .overwriteClip:
-            return "Overwrite Clip"
-        case .appendClip:
-            return "Append Clip"
-        case .removeClip:
-            return "Remove Clip"
-        case .replaceClipSource:
-            return "Replace Clip Source"
-        case .threePointEdit:
-            return "Three-Point Edit"
-        case .bladeClip:
-            return "Blade Clip"
-        case .rippleTrimClip:
-            return "Ripple Trim"
-        case .rollEdit:
-            return "Roll Edit"
-        case .slipClip:
-            return "Slip Clip"
-        case .slideClip:
-            return "Slide Clip"
-        case .rippleDeleteClip:
-            return "Ripple Delete"
-        case .liftClip:
-            return "Lift Clip"
-        case .setTrackState:
-            return "Change Track State"
-        case .setTrackCompositing:
-            return "Set Track Compositing"
-        case .moveClip:
-            return "Move Clip"
-        case .trimClip:
-            return "Trim Clip"
-        case .setClipTransform:
-            return "Set Clip Transform"
-        case .addClipTransformKeyframe:
-            return "Add Transform Keyframe"
-        case .moveClipTransformKeyframe:
-            return "Move Transform Keyframe"
-        case .deleteClipTransformKeyframe:
-            return "Delete Transform Keyframe"
-        case .setClipChromaKey:
-            return "Set Chroma Key"
-        case .setClipLumaKey:
-            return "Set Luma Key"
-        case .clearClipLumaKey:
-            return "Clear Luma Key"
-        case .setClipColorCorrection:
-            return "Set Color Correction"
-        case .clearClipColorCorrection:
-            return "Clear Color Correction"
-        case .addClipMask:
-            return "Add Clip Mask"
-        case .removeClipMask:
-            return "Remove Clip Mask"
-        case .moveClipMask:
-            return "Reorder Clip Mask"
-        case .setClipMask:
-            return "Set Clip Mask"
-        case .addTrack:
-            return "Add Track"
-        case .removeTrack:
-            return "Remove Track"
-        case .addSequence:
-            return "Add Sequence"
-        case .removeSequence:
-            return "Remove Sequence"
-        case .duplicateSequence:
-            return "Duplicate Sequence"
-        case .renameSequence:
-            return "Rename Sequence"
-        case .addMarker:
-            return "Add Marker"
-        case .removeMarker:
-            return "Delete Marker"
-        case .updateMarker:
-            return "Update Marker"
-        case .linkClips:
-            return "Link Clips"
-        case .unlinkClips:
-            return "Detach Audio"
-        case .setProjectSettings:
-            return "Change Project Settings"
-        }
     }
 }
