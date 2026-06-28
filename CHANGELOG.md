@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarAudio` deterministic offline audio mixer with gain/pan/fade evaluation, mix-time
+  automation clamping, crossfade adjacency validation, sample-rate/channel mapping,
+  `ajar render-audio` WAV output, a golden-audio harness, and CI coverage for FR-AUD-003/007/009.
 - `AjarCore` audio mix model for FR-AUD-001 with keyframable clip and track gain/pan,
   clip fade and crossfade metadata, typed validation, undoable set/clear commands, and
   `.ajar` legacy defaults.

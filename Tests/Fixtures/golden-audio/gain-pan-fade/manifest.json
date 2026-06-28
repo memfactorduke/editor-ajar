@@ -1,0 +1,31 @@
+{
+  "id": "gain-pan-fade",
+  "sampleRate": 4,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [1.0, 1.0, 1.0, 1.0]
+    }
+  ],
+  "clips": [
+    {
+      "sourceIndex": 0,
+      "timelineStart": "0",
+      "sourceStart": "0",
+      "duration": "1",
+      "gain": 1.0,
+      "pan": -1.0,
+      "fadeIn": "1/2"
+    }
+  ],
+  "referenceSamples": [
+    0.0, 0.0,
+    0.5, 0.0,
+    1.0, 0.0,
+    1.0, 0.0
+  ]
+}

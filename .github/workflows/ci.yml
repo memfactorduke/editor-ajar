@@ -73,6 +73,19 @@ jobs:
       - name: Golden-frame gate (TESTING §2, ADR-0011)
         run: swift run ajar golden Tests/Fixtures/golden
 
+  golden-audio:
+    name: Golden-audio
+    runs-on: macos-14
+    needs: [build-test, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Golden-audio gate (TESTING §2, ADR-0011)
+        run: swift run ajar golden-audio Tests/Fixtures/golden-audio
+
   ui-smoke:
     name: UI smoke (macOS app)
     runs-on: macos-14
@@ -102,7 +115,7 @@ jobs:
   benchmarks-report:
     name: Benchmarks (report)
     runs-on: macos-14
-    needs: [build-test, lint, golden-frame, ui-smoke]
+    needs: [build-test, lint, golden-frame, golden-audio, ui-smoke]
     steps:
       - uses: actions/checkout@v4
 

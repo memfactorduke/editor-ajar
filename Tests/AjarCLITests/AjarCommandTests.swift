@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AjarAudio
 import AjarCore
 import Foundation
 import Metal
@@ -78,6 +79,59 @@ final class AjarCommandTests: XCTestCase {
         XCTAssertTrue(output.lines.contains { line in line.contains("golden-frame passed") })
     }
 
+    func testRenderAudioWritesDeterministicWAVForSyntheticAudioClip() async throws {
+        let directory = try temporaryDirectory()
+        let sourceURL = directory.appendingPathComponent("source.wav")
+        let projectURL = directory.appendingPathComponent("project.ajar")
+        let outputURL = directory.appendingPathComponent("mix.wav")
+        let source = try AudioSourceBuffer(
+            format: AudioRenderFormat(sampleRate: 4, channelCount: 1),
+            frameCount: 4,
+            samples: [0, 0.25, 0.5, 1]
+        )
+        try WAVCodec.write(source, to: sourceURL)
+        try ProjectPackageIO.writeProject(
+            makeAudioProject(mediaURL: sourceURL, source: source),
+            to: projectURL
+        )
+
+        let standardOutput = BufferedTextOutput()
+        let errorOutput = BufferedTextOutput()
+        let exitCode = await AjarCommand.run(
+            arguments: [
+                "render-audio",
+                "--duration",
+                "1/1",
+                projectURL.path,
+                "-o",
+                outputURL.path
+            ],
+            standardOutput: standardOutput,
+            standardError: errorOutput
+        )
+
+        let diagnosticOutput = (standardOutput.lines + errorOutput.lines).joined(separator: "\n")
+        XCTAssertEqual(exitCode, 0, diagnosticOutput)
+        let rendered = try WAVCodec.readRenderedAudio(from: outputURL)
+        XCTAssertEqual(rendered.format, AudioRenderFormat(sampleRate: 4, channelCount: 2))
+        assertSamples(rendered.samples, equal: [0, 0, 0.25, 0.25, 0.5, 0.5, 1, 1])
+    }
+
+    func testTESTING2ADR0011GoldenAudioHarnessComparesStoredReferenceSamples() async throws {
+        let output = BufferedTextOutput()
+        let errorOutput = BufferedTextOutput()
+        let exitCode = await AjarCommand.run(
+            arguments: ["golden-audio", fixtureGoldenAudioDirectory().path],
+            standardOutput: output,
+            standardError: errorOutput
+        )
+
+        let diagnosticOutput = (output.lines + errorOutput.lines).joined(separator: "\n")
+        XCTAssertEqual(exitCode, 0, diagnosticOutput)
+        XCTAssertTrue(output.lines.contains { line in line.contains("PASS gain-pan-fade") })
+        XCTAssertTrue(output.lines.contains { line in line.contains("golden-audio passed") })
+    }
+
     func testBenchmarkAllEmitsReportOnlyPerformanceJSON() async throws {
         try requireMetal()
         let output = BufferedTextOutput()
@@ -154,6 +208,14 @@ private func fixtureGoldenDirectory() -> URL {
         .appendingPathComponent("golden")
 }
 
+private func fixtureGoldenAudioDirectory() -> URL {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Fixtures")
+        .appendingPathComponent("golden-audio")
+}
+
 private func makeProject(mediaURL: URL, movieSpec: SyntheticMovieSpec) throws -> Project {
     let frameRate = try FrameRate(frames: Int64(movieSpec.frameRate))
     let duration = try frameRate.duration(ofFrames: Int64(movieSpec.frameCount))
@@ -208,6 +270,80 @@ private func makeProject(mediaURL: URL, movieSpec: SyntheticMovieSpec) throws ->
         mediaPool: [media],
         sequences: [sequence]
     )
+}
+
+private func makeAudioProject(mediaURL: URL, source: AudioSourceBuffer) throws -> Project {
+    let frameRate = try FrameRate(frames: Int64(source.format.sampleRate))
+    let duration = try RationalTime(
+        value: Int64(source.frameCount),
+        timescale: Int64(source.format.sampleRate)
+    )
+    let mediaID = try uuid("00000000-0000-0000-0000-000000001418")
+    let clip = Clip(
+        id: try uuid("00000000-0000-0000-0000-000000001518"),
+        source: .media(id: mediaID),
+        sourceRange: try TimeRange(start: .zero, duration: duration),
+        timelineRange: try TimeRange(start: .zero, duration: duration),
+        kind: .audio,
+        name: "CLI Audio Synthetic"
+    )
+
+    return Project(
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
+        settings: ProjectSettings(
+            frameRate: frameRate,
+            resolution: PixelDimensions(width: 16, height: 16),
+            colorSpace: .rec709,
+            audioSampleRate: source.format.sampleRate
+        ),
+        mediaPool: [
+            MediaRef(
+                id: mediaID,
+                sourceURL: mediaURL,
+                contentHash: ContentHash.sha256(data: Data("cli-audio-test".utf8)),
+                metadata: MediaMetadata(
+                    codecID: "pcm_f32le",
+                    pixelDimensions: nil,
+                    frameRate: nil,
+                    duration: duration,
+                    colorSpace: .unspecified,
+                    audioChannelLayout: AudioChannelLayout(
+                        channelCount: source.format.channelCount
+                    ),
+                    isVariableFrameRate: false,
+                    conformedFrameRate: nil
+                )
+            )
+        ],
+        sequences: [
+            Sequence(
+                id: try uuid("00000000-0000-0000-0000-000000001618"),
+                name: "CLI Audio Render",
+                videoTracks: [],
+                audioTracks: [
+                    Track(
+                        id: try uuid("00000000-0000-0000-0000-000000001718"),
+                        kind: .audio,
+                        items: [.clip(clip)]
+                    )
+                ],
+                markers: [],
+                timebase: frameRate
+            )
+        ]
+    )
+}
+
+private func assertSamples(
+    _ actual: [Float],
+    equal expected: [Float],
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(actual.count, expected.count, file: file, line: line)
+    for index in actual.indices {
+        XCTAssertEqual(actual[index], expected[index], accuracy: 0.00001, file: file, line: line)
+    }
 }
 
 private func uuid(_ value: String) throws -> UUID {

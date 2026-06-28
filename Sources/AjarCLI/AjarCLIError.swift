@@ -32,6 +32,9 @@ public enum AjarCLIError: Error, Equatable, Sendable, CustomStringConvertible {
     /// PNG encoding or decoding failed.
     case pngFailed(String)
 
+    /// Audio rendering, decoding, encoding, or comparison failed.
+    case audioFailed(String)
+
     /// A golden manifest is malformed.
     case invalidGoldenManifest(String)
 
@@ -59,6 +62,8 @@ public enum AjarCLIError: Error, Equatable, Sendable, CustomStringConvertible {
             "texture readback failed: \(message)"
         case .pngFailed(let message):
             "PNG failure: \(message)"
+        case .audioFailed(let message):
+            "audio failure: \(message)"
         case .invalidGoldenManifest(let message):
             "invalid golden manifest: \(message)"
         case .benchmarkFailed(let message):
