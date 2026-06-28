@@ -246,6 +246,56 @@ final class RenderGraphChromaKeyTests: XCTestCase {
             )
         }
     }
+
+    func testFRCOMP003ADR0009AllMaskFieldsInvalidateCompositeHash() throws {
+        let baseMask = try rectangleMask(
+            id: uuid(820),
+            x: 0,
+            width: 8,
+            featherRadius: .zero,
+            invert: false,
+            combine: .add
+        )
+        let baseHash = try maskCompositeHash(masks: [baseMask])
+        let repeatedHash = try maskCompositeHash(masks: [baseMask])
+        let variations: [(String, [ClipMask])] = try [
+            (
+                "featherRadius",
+                [
+                    rectangleMask(
+                        id: uuid(820),
+                        x: 0,
+                        width: 8,
+                        featherRadius: rationalValue(1, 2)
+                    )
+                ]
+            ),
+            (
+                "invert",
+                [rectangleMask(id: uuid(820), x: 0, width: 8, invert: true)]
+            ),
+            (
+                "combine",
+                [rectangleMask(id: uuid(820), x: 0, width: 8, combine: .subtract)]
+            )
+        ]
+
+        XCTAssertEqual(baseHash, repeatedHash)
+        for (field, masks) in variations {
+            XCTAssertNotEqual(
+                baseHash,
+                try maskCompositeHash(masks: masks),
+                "\(field) should perturb the composite content hash"
+            )
+        }
+
+        let secondMask = try rectangleMask(id: uuid(821), x: 2, width: 4, combine: .intersect)
+        XCTAssertNotEqual(
+            try maskCompositeHash(masks: [baseMask, secondMask]),
+            try maskCompositeHash(masks: [secondMask, baseMask]),
+            "mask order should perturb the composite content hash"
+        )
+    }
 }
 
 private func compositeInput(in graph: RenderGraph) throws -> RenderCompositeInput {
@@ -337,6 +387,43 @@ private func lumaKeyCompositeHash(settings: ClipLumaKeySettings) throws -> Conte
     let sequence = try makeSequence(with: clip)
     let project = try makeProject(mediaPool: [makeMediaRef(id: mediaID)], sequences: [sequence])
     return try buildRenderGraph(for: sequence, at: try time(0), in: project).outputNode?.contentHash
+}
+
+private func maskCompositeHash(masks: [ClipMask]) throws -> ContentHash? {
+    let mediaID = try uuid(830)
+    let clipID = try uuid(831)
+    let clip = try makeClip(
+        id: clipID,
+        mediaID: mediaID,
+        effectsAnimation: .constant(ClipEffects(masks: masks))
+    )
+    let sequence = try makeSequence(with: clip)
+    let project = try makeProject(mediaPool: [makeMediaRef(id: mediaID)], sequences: [sequence])
+    return try buildRenderGraph(for: sequence, at: try time(0), in: project).outputNode?.contentHash
+}
+
+private func rectangleMask(
+    id: UUID,
+    x: Int64,
+    width: Int64,
+    featherRadius: RationalValue = .zero,
+    invert: Bool = false,
+    combine: ClipMaskCombineOperation = .add
+) -> ClipMask {
+    ClipMask(
+        id: id,
+        shape: .rectangle(
+            ClipRectangleMask(
+                x: RationalValue(x),
+                y: .zero,
+                width: RationalValue(width),
+                height: RationalValue(8)
+            )
+        ),
+        featherRadius: featherRadius,
+        invert: invert,
+        combine: combine
+    )
 }
 
 private func lumaKeySettings(

@@ -81,7 +81,10 @@ public struct ClipEllipseMask: Codable, Equatable, Sendable {
 
 /// Polygon/Bézier-point-list mask represented as a closed polygon for M5 rasterization.
 public struct ClipPolygonMask: Codable, Equatable, Sendable {
-    /// Ordered source-space points. M5 rasterization connects them as straight segments.
+    /// Ordered clip-local source-space points.
+    ///
+    /// `CanvasPoint` is reused for exact rational X/Y storage, but mask polygon points are
+    /// interpreted like rectangle and ellipse masks: in source pixels before clip transforms.
     public let points: [CanvasPoint]
 
     /// Creates a polygon mask.
@@ -355,9 +358,7 @@ enum ClipMaskValidator {
 
     static func errors(for masks: [AnimatableClipMask]) -> [ClipEffectsValidationError] {
         var errors: [ClipEffectsValidationError] = []
-        appendMaskCountError(masks.count, to: &errors)
         for mask in masks {
-            appendMaskErrors(mask.value(at: .zero), to: &errors)
             appendFeatherErrors(mask.featherRadius, maskID: mask.id, to: &errors)
             appendShapeKeyframeErrors(mask.shape, maskID: mask.id, to: &errors)
         }
@@ -412,7 +413,8 @@ enum ClipMaskValidator {
         maskID: UUID,
         to errors: inout [ClipEffectsValidationError]
     ) {
-        for keyframe in featherRadius.keyframes where keyframe.value.isNegative {
+        for keyframe in featherRadius.keyframes
+        where keyframe.time != .zero && keyframe.value.isNegative {
             errors.append(.clipMaskFeatherRadiusNegative(maskID: maskID, keyframe.value))
         }
     }
@@ -437,8 +439,8 @@ enum ClipMaskValidator {
             appendPositiveErrors(ellipse.radiusY, maskID: maskID, to: &errors) {
                 .clipMaskEllipseRadiusInvalid(maskID: $0)
             }
-        case .polygon(let polygon):
-            appendPolygonPointCountError(polygon.points.count, maskID: maskID, to: &errors)
+        case .polygon:
+            break
         }
     }
 
@@ -448,7 +450,8 @@ enum ClipMaskValidator {
         to errors: inout [ClipEffectsValidationError],
         error: (UUID) -> ClipEffectsValidationError
     ) {
-        for keyframe in value.keyframes where !isPositive(keyframe.value) {
+        for keyframe in value.keyframes
+        where keyframe.time != .zero && !isPositive(keyframe.value) {
             errors.append(error(maskID))
         }
     }

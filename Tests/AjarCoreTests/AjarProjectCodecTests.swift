@@ -271,6 +271,32 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
     }
 
+    func testFRPROJ005FRCOMP001LegacyEffectsWithoutChromaKeyDefaultToDisabled() throws {
+        let project = try makeCodecProject(seed: 198)
+        let effectsProject = try replacingFirstCodecClipEffects(
+            in: project,
+            with: try makeCodecClipEffects()
+        )
+        let package = try AjarProjectCodec.encode(effectsProject)
+        let legacyProjectJSON = try projectJSONWithoutClipEffectKey(
+            "chromaKey",
+            package.projectJSON
+        )
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(videoClip.effects.chromaKey, .disabled)
+        XCTAssertEqual(videoClip.effectsAnimation.chromaKey, .disabled)
+        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
+    }
+
     func testFRCOMP003ClipMasksRoundTripThroughProjectCodec() throws {
         let project = try makeCodecProject(seed: 196)
         let effects = try makeCodecClipMaskEffects()
@@ -313,6 +339,32 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
         XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
         XCTAssertEqual(videoClip.effects.masks, [])
+        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
+    }
+
+    func testFRPROJ005FRCOL001LegacyEffectsWithoutColorCorrectionDefaultToIdentity() throws {
+        let project = try makeCodecProject(seed: 199)
+        let effectsProject = try replacingFirstCodecClipEffects(
+            in: project,
+            with: try makeCodecClipEffects()
+        )
+        let package = try AjarProjectCodec.encode(effectsProject)
+        let legacyProjectJSON = try projectJSONWithoutClipEffectKey(
+            "colorCorrection",
+            package.projectJSON
+        )
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let sequence = try XCTUnwrap(loadedProject.sequences.first)
+        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
+
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(videoClip.effects.colorCorrection, .identity)
+        XCTAssertEqual(videoClip.effectsAnimation.colorCorrection, .identity)
         XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
     }
 }
@@ -674,45 +726,48 @@ private func projectJSONWithoutClipEffectsField(_ projectJSON: Data) throws -> D
 }
 
 private func projectJSONWithoutChromaKeyChokeAndViewMatte(_ projectJSON: Data) throws -> Data {
-    var document = try XCTUnwrap(
-        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
-    )
-    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
-    var sequence = try XCTUnwrap(sequences.first)
-    var videoTracks = try XCTUnwrap(sequence["videoTracks"] as? [[String: Any]])
-    var videoTrack = try XCTUnwrap(videoTracks.first)
-    var items = try XCTUnwrap(videoTrack["items"] as? [[String: Any]])
-    var clipItem = try XCTUnwrap(items.first)
-    var clipWrapper = try XCTUnwrap(clipItem["clip"] as? [String: Any])
-    var clipPayload = try XCTUnwrap(clipWrapper["_0"] as? [String: Any])
-    var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
-    var chromaKey = try XCTUnwrap(effects["chromaKey"] as? [String: Any])
-
-    document["schemaVersion"] = 1
-    chromaKey.removeValue(forKey: "choke")
-    chromaKey.removeValue(forKey: "viewMatte")
-    effects["chromaKey"] = chromaKey
-    clipPayload["effects"] = effects
-    clipPayload.removeValue(forKey: "effectsAnimation")
-    clipWrapper["_0"] = clipPayload
-    clipItem["clip"] = clipWrapper
-    items[0] = clipItem
-    videoTrack["items"] = items
-    videoTracks[0] = videoTrack
-    sequence["videoTracks"] = videoTracks
-    sequences[0] = sequence
-    document["sequences"] = sequences
-
-    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+    try updatingFirstClipPayload(projectJSON) { clipPayload in
+        try removeChromaKeyFields(["choke", "viewMatte"], from: "effects", in: &clipPayload)
+        try removeChromaKeyFields(
+            ["choke", "viewMatte"],
+            from: "effectsAnimation",
+            in: &clipPayload
+        )
+    }
 }
 
 private func projectJSONWithoutClipEffectMasks(_ projectJSON: Data) throws -> Data {
+    try projectJSONWithoutClipEffectKey("masks", projectJSON)
+}
+
+private func projectJSONWithoutClipEffectKey(_ key: String, _ projectJSON: Data) throws -> Data {
     try updatingFirstClipPayload(projectJSON) { clipPayload in
         var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
-        effects.removeValue(forKey: "masks")
+        var effectsAnimation = try XCTUnwrap(
+            clipPayload["effectsAnimation"] as? [String: Any]
+        )
+
+        effects.removeValue(forKey: key)
+        effectsAnimation.removeValue(forKey: key)
         clipPayload["effects"] = effects
-        clipPayload.removeValue(forKey: "effectsAnimation")
+        clipPayload["effectsAnimation"] = effectsAnimation
     }
+}
+
+private func removeChromaKeyFields(
+    _ fields: [String],
+    from effectsKey: String,
+    in clipPayload: inout [String: Any]
+) throws {
+    var effects = try XCTUnwrap(clipPayload[effectsKey] as? [String: Any])
+    var chromaKey = try XCTUnwrap(effects["chromaKey"] as? [String: Any])
+
+    for field in fields {
+        chromaKey.removeValue(forKey: field)
+    }
+
+    effects["chromaKey"] = chromaKey
+    clipPayload[effectsKey] = effects
 }
 
 private func updatingFirstClipPayload(

@@ -152,7 +152,8 @@ func makeEditClip(
     linkGroupID: UUID? = nil,
     transform: ClipTransform = .identity,
     transformAnimation: AnimatableClipTransform? = nil,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    effectsAnimation: AnimatableClipEffects? = nil
 ) throws -> Clip {
     Clip(
         id: id,
@@ -164,7 +165,8 @@ func makeEditClip(
         linkGroupID: linkGroupID,
         transform: transform,
         transformAnimation: transformAnimation,
-        effects: effects
+        effects: effects,
+        effectsAnimation: effectsAnimation
     )
 }
 
