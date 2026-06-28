@@ -36,6 +36,33 @@ final class EditAudioMixCommandTests: XCTestCase {
         XCTAssertEqual(try clearHistory.redo(), cleared)
     }
 
+    func testFRAUD001SetClipAudioMixPreservesAnimationState() throws {
+        let fixture = try makeLinkedEditFixture(seed: 444)
+        let transformAnimation = try commandClipTransformAnimation()
+        let effectsAnimation = try commandClipEffectsAnimation()
+        let project = try commandProject(
+            fixture: fixture,
+            transformAnimation: transformAnimation,
+            effectsAnimation: effectsAnimation
+        )
+        let audioMix = try makeCommandAudioMix()
+
+        let edited = try apply(
+            .setClipAudioMix(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.audioTrackID,
+                clipID: fixture.audioClipID,
+                audioMix: audioMix
+            ),
+            to: project
+        )
+        let editedClip = try commandAudioClip(fixture.audioClipID, in: edited)
+
+        XCTAssertEqual(editedClip.audioMix, audioMix)
+        XCTAssertEqual(editedClip.transformAnimation, transformAnimation)
+        XCTAssertEqual(editedClip.effectsAnimation, effectsAnimation)
+    }
+
     func testFRAUD001SetAndClearTrackAudioMixRoutesThroughUndoableHistory() throws {
         let fixture = try makeEditFixture(seed: 441)
         let patch = TrackAudioMixPatch(
@@ -130,9 +157,8 @@ final class EditAudioMixCommandTests: XCTestCase {
         ) { error in
             XCTAssertEqual(
                 error as? EditReducerError,
-                .validationFailed([
+                .invalidEdit(
                     .invalidTrackAudioMix(
-                        sequenceID: fixture.sequenceID,
                         trackID: fixture.audioTrackID,
                         error: .panOutOfRange(
                             value: RationalValue(2),
@@ -140,7 +166,7 @@ final class EditAudioMixCommandTests: XCTestCase {
                             maximum: .one
                         )
                     )
-                ])
+                )
             )
         }
     }
@@ -173,4 +199,107 @@ private func commandAudioClip(_ clipID: UUID, in project: Project) throws -> Cli
     let sequence = try XCTUnwrap(project.sequences.first)
     let audioTrack = try XCTUnwrap(sequence.audioTracks.first)
     return try XCTUnwrap(clip(clipID, in: audioTrack))
+}
+
+private func commandProject(
+    fixture: LinkedEditFixture,
+    transformAnimation: AnimatableClipTransform,
+    effectsAnimation: AnimatableClipEffects
+) throws -> Project {
+    let audioClip = try commandAudioClip(fixture.audioClipID, in: fixture.project)
+    let animatedAudioClip = EditReducer.copying(
+        audioClip,
+        transformAnimation: transformAnimation,
+        effectsAnimation: effectsAnimation
+    )
+    return try replacingAudioItems([.clip(animatedAudioClip)], in: fixture)
+}
+
+private func commandClipTransformAnimation() throws -> AnimatableClipTransform {
+    AnimatableClipTransform(
+        position: try Animatable(
+            base: .zero,
+            keyframes: [
+                Keyframe(
+                    time: try editTime(1),
+                    value: CanvasPoint(x: RationalValue(4), y: RationalValue(5)),
+                    interpolation: .linear
+                ),
+                Keyframe(
+                    time: try editTime(6),
+                    value: CanvasPoint(x: RationalValue(7), y: RationalValue(8)),
+                    interpolation: .easeInOut
+                )
+            ]
+        ),
+        opacity: try Animatable(
+            base: .one,
+            keyframes: [
+                Keyframe(
+                    time: try editTime(2),
+                    value: try RationalValue(numerator: 3, denominator: 4),
+                    interpolation: .hold
+                )
+            ]
+        )
+    )
+}
+
+private func commandClipEffectsAnimation() throws -> AnimatableClipEffects {
+    AnimatableClipEffects(
+        colorCorrection: AnimatableClipColorCorrection(
+            exposure: try Animatable(
+                base: .zero,
+                keyframes: [
+                    Keyframe(
+                        time: try editTime(3),
+                        value: try RationalValue(numerator: 1, denominator: 2),
+                        interpolation: .easeOut
+                    )
+                ]
+            )
+        )
+    )
+}
+
+private func replacingAudioItems(
+    _ items: [TimelineItem],
+    in fixture: LinkedEditFixture
+) throws -> Project {
+    let project = fixture.project
+    let sequence = try XCTUnwrap(project.sequences.first { $0.id == fixture.sequenceID })
+    let audioTracks = sequence.audioTracks.map { track in
+        if track.id == fixture.audioTrackID {
+            return Track(
+                id: track.id,
+                kind: track.kind,
+                items: items,
+                enabled: track.enabled,
+                locked: track.locked,
+                muted: track.muted,
+                solo: track.solo,
+                hidden: track.hidden,
+                opacity: track.opacity,
+                blendMode: track.blendMode,
+                audioGain: track.audioGain,
+                audioPan: track.audioPan
+            )
+        }
+        return track
+    }
+    let replacementSequence = Sequence(
+        id: sequence.id,
+        name: sequence.name,
+        videoTracks: sequence.videoTracks,
+        audioTracks: audioTracks,
+        markers: sequence.markers,
+        timebase: sequence.timebase
+    )
+
+    return Project(
+        schemaVersion: project.schemaVersion,
+        settings: project.settings,
+        mediaPool: project.mediaPool,
+        sequences: project.sequences.map { $0.id == sequence.id ? replacementSequence : $0 }
+    )
 }

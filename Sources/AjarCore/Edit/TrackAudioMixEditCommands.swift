@@ -19,7 +19,9 @@ extension EditReducer {
         in project: Project
     ) throws -> Project {
         try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
-            copying(track, audio: edit.audio)
+            let editedTrack = copying(track, audio: edit.audio)
+            try validateAudioMix(editedTrack)
+            return editedTrack
         }
     }
 
@@ -54,6 +56,19 @@ extension EditReducer {
             blendMode: track.blendMode,
             audioGain: audio.gain ?? track.audioGain,
             audioPan: audio.pan ?? track.audioPan
+        )
+    }
+
+    static func validateAudioMix(_ track: Track) throws {
+        guard let error = AudioMixValidator.errors(
+            gain: track.audioGain,
+            pan: track.audioPan
+        ).first else {
+            return
+        }
+
+        throw EditReducerError.invalidEdit(
+            .invalidTrackAudioMix(trackID: track.id, error: error)
         )
     }
 }
