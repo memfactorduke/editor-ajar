@@ -41,15 +41,7 @@ final class MetalScopeAnalyzerTests: XCTestCase {
         let frame = try analyzeScopeFixture(device: device)
         try waitForScopeFrame(frame)
 
-        XCTAssertEqual(frame.histogramTexture.width, MetalScopeLayout.binCount)
-        XCTAssertEqual(frame.histogramTexture.height, MetalScopeLayout.histogramChannelCount)
-        XCTAssertEqual(frame.waveformTexture.width, scopeFixtureWidth)
-        XCTAssertEqual(frame.waveformTexture.height, MetalScopeLayout.binCount)
-        XCTAssertEqual(frame.rgbParadeTexture.width, scopeFixtureWidth * 3)
-        XCTAssertEqual(frame.rgbParadeTexture.height, MetalScopeLayout.binCount)
-        XCTAssertEqual(frame.vectorscopeTexture.width, MetalScopeLayout.binCount)
-        XCTAssertEqual(frame.vectorscopeTexture.height, MetalScopeLayout.binCount)
-
+        assertScopeTextureDimensions(frame)
         let histogramPixels = try readScopeRGBA8(texture: frame.histogramTexture, device: device)
         let waveformPixels = try readScopeRGBA8(texture: frame.waveformTexture, device: device)
         let paradePixels = try readScopeRGBA8(texture: frame.rgbParadeTexture, device: device)
@@ -58,39 +50,35 @@ final class MetalScopeAnalyzerTests: XCTestCase {
             device: device
         )
 
-        XCTAssertEqual(
-            scopePixel(
-                histogramPixels,
-                width: MetalScopeLayout.binCount,
-                x: 255,
-                y: MetalScopeHistogramChannel.red.rawValue
-            ),
-            [255, 0, 0, 255]
+        assertScopeTexturePixels(
+            histogramPixels: histogramPixels,
+            waveformPixels: waveformPixels,
+            paradePixels: paradePixels,
+            vectorscopePixels: vectorscopePixels
         )
-        XCTAssertEqual(
-            scopePixel(waveformPixels, width: scopeFixtureWidth, x: 1, y: scopeLumaBin(.red)),
-            [255, 255, 255, 255]
-        )
-        XCTAssertEqual(
-            scopePixel(
-                paradePixels,
-                width: scopeFixtureWidth * 3,
-                x: scopeFixtureWidth + 2,
-                y: 255
-            ),
-            [0, 255, 0, 255]
-        )
+    }
 
-        let redVectorPosition = scopeVectorscopePosition(.red)
-        XCTAssertEqual(
-            scopePixel(
-                vectorscopePixels,
-                width: MetalScopeLayout.binCount,
-                x: redVectorPosition.x,
-                y: redVectorPosition.y
-            ),
-            [255, 255, 255, 255]
-        )
+    func testFRCOL003PoolsScopeResourcesUntilFramesAreReleased() throws {
+        let device = try scopeMetalDeviceOrSkip()
+        let analyzer = try MetalScopeAnalyzer(device: device)
+        let texture = try makeScopeFixtureTexture(device: device)
+        var frames: [MetalScopeFrame] = try (0..<3).map { _ in
+            try analyzer.analyze(displayEncodedTexture: texture)
+        }
+        let histogramBuffers = frames.map { frame in
+            ObjectIdentifier(frame.histogramBuffer)
+        }
+
+        XCTAssertEqual(Set(histogramBuffers).count, 3)
+        for frame in frames {
+            try waitForScopeFrame(frame)
+        }
+
+        frames.removeAll()
+        let reusedFrame = try analyzer.analyze(displayEncodedTexture: texture)
+        try waitForScopeFrame(reusedFrame)
+
+        XCTAssertEqual(ObjectIdentifier(reusedFrame.histogramBuffer), histogramBuffers[0])
     }
 }
 
@@ -106,6 +94,11 @@ private enum ScopeTestError: Error {
     case commandQueueCreationFailed
     case commandBufferCreationFailed
     case blitEncoderCreationFailed
+}
+
+private enum ScopeTextureColor {
+    case white
+    case green
 }
 
 private let scopeFixtureWidth = 4
@@ -129,7 +122,7 @@ private extension ScopeSample {
 private func analyzeScopeFixture(device: MTLDevice) throws -> MetalScopeFrame {
     let analyzer = try MetalScopeAnalyzer(device: device)
     let texture = try makeScopeFixtureTexture(device: device)
-    return try analyzer.analyze(texture: texture)
+    return try analyzer.analyze(displayEncodedTexture: texture)
 }
 
 private func makeScopeFixtureTexture(device: MTLDevice) throws -> MTLTexture {
@@ -352,9 +345,129 @@ private func scopeSum(_ values: [UInt32]) -> UInt32 {
     values.reduce(UInt32(0), +)
 }
 
+private func assertScopeTextureDimensions(
+    _ frame: MetalScopeFrame,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(frame.histogramTexture.width, MetalScopeLayout.binCount, file: file, line: line)
+    XCTAssertEqual(
+        frame.histogramTexture.height,
+        MetalScopeLayout.histogramChannelCount,
+        file: file,
+        line: line
+    )
+    XCTAssertEqual(frame.waveformTexture.width, scopeFixtureWidth, file: file, line: line)
+    XCTAssertEqual(frame.waveformTexture.height, MetalScopeLayout.binCount, file: file, line: line)
+    XCTAssertEqual(frame.rgbParadeTexture.width, scopeFixtureWidth * 3, file: file, line: line)
+    XCTAssertEqual(frame.rgbParadeTexture.height, MetalScopeLayout.binCount, file: file, line: line)
+    XCTAssertEqual(
+        frame.vectorscopeTexture.width,
+        MetalScopeLayout.binCount,
+        file: file,
+        line: line
+    )
+    XCTAssertEqual(
+        frame.vectorscopeTexture.height,
+        MetalScopeLayout.binCount,
+        file: file,
+        line: line
+    )
+}
+
+private func assertScopeTexturePixels(
+    histogramPixels: [UInt8],
+    waveformPixels: [UInt8],
+    paradePixels: [UInt8],
+    vectorscopePixels: [UInt8],
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    assertDensityHistogramPixel(histogramPixels, file: file, line: line)
+    assertScopePixel(
+        scopePixel(waveformPixels, width: scopeFixtureWidth, x: 1, y: scopeLumaBin(.red)),
+        color: .white,
+        file: file,
+        line: line
+    )
+    assertScopePixel(
+        scopePixel(paradePixels, width: scopeFixtureWidth * 3, x: scopeFixtureWidth + 2, y: 255),
+        color: .green,
+        file: file,
+        line: line
+    )
+
+    let redVectorPosition = scopeVectorscopePosition(.red)
+    assertScopePixel(
+        scopePixel(
+            vectorscopePixels,
+            width: MetalScopeLayout.binCount,
+            x: redVectorPosition.x,
+            y: redVectorPosition.y
+        ),
+        color: .white,
+        file: file,
+        line: line
+    )
+}
+
+private func assertDensityHistogramPixel(
+    _ histogramPixels: [UInt8],
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(
+        scopePixel(
+            histogramPixels,
+            width: MetalScopeLayout.binCount,
+            x: 255,
+            y: MetalScopeHistogramChannel.red.rawValue
+        ),
+        [128, 0, 0, 255],
+        file: file,
+        line: line
+    )
+    XCTAssertGreaterThan(
+        scopePixel(
+            histogramPixels,
+            width: MetalScopeLayout.binCount,
+            x: 0,
+            y: MetalScopeHistogramChannel.red.rawValue
+        )[0],
+        scopePixel(
+            histogramPixels,
+            width: MetalScopeLayout.binCount,
+            x: 128,
+            y: MetalScopeHistogramChannel.red.rawValue
+        )[0],
+        file: file,
+        line: line
+    )
+}
+
 private func scopePixel(_ pixels: [UInt8], width: Int, x: Int, y: Int) -> [UInt8] {
     let offset = ((y * width) + x) * 4
     return Array(pixels[offset..<(offset + 4)])
+}
+
+private func assertScopePixel(
+    _ pixel: [UInt8],
+    color: ScopeTextureColor,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    XCTAssertEqual(pixel.count, 4, file: file, line: line)
+    XCTAssertEqual(pixel[3], 255, file: file, line: line)
+    switch color {
+    case .white:
+        XCTAssertGreaterThan(pixel[0], 0, file: file, line: line)
+        XCTAssertEqual(pixel[0], pixel[1], file: file, line: line)
+        XCTAssertEqual(pixel[1], pixel[2], file: file, line: line)
+    case .green:
+        XCTAssertEqual(pixel[0], 0, file: file, line: line)
+        XCTAssertGreaterThan(pixel[1], 0, file: file, line: line)
+        XCTAssertEqual(pixel[2], 0, file: file, line: line)
+    }
 }
 
 private func scopeMetalDeviceOrSkip() throws -> MTLDevice {
