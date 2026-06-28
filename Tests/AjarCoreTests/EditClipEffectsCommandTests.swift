@@ -143,6 +143,74 @@ final class EditClipEffectsCommandTests: XCTestCase {
         try assertMaskCommandUndoRedo(sequence: &sequence, fixture: fixture)
     }
 
+    func testFRCOMP003ColorEditPreservesUnchangedEffectAnimations() throws {
+        let fixture = try makeEditFixture(seed: 1_141)
+        let effectsAnimation = try makeAnimatedEffects(seed: 1_141)
+        let clip = try makeEditClip(
+            id: fixture.clipID,
+            mediaID: fixture.mediaID,
+            startFrame: 0,
+            effects: effectsAnimation.baseEffects,
+            effectsAnimation: effectsAnimation
+        )
+        let project = try replacingVideoItems([.clip(clip)], in: fixture)
+        let correction = ClipColorCorrection(exposure: RationalValue(2))
+
+        let edited = try apply(
+            .setClipColorCorrection(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                correction: correction
+            ),
+            to: project
+        )
+        let editedClip = try requiredClip(fixture.clipID, in: edited, fixture: fixture)
+
+        XCTAssertEqual(editedClip.effects.colorCorrection, correction)
+        XCTAssertEqual(editedClip.effectsAnimation.chromaKey, effectsAnimation.chromaKey)
+        XCTAssertEqual(editedClip.effectsAnimation.lumaKey, effectsAnimation.lumaKey)
+        XCTAssertEqual(editedClip.effectsAnimation.masks, effectsAnimation.masks)
+        XCTAssertEqual(editedClip.effectsAnimation.colorCorrection, .constant(correction))
+    }
+
+    func testFRCOMP003MaskEditPreservesUnchangedEffectAnimations() throws {
+        let fixture = try makeEditFixture(seed: 1_142)
+        let effectsAnimation = try makeAnimatedEffects(seed: 1_142)
+        let clip = try makeEditClip(
+            id: fixture.clipID,
+            mediaID: fixture.mediaID,
+            startFrame: 0,
+            effects: effectsAnimation.baseEffects,
+            effectsAnimation: effectsAnimation
+        )
+        let project = try replacingVideoItems([.clip(clip)], in: fixture)
+        let addedMask = try makeEllipseMask(id: try editUUID(1_142_900))
+
+        let edited = try apply(
+            .addClipMask(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                mask: addedMask
+            ),
+            to: project
+        )
+        let editedClip = try requiredClip(fixture.clipID, in: edited, fixture: fixture)
+
+        XCTAssertEqual(editedClip.effects.masks, effectsAnimation.baseEffects.masks + [addedMask])
+        XCTAssertEqual(editedClip.effectsAnimation.chromaKey, effectsAnimation.chromaKey)
+        XCTAssertEqual(editedClip.effectsAnimation.lumaKey, effectsAnimation.lumaKey)
+        XCTAssertEqual(
+            editedClip.effectsAnimation.colorCorrection,
+            effectsAnimation.colorCorrection
+        )
+        XCTAssertEqual(
+            editedClip.effectsAnimation.masks,
+            editedClip.effects.masks.map(AnimatableClipMask.constant)
+        )
+    }
+
     func testFRCOMP003NegativeClipMaskFeatherReturnsTypedError() throws {
         let fixture = try makeEditFixture(seed: 1_150)
         let invalidFeather = try RationalValue(numerator: -1, denominator: 1)
@@ -245,22 +313,156 @@ final class EditClipEffectsCommandTests: XCTestCase {
             XCTFail("Expected invalid project")
             return
         }
-
-        XCTAssertTrue(
-            errors.contains(
-                .invalidClipEffects(
-                    sequenceID: fixture.sequenceID,
-                    trackID: fixture.videoTrackID,
-                    clipID: invalidClip.id,
-                    error: .clipMaskPolygonPointCountInvalid(
-                        maskID: invalidMaskID,
-                        count: 2,
-                        maximum: ClipMaskLimits.maximumPolygonPointCount
-                    )
-                )
+        let expectedError = ProjectValidationError.invalidClipEffects(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clipID: invalidClip.id,
+            error: .clipMaskPolygonPointCountInvalid(
+                maskID: invalidMaskID,
+                count: 2,
+                maximum: ClipMaskLimits.maximumPolygonPointCount
             )
         )
+
+        XCTAssertEqual(errors.filter { $0 == expectedError }.count, 1)
     }
+
+    func testFRCOMP003AnimatableMaskValidationDoesNotDuplicateZeroTimeErrors() throws {
+        let maskID = try editUUID(1_170_100)
+        let invalidFeather = RationalValue(-1)
+        let effects = AnimatableClipEffects(
+            masks: [
+                try AnimatableClipMask(
+                    id: maskID,
+                    shape: .rectangle(
+                        AnimatableClipRectangleMask(
+                            x: .constant(.zero),
+                            y: .constant(.zero),
+                            width: Animatable(
+                                base: .zero,
+                                keyframes: [
+                                    Keyframe(
+                                        time: try editTime(0),
+                                        value: .zero,
+                                        interpolation: .linear
+                                    )
+                                ]
+                            ),
+                            height: .constant(.one)
+                        )
+                    ),
+                    featherRadius: Animatable(
+                        base: invalidFeather,
+                        keyframes: [
+                            Keyframe(
+                                time: try editTime(0),
+                                value: invalidFeather,
+                                interpolation: .linear
+                            )
+                        ]
+                    )
+                )
+            ]
+        )
+        let errors = ClipEffectsValidator.errors(for: effects)
+
+        XCTAssertEqual(
+            errors.filter { $0 == .clipMaskRectangleSizeInvalid(maskID: maskID) }.count,
+            1
+        )
+        XCTAssertEqual(
+            errors.filter {
+                $0 == .clipMaskFeatherRadiusNegative(maskID: maskID, invalidFeather)
+            }.count,
+            1
+        )
+    }
+
+    func testFRCOMP003AnimatablePolygonValidationDoesNotDuplicatePointCountErrors() throws {
+        let maskID = try editUUID(1_171_100)
+        let effects = AnimatableClipEffects(
+            masks: [
+                AnimatableClipMask.constant(
+                    ClipMask(
+                        id: maskID,
+                        shape: .polygon(
+                            ClipPolygonMask(
+                                points: [
+                                    CanvasPoint(x: .zero, y: .zero),
+                                    CanvasPoint(x: .one, y: .zero)
+                                ]
+                            )
+                        )
+                    )
+                )
+            ]
+        )
+        let expectedError = ClipEffectsValidationError.clipMaskPolygonPointCountInvalid(
+            maskID: maskID,
+            count: 2,
+            maximum: ClipMaskLimits.maximumPolygonPointCount
+        )
+
+        XCTAssertEqual(
+            ClipEffectsValidator.errors(for: effects).filter { $0 == expectedError }.count,
+            1
+        )
+    }
+}
+
+private func makeAnimatedEffects(seed: Int) throws -> AnimatableClipEffects {
+    AnimatableClipEffects(
+        chromaKey: AnimatableClipChromaKeySettings(
+            enabled: true,
+            tolerance: try animatedRational(
+                base: try RationalValue(numerator: 1, denominator: 10),
+                changed: try RationalValue(numerator: 1, denominator: 5)
+            ),
+            edgeSoftness: .constant(try RationalValue(numerator: 1, denominator: 10)),
+            spillSuppression: .constant(try RationalValue(numerator: 1, denominator: 5))
+        ),
+        lumaKey: AnimatableClipLumaKeySettings(
+            enabled: true,
+            lowThreshold: try animatedRational(
+                base: try RationalValue(numerator: 1, denominator: 10),
+                changed: try RationalValue(numerator: 1, denominator: 5)
+            ),
+            highThreshold: .constant(try RationalValue(numerator: 9, denominator: 10)),
+            softness: .constant(try RationalValue(numerator: 1, denominator: 10))
+        ),
+        colorCorrection: AnimatableClipColorCorrection(
+            exposure: try animatedRational(base: 0, changed: 1),
+            saturation: .constant(try RationalValue(numerator: 3, denominator: 2))
+        ),
+        masks: [
+            AnimatableClipMask.constant(
+                try makeRectangleMask(id: try editUUID(seed * 1_000 + 910), x: 0, width: 5)
+            )
+        ]
+    )
+}
+
+private func animatedRational(
+    base: RationalValue,
+    changed: RationalValue
+) throws -> Animatable<RationalValue> {
+    try Animatable(
+        base: base,
+        keyframes: [
+            Keyframe(time: try editTime(0), value: base, interpolation: .linear),
+            Keyframe(time: try editTime(5), value: changed, interpolation: .hold)
+        ]
+    )
+}
+
+private func animatedRational(base: Int64, changed: Int64) throws -> Animatable<RationalValue> {
+    try Animatable(
+        base: RationalValue(base),
+        keyframes: [
+            Keyframe(time: try editTime(0), value: RationalValue(base), interpolation: .linear),
+            Keyframe(time: try editTime(5), value: RationalValue(changed), interpolation: .hold)
+        ]
+    )
 }
 
 private func makeChromaKeySettings(

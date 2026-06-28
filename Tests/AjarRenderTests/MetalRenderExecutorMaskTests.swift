@@ -151,6 +151,36 @@ final class MetalRenderExecutorMaskTests: XCTestCase {
         XCTAssertEqual(pixels, maskRed + maskBlue + maskBlue + maskRed)
     }
 
+    func testFRCOMP003MaskStaysInPreFlipLocalGeometry() throws {
+        let device = try maskMetalDeviceOrSkip()
+        let background = try makeMaskTexture(
+            device: device,
+            width: 4,
+            height: 1,
+            bgraPixels: repeatedMaskBGRA(maskBlue, count: 4)
+        )
+        let mirroredSource = try makeMaskTexture(
+            device: device,
+            width: 4,
+            height: 1,
+            bgraPixels: maskRed + maskRed + maskWhite + maskWhite
+        )
+        let pixels = try renderMaskTwoClipPixels(
+            device: device,
+            topEffects: ClipEffects(
+                masks: [
+                    try makeMaskRectangle(x: 0, y: 0, width: 2, height: 1)
+                ]
+            ),
+            topTransform: ClipTransform(flip: ClipFlip(horizontal: true, vertical: false)),
+            bottomTexture: background,
+            topTexture: mirroredSource,
+            dimensions: PixelDimensions(width: 4, height: 1)
+        )
+
+        XCTAssertEqual(pixels, maskWhite + maskWhite + maskBlue + maskBlue)
+    }
+
     func testFRCOMP003IntersectMaskKeepsOverlapWithPreviousMatte() throws {
         let device = try maskMetalDeviceOrSkip()
         let textures = try makeMaskCompositeTextures(device: device)

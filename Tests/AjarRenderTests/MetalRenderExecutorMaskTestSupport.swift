@@ -85,6 +85,7 @@ func renderMaskSingleClipPixels(
 func renderMaskTwoClipPixels(
     device: MTLDevice,
     topEffects: ClipEffects,
+    topTransform: ClipTransform = .identity,
     bottomTexture: MTLTexture,
     topTexture: MTLTexture,
     dimensions: PixelDimensions
@@ -93,6 +94,7 @@ func renderMaskTwoClipPixels(
         device: device,
         graph: try makeMaskTwoClipGraph(
             topEffects: topEffects,
+            topTransform: topTransform,
             width: dimensions.width,
             height: dimensions.height
         ),
@@ -150,6 +152,7 @@ func makeMaskSingleClipGraph(
 
 func makeMaskTwoClipGraph(
     topEffects: ClipEffects,
+    topTransform: ClipTransform = .identity,
     width: Int,
     height: Int
 ) throws -> RenderGraph {
@@ -165,7 +168,8 @@ func makeMaskTwoClipGraph(
             try makeMaskRenderClip(
                 id: try maskUUID(MaskTestIDs.topClip),
                 mediaID: topMediaID,
-                effects: topEffects
+                effects: topEffects,
+                transform: topTransform
             )
         ],
         width: width,
@@ -238,7 +242,12 @@ func makeMaskRenderMedia(id: UUID, width: Int, height: Int) throws -> MediaRef {
     )
 }
 
-func makeMaskRenderClip(id: UUID, mediaID: UUID, effects: ClipEffects) throws -> Clip {
+func makeMaskRenderClip(
+    id: UUID,
+    mediaID: UUID,
+    effects: ClipEffects,
+    transform: ClipTransform = .identity
+) throws -> Clip {
     Clip(
         id: id,
         source: .media(id: mediaID),
@@ -246,6 +255,7 @@ func makeMaskRenderClip(id: UUID, mediaID: UUID, effects: ClipEffects) throws ->
         timelineRange: try maskRange(startFrame: 0, durationFrames: 24),
         kind: .video,
         name: "Synthetic mask clip",
+        transform: transform,
         effects: effects
     )
 }
