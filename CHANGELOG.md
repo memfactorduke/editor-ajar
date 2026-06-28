@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarRender` GPU scope analyzer for FR-COL-003 with histogram, waveform, RGB parade, and
+  vectorscope buffers plus rendered scope textures and deterministic Metal coverage.
 - `AjarRender` chroma-key hardening with chroma-normalized matte distance, spatial choke
   erosion for hard mattes, faithful mid-range view-matte preview output, Swift/Metal uniform ABI
   guard coverage, and golden coverage for FR-COMP-001/002.
