@@ -29,6 +29,14 @@ public struct ClipLumaKeySettings: Codable, Equatable, Sendable {
     /// Whether to invert the resolved luma matte.
     public let invert: Bool
 
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case lowThreshold
+        case highThreshold
+        case softness
+        case invert
+    }
+
     /// Disabled keyer with stable default values.
     public static let disabled = ClipLumaKeySettings()
 
@@ -45,6 +53,22 @@ public struct ClipLumaKeySettings: Codable, Equatable, Sendable {
         self.highThreshold = highThreshold
         self.softness = softness
         self.invert = invert
+    }
+
+    /// Decodes luma-key settings from current and sparse legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        lowThreshold = try container.decodeIfPresent(
+            RationalValue.self,
+            forKey: .lowThreshold
+        ) ?? .zero
+        highThreshold = try container.decodeIfPresent(
+            RationalValue.self,
+            forKey: .highThreshold
+        ) ?? .one
+        softness = try container.decodeIfPresent(RationalValue.self, forKey: .softness) ?? .zero
+        invert = try container.decodeIfPresent(Bool.self, forKey: .invert) ?? false
     }
 }
 
@@ -65,6 +89,14 @@ public struct AnimatableClipLumaKeySettings: Codable, Equatable, Sendable {
     /// Whether to invert the resolved luma matte.
     public let invert: Bool
 
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case lowThreshold
+        case highThreshold
+        case softness
+        case invert
+    }
+
     /// Disabled keyer with stable default values.
     public static let disabled = AnimatableClipLumaKeySettings.constant(.disabled)
 
@@ -81,6 +113,25 @@ public struct AnimatableClipLumaKeySettings: Codable, Equatable, Sendable {
         self.highThreshold = highThreshold
         self.softness = softness
         self.invert = invert
+    }
+
+    /// Decodes keyframable luma-key settings from current and sparse legacy schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        lowThreshold = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .lowThreshold
+        ) ?? .constant(.zero)
+        highThreshold = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .highThreshold
+        ) ?? .constant(.one)
+        softness = try container.decodeIfPresent(
+            Animatable<RationalValue>.self,
+            forKey: .softness
+        ) ?? .constant(.zero)
+        invert = try container.decodeIfPresent(Bool.self, forKey: .invert) ?? false
     }
 
     /// Creates keyframable settings with constant values.

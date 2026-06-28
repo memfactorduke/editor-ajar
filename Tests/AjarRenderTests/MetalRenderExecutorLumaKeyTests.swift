@@ -152,6 +152,42 @@ final class MetalRenderExecutorLumaKeyTests: XCTestCase {
         XCTAssertGreaterThan(pixels[2], 160)
         XCTAssertEqual(pixels[3], 255)
     }
+
+    func testFRCOMP005PremultipliedSpatialAlphaEdgeCompositesWithoutDarkFringe() throws {
+        let device = try lumaMetalDeviceOrSkip()
+        let graph = try makeLumaTwoClipGraph(topEffects: .none)
+        let bottomTexture = try makeLumaTexture(
+            device: device,
+            width: 2,
+            height: 1,
+            bgraPixels: repeatedLumaBGRA([255, 0, 0, 255], count: 2)
+        )
+        let topTexture = try makeLumaTexture(
+            device: device,
+            width: 2,
+            height: 1,
+            bgraPixels: [
+                0, 0, 128, 128,
+                0, 0, 0, 0
+            ]
+        )
+
+        let pixels = try renderLumaGraph(
+            device: device,
+            graph: graph,
+            output: PixelDimensions(width: 2, height: 1),
+            textures: [
+                try lumaUUID(LumaTestIDs.bottomClip): bottomTexture,
+                try lumaUUID(LumaTestIDs.topClip): topTexture
+            ]
+        )
+
+        XCTAssertGreaterThan(pixels[0], 160)
+        XCTAssertLessThan(pixels[1], 8)
+        XCTAssertGreaterThan(pixels[2], 160)
+        XCTAssertEqual(pixels[3], 255)
+        XCTAssertEqual(pixels[4..<8], [255, 0, 0, 255])
+    }
 }
 
 private enum LumaTestIDs {

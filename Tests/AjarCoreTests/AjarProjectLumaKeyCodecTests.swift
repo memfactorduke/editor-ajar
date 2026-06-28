@@ -38,6 +38,55 @@ final class AjarProjectLumaKeyCodecTests: XCTestCase {
         XCTAssertEqual(videoClip.effects.lumaKey, .disabled)
         XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
     }
+
+    func testFRPROJ005FRCOMP005SparseLumaKeyBlockDefaultsMissingFields() throws {
+        let project = try makeLumaKeyCodecProject()
+        let package = try AjarProjectCodec.encode(project)
+        let sparseProjectJSON = try lumaKeyProjectJSONWithSparseLumaKey(package.projectJSON)
+        let loadedProject = try editableLumaKeyProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: sparseProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let videoClip = try firstLumaKeyClip(in: loadedProject)
+
+        XCTAssertEqual(
+            videoClip.effects.lumaKey,
+            ClipLumaKeySettings(
+                enabled: true,
+                lowThreshold: try RationalValue(numerator: 1, denominator: 5),
+                highThreshold: .one,
+                softness: .zero,
+                invert: false
+            )
+        )
+        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
+    }
+
+    func testFRPROJ005FRCOMP005SparseAnimatableLumaKeyBlockDefaultsMissingFields() throws {
+        let project = try makeLumaKeyCodecProject()
+        let package = try AjarProjectCodec.encode(project)
+        let sparseProjectJSON = try lumaKeyProjectJSONWithSparseAnimatableLumaKey(
+            package.projectJSON
+        )
+        let loadedProject = try editableLumaKeyProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: sparseProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let videoClip = try firstLumaKeyClip(in: loadedProject)
+
+        XCTAssertEqual(videoClip.effectsAnimation.lumaKey.enabled, true)
+        XCTAssertEqual(
+            videoClip.effectsAnimation.lumaKey.lowThreshold,
+            .constant(try RationalValue(numerator: 1, denominator: 5))
+        )
+        XCTAssertEqual(videoClip.effectsAnimation.lumaKey.highThreshold, .constant(.one))
+        XCTAssertEqual(videoClip.effectsAnimation.lumaKey.softness, .constant(.zero))
+        XCTAssertEqual(videoClip.effectsAnimation.lumaKey.invert, false)
+    }
 }
 
 private func makeLumaKeyCodecProject() throws -> Project {
@@ -108,6 +157,46 @@ private func lumaKeyCodecMedia(id: UUID) throws -> MediaRef {
 }
 
 private func lumaKeyProjectJSONWithoutLumaKey(_ projectJSON: Data) throws -> Data {
+    try lumaKeyProjectJSON(projectJSON) { clipPayload in
+        var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
+
+        effects.removeValue(forKey: "lumaKey")
+        clipPayload["effects"] = effects
+        clipPayload.removeValue(forKey: "effectsAnimation")
+    }
+}
+
+private func lumaKeyProjectJSONWithSparseLumaKey(_ projectJSON: Data) throws -> Data {
+    try lumaKeyProjectJSON(projectJSON) { clipPayload in
+        var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
+        var lumaKey = try XCTUnwrap(effects["lumaKey"] as? [String: Any])
+
+        lumaKey.removeValue(forKey: "highThreshold")
+        lumaKey.removeValue(forKey: "softness")
+        lumaKey.removeValue(forKey: "invert")
+        effects["lumaKey"] = lumaKey
+        clipPayload["effects"] = effects
+        clipPayload.removeValue(forKey: "effectsAnimation")
+    }
+}
+
+private func lumaKeyProjectJSONWithSparseAnimatableLumaKey(_ projectJSON: Data) throws -> Data {
+    try lumaKeyProjectJSON(projectJSON) { clipPayload in
+        var effectsAnimation = try XCTUnwrap(clipPayload["effectsAnimation"] as? [String: Any])
+        var lumaKey = try XCTUnwrap(effectsAnimation["lumaKey"] as? [String: Any])
+
+        lumaKey.removeValue(forKey: "highThreshold")
+        lumaKey.removeValue(forKey: "softness")
+        lumaKey.removeValue(forKey: "invert")
+        effectsAnimation["lumaKey"] = lumaKey
+        clipPayload["effectsAnimation"] = effectsAnimation
+    }
+}
+
+private func lumaKeyProjectJSON(
+    _ projectJSON: Data,
+    mutatingClipPayload mutate: (inout [String: Any]) throws -> Void
+) throws -> Data {
     var document = try XCTUnwrap(
         JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
     )
@@ -119,12 +208,9 @@ private func lumaKeyProjectJSONWithoutLumaKey(_ projectJSON: Data) throws -> Dat
     var clipItem = try XCTUnwrap(items.first)
     var clipWrapper = try XCTUnwrap(clipItem["clip"] as? [String: Any])
     var clipPayload = try XCTUnwrap(clipWrapper["_0"] as? [String: Any])
-    var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
 
     document["schemaVersion"] = 1
-    effects.removeValue(forKey: "lumaKey")
-    clipPayload["effects"] = effects
-    clipPayload.removeValue(forKey: "effectsAnimation")
+    try mutate(&clipPayload)
     clipWrapper["_0"] = clipPayload
     clipItem["clip"] = clipWrapper
     items[0] = clipItem
