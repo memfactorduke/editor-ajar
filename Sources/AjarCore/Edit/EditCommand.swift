@@ -258,6 +258,17 @@ public enum EditCommand: Codable, Equatable, Sendable {
         clipID: UUID
     )
 
+    /// Breaks a linked A/V clip group so the audio clip can be edited independently.
+    case detachClipAudio(sequenceID: UUID, trackID: UUID, clipID: UUID)
+
+    /// Replaces an audio clip's media source while preserving its edits and audio mix.
+    case replaceClipAudioSource(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        mediaID: UUID
+    )
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 
@@ -415,6 +426,18 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A track audio mix failed semantic validation.
     case invalidTrackAudioMix(trackID: UUID, error: AudioMixValidationError)
+
+    /// Detaching audio requires the clip to be part of a linked A/V group.
+    case detachAudioRequiresLinkedAudio(clipID: UUID)
+
+    /// Replacing clip audio requires an audio clip target.
+    case replaceAudioRequiresAudioClip(clipID: UUID, kind: TrackKind)
+
+    /// The replacement audio source was not found in the media pool.
+    case replacementAudioSourceNotFound(mediaID: UUID)
+
+    /// The replacement media has no audio channels.
+    case replacementAudioSourceHasNoAudio(mediaID: UUID)
 
     /// A clip mask edit referenced a missing mask.
     case clipMaskNotFound(clipID: UUID, maskID: UUID)
