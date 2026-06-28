@@ -74,6 +74,18 @@ final class EditorAjarUISmokeTests: XCTestCase {
             app.descendants(matching: .any)["Transform Inspector"]
                 .waitForExistence(timeout: 5)
         )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Track Compositing Inspector"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Track Opacity Percent"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Track Blend Mode"]
+                .waitForExistence(timeout: 5)
+        )
         let positionXField = app.descendants(matching: .any)["Transform Position X"]
         XCTAssertTrue(positionXField.waitForExistence(timeout: 5))
         positionXField.click()

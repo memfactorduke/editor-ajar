@@ -223,6 +223,23 @@ final class EditorAjarAppModel: ObservableObject {
         )
     }
 
+    var selectedTrackCompositingInspector: SelectedTrackCompositingInspectorState? {
+        guard let reference = selectedTransformClipReference,
+              let sequence = activeSequence,
+              let trackIndex = sequence.videoTracks.firstIndex(where: { $0.id == reference.trackID }),
+              let time = playheadTime(in: sequence)
+        else {
+            return nil
+        }
+
+        let track = sequence.videoTracks[trackIndex]
+        return SelectedTrackCompositingInspectorState(
+            trackName: "Video track \(trackIndex + 1)",
+            opacity: track.opacity.value(at: time),
+            blendMode: track.blendMode
+        )
+    }
+
     var selectedTransformKeyframeLanes: [TransformKeyframeLane] {
         guard let selectedClip,
               selectedClip.kind == .video,
@@ -491,6 +508,13 @@ final class EditorAjarAppModel: ObservableObject {
         return TransformFieldValueMapper.stringValue(for: field, in: transform)
     }
 
+    func selectedTrackOpacityPercentValue() -> String {
+        guard let state = selectedTrackCompositingInspector else {
+            return ""
+        }
+        return TrackCompositingValueMapper.percentString(from: state.opacity)
+    }
+
     @discardableResult
     func updateSelectedTransformField(_ field: TransformInspectorField, rawValue: String) -> Bool {
         guard let transform = selectedTransformInspector?.transform,
@@ -514,6 +538,41 @@ final class EditorAjarAppModel: ObservableObject {
 
         return updateSelectedClipTransform(
             TransformEditor.copying(transform, blendMode: blendMode)
+        )
+    }
+
+    @discardableResult
+    func updateSelectedTrackOpacityPercent(rawValue: String) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedTransformClipReference,
+              let opacity = TrackCompositingValueMapper.percent(rawValue)
+        else {
+            return false
+        }
+
+        return applyEdit(
+            .setTrackCompositing(
+                sequenceID: sequenceID,
+                trackID: reference.trackID,
+                compositing: TrackCompositingPatch(opacity: .constant(opacity))
+            )
+        )
+    }
+
+    @discardableResult
+    func updateSelectedTrackBlendMode(_ blendMode: ClipBlendMode) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedTransformClipReference
+        else {
+            return false
+        }
+
+        return applyEdit(
+            .setTrackCompositing(
+                sequenceID: sequenceID,
+                trackID: reference.trackID,
+                compositing: TrackCompositingPatch(blendMode: blendMode)
+            )
         )
     }
 
@@ -1491,6 +1550,12 @@ struct SelectedTransformInspectorState: Equatable, Sendable {
     let transform: ClipTransform
 }
 
+struct SelectedTrackCompositingInspectorState: Equatable, Sendable {
+    let trackName: String
+    let opacity: RationalValue
+    let blendMode: ClipBlendMode
+}
+
 struct CanvasClipTransformLayout: Equatable, Sendable {
     let canvasSize: PixelDimensions
     let clipSize: PixelDimensions
@@ -1709,6 +1774,34 @@ enum TransformFieldValueMapper {
 
     private static func int64(_ rawValue: String) -> Int64? {
         double(rawValue).map { Int64($0.rounded()) }
+    }
+
+    private static func double(_ rawValue: String) -> Double? {
+        let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedValue.isEmpty,
+              let value = Double(trimmedValue),
+              value.isFinite
+        else {
+            return nil
+        }
+        return value
+    }
+}
+
+enum TrackCompositingValueMapper {
+    static func percentString(from value: RationalValue) -> String {
+        formatted(value.doubleValue * 100.0)
+    }
+
+    static func percent(_ rawValue: String) -> RationalValue? {
+        double(rawValue).map { RationalValue.approximating($0 / 100.0) }
+    }
+
+    private static func formatted(_ value: Double) -> String {
+        if abs(value.rounded() - value) < 0.000_001 {
+            return "\(Int64(value.rounded()))"
+        }
+        return String(format: "%.2f", value)
     }
 
     private static func double(_ rawValue: String) -> Double? {

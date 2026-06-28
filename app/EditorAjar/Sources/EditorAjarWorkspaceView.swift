@@ -985,6 +985,9 @@ private struct TransformInspector: View {
                     model: model
                 )
                 TransformBlendPicker(model: model)
+                if let trackState = model.selectedTrackCompositingInspector {
+                    TrackCompositingInspector(state: trackState, model: model)
+                }
                 TransformFieldGrid(
                     fields: [.cropLeft, .cropTop, .cropRight, .cropBottom],
                     keyframeParameter: .crop,
@@ -1088,6 +1091,49 @@ private struct TransformBlendPicker: View {
         .pickerStyle(.menu)
         .accessibilityLabel("Blend Mode")
         .accessibilityIdentifier("Transform Blend Mode")
+    }
+}
+
+private struct TrackCompositingInspector: View {
+    let state: SelectedTrackCompositingInspectorState
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Track Compositing")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(state.trackName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            TextField(
+                "Opacity %",
+                text: Binding(
+                    get: { model.selectedTrackOpacityPercentValue() },
+                    set: { model.updateSelectedTrackOpacityPercent(rawValue: $0) }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+            .accessibilityLabel("Track Opacity Percent")
+            .accessibilityIdentifier("Track Opacity Percent")
+            Picker(
+                "Track Blend",
+                selection: Binding(
+                    get: { model.selectedTrackCompositingInspector?.blendMode ?? .normal },
+                    set: { model.updateSelectedTrackBlendMode($0) }
+                )
+            ) {
+                ForEach(ClipBlendMode.allCases, id: \.self) { blendMode in
+                    Text(blendMode.displayName).tag(blendMode)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityLabel("Track Blend Mode")
+            .accessibilityIdentifier("Track Blend Mode")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Track Compositing Inspector")
+        .accessibilityLabel("Track Compositing Inspector")
     }
 }
 

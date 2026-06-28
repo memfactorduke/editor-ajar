@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-COMP-006 track compositing follow-ups with forward-compatible blend-mode
+  decoding, documented track/clip blend precedence, split cache-key tests, and selected-track
+  opacity/blend inspector controls.
 - Hardened luma-key/alpha passthrough follow-ups for FR-COMP-005 with sparse `.ajar`
   decode defaults, full-field cache-key coverage, a documented premultiplied source-texture
   contract, and spatial alpha-edge Metal coverage.

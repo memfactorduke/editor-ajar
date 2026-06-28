@@ -380,6 +380,37 @@ final class AjarProjectTrackCompositingCodecTests: XCTestCase {
         XCTAssertEqual(videoTrack.opacity, .constant(.one))
         XCTAssertEqual(videoTrack.blendMode, .normal)
     }
+
+    func testFRPROJ005FRCOMP006UnknownTrackBlendModeDefaultsToNormal() throws {
+        let project = try makeCodecProject(seed: 157)
+        let package = try AjarProjectCodec.encode(project)
+        let futureProjectJSON = try projectJSONWithUnknownTrackBlendMode(package.projectJSON)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: futureProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let videoTrack = try XCTUnwrap(loadedProject.sequences.first?.videoTracks.first)
+
+        XCTAssertEqual(videoTrack.blendMode, .normal)
+    }
+
+    func testFRPROJ005FRCOMP006UnknownClipBlendModeDefaultsToNormal() throws {
+        let project = try makeCodecProject(seed: 158)
+        let package = try AjarProjectCodec.encode(project)
+        let futureProjectJSON = try projectJSONWithUnknownClipBlendMode(package.projectJSON)
+        let loadedProject = try editableProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: futureProjectJSON,
+                mediaJSON: package.mediaJSON
+            )
+        )
+        let clip = try XCTUnwrap(loadedProject.sequences.first?.videoTracks.first.flatMap(clip))
+
+        XCTAssertEqual(clip.transform.blendMode, .normal)
+        XCTAssertEqual(clip.transformAnimation.blendMode, .normal)
+    }
 }
 
 final class AjarProjectCodecVersioningTests: XCTestCase {
@@ -583,6 +614,38 @@ private func projectJSONWithoutTrackCompositingFields(_ projectJSON: Data) throw
     document["sequences"] = sequences
 
     return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func projectJSONWithUnknownTrackBlendMode(_ projectJSON: Data) throws -> Data {
+    var document = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: projectJSON) as? [String: Any]
+    )
+    var sequences = try XCTUnwrap(document["sequences"] as? [[String: Any]])
+    var sequence = try XCTUnwrap(sequences.first)
+    var videoTracks = try XCTUnwrap(sequence["videoTracks"] as? [[String: Any]])
+    var videoTrack = try XCTUnwrap(videoTracks.first)
+
+    videoTrack["blendMode"] = "futureTrackBlend"
+    videoTracks[0] = videoTrack
+    sequence["videoTracks"] = videoTracks
+    sequences[0] = sequence
+    document["sequences"] = sequences
+
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func projectJSONWithUnknownClipBlendMode(_ projectJSON: Data) throws -> Data {
+    try updatingFirstClipPayload(projectJSON) { clipPayload in
+        var transform = try XCTUnwrap(clipPayload["transform"] as? [String: Any])
+        var transformAnimation = try XCTUnwrap(
+            clipPayload["transformAnimation"] as? [String: Any]
+        )
+
+        transform["blendMode"] = "futureClipBlend"
+        transformAnimation["blendMode"] = "futureAnimatedClipBlend"
+        clipPayload["transform"] = transform
+        clipPayload["transformAnimation"] = transformAnimation
+    }
 }
 
 private func projectJSONWithoutClipEffectsField(_ projectJSON: Data) throws -> Data {

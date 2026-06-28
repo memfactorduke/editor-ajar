@@ -949,6 +949,11 @@ public final class MetalRenderExecutor {
         clipBlendMode: ClipBlendMode,
         trackBlendMode: ClipBlendMode
     ) -> ClipBlendMode {
+        // Tracks are currently validated as non-overlapping, so at most one clip per track can be
+        // active at a time. That makes flattening directly into one accumulation texture exact:
+        // track opacity multiplies clip opacity, and a non-normal track blend mode intentionally
+        // overrides the clip blend mode. When transitions or intra-track overlap land, this must
+        // become per-track isolation first, then track-over-track compositing.
         trackBlendMode == .normal ? clipBlendMode : trackBlendMode
     }
 
@@ -1354,6 +1359,8 @@ public final class MetalRenderExecutor {
         }
 
         static float ajar_blend_lum(float3 color) {
+            // ADR-0010 keeps blending in Rec.709 linear light, so these are Rec.709 luma
+            // coefficients rather than the W3C gamma-space 0.3/0.59/0.11 blend weights.
             return dot(color, float3(0.2126, 0.7152, 0.0722));
         }
 

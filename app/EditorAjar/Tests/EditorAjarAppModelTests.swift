@@ -623,6 +623,44 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertTrue(model.canUndo)
     }
 
+    func testFRCOMP006TrackCompositingInspectorRoutesThroughEditHistoryAndUndo() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+
+        XCTAssertNil(model.selectedTrackCompositingInspector)
+        XCTAssertFalse(model.updateSelectedTrackOpacityPercent(rawValue: "45"))
+        XCTAssertFalse(model.updateSelectedTrackBlendMode(.difference))
+
+        try selectSampleVideoClip(in: model)
+        let originalProject = try XCTUnwrap(model.project)
+
+        XCTAssertEqual(model.selectedTrackCompositingInspector?.trackName, "Video track 1")
+        XCTAssertEqual(model.selectedTrackCompositingInspector?.blendMode, .normal)
+        XCTAssertEqual(model.selectedTrackOpacityPercentValue(), "100")
+
+        XCTAssertTrue(model.updateSelectedTrackOpacityPercent(rawValue: "45"))
+        let editedOpacity = try XCTUnwrap(model.selectedTrackCompositingInspector?.opacity)
+        XCTAssertEqual(
+            editedOpacity.doubleValue,
+            0.45,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(model.undoMenuTitle, "Undo Set Track Compositing")
+
+        model.undo()
+
+        XCTAssertEqual(model.project, originalProject)
+        XCTAssertEqual(model.selectedTrackOpacityPercentValue(), "100")
+
+        XCTAssertTrue(model.updateSelectedTrackBlendMode(.difference))
+        XCTAssertEqual(model.selectedTrackCompositingInspector?.blendMode, .difference)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Set Track Compositing")
+
+        model.undo()
+
+        XCTAssertEqual(model.project, originalProject)
+        XCTAssertEqual(model.selectedTrackCompositingInspector?.blendMode, .normal)
+    }
+
     func testFRKEY005TransformKeyframeToggleLaneMoveAndDeleteRouteThroughEditHistory() throws {
         let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
         try selectSampleVideoClip(in: model)
