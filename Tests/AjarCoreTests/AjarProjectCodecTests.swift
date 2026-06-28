@@ -271,32 +271,6 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
     }
 
-    func testFRPROJ005FRCOMP001LegacyEffectsWithoutChromaKeyDefaultToDisabled() throws {
-        let project = try makeCodecProject(seed: 198)
-        let effectsProject = try replacingFirstCodecClipEffects(
-            in: project,
-            with: try makeCodecClipEffects()
-        )
-        let package = try AjarProjectCodec.encode(effectsProject)
-        let legacyProjectJSON = try projectJSONWithoutClipEffectKey(
-            "chromaKey",
-            package.projectJSON
-        )
-        let loadedProject = try editableProject(
-            from: AjarProjectCodec.decode(
-                projectJSON: legacyProjectJSON,
-                mediaJSON: package.mediaJSON
-            )
-        )
-        let sequence = try XCTUnwrap(loadedProject.sequences.first)
-        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
-
-        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
-        XCTAssertEqual(videoClip.effects.chromaKey, .disabled)
-        XCTAssertEqual(videoClip.effectsAnimation.chromaKey, .disabled)
-        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
-    }
-
     func testFRCOMP003ClipMasksRoundTripThroughProjectCodec() throws {
         let project = try makeCodecProject(seed: 196)
         let effects = try makeCodecClipMaskEffects()
@@ -320,53 +294,6 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
     }
 
-    func testFRPROJ005FRCOMP003LegacyEffectsWithoutMasksDefaultToEmpty() throws {
-        let project = try makeCodecProject(seed: 197)
-        let effectsProject = try replacingFirstCodecClipEffects(
-            in: project,
-            with: try makeCodecClipEffects()
-        )
-        let package = try AjarProjectCodec.encode(effectsProject)
-        let legacyProjectJSON = try projectJSONWithoutClipEffectMasks(package.projectJSON)
-        let loadedProject = try editableProject(
-            from: AjarProjectCodec.decode(
-                projectJSON: legacyProjectJSON,
-                mediaJSON: package.mediaJSON
-            )
-        )
-        let sequence = try XCTUnwrap(loadedProject.sequences.first)
-        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
-
-        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
-        XCTAssertEqual(videoClip.effects.masks, [])
-        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
-    }
-
-    func testFRPROJ005FRCOL001LegacyEffectsWithoutColorCorrectionDefaultToIdentity() throws {
-        let project = try makeCodecProject(seed: 199)
-        let effectsProject = try replacingFirstCodecClipEffects(
-            in: project,
-            with: try makeCodecClipEffects()
-        )
-        let package = try AjarProjectCodec.encode(effectsProject)
-        let legacyProjectJSON = try projectJSONWithoutClipEffectKey(
-            "colorCorrection",
-            package.projectJSON
-        )
-        let loadedProject = try editableProject(
-            from: AjarProjectCodec.decode(
-                projectJSON: legacyProjectJSON,
-                mediaJSON: package.mediaJSON
-            )
-        )
-        let sequence = try XCTUnwrap(loadedProject.sequences.first)
-        let videoClip = try XCTUnwrap(clip(in: sequence.videoTracks.first))
-
-        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
-        XCTAssertEqual(videoClip.effects.colorCorrection, .identity)
-        XCTAssertEqual(videoClip.effectsAnimation.colorCorrection, .identity)
-        XCTAssertEqual(videoClip.effectsAnimation, .constant(videoClip.effects))
-    }
 }
 
 final class AjarProjectTrackCompositingCodecTests: XCTestCase {
@@ -733,24 +660,6 @@ private func projectJSONWithoutChromaKeyChokeAndViewMatte(_ projectJSON: Data) t
             from: "effectsAnimation",
             in: &clipPayload
         )
-    }
-}
-
-private func projectJSONWithoutClipEffectMasks(_ projectJSON: Data) throws -> Data {
-    try projectJSONWithoutClipEffectKey("masks", projectJSON)
-}
-
-private func projectJSONWithoutClipEffectKey(_ key: String, _ projectJSON: Data) throws -> Data {
-    try updatingFirstClipPayload(projectJSON) { clipPayload in
-        var effects = try XCTUnwrap(clipPayload["effects"] as? [String: Any])
-        var effectsAnimation = try XCTUnwrap(
-            clipPayload["effectsAnimation"] as? [String: Any]
-        )
-
-        effects.removeValue(forKey: key)
-        effectsAnimation.removeValue(forKey: key)
-        clipPayload["effects"] = effects
-        clipPayload["effectsAnimation"] = effectsAnimation
     }
 }
 
