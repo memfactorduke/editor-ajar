@@ -269,12 +269,7 @@ private extension OfflineAudioMixer {
                 clipDuration: clip.timelineRange.duration
             ).doubleValue
         )
-        let crossfade = crossfadeEnvelope(
-            mix: clip.audioMix,
-            localTime: localTime,
-            clipDuration: clip.timelineRange.duration
-        )
-        return clipGain * trackGain * fade * crossfade
+        return clipGain * trackGain * fade
     }
 
     static func panValue(clip: Clip, track: Track, renderTime: RationalTime) -> Double {
@@ -325,13 +320,15 @@ private extension OfflineAudioMixer {
         if outputChannelCount == 1 {
             return averagedSourceSample(source, framePosition: framePosition)
         }
-        if outputChannelCount == 2, source.format.channelCount > 2 {
+        if outputChannelCount == 2, source.format.channelCount == 6 {
             return downmixedStereoSample(
                 source,
                 framePosition: framePosition,
                 outputChannel: outputChannel
             )
         }
+        // Non-5.1 multichannel layouts need layout metadata before a correct downmix.
+        // Until then, preserve the previous deterministic first-channel mapping.
         let channel = min(outputChannel, source.format.channelCount - 1)
         return sourceSample(source, framePosition: framePosition, channel: channel)
     }

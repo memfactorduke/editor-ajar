@@ -112,7 +112,7 @@ final class OfflineAudioMixerFollowUpTests: XCTestCase {
         XCTAssertEqual(output, [1, 2, 3, 4, 0, 0])
     }
 
-    func testFRAUD002CrossfadeRendersExactAbutEdgeRamps() throws {
+    func testFRAUD002ValidExactAbutCrossfadeDoesNotIntroduceDropout() throws {
         let firstID = try uuid("00000000-0000-0000-0000-000000085011")
         let secondID = try uuid("00000000-0000-0000-0000-000000085012")
         let firstClipID = try uuid("00000000-0000-0000-0000-000000085013")
@@ -132,7 +132,7 @@ final class OfflineAudioMixerFollowUpTests: XCTestCase {
 
         assertSamples(
             buffer.samples,
-            equal: [1, 1, 1, 1, 1, 1, 0.5, 0.5, 0, 0, 0.5, 0.5, 1, 1, 1, 1]
+            equal: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         )
     }
 
@@ -254,6 +254,23 @@ final class OfflineAudioMixerFollowUpTests: XCTestCase {
         )
 
         assertSamples(buffer.samples, equal: [6.6568546, 8.363961])
+    }
+
+    func testFRAUD009NonFiveOneMultichannelUsesDeterministicFallbackMapping() throws {
+        let mediaID = try uuid("00000000-0000-0000-0000-000000085205")
+        let clip = try makeClip(mediaID: mediaID, duration: time(1, 4))
+        let source = try AudioSourceBuffer(
+            format: AudioRenderFormat(sampleRate: 4, channelCount: 4),
+            frameCount: 1,
+            samples: [1, 2, 3, 4]
+        )
+        let buffer = try render(
+            sequence: makeSequence(items: [.clip(clip)]),
+            sources: [mediaID: source],
+            duration: time(1, 4)
+        )
+
+        assertSamples(buffer.samples, equal: [1, 2])
     }
 
     func testRenderRejectsOutputSampleCountOverflowBeforeAllocation() throws {

@@ -89,9 +89,7 @@ public struct RealtimeAudioRenderPlan: Sendable {
         guard sampleCount > 0 else {
             return
         }
-        for sampleIndex in 0..<sampleCount {
-            output[sampleIndex] = storage.sample(at: sourceOffset + sampleIndex)
-        }
+        storage.copySamples(startingAt: sourceOffset, count: sampleCount, into: output)
     }
 
     private func clearRemainder(
@@ -136,7 +134,14 @@ private final class RealtimeAudioSampleStorage: @unchecked Sendable {
         pointer.deallocate()
     }
 
-    func sample(at index: Int) -> Float {
-        pointer[index]
+    func copySamples(
+        startingAt sourceOffset: Int,
+        count: Int,
+        into output: UnsafeMutableBufferPointer<Float>
+    ) {
+        let sourceBase = pointer.advanced(by: sourceOffset)
+        for sampleIndex in 0..<count {
+            output[sampleIndex] = sourceBase[sampleIndex]
+        }
     }
 }
