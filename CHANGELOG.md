@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Optimized NFR-QUAL-001 nested compound rendering so sequence-backed sources expose cached
+  `rgba16Float` linear working textures directly, skip per-level present transfer passes, and
+  keep same-content-hash cache entries separated by output descriptor.
 - Added FR-CMP-004 compound-clip decomposition as an undoable `AjarCore` edit command, expanding
   sequence-backed clips back onto parent tracks with exact 2x/0.5x speed mapping, typed overlap
   and non-compound errors, and a documented leave-the-nested-sequence-in-place cleanup policy.

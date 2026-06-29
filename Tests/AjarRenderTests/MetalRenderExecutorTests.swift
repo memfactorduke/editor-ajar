@@ -406,6 +406,47 @@ final class MetalRenderExecutorCompoundTests: XCTestCase {
         XCTAssertEqual(provider.requestedClipIDs, [try testUUID(TestIDs.innerClip)])
     }
 
+    func testNFRQUAL001NestedCompoundSkipsPerLevelPresentPass() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeCompoundClipGraph()
+        let nestedGraph = try compoundNestedGraph(in: graph)
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let provider = ClipTextureProvider(
+            textures: [try testUUID(TestIDs.innerClip): sourceTexture]
+        )
+        let parentOutput = RenderOutputDescriptor(
+            pixelDimensions: PixelDimensions(width: 1, height: 1)
+        )
+        let nestedOutput = RenderOutputDescriptor(
+            pixelDimensions: parentOutput.pixelDimensions,
+            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat
+        )
+
+        let parent = try executor.render(
+            graph: graph,
+            output: parentOutput,
+            sourceProvider: provider
+        )
+        try waitForRender(parent)
+        let nested = try executor.render(
+            graph: nestedGraph,
+            output: nestedOutput,
+            sourceProvider: provider
+        )
+
+        XCTAssertFalse(parent.cacheHit)
+        XCTAssertTrue(nested.cacheHit)
+        XCTAssertEqual(executor.outputPassCount, 1)
+        XCTAssertEqual(nested.texture.pixelFormat, MetalRenderExecutor.linearWorkingPixelFormat)
+        XCTAssertEqual(provider.requestedClipIDs, [try testUUID(TestIDs.innerClip)])
+    }
+
     func testADR0009ContentHashCacheIsBoundedByEntryLimit() throws {
         let device = try metalDeviceOrSkip()
         let firstGraph = try makeSingleClipGraph()
@@ -557,8 +598,15 @@ final class MetalRenderExecutorCacheTests: XCTestCase {
         XCTAssertFalse(small.cacheHit)
         XCTAssertFalse(large.cacheHit)
         XCTAssertTrue(repeatedLarge.cacheHit)
+        XCTAssertEqual(small.contentHash, large.contentHash)
+        XCTAssertEqual(small.texture.width, 1)
+        XCTAssertEqual(small.texture.height, 1)
         XCTAssertEqual(large.texture.width, 2)
         XCTAssertEqual(large.texture.height, 2)
+        XCTAssertEqual(repeatedLarge.texture.width, 2)
+        XCTAssertEqual(repeatedLarge.texture.height, 2)
+        XCTAssertNotEqual(ObjectIdentifier(small.texture), ObjectIdentifier(large.texture))
+        XCTAssertEqual(ObjectIdentifier(repeatedLarge.texture), ObjectIdentifier(large.texture))
         XCTAssertEqual(executor.cacheEntryCount, 2)
         XCTAssertEqual(provider.requestCount, 2)
     }
