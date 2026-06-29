@@ -210,8 +210,9 @@ The transforms the user explicitly asked for, plus the rest of the standard set.
 | FR-CMP-006 | Render caching of unchanged compound clips to keep playback real-time (ties to `PLAY` cache). | v1 |
 
 Implementation note: M7 has started with the headless sequence-backed clip model, query-time
-compound duration/timebase resolution, and `AjarCore` cycle validation. Nested rendering and cache
-wiring remain in the M7 render/cache follow-up.
+compound duration/timebase resolution, `AjarCore` cycle validation, and nested video rendering
+through the content-hash cache. Compound creation/open/decompose UI, nested audio, disk cache
+warming, and retiming remain in later M7 follow-ups.
 
 ### 6.7 Color — area `COL`
 

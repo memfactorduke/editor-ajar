@@ -308,28 +308,6 @@ final class RenderGraphTests: XCTestCase {
         }
     }
 
-    func testNFRSTAB003UnsupportedSequenceClipSourceReturnsTypedRenderGraphError() throws {
-        let targetSequenceID = try uuid(60)
-        let clipID = try uuid(61)
-        let clip = try makeClip(
-            id: clipID,
-            source: .sequence(id: targetSequenceID),
-            timelineStartFrame: 0,
-            sourceStartFrame: 0
-        )
-        let sequence = try makeSequence(with: clip)
-        let targetSequence = try makeEmptySequence(id: targetSequenceID)
-        let project = try makeProject(mediaPool: [], sequences: [sequence, targetSequence])
-
-        XCTAssertThrowsError(
-            try buildRenderGraph(for: sequence, at: try time(0), in: project)
-        ) { error in
-            XCTAssertEqual(
-                error as? RenderGraphBuildError,
-                .unsupportedClipSource(clipID: clipID, source: .sequence(id: targetSequenceID))
-            )
-        }
-    }
 }
 
 private func sourceNode(in graph: RenderGraph) throws -> RenderNode {

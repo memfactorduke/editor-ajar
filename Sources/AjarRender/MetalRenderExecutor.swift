@@ -197,7 +197,7 @@ public struct RenderedFrame {
     public let commandBuffer: MTLCommandBuffer?
 
     private let completion: RenderCompletion?
-    private let retainedSourceProvider: Any?
+    private let retainedObjects: [Any]
 
     init(
         texture: MTLTexture,
@@ -205,18 +205,19 @@ public struct RenderedFrame {
         cacheHit: Bool,
         commandBuffer: MTLCommandBuffer?,
         completion: RenderCompletion?,
-        retainedSourceProvider: Any?
+        retainedObjects: [Any]
     ) {
         self.texture = texture
         self.contentHash = contentHash
         self.cacheHit = cacheHit
         self.commandBuffer = commandBuffer
         self.completion = completion
-        self.retainedSourceProvider = retainedSourceProvider
+        self.retainedObjects = retainedObjects
     }
 
     /// Waits until the render command buffer has completed.
     public func waitForCompletion() async throws {
+        _ = retainedObjects.count
         try await completion?.wait()
     }
 }
@@ -229,14 +230,24 @@ public final class MetalRenderExecutor {
     private let library: MTLLibrary
     private var pipelineStates: [PipelineStateKey: MTLRenderPipelineState] = [:]
     private var frameCache: [ContentHash: MTLTexture] = [:]
+    private var frameCacheAccessOrder: [ContentHash] = []
 
     /// Half-float linear working format used between composite passes.
     public static let linearWorkingPixelFormat: MTLPixelFormat = .rgba16Float
+
+    /// Maximum number of content-hash cache entries retained by this executor.
+    public let maximumCacheEntryCount: Int
 
     /// Number of content-hash cache entries retained by this executor.
     public var cacheEntryCount: Int {
         frameCache.count
     }
+
+    /// Number of render calls satisfied by the content-hash cache.
+    public private(set) var cacheHitCount = 0
+
+    /// Number of render calls that populated the content-hash cache.
+    public private(set) var cacheMissCount = 0
 
     /// Creates an executor with the default Metal device.
     public convenience init() throws {
@@ -248,8 +259,9 @@ public final class MetalRenderExecutor {
     }
 
     /// Creates an executor with an explicit Metal device.
-    public init(device: MTLDevice) throws {
+    public init(device: MTLDevice, maximumCacheEntryCount: Int = 16) throws {
         self.device = device
+        self.maximumCacheEntryCount = max(1, maximumCacheEntryCount)
 
         guard let commandQueue = device.makeCommandQueue() else {
             throw MetalRenderError.commandQueueCreationFailed
@@ -274,14 +286,15 @@ public final class MetalRenderExecutor {
         sourceProvider: any RenderSourceTextureProvider
     ) throws -> RenderedFrame {
         let outputNode = try outputNode(in: graph)
-        if let cachedTexture = frameCache[outputNode.contentHash] {
+        if let cachedTexture = cachedTexture(for: outputNode.contentHash) {
+            cacheHitCount += 1
             return RenderedFrame(
                 texture: cachedTexture,
                 contentHash: outputNode.contentHash,
                 cacheHit: true,
                 commandBuffer: nil,
                 completion: nil,
-                retainedSourceProvider: nil
+                retainedObjects: []
             )
         }
 
@@ -289,15 +302,18 @@ public final class MetalRenderExecutor {
         let commandBuffer = try makeCommandBuffer()
         let completion = RenderCompletion()
         completion.attach(to: commandBuffer)
-        try encode(
+        let nestedFrames = try encode(
             graph: graph,
-            outputNode: outputNode,
+            output: output,
             into: texture,
             commandBuffer: commandBuffer,
             sourceProvider: sourceProvider
         )
-        frameCache[outputNode.contentHash] = texture
+        cacheMissCount += 1
+        storeCachedTexture(texture, for: outputNode.contentHash)
         commandBuffer.commit()
+        var retainedObjects: [Any] = [sourceProvider]
+        retainedObjects.append(contentsOf: nestedFrames)
 
         return RenderedFrame(
             texture: texture,
@@ -305,13 +321,42 @@ public final class MetalRenderExecutor {
             cacheHit: false,
             commandBuffer: commandBuffer,
             completion: completion,
-            retainedSourceProvider: sourceProvider
+            retainedObjects: retainedObjects
         )
     }
 
     /// Removes all cached frame textures.
     public func removeAllCachedFrames() {
         frameCache.removeAll()
+        frameCacheAccessOrder.removeAll()
+        cacheHitCount = 0
+        cacheMissCount = 0
+    }
+
+    private func cachedTexture(for hash: ContentHash) -> MTLTexture? {
+        guard let texture = frameCache[hash] else {
+            return nil
+        }
+        markCacheEntryUsed(hash)
+        return texture
+    }
+
+    private func storeCachedTexture(_ texture: MTLTexture, for hash: ContentHash) {
+        frameCache[hash] = texture
+        markCacheEntryUsed(hash)
+        evictExpiredCacheEntries()
+    }
+
+    private func markCacheEntryUsed(_ hash: ContentHash) {
+        frameCacheAccessOrder.removeAll { $0 == hash }
+        frameCacheAccessOrder.append(hash)
+    }
+
+    private func evictExpiredCacheEntries() {
+        while frameCacheAccessOrder.count > maximumCacheEntryCount {
+            let expiredHash = frameCacheAccessOrder.removeFirst()
+            frameCache.removeValue(forKey: expiredHash)
+        }
     }
 
     private func outputNode(in graph: RenderGraph) throws -> RenderNode {
@@ -355,11 +400,12 @@ public final class MetalRenderExecutor {
 
     private func encode(
         graph: RenderGraph,
-        outputNode: RenderNode,
+        output: RenderOutputDescriptor,
         into outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer,
         sourceProvider: any RenderSourceTextureProvider
-    ) throws {
+    ) throws -> [RenderedFrame] {
+        let outputNode = try outputNode(in: graph)
         guard case .composite(let composite) = outputNode.kind else {
             throw MetalRenderError.unsupportedOutputNode(outputNode.id)
         }
@@ -367,6 +413,7 @@ public final class MetalRenderExecutor {
         switch outputNode.inputIDs.count {
         case 0:
             try encodeTransparentComposite(into: outputTexture, commandBuffer: commandBuffer)
+            return []
         default:
             guard composite.inputs.count == outputNode.inputIDs.count else {
                 throw MetalRenderError.compositeInputMetadataMismatch(nodeID: outputNode.id)
@@ -376,7 +423,12 @@ public final class MetalRenderExecutor {
             }
 
             let sourceInputs = try composite.inputs.map { input in
-                try sourceInput(graph: graph, input: input, sourceProvider: sourceProvider)
+                try sourceInput(
+                    graph: graph,
+                    input: input,
+                    output: output,
+                    sourceProvider: sourceProvider
+                )
             }
             try encodeSourceComposite(
                 composite: composite,
@@ -384,6 +436,7 @@ public final class MetalRenderExecutor {
                 outputTexture: outputTexture,
                 commandBuffer: commandBuffer
             )
+            return sourceInputs.compactMap(\.retainedFrame)
         }
     }
 
@@ -395,6 +448,7 @@ public final class MetalRenderExecutor {
         let trackOpacity: RationalValue
         let trackBlendMode: ClipBlendMode
         let sourceColorSpace: MediaColorSpace
+        let retainedFrame: RenderedFrame?
     }
 
     private static let blendModeValues: [ClipBlendMode: UInt32] = [
@@ -421,31 +475,55 @@ public final class MetalRenderExecutor {
     private func sourceInput(
         graph: RenderGraph,
         input: RenderCompositeInput,
+        output: RenderOutputDescriptor,
         sourceProvider: any RenderSourceTextureProvider
     ) throws -> SourceCompositeInput {
         guard let inputNode = graph.node(withID: input.sourceNodeID) else {
             throw MetalRenderError.missingInputNode(input.sourceNodeID)
         }
 
-        guard case .source(let source) = inputNode.kind else {
-            throw MetalRenderError.unsupportedInputNode(input.sourceNodeID)
-        }
-
-        do {
+        switch inputNode.kind {
+        case .source(let source):
+            do {
+                return SourceCompositeInput(
+                    source: source,
+                    texture: try sourceProvider.texture(for: source),
+                    transform: input.transform,
+                    effects: input.effects,
+                    trackOpacity: input.trackOpacity,
+                    trackBlendMode: input.trackBlendMode,
+                    sourceColorSpace: source.colorSpace,
+                    retainedFrame: nil
+                )
+            } catch {
+                throw MetalRenderError.sourceTextureUnavailable(
+                    input.sourceNodeID,
+                    String(describing: error)
+                )
+            }
+        case .compound(let compound):
+            let frame = try render(
+                graph: compound.graph,
+                output: output,
+                sourceProvider: sourceProvider
+            )
             return SourceCompositeInput(
-                source: source,
-                texture: try sourceProvider.texture(for: source),
+                source: RenderSourceNode(
+                    mediaID: compound.sequenceID,
+                    clipID: compound.clipID,
+                    sourceTime: compound.sequenceTime,
+                    colorSpace: compound.colorSpace
+                ),
+                texture: frame.texture,
                 transform: input.transform,
                 effects: input.effects,
                 trackOpacity: input.trackOpacity,
                 trackBlendMode: input.trackBlendMode,
-                sourceColorSpace: source.colorSpace
+                sourceColorSpace: compound.colorSpace,
+                retainedFrame: frame
             )
-        } catch {
-            throw MetalRenderError.sourceTextureUnavailable(
-                input.sourceNodeID,
-                String(describing: error)
-            )
+        case .composite:
+            throw MetalRenderError.unsupportedInputNode(input.sourceNodeID)
         }
     }
 

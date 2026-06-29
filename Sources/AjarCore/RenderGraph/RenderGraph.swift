@@ -93,6 +93,39 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     }
 }
 
+/// Resolved compound clip source parameters for a nested sequence render node.
+public struct RenderCompoundNode: Codable, Equatable, Sendable {
+    /// Stable sequence ID to render as the nested source.
+    public let sequenceID: UUID
+
+    /// Stable clip ID that requested this nested sequence frame.
+    public let clipID: UUID
+
+    /// Exact time in nested sequence coordinates.
+    public let sequenceTime: RationalTime
+
+    /// Nested sequence graph evaluated at `sequenceTime`.
+    public let graph: RenderGraph
+
+    /// Encoded color space of the nested render output.
+    public let colorSpace: MediaColorSpace
+
+    /// Creates resolved compound node parameters.
+    public init(
+        sequenceID: UUID,
+        clipID: UUID,
+        sequenceTime: RationalTime,
+        graph: RenderGraph,
+        colorSpace: MediaColorSpace
+    ) {
+        self.sequenceID = sequenceID
+        self.clipID = clipID
+        self.sequenceTime = sequenceTime
+        self.graph = graph
+        self.colorSpace = colorSpace
+    }
+}
+
 /// Resolved composite parameters for the M2 output node.
 public struct RenderCompositeNode: Codable, Equatable, Sendable {
     /// Output background when there are no inputs.
@@ -125,6 +158,9 @@ public struct RenderCompositeNode: Codable, Equatable, Sendable {
 public enum RenderNodeKind: Codable, Equatable, Sendable {
     /// A decoded media frame request.
     case source(RenderSourceNode)
+
+    /// A nested sequence rendered as a compound clip source.
+    case compound(RenderCompoundNode)
 
     /// The output composite node.
     case composite(RenderCompositeNode)
@@ -233,6 +269,33 @@ enum RenderNodeFactory {
             ),
             inputIDs: inputs.map(\.node.id),
             inputHashes: inputs.map(\.node.contentHash)
+        )
+    }
+
+    static func makeCompoundNode(
+        sequenceID: UUID,
+        clipID: UUID,
+        sequenceTime: RationalTime,
+        graph: RenderGraph,
+        colorSpace: MediaColorSpace
+    ) throws -> RenderNode {
+        guard let outputHash = graph.outputNode?.contentHash else {
+            throw RenderGraphBuildError.missingNestedOutputNode(sequenceID: sequenceID)
+        }
+        let kind = RenderNodeKind.compound(
+            RenderCompoundNode(
+                sequenceID: sequenceID,
+                clipID: clipID,
+                sequenceTime: sequenceTime,
+                graph: graph,
+                colorSpace: colorSpace
+            )
+        )
+        return try makeNode(
+            id: RenderNodeID(rawValue: "compound:\(clipID.uuidString)"),
+            kind: kind,
+            inputIDs: [graph.outputNodeID],
+            inputHashes: [outputHash]
         )
     }
 
