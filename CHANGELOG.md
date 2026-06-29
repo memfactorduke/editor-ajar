@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-AUD-003 program loudness accuracy with the BS.1770-4 RLB high-pass numerator,
+  standard-referenced LUFS baselines, stronger true-peak coverage, and an explicit
+  mono/stereo guard until layout-aware surround weights are available.
 - Added live FR-AUD-007 audio output with an AVAudioEngine driver consuming lock-free
   realtime render plans, app transport start/stop/seek publishing, and a deterministic
   sample-tone source for the bundled playback project.

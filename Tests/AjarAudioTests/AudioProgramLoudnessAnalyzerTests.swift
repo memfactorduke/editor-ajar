@@ -11,9 +11,9 @@ final class AudioProgramLoudnessAnalyzerTests: XCTestCase {
 
         let report = try AudioMixerMeterAnalyzer.measureProgramLoudness(buffer: buffer)
 
-        // ITU-R BS.1770 K-weighting plus the -0.691 LKFS offset puts a full-scale 1 kHz
-        // mono sine near -3.05 LUFS with the documented 48 kHz coefficient set.
-        XCTAssertEqual(try XCTUnwrap(report.integratedLUFS), -3.04688, accuracy: 0.01)
+        // ITU-R BS.1770-4 K-weighting plus the -0.691 LKFS offset puts a full-scale 1 kHz
+        // mono sine near -3.0036 LUFS when the RLB numerator remains [1, -2, 1].
+        XCTAssertEqual(try XCTUnwrap(report.integratedLUFS), -3.0036, accuracy: 0.01)
         XCTAssertEqual(report.blockCount, 7)
         XCTAssertEqual(report.gatedBlockCount, 7)
         XCTAssertFalse(report.isGatedToSilence)
@@ -26,7 +26,7 @@ final class AudioProgramLoudnessAnalyzerTests: XCTestCase {
         let report = try AudioMixerMeterAnalyzer.measureProgramLoudness(buffer: buffer)
 
         // Stereo L/R weights are both 1.0 in BS.1770, so dual-mono is +3.0103 LU over mono.
-        XCTAssertEqual(try XCTUnwrap(report.integratedLUFS), -0.03658, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(report.integratedLUFS), 0.0067, accuracy: 0.01)
         XCTAssertEqual(report.channelCount, 2)
         XCTAssertEqual(report.gatedBlockCount, 7)
     }
@@ -59,9 +59,45 @@ final class AudioProgramLoudnessAnalyzerTests: XCTestCase {
 
         // BS.1770 true peak is an oversampled inter-sample estimate; this synthetic transition
         // has a 0 dBFS sample peak but reconstructs above full scale between samples.
-        XCTAssertEqual(report.truePeak, 1.35811, accuracy: 0.0001)
-        XCTAssertEqual(try XCTUnwrap(report.truePeakDBTP), 2.65873, accuracy: 0.0001)
+        XCTAssertGreaterThan(report.truePeak, 1)
+        XCTAssertEqual(
+            try XCTUnwrap(report.truePeakDBTP),
+            try XCTUnwrap(AudioMeterChannelLevel.dbFS(for: report.truePeak)),
+            accuracy: 0.000_001
+        )
         XCTAssertNil(report.integratedLUFS)
+    }
+
+    func testFRAUD003TruePeakMatchesKnownMidSampleSinePeak() throws {
+        let frameCount = 4_800
+        let buffer = try RenderedAudioBuffer(
+            format: AudioRenderFormat(sampleRate: loudnessSampleRate, channelCount: 1),
+            frameCount: frameCount,
+            samples: quarterSampleRateSineSamples(frameCount: frameCount, amplitude: knownTruePeak)
+        )
+
+        let report = try AudioMixerMeterAnalyzer.measureProgramLoudness(buffer: buffer)
+
+        // A quarter-sample-rate sine shifted by pi/4 has samples [1, 1, -1, -1] while its
+        // band-limited continuous peak is sqrt(2), or +3.0103 dBTP.
+        XCTAssertEqual(report.truePeak, knownTruePeak, accuracy: 0.02)
+        XCTAssertEqual(try XCTUnwrap(report.truePeakDBTP), 3.0103, accuracy: 0.1)
+    }
+
+    func testFRAUD003TruePeakUsesMaximumAcrossStereoChannels() throws {
+        let frameCount = 4_800
+        let left = quarterSampleRateSineSamples(frameCount: frameCount, amplitude: 0.75)
+        let right = quarterSampleRateSineSamples(frameCount: frameCount, amplitude: knownTruePeak)
+        let buffer = try RenderedAudioBuffer(
+            format: AudioRenderFormat(sampleRate: loudnessSampleRate, channelCount: 2),
+            frameCount: frameCount,
+            samples: interleaveStereo(left: left, right: right)
+        )
+
+        let report = try AudioMixerMeterAnalyzer.measureProgramLoudness(buffer: buffer)
+
+        XCTAssertEqual(report.truePeak, knownTruePeak, accuracy: 0.02)
+        XCTAssertGreaterThan(report.truePeak, 1)
     }
 
     func testFRAUD003ProgramLoudnessRendersSequenceDeterministicallyAndCodable() throws {
@@ -96,7 +132,7 @@ final class AudioProgramLoudnessAnalyzerTests: XCTestCase {
 
         XCTAssertEqual(first, second)
         XCTAssertEqual(decoded, first)
-        XCTAssertEqual(try XCTUnwrap(first.integratedLUFS), -0.03658, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(first.integratedLUFS), 0.0067, accuracy: 0.01)
     }
 
     func testFRAUD003ProgramLoudnessRejectsInvalidSampleRateWithTypedError() throws {
@@ -112,10 +148,25 @@ final class AudioProgramLoudnessAnalyzerTests: XCTestCase {
             XCTAssertEqual(error as? AudioProgramLoudnessError, .invalidSampleRate(4))
         }
     }
+
+    func testFRAUD003ProgramLoudnessRejectsSurroundUntilLayoutWeightsExist() throws {
+        let buffer = try RenderedAudioBuffer(
+            format: AudioRenderFormat(sampleRate: loudnessSampleRate, channelCount: 6),
+            frameCount: 2,
+            samples: [Float](repeating: 0, count: 12)
+        )
+
+        XCTAssertThrowsError(
+            try AudioMixerMeterAnalyzer.measureProgramLoudness(buffer: buffer)
+        ) { error in
+            XCTAssertEqual(error as? AudioProgramLoudnessError, .unsupportedChannelCount(6))
+        }
+    }
 }
 
 private let loudnessSampleRate = 48_000
 private let loudnessToneFrequency = 1_000.0
+private let knownTruePeak = sqrt(2.0)
 
 private func renderedSineBuffer(channelCount: Int) throws -> RenderedAudioBuffer {
     try RenderedAudioBuffer(
@@ -136,6 +187,23 @@ private func sineSamples(channelCount: Int) -> [Float] {
         for _ in 0..<channelCount {
             samples.append(sample)
         }
+    }
+    return samples
+}
+
+private func quarterSampleRateSineSamples(frameCount: Int, amplitude: Double) -> [Float] {
+    (0..<frameCount).map { frame in
+        let phase = ((Double.pi / 2) * Double(frame)) + (Double.pi / 4)
+        return Float(amplitude * sin(phase))
+    }
+}
+
+private func interleaveStereo(left: [Float], right: [Float]) -> [Float] {
+    var samples: [Float] = []
+    samples.reserveCapacity(left.count * 2)
+    for index in left.indices {
+        samples.append(left[index])
+        samples.append(right[index])
     }
     return samples
 }
