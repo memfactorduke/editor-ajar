@@ -182,12 +182,12 @@ public enum TimelineItem: Codable, Equatable, Sendable {
     }
 }
 
-/// A clip source. Sequence references reserve schema space for future compound clips.
+/// A clip source.
 public enum ClipSource: Codable, Equatable, Sendable {
     /// A clip backed by an imported media reference.
     case media(id: UUID)
 
-    /// A future compound clip backed by another sequence. Cycle validation lands with M7.
+    /// A compound clip backed by another sequence in the same project.
     case sequence(id: UUID)
 }
 
@@ -206,7 +206,7 @@ public struct ClipReference: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-/// A media or future compound clip placed on a timeline.
+/// A media or compound clip placed on a timeline.
 public struct Clip: Codable, Equatable, Sendable {
     /// Stable clip ID.
     public let id: UUID

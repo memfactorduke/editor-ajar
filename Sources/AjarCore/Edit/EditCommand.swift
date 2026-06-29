@@ -40,6 +40,17 @@ public enum EditCommand: Codable, Equatable, Sendable {
         mode: ThreePointEditMode
     )
 
+    /// Inserts a compound clip referencing another sequence.
+    case insertCompoundClip(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        targetSequenceID: UUID,
+        timelineStart: RationalTime,
+        kind: TrackKind,
+        name: String
+    )
+
     /// Splits a clip at a timeline time into two adjacent clips.
     case bladeClip(
         sequenceID: UUID,

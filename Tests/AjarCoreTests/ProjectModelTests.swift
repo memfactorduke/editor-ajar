@@ -245,7 +245,7 @@ final class ProjectModelTests: XCTestCase {
 }
 
 final class ProjectValidationTests: XCTestCase {
-    func testFRCMP005ClipSourceCanRepresentFutureSequenceReference() throws {
+    func testFRCMP005ClipSourceCanRepresentCompoundSequenceReference() throws {
         let sourceSequenceID = try uuid(70)
         let targetSequenceID = try uuid(71)
         let track = Track(

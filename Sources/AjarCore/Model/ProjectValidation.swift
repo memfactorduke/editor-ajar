@@ -56,6 +56,9 @@ public enum ProjectValidationError: Equatable, Sendable {
     /// A clip refers to a missing sequence.
     case missingSequenceReference(sequenceID: UUID, trackID: UUID, clipID: UUID, targetID: UUID)
 
+    /// A compound clip would make a sequence contain itself directly or transitively.
+    case compoundSequenceCycle(sequenceID: UUID, trackID: UUID, clipID: UUID, targetID: UUID)
+
     /// Two markers in a sequence use the same stable ID.
     case duplicateMarkerID(sequenceID: UUID, markerID: UUID)
 
@@ -119,6 +122,7 @@ enum ProjectValidator {
     struct ValidationState {
         let mediaIDs: Set<UUID>
         let sequenceIDs: Set<UUID>
+        let sequenceReferencesBySource: [UUID: [SequenceReferenceEdge]]
         let frame: PixelDimensions
         var errors: [ProjectValidationError] = []
     }
@@ -138,6 +142,7 @@ enum ProjectValidator {
         var state = ValidationState(
             mediaIDs: Set(project.mediaPool.map(\.id)),
             sequenceIDs: Set(project.sequences.map(\.id)),
+            sequenceReferencesBySource: sequenceReferenceGraph(in: project),
             frame: project.settings.resolution
         )
 
@@ -355,6 +360,20 @@ enum ProjectValidator {
             if !state.sequenceIDs.contains(targetID) {
                 state.errors.append(
                     .missingSequenceReference(
+                        sequenceID: context.sequenceID,
+                        trackID: context.trackID,
+                        clipID: clip.id,
+                        targetID: targetID
+                    )
+                )
+            }
+            if sequenceReferenceCreatesCycle(
+                sourceID: context.sequenceID,
+                targetID: targetID,
+                referencesBySource: state.sequenceReferencesBySource
+            ) {
+                state.errors.append(
+                    .compoundSequenceCycle(
                         sequenceID: context.sequenceID,
                         trackID: context.trackID,
                         clipID: clip.id,

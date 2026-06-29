@@ -1,6 +1,6 @@
 # Editor Ajar — Master Specification
 
-> **Status:** Draft v0.1 (founding) · **Last updated:** 2026-06-20
+> **Status:** Draft v0.1 (founding) · **Last updated:** 2026-06-29
 > **Owner:** Mem · **Audience:** maintainers, contributors, and the autonomous build agent
 > **Companion docs:** [ARCHITECTURE](ARCHITECTURE.md) · [ROADMAP](ROADMAP.md) ·
 > [PERFORMANCE](PERFORMANCE.md) · [TESTING](TESTING.md) · [GLOSSARY](GLOSSARY.md) · [ADRs](adr/)
@@ -208,6 +208,10 @@ The transforms the user explicitly asked for, plus the rest of the standard set.
 | FR-CMP-004 | "Decompose" / break apart back into component clips in place. | v1 |
 | FR-CMP-005 | Nested compound clips (compounds within compounds) with cycle detection (a compound can never contain itself — enforced in `AjarCore`). | v1 |
 | FR-CMP-006 | Render caching of unchanged compound clips to keep playback real-time (ties to `PLAY` cache). | v1 |
+
+Implementation note: M7 has started with the headless sequence-backed clip model, query-time
+compound duration/timebase resolution, and `AjarCore` cycle validation. Nested rendering and cache
+wiring remain in the M7 render/cache follow-up.
 
 ### 6.7 Color — area `COL`
 
