@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added FR-CMP-004 compound-clip decomposition as an undoable `AjarCore` edit command, expanding
+  sequence-backed clips back onto parent tracks with exact 2x/0.5x speed mapping, typed overlap
+  and non-compound errors, and a documented leave-the-nested-sequence-in-place cleanup policy.
 - Added FR-CMP-001/FR-AUD-003 nested compound audio rendering so sequence-backed audio clips
   contribute to offline/live control-side mixes, honor compound speed/gain, stop at the
   defensive nesting limit with typed errors, and carry golden-audio coverage.
