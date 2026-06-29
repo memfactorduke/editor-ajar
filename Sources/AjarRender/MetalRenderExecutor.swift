@@ -512,6 +512,7 @@ public final class MetalRenderExecutor {
                     mediaID: compound.sequenceID,
                     clipID: compound.clipID,
                     sourceTime: compound.sequenceTime,
+                    speed: compound.speed,
                     colorSpace: compound.colorSpace
                 ),
                 texture: frame.texture,

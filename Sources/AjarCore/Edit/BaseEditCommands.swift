@@ -148,6 +148,12 @@ extension EditReducer {
                 )
             }
 
+            try validateMatchingDurations(
+                clipID: edit.clipID,
+                sourceRange: edit.sourceRange,
+                timelineRange: edit.timelineRange,
+                speed: clip.speed
+            )
             items[index] = .clip(
                 copying(
                     clip,
@@ -463,7 +469,8 @@ extension EditReducer {
         transformAnimation: AnimatableClipTransform? = nil,
         effects: ClipEffects? = nil,
         effectsAnimation: AnimatableClipEffects? = nil,
-        audioMix: ClipAudioMix? = nil
+        audioMix: ClipAudioMix? = nil,
+        speed: RationalValue? = nil
     ) -> Clip {
         let replacementTransform = transform ?? clip.transform
         let replacementAnimation = transformAnimation
@@ -488,7 +495,8 @@ extension EditReducer {
             transformAnimation: replacementAnimation,
             effects: replacementEffects,
             effectsAnimation: replacementEffectsAnimation,
-            audioMix: audioMix ?? clip.audioMix
+            audioMix: audioMix ?? clip.audioMix,
+            speed: speed ?? clip.speed
         )
     }
 }

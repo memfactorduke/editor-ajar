@@ -195,7 +195,7 @@ extension OfflineAudioMixer {
         let renderTime = frame.renderTime
         let format = frame.format
         let localTime = try subtract(renderTime, clip.timelineRange.start)
-        let sourceTime = try add(clip.sourceRange.start, localTime)
+        let sourceTime = try clipSourceTime(clip, at: renderTime)
         let sourceFrame = sourceTime.seconds * Double(source.format.sampleRate)
         let gain = gainMultiplier(
             clip: clip,
@@ -466,6 +466,14 @@ extension OfflineAudioMixer {
     static func end(of range: TimeRange) throws -> RationalTime {
         do {
             return try range.end()
+        } catch {
+            throw AudioRenderError.timeArithmetic(String(describing: error))
+        }
+    }
+
+    static func clipSourceTime(_ clip: Clip, at renderTime: RationalTime) throws -> RationalTime {
+        do {
+            return try clip.sourceTime(at: renderTime)
         } catch {
             throw AudioRenderError.timeArithmetic(String(describing: error))
         }

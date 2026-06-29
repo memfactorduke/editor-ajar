@@ -114,6 +114,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         sequenceID: UUID, trackID: UUID, clipID: UUID, error: AudioMixValidationError
     )
 
+    /// A clip speed is zero or negative.
+    case invalidClipSpeed(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: ClipSpeedValidationError
+    )
+
     /// A sequence ducking rule is outside the supported range or references invalid tracks.
     case invalidAudioDucking(sequenceID: UUID, ruleIndex: Int, error: AudioDuckingValidationError)
 }
@@ -227,6 +235,7 @@ enum ProjectValidator {
                 state: &state
             )
             validateClipSource(item, context: context, state: &state)
+            validateClipSpeed(item, context: context, state: &state)
             validateClipTransform(item, context: context, state: &state)
             validateClipEffects(item, context: context, state: &state)
             validateClipAudioMix(item, context: context, state: &state)
@@ -381,6 +390,27 @@ enum ProjectValidator {
                     )
                 )
             }
+        }
+    }
+
+    private static func validateClipSpeed(
+        _ item: TimelineItem,
+        context: TrackContext,
+        state: inout ValidationState
+    ) {
+        guard case .clip(let clip) = item else {
+            return
+        }
+
+        if let error = Clip.validateSpeed(clip.speed) {
+            state.errors.append(
+                .invalidClipSpeed(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    error: error
+                )
+            )
         }
     }
 

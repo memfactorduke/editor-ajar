@@ -115,6 +115,76 @@ final class RenderGraphTests: XCTestCase {
         XCTAssertNotEqual(firstGraph.outputNode?.contentHash, secondGraph.outputNode?.contentHash)
     }
 
+    func testFREDIT007ClipSpeedMapsRenderGraphSourceTime() throws {
+        let mediaID = try uuid(130)
+        let clipID = try uuid(131)
+        let media = try makeMediaRef(id: mediaID)
+        let fastClip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            durationFrames: 16,
+            speed: RationalValue(2)
+        )
+        let fastSequence = try makeSequence(with: fastClip)
+        let fastProject = try makeProject(mediaPool: [media], sequences: [fastSequence])
+        let slowClip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            durationFrames: 16,
+            speed: try RationalValue(numerator: 1, denominator: 2)
+        )
+        let slowSequence = try makeSequence(with: slowClip)
+        let slowProject = try makeProject(mediaPool: [media], sequences: [slowSequence])
+
+        let fastGraph = try buildRenderGraph(for: fastSequence, at: try time(2), in: fastProject)
+        let slowGraph = try buildRenderGraph(for: slowSequence, at: try time(4), in: slowProject)
+
+        guard case .source(let fastPayload) = try sourceNode(in: fastGraph).kind else {
+            return XCTFail("Expected fast source node")
+        }
+        guard case .source(let slowPayload) = try sourceNode(in: slowGraph).kind else {
+            return XCTFail("Expected slow source node")
+        }
+
+        XCTAssertEqual(fastPayload.speed, RationalValue(2))
+        XCTAssertEqual(fastPayload.sourceTime, try time(4))
+        XCTAssertEqual(slowPayload.speed, try RationalValue(numerator: 1, denominator: 2))
+        XCTAssertEqual(slowPayload.sourceTime, try time(2))
+    }
+
+    func testADR0009FREDIT007ChangingSpeedInvalidatesSourceHashAtClipStart() throws {
+        let mediaID = try uuid(132)
+        let clipID = try uuid(133)
+        let media = try makeMediaRef(id: mediaID)
+        let normalClip = try makeClip(id: clipID, mediaID: mediaID)
+        let fastClip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            speed: RationalValue(2)
+        )
+        let normalSequence = try makeSequence(with: normalClip)
+        let fastSequence = try makeSequence(with: fastClip)
+        let normalProject = try makeProject(mediaPool: [media], sequences: [normalSequence])
+        let fastProject = try makeProject(mediaPool: [media], sequences: [fastSequence])
+
+        let normalGraph = try buildRenderGraph(
+            for: normalSequence,
+            at: try time(0),
+            in: normalProject
+        )
+        let fastGraph = try buildRenderGraph(
+            for: fastSequence,
+            at: try time(0),
+            in: fastProject
+        )
+
+        XCTAssertNotEqual(
+            try sourceNode(in: normalGraph).contentHash,
+            try sourceNode(in: fastGraph).contentHash
+        )
+        XCTAssertNotEqual(normalGraph.outputNode?.contentHash, fastGraph.outputNode?.contentHash)
+    }
+
     func testFRXFORM001To005ChangingTransformInvalidatesCompositeButNotSourceHash() throws {
         let mediaID = try uuid(32)
         let clipID = try uuid(33)
@@ -386,7 +456,8 @@ private func makeClip(
     sourceStartFrame: Int64 = 0,
     durationFrames: Int64 = 10,
     transform: ClipTransform = .identity,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    speed: RationalValue = .one
 ) throws -> Clip {
     try makeClip(
         id: id,
@@ -395,7 +466,8 @@ private func makeClip(
         sourceStartFrame: sourceStartFrame,
         durationFrames: durationFrames,
         transform: transform,
-        effects: effects
+        effects: effects,
+        speed: speed
     )
 }
 
@@ -406,17 +478,24 @@ private func makeClip(
     sourceStartFrame: Int64,
     durationFrames: Int64 = 10,
     transform: ClipTransform = .identity,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    speed: RationalValue = .one
 ) throws -> Clip {
-    Clip(
+    let sourceDuration = try time(durationFrames)
+    let timelineDuration = try Clip.timelineDuration(
+        forSourceDuration: sourceDuration,
+        speed: speed
+    )
+    return Clip(
         id: id,
         source: source,
-        sourceRange: try range(startFrame: sourceStartFrame, durationFrames: durationFrames),
-        timelineRange: try range(startFrame: timelineStartFrame, durationFrames: durationFrames),
+        sourceRange: try TimeRange(start: time(sourceStartFrame), duration: sourceDuration),
+        timelineRange: try TimeRange(start: time(timelineStartFrame), duration: timelineDuration),
         kind: .video,
         name: "RenderGraph clip",
         transform: transform,
-        effects: effects
+        effects: effects,
+        speed: speed
     )
 }
 

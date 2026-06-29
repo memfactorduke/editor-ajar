@@ -324,10 +324,15 @@ extension EditReducer {
     ) throws -> (sourceRange: TimeRange, timelineRange: TimeRange) {
         let sourceStart = try addTimes(clip.sourceRange.start, delta.sourceStart)
         let timelineStart = try addTimes(clip.timelineRange.start, delta.timelineStart)
-        let duration = try addTimes(clip.timelineRange.duration, delta.duration)
+        let timelineDuration = try addTimes(clip.timelineRange.duration, delta.duration)
+        let sourceDuration = try speedSourceDuration(
+            clipID: clip.id,
+            timelineDuration: timelineDuration,
+            speed: clip.speed
+        )
         return (
-            sourceRange: try makeRange(start: sourceStart, duration: duration),
-            timelineRange: try makeRange(start: timelineStart, duration: duration)
+            sourceRange: try makeRange(start: sourceStart, duration: sourceDuration),
+            timelineRange: try makeRange(start: timelineStart, duration: timelineDuration)
         )
     }
 

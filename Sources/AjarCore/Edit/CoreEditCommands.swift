@@ -44,6 +44,8 @@ extension EditReducer {
             return try applyTrimClipCommand(command, to: project)
         case .moveClip, .trimClip:
             return try applyRangeClipCommand(command, to: project)
+        case .setClipSpeed:
+            return try applyClipSpeedCommand(command, to: project)
         case .setClipTransform, .addClipTransformKeyframe, .moveClipTransformKeyframe,
             .deleteClipTransformKeyframe, .setClipChromaKey, .setClipColorCorrection,
             .clearClipColorCorrection, .setClipLumaKey, .clearClipLumaKey:

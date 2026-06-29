@@ -76,6 +76,9 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Exact time in source media coordinates.
     public let sourceTime: RationalTime
 
+    /// Constant-rate playback speed that mapped sequence time to source time.
+    public let speed: RationalValue
+
     /// Tagged source color space used by the render pipeline.
     public let colorSpace: MediaColorSpace
 
@@ -84,11 +87,13 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         mediaID: UUID,
         clipID: UUID,
         sourceTime: RationalTime,
+        speed: RationalValue = .one,
         colorSpace: MediaColorSpace = .rec709
     ) {
         self.mediaID = mediaID
         self.clipID = clipID
         self.sourceTime = sourceTime
+        self.speed = speed
         self.colorSpace = colorSpace
     }
 }
@@ -104,6 +109,9 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
     /// Exact time in nested sequence coordinates.
     public let sequenceTime: RationalTime
 
+    /// Constant-rate playback speed that mapped sequence time to nested sequence time.
+    public let speed: RationalValue
+
     /// Nested sequence graph evaluated at `sequenceTime`.
     public let graph: RenderGraph
 
@@ -115,12 +123,14 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
         sequenceID: UUID,
         clipID: UUID,
         sequenceTime: RationalTime,
+        speed: RationalValue = .one,
         graph: RenderGraph,
         colorSpace: MediaColorSpace
     ) {
         self.sequenceID = sequenceID
         self.clipID = clipID
         self.sequenceTime = sequenceTime
+        self.speed = speed
         self.graph = graph
         self.colorSpace = colorSpace
     }
@@ -226,6 +236,7 @@ enum RenderNodeFactory {
         mediaID: UUID,
         clipID: UUID,
         sourceTime: RationalTime,
+        speed: RationalValue,
         colorSpace: MediaColorSpace
     ) throws -> RenderNode {
         let kind = RenderNodeKind.source(
@@ -233,6 +244,7 @@ enum RenderNodeFactory {
                 mediaID: mediaID,
                 clipID: clipID,
                 sourceTime: sourceTime,
+                speed: speed,
                 colorSpace: colorSpace
             )
         )
@@ -276,6 +288,7 @@ enum RenderNodeFactory {
         sequenceID: UUID,
         clipID: UUID,
         sequenceTime: RationalTime,
+        speed: RationalValue,
         graph: RenderGraph,
         colorSpace: MediaColorSpace
     ) throws -> RenderNode {
@@ -287,6 +300,7 @@ enum RenderNodeFactory {
                 sequenceID: sequenceID,
                 clipID: clipID,
                 sequenceTime: sequenceTime,
+                speed: speed,
                 graph: graph,
                 colorSpace: colorSpace
             )

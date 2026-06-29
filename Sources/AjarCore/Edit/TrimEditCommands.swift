@@ -74,10 +74,23 @@ extension EditReducer {
 
             let leftDuration = try subtractTimes(edit.atTime, clip.timelineRange.start)
             let rightDuration = try subtractTimes(clipEnd, edit.atTime)
-            let rightSourceStart = try addTimes(clip.sourceRange.start, leftDuration)
+            let leftSourceDuration = try speedSourceDuration(
+                clipID: clip.id,
+                timelineDuration: leftDuration,
+                speed: clip.speed
+            )
+            let rightSourceDuration = try speedSourceDuration(
+                clipID: clip.id,
+                timelineDuration: rightDuration,
+                speed: clip.speed
+            )
+            let rightSourceStart = try addTimes(clip.sourceRange.start, leftSourceDuration)
             let leftClip = copying(
                 clip,
-                sourceRange: try makeRange(start: clip.sourceRange.start, duration: leftDuration),
+                sourceRange: try makeRange(
+                    start: clip.sourceRange.start,
+                    duration: leftSourceDuration
+                ),
                 timelineRange: try makeRange(
                     start: clip.timelineRange.start,
                     duration: leftDuration
@@ -86,10 +99,11 @@ extension EditReducer {
             let rightClip = Clip(
                 id: edit.rightClipID,
                 source: clip.source,
-                sourceRange: try makeRange(start: rightSourceStart, duration: rightDuration),
+                sourceRange: try makeRange(start: rightSourceStart, duration: rightSourceDuration),
                 timelineRange: try makeRange(start: edit.atTime, duration: rightDuration),
                 kind: clip.kind,
-                name: "\(clip.name) 2"
+                name: "\(clip.name) 2",
+                speed: clip.speed
             )
 
             items[index] = .clip(leftClip)
@@ -118,7 +132,8 @@ extension EditReducer {
             try validateMatchingDurations(
                 clipID: edit.clipID,
                 sourceRange: edit.sourceRange,
-                timelineRange: edit.timelineRange
+                timelineRange: edit.timelineRange,
+                speed: clip.speed
             )
             let oldEnd = try exactTime { try clip.timelineRange.end() }
             let newEnd = try exactTime { try edit.timelineRange.end() }
@@ -171,13 +186,31 @@ extension EditReducer {
             let leftDuration = try subtractTimes(edit.editTime, leftClip.timelineRange.start)
             let rightDuration = try subtractTimes(rightEnd, edit.editTime)
             let rightSourceDelta = try subtractTimes(edit.editTime, rightClip.timelineRange.start)
-            let rightSourceStart = try addTimes(rightClip.sourceRange.start, rightSourceDelta)
+            let leftSourceDuration = try speedSourceDuration(
+                clipID: leftClip.id,
+                timelineDuration: leftDuration,
+                speed: leftClip.speed
+            )
+            let rightSourceDuration = try speedSourceDuration(
+                clipID: rightClip.id,
+                timelineDuration: rightDuration,
+                speed: rightClip.speed
+            )
+            let rightSourceStartDelta = try speedSourceDuration(
+                clipID: rightClip.id,
+                timelineDuration: rightSourceDelta,
+                speed: rightClip.speed
+            )
+            let rightSourceStart = try addTimes(
+                rightClip.sourceRange.start,
+                rightSourceStartDelta
+            )
             items[selection.leftIndex] = .clip(
                 copying(
                     leftClip,
                     sourceRange: try makeRange(
                         start: leftClip.sourceRange.start,
-                        duration: leftDuration
+                        duration: leftSourceDuration
                     ),
                     timelineRange: try makeRange(
                         start: leftClip.timelineRange.start,
@@ -188,7 +221,10 @@ extension EditReducer {
             items[selection.rightIndex] = .clip(
                 copying(
                     rightClip,
-                    sourceRange: try makeRange(start: rightSourceStart, duration: rightDuration),
+                    sourceRange: try makeRange(
+                        start: rightSourceStart,
+                        duration: rightSourceDuration
+                    ),
                     timelineRange: try makeRange(start: edit.editTime, duration: rightDuration)
                 )
             )
@@ -249,7 +285,8 @@ extension EditReducer {
             try validateMatchingDurations(
                 clipID: edit.clipID,
                 sourceRange: edit.sourceRange,
-                timelineRange: clip.timelineRange
+                timelineRange: clip.timelineRange,
+                speed: clip.speed
             )
             items[index] = .clip(copying(clip, sourceRange: edit.sourceRange))
             return copying(track, items: sortedItems(items))
@@ -278,7 +315,8 @@ extension EditReducer {
             try validateMatchingDurations(
                 clipID: edit.clipID,
                 sourceRange: clip.sourceRange,
-                timelineRange: edit.timelineRange
+                timelineRange: edit.timelineRange,
+                speed: clip.speed
             )
 
             let previousIndex = items.index(before: index)
@@ -368,9 +406,15 @@ extension EditReducer {
     static func validateMatchingDurations(
         clipID: UUID,
         sourceRange: TimeRange,
-        timelineRange: TimeRange
+        timelineRange: TimeRange,
+        speed: RationalValue
     ) throws {
-        guard sourceRange.duration == timelineRange.duration else {
+        let expectedTimelineDuration = try speedTimelineDuration(
+            clipID: clipID,
+            sourceDuration: sourceRange.duration,
+            speed: speed
+        )
+        guard expectedTimelineDuration == timelineRange.duration else {
             throw EditReducerError.invalidEdit(
                 .durationMismatch(
                     clipID: clipID,
@@ -388,9 +432,14 @@ extension EditReducer {
         let duration = try subtractTimes(end, item.timelineRange.start)
         switch item {
         case .clip(let clip):
+            let sourceDuration = try speedSourceDuration(
+                clipID: clip.id,
+                timelineDuration: duration,
+                speed: clip.speed
+            )
             let sourceRange = try makeRange(
                 start: clip.sourceRange.start,
-                duration: duration
+                duration: sourceDuration
             )
             let timelineRange = try makeRange(
                 start: clip.timelineRange.start,
@@ -429,12 +478,22 @@ extension EditReducer {
         let duration = try subtractTimes(itemEnd, start)
         switch item {
         case .clip(let clip):
-            let sourceDelta = try subtractTimes(start, clip.timelineRange.start)
+            let timelineDelta = try subtractTimes(start, clip.timelineRange.start)
+            let sourceDelta = try speedSourceDuration(
+                clipID: clip.id,
+                timelineDuration: timelineDelta,
+                speed: clip.speed
+            )
             let sourceStart = try addTimes(clip.sourceRange.start, sourceDelta)
+            let sourceDuration = try speedSourceDuration(
+                clipID: clip.id,
+                timelineDuration: duration,
+                speed: clip.speed
+            )
             return .clip(
                 copying(
                     clip,
-                    sourceRange: try makeRange(start: sourceStart, duration: duration),
+                    sourceRange: try makeRange(start: sourceStart, duration: sourceDuration),
                     timelineRange: try makeRange(start: start, duration: duration)
                 )
             )

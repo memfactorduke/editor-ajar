@@ -155,6 +155,14 @@ public enum EditCommand: Codable, Equatable, Sendable {
         transform: ClipTransform
     )
 
+    /// Replaces a clip's constant playback speed and derives its timeline duration.
+    case setClipSpeed(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        speed: RationalValue
+    )
+
     /// Adds a keyframe to one transform parameter.
     case addClipTransformKeyframe(
         sequenceID: UUID,
@@ -440,6 +448,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A clip audio mix failed semantic validation.
     case invalidClipAudioMix(clipID: UUID, error: AudioMixValidationError)
+
+    /// A clip speed failed semantic validation.
+    case invalidClipSpeed(clipID: UUID, error: ClipSpeedValidationError)
 
     /// A track audio mix failed semantic validation.
     case invalidTrackAudioMix(trackID: UUID, error: AudioMixValidationError)

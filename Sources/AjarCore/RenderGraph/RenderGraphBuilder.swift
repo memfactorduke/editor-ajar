@@ -22,6 +22,9 @@ public enum RenderGraphBuildError: Error, Equatable, Sendable, CustomStringConve
     /// Exact time math failed while selecting or mapping a clip.
     case timeMappingFailed(RationalTimeError)
 
+    /// Clip speed mapping failed while selecting a source frame.
+    case clipSpeedMappingFailed(clipID: UUID, error: ClipSpeedMappingError)
+
     /// Internal node factory input IDs and hashes were mismatched.
     case inputHashCountMismatch(nodeID: RenderNodeID, inputIDCount: Int, inputHashCount: Int)
 
@@ -43,6 +46,8 @@ public enum RenderGraphBuildError: Error, Equatable, Sendable, CustomStringConve
             "multiple active video clips at \(time): \(clipIDs)"
         case .timeMappingFailed(let error):
             "render graph time mapping failed: \(error)"
+        case .clipSpeedMappingFailed(let clipID, let error):
+            "render graph speed mapping failed for clip \(clipID): \(error)"
         case .inputHashCountMismatch(let nodeID, let inputIDCount, let inputHashCount):
             "node \(nodeID) has \(inputIDCount) input IDs but \(inputHashCount) input hashes"
         case .contentHashEncodingFailed(let message):
@@ -197,6 +202,7 @@ public enum RenderGraphBuilder {
             mediaID: mediaID,
             clipID: clip.id,
             sourceTime: sourceTime,
+            speed: clip.speed,
             colorSpace: media.metadata.colorSpace
         )
     }
@@ -234,6 +240,7 @@ public enum RenderGraphBuilder {
             sequenceID: sequenceID,
             clipID: clip.id,
             sequenceTime: sequenceTime,
+            speed: clip.speed,
             graph: graph,
             colorSpace: project.settings.colorSpace
         )
@@ -244,10 +251,9 @@ public enum RenderGraphBuilder {
         toSourceTimeFor clip: Clip
     ) throws -> RationalTime {
         do {
-            let offset = try time.subtracting(clip.timelineRange.start)
-            return try clip.sourceRange.start.adding(offset)
-        } catch let error as RationalTimeError {
-            throw RenderGraphBuildError.timeMappingFailed(error)
+            return try clip.sourceTime(at: time)
+        } catch let error as ClipSpeedMappingError {
+            throw RenderGraphBuildError.clipSpeedMappingFailed(clipID: clip.id, error: error)
         }
     }
 }
