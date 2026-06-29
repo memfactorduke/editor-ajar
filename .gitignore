@@ -38,6 +38,7 @@ fastlane/Preview.html
 /Tests/Fixtures/_diff/       # golden-vs-actual diff images
 /Tests/Fixtures/golden/**/_actual/
 /Tests/Fixtures/golden/**/_diff/
+/Tests/Fixtures/golden-audio/**/_actual/
 *.ajarproxy
 
 # Large media must never be committed. Keep tiny fixtures only.

@@ -11,6 +11,9 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     /// An interleaved buffer does not match its frame/channel metadata.
     case invalidBufferSampleCount(actual: Int, expected: Int)
 
+    /// Frame and channel metadata would overflow an interleaved sample count.
+    case sampleCountOverflow(frameCount: Int, channelCount: Int)
+
     /// A timeline clip references media that was not provided.
     case missingAudioSource(UUID)
 
@@ -45,6 +48,8 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
                 + "channelCount=\(channelCount) frameCount=\(frameCount)"
         case .invalidBufferSampleCount(let actual, let expected):
             "invalid audio buffer sample count \(actual), expected \(expected)"
+        case .sampleCountOverflow(let frameCount, let channelCount):
+            "audio sample count overflows frameCount=\(frameCount) channelCount=\(channelCount)"
         case .missingAudioSource(let mediaID):
             "missing audio source \(mediaID)"
         case .unsupportedClipSource(let clipID):

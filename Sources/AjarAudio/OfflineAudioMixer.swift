@@ -39,8 +39,12 @@ public enum OfflineAudioMixer {
             sampleRate: format.sampleRate,
             rounding: .nearestOrAwayFromZero
         )
+        let outputSampleCount = try sampleCount(
+            frameCount: frameCount,
+            channelCount: format.channelCount
+        )
         let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
-        var output = Array(repeating: Float(0), count: frameCount * format.channelCount)
+        var output = Array(repeating: Float(0), count: outputSampleCount)
         var sourceCache: [UUID: AudioSourceBuffer] = [:]
 
         for track in selectedAudioTracks(sequence.audioTracks) {
@@ -69,7 +73,7 @@ private struct OfflineMixFrameContext {
     let format: AudioRenderFormat
 }
 
-private extension OfflineAudioMixer {
+extension OfflineAudioMixer {
     static func selectedAudioTracks(_ tracks: [Track]) -> [Track] {
         let enabledTracks = tracks.filter { track in
             track.kind == .audio && track.enabled && !track.muted
@@ -77,7 +81,9 @@ private extension OfflineAudioMixer {
         let soloTracks = enabledTracks.filter(\.solo)
         return soloTracks.isEmpty ? enabledTracks : soloTracks
     }
+}
 
+private extension OfflineAudioMixer {
     static func mixTrack(
         _ track: Track,
         into output: inout [Float],
@@ -236,6 +242,16 @@ private extension OfflineAudioMixer {
         }
         return Int(value)
     }
+
+    static func sampleCount(frameCount: Int, channelCount: Int) throws -> Int {
+        guard frameCount <= Int.max / channelCount else {
+            throw AudioRenderError.sampleCountOverflow(
+                frameCount: frameCount,
+                channelCount: channelCount
+            )
+        }
+        return frameCount * channelCount
+    }
 }
 
 private extension OfflineAudioMixer {
@@ -285,6 +301,7 @@ private extension OfflineAudioMixer {
     static func clamped(_ value: Double, minimum: Double, maximum: Double) -> Double {
         min(max(value, minimum), maximum)
     }
+
 }
 
 private extension OfflineAudioMixer {
@@ -303,6 +320,15 @@ private extension OfflineAudioMixer {
         if outputChannelCount == 1 {
             return averagedSourceSample(source, framePosition: framePosition)
         }
+        if outputChannelCount == 2, source.format.channelCount == 6 {
+            return downmixedStereoSample(
+                source,
+                framePosition: framePosition,
+                outputChannel: outputChannel
+            )
+        }
+        // Non-5.1 multichannel layouts need layout metadata before a correct downmix.
+        // Until then, preserve the previous deterministic first-channel mapping.
         let channel = min(outputChannel, source.format.channelCount - 1)
         return sourceSample(source, framePosition: framePosition, channel: channel)
     }
@@ -338,6 +364,7 @@ private extension OfflineAudioMixer {
     }
 
     static func panMultiplier(pan: Double, channel: Int, format: AudioRenderFormat) -> Double {
+        // Linear-balance pan law: center is unity on both L/R channels.
         guard format.channelCount >= 2 else {
             return 1
         }
@@ -348,6 +375,46 @@ private extension OfflineAudioMixer {
             return pan < 0 ? 1 + pan : 1
         }
         return 1
+    }
+
+    static func downmixedStereoSample(
+        _ source: AudioSourceBuffer,
+        framePosition: Double,
+        outputChannel: Int
+    ) -> Float {
+        if outputChannel == 0 {
+            return weightedSourceSample(source, framePosition: framePosition, terms: [
+                (channel: 0, gain: 1),
+                (channel: 2, gain: centerDownmixGain),
+                (channel: 4, gain: surroundDownmixGain)
+            ])
+        }
+        return weightedSourceSample(source, framePosition: framePosition, terms: [
+            (channel: 1, gain: 1),
+            (channel: 2, gain: centerDownmixGain),
+            (channel: 5, gain: surroundDownmixGain)
+        ])
+    }
+
+    static func weightedSourceSample(
+        _ source: AudioSourceBuffer,
+        framePosition: Double,
+        terms: [(channel: Int, gain: Float)]
+    ) -> Float {
+        var sum = Float(0)
+        for term in terms where term.channel < source.format.channelCount {
+            sum += sourceSample(source, framePosition: framePosition, channel: term.channel)
+                * term.gain
+        }
+        return sum
+    }
+
+    static var centerDownmixGain: Float {
+        0.70710678
+    }
+
+    static var surroundDownmixGain: Float {
+        0.70710678
     }
 }
 
