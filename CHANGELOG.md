@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added an FR-AUD-007 realtime render-plan handoff in `AjarAudio` using a lock-free atomic
+  slot ring so control-side plan publishes stay off the audio callback path.
 - Hardened FR-AUD-004 ducking with hold-at-reached-level envelope behavior, multi-rule
   multiplicative target coverage, trigger/target order-independence tests, and a ramp-shaped
   golden-audio fixture.
