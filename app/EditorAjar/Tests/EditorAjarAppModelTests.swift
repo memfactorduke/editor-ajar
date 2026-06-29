@@ -14,7 +14,7 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(model.activeSequenceName, "Sample Playback Sequence")
         XCTAssertEqual(model.project?.validate(), .valid)
         XCTAssertEqual(model.frameRateDescription, "30 fps")
-        XCTAssertEqual(model.project?.mediaPool.count, 1)
+        XCTAssertEqual(model.project?.mediaPool.count, 2)
         XCTAssertEqual(model.activeSequence?.videoTracks.count, 2)
         XCTAssertEqual(model.activeSequence?.audioTracks.count, 2)
         XCTAssertGreaterThan(model.durationFrames, 1)
@@ -34,6 +34,41 @@ final class EditorAjarAppModelTests: XCTestCase {
         model.stepBackward()
         model.stepBackward()
         XCTAssertEqual(model.playheadFrame, 0)
+    }
+
+    func testFRAUD007TransportStartsAndStopsLiveAudioWithVideoPlayback() {
+        let audioCoordinator = FakeAudioCoordinator()
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            audioCoordinator: audioCoordinator
+        )
+
+        model.togglePlayback()
+
+        XCTAssertTrue(model.isPlaying)
+        XCTAssertEqual(audioCoordinator.startedFrames, [0])
+        XCTAssertEqual(audioCoordinator.stopCount, 0)
+
+        model.togglePlayback()
+
+        XCTAssertFalse(model.isPlaying)
+        XCTAssertEqual(audioCoordinator.stopCount, 1)
+    }
+
+    func testFRAUD007StepAndScrubRepublishLiveAudioAtVideoPlayhead() {
+        let audioCoordinator = FakeAudioCoordinator()
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            audioCoordinator: audioCoordinator
+        )
+
+        model.scrub(to: 12)
+        model.stepForward()
+        model.stepBackward()
+
+        XCTAssertFalse(model.isPlaying)
+        XCTAssertEqual(audioCoordinator.seekFrames, [12, 13, 12])
+        XCTAssertEqual(audioCoordinator.stopCount, 3)
     }
 
     func testFRPLAY001DisplayLinkAdvancesPlayheadAtSequenceFrameRate() throws {
@@ -948,4 +983,42 @@ private struct SampleLinkedSelection {
     let audioTrackID: UUID
     let videoClip: Clip
     let audioClip: Clip
+}
+
+private final class FakeAudioCoordinator: EditorAjarAudioCoordinating {
+    private(set) var startedFrames: [Int64] = []
+    private(set) var seekFrames: [Int64] = []
+    private(set) var ensuredFrames: [Int64] = []
+    private(set) var stopCount = 0
+
+    func start(
+        project: Project,
+        sequence: Sequence,
+        playheadFrame: Int64,
+        durationFrames: Int64
+    ) throws {
+        startedFrames.append(playheadFrame)
+    }
+
+    func stop() {
+        stopCount += 1
+    }
+
+    func publishSeek(
+        project: Project,
+        sequence: Sequence,
+        playheadFrame: Int64,
+        durationFrames: Int64
+    ) throws {
+        seekFrames.append(playheadFrame)
+    }
+
+    func ensurePlaybackPlan(
+        project: Project,
+        sequence: Sequence,
+        playheadFrame: Int64,
+        durationFrames: Int64
+    ) throws {
+        ensuredFrames.append(playheadFrame)
+    }
 }

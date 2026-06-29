@@ -31,6 +31,8 @@ targets:
         product: AjarRender
       - package: EditorAjarPackage
         product: AjarMedia
+      - package: EditorAjarPackage
+        product: AjarAudio
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
