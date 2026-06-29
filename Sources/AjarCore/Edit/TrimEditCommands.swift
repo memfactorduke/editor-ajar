@@ -51,6 +51,13 @@ extension EditReducer {
         let rightClip: Clip
     }
 
+    struct RollClipRanges {
+        let leftSourceRange: TimeRange
+        let leftTimelineRange: TimeRange
+        let rightSourceRange: TimeRange
+        let rightTimelineRange: TimeRange
+    }
+
     static func bladeClip(_ edit: BladeClipEdit, in project: Project) throws -> Project {
         try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
             var items = track.items
@@ -166,66 +173,19 @@ extension EditReducer {
         try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
             var items = track.items
             let selection = try rollClipSelection(edit, in: items)
-            let leftClip = selection.leftClip
-            let rightClip = selection.rightClip
-
-            let leftEnd = try exactTime { try leftClip.timelineRange.end() }
-            let rightEnd = try exactTime { try rightClip.timelineRange.end() }
-            guard leftEnd == rightClip.timelineRange.start else {
-                throw EditReducerError.invalidEdit(
-                    .clipsNotAdjacent(
-                        leftClipID: edit.leftClipID,
-                        rightClipID: edit.rightClipID
-                    )
-                )
-            }
-            guard edit.editTime > leftClip.timelineRange.start, edit.editTime < rightEnd else {
-                throw EditReducerError.invalidEdit(.nonPositiveDuration(clipID: edit.leftClipID))
-            }
-
-            let leftDuration = try subtractTimes(edit.editTime, leftClip.timelineRange.start)
-            let rightDuration = try subtractTimes(rightEnd, edit.editTime)
-            let rightSourceDelta = try subtractTimes(edit.editTime, rightClip.timelineRange.start)
-            let leftSourceDuration = try speedSourceDuration(
-                clipID: leftClip.id,
-                timelineDuration: leftDuration,
-                speed: leftClip.speed
-            )
-            let rightSourceDuration = try speedSourceDuration(
-                clipID: rightClip.id,
-                timelineDuration: rightDuration,
-                speed: rightClip.speed
-            )
-            let rightSourceStartDelta = try speedSourceDuration(
-                clipID: rightClip.id,
-                timelineDuration: rightSourceDelta,
-                speed: rightClip.speed
-            )
-            let rightSourceStart = try addTimes(
-                rightClip.sourceRange.start,
-                rightSourceStartDelta
-            )
+            let ranges = try rollClipRanges(edit, selection: selection)
             items[selection.leftIndex] = .clip(
                 copying(
-                    leftClip,
-                    sourceRange: try makeRange(
-                        start: leftClip.sourceRange.start,
-                        duration: leftSourceDuration
-                    ),
-                    timelineRange: try makeRange(
-                        start: leftClip.timelineRange.start,
-                        duration: leftDuration
-                    )
+                    selection.leftClip,
+                    sourceRange: ranges.leftSourceRange,
+                    timelineRange: ranges.leftTimelineRange
                 )
             )
             items[selection.rightIndex] = .clip(
                 copying(
-                    rightClip,
-                    sourceRange: try makeRange(
-                        start: rightSourceStart,
-                        duration: rightSourceDuration
-                    ),
-                    timelineRange: try makeRange(start: edit.editTime, duration: rightDuration)
+                    selection.rightClip,
+                    sourceRange: ranges.rightSourceRange,
+                    timelineRange: ranges.rightTimelineRange
                 )
             )
             return copying(track, items: sortedItems(items))
@@ -399,127 +359,5 @@ extension EditReducer {
             items[index] = .gap(clip.timelineRange)
             return copying(track, items: sortedItems(items))
         }
-    }
-}
-
-extension EditReducer {
-    static func validateMatchingDurations(
-        clipID: UUID,
-        sourceRange: TimeRange,
-        timelineRange: TimeRange,
-        speed: RationalValue
-    ) throws {
-        let expectedTimelineDuration = try speedTimelineDuration(
-            clipID: clipID,
-            sourceDuration: sourceRange.duration,
-            speed: speed
-        )
-        guard expectedTimelineDuration == timelineRange.duration else {
-            throw EditReducerError.invalidEdit(
-                .durationMismatch(
-                    clipID: clipID,
-                    sourceDuration: sourceRange.duration,
-                    timelineDuration: timelineRange.duration
-                )
-            )
-        }
-        guard timelineRange.duration > .zero else {
-            throw EditReducerError.invalidEdit(.nonPositiveDuration(clipID: clipID))
-        }
-    }
-
-    static func adjustingItemEnd(_ item: TimelineItem, end: RationalTime) throws -> TimelineItem {
-        let duration = try subtractTimes(end, item.timelineRange.start)
-        switch item {
-        case .clip(let clip):
-            let sourceDuration = try speedSourceDuration(
-                clipID: clip.id,
-                timelineDuration: duration,
-                speed: clip.speed
-            )
-            let sourceRange = try makeRange(
-                start: clip.sourceRange.start,
-                duration: sourceDuration
-            )
-            let timelineRange = try makeRange(
-                start: clip.timelineRange.start,
-                duration: duration
-            )
-            return .clip(
-                copying(
-                    clip,
-                    sourceRange: sourceRange,
-                    timelineRange: timelineRange
-                )
-            )
-        case .gap:
-            return .gap(try makeRange(start: item.timelineRange.start, duration: duration))
-        case .transition(let transition):
-            let timelineRange = try makeRange(
-                start: item.timelineRange.start,
-                duration: duration
-            )
-            return .transition(
-                Transition(
-                    id: transition.id,
-                    timelineRange: timelineRange,
-                    kind: transition.kind,
-                    name: transition.name
-                )
-            )
-        }
-    }
-
-    static func adjustingItemStart(
-        _ item: TimelineItem,
-        start: RationalTime
-    ) throws -> TimelineItem {
-        let itemEnd = try exactTime { try item.timelineRange.end() }
-        let duration = try subtractTimes(itemEnd, start)
-        switch item {
-        case .clip(let clip):
-            let timelineDelta = try subtractTimes(start, clip.timelineRange.start)
-            let sourceDelta = try speedSourceDuration(
-                clipID: clip.id,
-                timelineDuration: timelineDelta,
-                speed: clip.speed
-            )
-            let sourceStart = try addTimes(clip.sourceRange.start, sourceDelta)
-            let sourceDuration = try speedSourceDuration(
-                clipID: clip.id,
-                timelineDuration: duration,
-                speed: clip.speed
-            )
-            return .clip(
-                copying(
-                    clip,
-                    sourceRange: try makeRange(start: sourceStart, duration: sourceDuration),
-                    timelineRange: try makeRange(start: start, duration: duration)
-                )
-            )
-        case .gap:
-            return .gap(try makeRange(start: start, duration: duration))
-        case .transition(let transition):
-            return .transition(
-                Transition(
-                    id: transition.id,
-                    timelineRange: try makeRange(start: start, duration: duration),
-                    kind: transition.kind,
-                    name: transition.name
-                )
-            )
-        }
-    }
-
-    static func addTimes(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
-        try exactTime { try left.adding(right) }
-    }
-
-    static func subtractTimes(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
-        try exactTime { try left.subtracting(right) }
-    }
-
-    static func negatedTime(_ time: RationalTime) throws -> RationalTime {
-        try exactTime { try time.negated() }
     }
 }

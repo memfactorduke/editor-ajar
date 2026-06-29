@@ -237,12 +237,14 @@ public enum RenderGraphBuilder {
             nestingDepth: nestingDepth + 1
         )
         return try RenderNodeFactory.makeCompoundNode(
-            sequenceID: sequenceID,
-            clipID: clip.id,
-            sequenceTime: sequenceTime,
-            speed: clip.speed,
-            graph: graph,
-            colorSpace: project.settings.colorSpace
+            RenderCompoundNodeSpec(
+                sequenceID: sequenceID,
+                clipID: clip.id,
+                sequenceTime: sequenceTime,
+                speed: clip.speed,
+                graph: graph,
+                colorSpace: project.settings.colorSpace
+            )
         )
     }
 

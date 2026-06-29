@@ -393,27 +393,6 @@ enum ProjectValidator {
         }
     }
 
-    private static func validateClipSpeed(
-        _ item: TimelineItem,
-        context: TrackContext,
-        state: inout ValidationState
-    ) {
-        guard case .clip(let clip) = item else {
-            return
-        }
-
-        if let error = Clip.validateSpeed(clip.speed) {
-            state.errors.append(
-                .invalidClipSpeed(
-                    sequenceID: context.sequenceID,
-                    trackID: context.trackID,
-                    clipID: clip.id,
-                    error: error
-                )
-            )
-        }
-    }
-
     private static func validateItemOrder(
         _ item: TimelineItem,
         itemIndex: Int,

@@ -407,33 +407,15 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
     }
 }
 
-/// JSON manifest for one golden-frame case.
 struct GoldenFrameManifest: Codable, Equatable, Sendable {
-    /// Manifest schema version.
     let schemaVersion: Int
-
-    /// Stable case ID.
     let id: String
-
-    /// Requirement IDs or references covered by this golden.
     let requirements: [String]
-
-    /// Frame time passed to `ajar render --frame`.
     let frame: String
-
-    /// Reference PNG path relative to the manifest directory.
     let referencePNG: String
-
-    /// Optional output canvas dimensions. Defaults to the first synthetic clip dimensions.
     let outputDimensions: PixelDimensions?
-
-    /// Legacy single synthetic media source specification.
     let syntheticMedia: SyntheticMovieSpec?
-
-    /// Synthetic clips to stack bottom-to-top.
     let clips: [GoldenFrameClipSpec]?
-
-    /// Comparison tolerance.
     let tolerance: GoldenFrameTolerance
 
     static func load(from url: URL) throws -> GoldenFrameManifest {

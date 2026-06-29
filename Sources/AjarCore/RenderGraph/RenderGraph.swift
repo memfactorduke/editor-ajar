@@ -65,6 +65,15 @@ struct RenderCompositeNodeInput {
     let trackBlendMode: ClipBlendMode
 }
 
+struct RenderCompoundNodeSpec {
+    let sequenceID: UUID
+    let clipID: UUID
+    let sequenceTime: RationalTime
+    let speed: RationalValue
+    let graph: RenderGraph
+    let colorSpace: MediaColorSpace
+}
+
 /// Resolved media source parameters for a source render node.
 public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Stable media reference ID to decode.
@@ -284,31 +293,24 @@ enum RenderNodeFactory {
         )
     }
 
-    static func makeCompoundNode(
-        sequenceID: UUID,
-        clipID: UUID,
-        sequenceTime: RationalTime,
-        speed: RationalValue,
-        graph: RenderGraph,
-        colorSpace: MediaColorSpace
-    ) throws -> RenderNode {
-        guard let outputHash = graph.outputNode?.contentHash else {
-            throw RenderGraphBuildError.missingNestedOutputNode(sequenceID: sequenceID)
+    static func makeCompoundNode(_ spec: RenderCompoundNodeSpec) throws -> RenderNode {
+        guard let outputHash = spec.graph.outputNode?.contentHash else {
+            throw RenderGraphBuildError.missingNestedOutputNode(sequenceID: spec.sequenceID)
         }
         let kind = RenderNodeKind.compound(
             RenderCompoundNode(
-                sequenceID: sequenceID,
-                clipID: clipID,
-                sequenceTime: sequenceTime,
-                speed: speed,
-                graph: graph,
-                colorSpace: colorSpace
+                sequenceID: spec.sequenceID,
+                clipID: spec.clipID,
+                sequenceTime: spec.sequenceTime,
+                speed: spec.speed,
+                graph: spec.graph,
+                colorSpace: spec.colorSpace
             )
         )
         return try makeNode(
-            id: RenderNodeID(rawValue: "compound:\(clipID.uuidString)"),
+            id: RenderNodeID(rawValue: "compound:\(spec.clipID.uuidString)"),
             kind: kind,
-            inputIDs: [graph.outputNodeID],
+            inputIDs: [spec.graph.outputNodeID],
             inputHashes: [outputHash]
         )
     }
