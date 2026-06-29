@@ -1,0 +1,54 @@
+{
+  "id": "ducking-ramp-envelope",
+  "sampleRate": 4,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [1.0, 1.0, 0.0, 0.0]
+    },
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [2.0, 2.0, 2.0, 2.0]
+    }
+  ],
+  "tracks": [
+    {
+      "clips": [
+        {
+          "sourceIndex": 0,
+          "duration": "1"
+        }
+      ]
+    },
+    {
+      "clips": [
+        {
+          "sourceIndex": 1,
+          "duration": "1"
+        }
+      ]
+    }
+  ],
+  "ducking": [
+    {
+      "triggerTrackIndex": 0,
+      "targetTrackIndexes": [1],
+      "threshold": 0.5,
+      "reductionGain": 0.5,
+      "attack": "1/2",
+      "release": "1/2",
+      "hold": "0"
+    }
+  ],
+  "referenceSamples": [
+    2.5, 2.5,
+    2.0, 2.0,
+    1.5, 1.5,
+    2.0, 2.0
+  ]
+}

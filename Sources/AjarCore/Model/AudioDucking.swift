@@ -30,6 +30,9 @@ public enum AudioDuckingTimeParameter: String, Codable, Equatable, Sendable {
 }
 
 /// A deterministic sidechain ducking rule for one trigger audio track and target audio tracks.
+///
+/// Future persisted fields should be optional or decoded with explicit defaults so projects saved
+/// with today's FR-AUD-004 ducking rules keep loading after the model grows.
 public struct AudioDuckingRule: Codable, Equatable, Sendable {
     /// Audio track whose detected level drives the ducking envelope.
     public let triggerTrackID: UUID

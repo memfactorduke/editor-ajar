@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-AUD-004 ducking with hold-at-reached-level envelope behavior, multi-rule
+  multiplicative target coverage, trigger/target order-independence tests, and a ramp-shaped
+  golden-audio fixture.
 - Added deterministic FR-AUD-003 mixer metering in `AjarAudio` with per-track and summed
   master peak/RMS levels, 0 dBFS = 1.0 conversion helpers, Codable reports, and typed
   offline render errors.
