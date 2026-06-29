@@ -34,7 +34,10 @@ extension EditReducer {
 
     static func applyClipCommand(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
-        case .insertClip, .overwriteClip, .appendClip, .replaceClipSource, .threePointEdit:
+        case .insertCompoundClip:
+            return try applyCompoundClipCommand(command, to: project)
+        case .insertClip, .overwriteClip, .appendClip, .replaceClipSource, .threePointEdit,
+            .addClip, .removeClip:
             return try applyCoreClipCommand(command, to: project)
         case .bladeClip, .rippleTrimClip, .rollEdit, .slipClip, .slideClip,
             .rippleDeleteClip, .liftClip:
@@ -51,15 +54,6 @@ extension EditReducer {
             return try applyClipAudioMixCommand(command, to: project)
         case .detachClipAudio, .replaceClipAudioSource:
             return try applyClipAudioSourceCommand(command, to: project)
-        case .addClip(let sequenceID, let trackID, let clip):
-            return try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
-        case .removeClip(let sequenceID, let trackID, let clipID):
-            return try removeClip(
-                clipID: clipID,
-                sequenceID: sequenceID,
-                trackID: trackID,
-                from: project
-            )
         default:
             throw EditReducerError.validationFailed([])
         }
@@ -237,6 +231,15 @@ extension EditReducer {
                 ),
                 in: project
             )
+        case .addClip(let sequenceID, let trackID, let clip):
+            return try addClip(clip, sequenceID: sequenceID, trackID: trackID, to: project)
+        case .removeClip(let sequenceID, let trackID, let clipID):
+            return try removeClip(
+                clipID: clipID,
+                sequenceID: sequenceID,
+                trackID: trackID,
+                from: project
+            )
         default:
             throw EditReducerError.validationFailed([])
         }
@@ -401,6 +404,7 @@ extension EditReducer {
             )
         }
     }
+
 }
 
 extension EditReducer {

@@ -86,7 +86,7 @@ correction (FR-COL-001); **scopes** (FR-COL-003).
 no dropouts during a stress mix.
 **Depends on:** M3 (timeline), parallelizable with M4/M5 after M3.
 
-## M7 — Compound clips, nesting, caching & speed
+## M7 — Compound clips, nesting, caching & speed *(started)*
 
 **Goal:** structure and time control without losing real-time.
 **Delivers:** compound clips: create/open/edit/propagate/decompose, nested with cycle detection
@@ -96,6 +96,11 @@ no dropouts during a stress mix.
 **Exit:** cache correctness + invalidation tests; cached compound playback holds real-time;
 speed-ramp golden-frame tests; soak test stays leak-free (NFR-STAB-005).
 **Depends on:** M4, M5.
+
+**Current status:** M7 is open with the pure `AjarCore` compound source model: clips can reference
+another sequence by ID, resolve its current duration/timebase at query time, and central validation
+rejects direct or transitive compound cycles. Nested render-graph/cache support and retiming remain
+unfinished M7 work.
 
 ## M8 — Titles, effects, transitions & color depth
 

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added the M7 compound-clip core model for FR-TL-013/FR-CMP-001/005 with
+  sequence-backed clip resolution, direct/transitive cycle validation, codec round trips,
+  and an undoable insert-compound command.
 - Added FR-AUD-003 loudness normalization reports that compute deterministic master-gain
   recommendations for target LUFS values, optional true-peak ceilings, sequence rendering,
   peak-limited outcomes, and silent-program typed errors.

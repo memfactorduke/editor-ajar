@@ -26,6 +26,10 @@ drift, deterministic behavior for testing (ADR-0011), and clean serialization (A
 5. **Invariants enforced centrally:** clips on a track never overlap and stay sorted; compound
    clips can't contain themselves (FR-CMP-005); links stay consistent. Violations are programmer
    errors caught by tests, not by crashing on user input.
+6. **Compound clips reference sequences by ID.** The clip stores a `ClipSource.sequence(id:)`
+   reference, not a copy of the nested timeline. Duration and timebase are resolved from the
+   referenced sequence at query time, and the validator rejects direct or transitive cycles before
+   a project can be edited or saved.
 
 ## Consequences
 

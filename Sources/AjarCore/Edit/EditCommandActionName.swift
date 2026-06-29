@@ -18,6 +18,8 @@ public extension EditCommand {
             return "Replace Clip Source"
         case .threePointEdit:
             return "Three-Point Edit"
+        case .insertCompoundClip:
+            return "Insert Compound Clip"
         case .bladeClip:
             return "Blade Clip"
         case .rippleTrimClip:
