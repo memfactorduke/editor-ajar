@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added deterministic FR-AUD-003 mixer metering in `AjarAudio` with per-track and summed
+  master peak/RMS levels, 0 dBFS = 1.0 conversion helpers, Codable reports, and typed
+  offline render errors.
 - Hardened FR-AUD-003/007/009 audio-engine checks with storage-kind-derived realtime safety
   reporting, explicit float master-bus headroom and pan-law documentation, golden-audio
   two-run determinism coverage, and solo/mute/disabled selection tests.
