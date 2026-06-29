@@ -237,7 +237,28 @@ private func makeCoreClipCommandCases(
 ) throws -> [EditCommandCase] {
     try makePlacementClipCommandCases(fixture: fixture, seed: seed)
         + makeReplaceAndThreePointCommandCases(fixture: fixture, seed: seed)
+        + makeMakeCompoundClipCommandCases(fixture: fixture, seed: seed)
         + makeTrimClipCommandCases(fixture: fixture, seed: seed)
+}
+
+private func makeMakeCompoundClipCommandCases(
+    fixture: EditFixture,
+    seed: Int
+) throws -> [EditCommandCase] {
+    [
+        EditCommandCase(
+            project: fixture.project,
+            command: .makeCompoundClip(
+                sequenceID: fixture.sequenceID,
+                compoundSequenceID: try editUUID(seed * 1_000 + 28),
+                compoundClipID: try editUUID(seed * 1_000 + 29),
+                selectedClips: [
+                    ClipReference(trackID: fixture.videoTrackID, clipID: fixture.clipID)
+                ],
+                name: "FR-CMP-001 Compound"
+            )
+        )
+    ]
 }
 
 private func makePlacementClipCommandCases(

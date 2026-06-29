@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added FR-CMP-001 make-compound edit commands that collapse selected timeline clips into a new
+  nested sequence, preserve relative multi-track layout, and route through undo/redo and codec
+  coverage.
 - Hardened FR-TL-013/NFR-QUAL-001 compound rendering with descriptor-aware frame-cache keys,
   half-float nested outputs, a bounded reusable texture pool, leaner compound hash payloads,
   and a more discriminating nested-transform golden fixture.
