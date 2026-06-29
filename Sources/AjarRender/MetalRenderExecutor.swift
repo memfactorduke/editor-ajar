@@ -263,9 +263,12 @@ public final class MetalRenderExecutor {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let library: MTLLibrary
+    private let executorStateLock = NSLock()
     private var pipelineStates: [PipelineStateKey: MTLRenderPipelineState] = [:]
     private var frameCache: [FrameCacheKey: MTLTexture] = [:]
     private var frameCacheAccessOrder: [FrameCacheKey] = []
+    private var cacheHitCountValue = 0
+    private var cacheMissCountValue = 0
     private let texturePoolLock = NSLock()
     private var texturePool: [TextureDescriptorKey: [MTLTexture]] = [:]
     private var texturePoolAccessOrder: [TextureDescriptorKey] = []
@@ -283,7 +286,9 @@ public final class MetalRenderExecutor {
 
     /// Number of content-hash cache entries retained by this executor.
     public var cacheEntryCount: Int {
-        frameCache.count
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        return frameCache.count
     }
 
     /// Number of completed reusable textures retained by this executor.
@@ -301,10 +306,18 @@ public final class MetalRenderExecutor {
     }
 
     /// Number of render calls satisfied by the content-hash cache.
-    public private(set) var cacheHitCount = 0
+    public var cacheHitCount: Int {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        return cacheHitCountValue
+    }
 
     /// Number of render calls that populated the content-hash cache.
-    public private(set) var cacheMissCount = 0
+    public var cacheMissCount: Int {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        return cacheMissCountValue
+    }
 
     /// Creates an executor with the default Metal device.
     public convenience init() throws {
@@ -350,7 +363,7 @@ public final class MetalRenderExecutor {
         let outputNode = try outputNode(in: graph)
         let cacheKey = FrameCacheKey(contentHash: outputNode.contentHash, output: output)
         if let cachedTexture = cachedTexture(for: cacheKey) {
-            cacheHitCount += 1
+            recordCacheHit()
             return RenderedFrame(
                 texture: cachedTexture,
                 contentHash: outputNode.contentHash,
@@ -372,7 +385,7 @@ public final class MetalRenderExecutor {
             commandBuffer: commandBuffer,
             sourceProvider: sourceProvider
         )
-        cacheMissCount += 1
+        recordCacheMiss()
         storeCachedTexture(texture, for: cacheKey)
         recycleReusableTextures(schedule.reusableTextures, after: commandBuffer)
         commandBuffer.commit()
@@ -391,32 +404,50 @@ public final class MetalRenderExecutor {
 
     /// Removes all cached frame textures.
     public func removeAllCachedFrames() {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
         frameCache.removeAll()
         frameCacheAccessOrder.removeAll()
-        cacheHitCount = 0
-        cacheMissCount = 0
+        cacheHitCountValue = 0
+        cacheMissCountValue = 0
+    }
+
+    private func recordCacheHit() {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        cacheHitCountValue += 1
+    }
+
+    private func recordCacheMiss() {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        cacheMissCountValue += 1
     }
 
     private func cachedTexture(for key: FrameCacheKey) -> MTLTexture? {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
         guard let texture = frameCache[key] else {
             return nil
         }
-        markCacheEntryUsed(key)
+        markCacheEntryUsedLocked(key)
         return texture
     }
 
     private func storeCachedTexture(_ texture: MTLTexture, for key: FrameCacheKey) {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
         frameCache[key] = texture
-        markCacheEntryUsed(key)
-        evictExpiredCacheEntries()
+        markCacheEntryUsedLocked(key)
+        evictExpiredCacheEntriesLocked()
     }
 
-    private func markCacheEntryUsed(_ key: FrameCacheKey) {
+    private func markCacheEntryUsedLocked(_ key: FrameCacheKey) {
         frameCacheAccessOrder.removeAll { $0 == key }
         frameCacheAccessOrder.append(key)
     }
 
-    private func evictExpiredCacheEntries() {
+    private func evictExpiredCacheEntriesLocked() {
         while frameCacheAccessOrder.count > maximumCacheEntryCount {
             let expiredKey = frameCacheAccessOrder.removeFirst()
             frameCache.removeValue(forKey: expiredKey)
@@ -862,7 +893,7 @@ public final class MetalRenderExecutor {
             fragmentFunctionName: fragmentFunctionName,
             pixelFormatRawValue: pixelFormat.rawValue
         )
-        if let pipelineState = pipelineStates[key] {
+        if let pipelineState = cachedPipelineState(for: key) {
             return pipelineState
         }
 
@@ -881,11 +912,31 @@ public final class MetalRenderExecutor {
 
         do {
             let pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
-            pipelineStates[key] = pipelineState
-            return pipelineState
+            return storePipelineState(pipelineState, for: key)
         } catch {
             throw MetalRenderError.pipelineCreationFailed(String(describing: error))
         }
+    }
+
+    private func cachedPipelineState(for key: PipelineStateKey) -> MTLRenderPipelineState? {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        return pipelineStates[key]
+    }
+
+    private func storePipelineState(
+        _ pipelineState: MTLRenderPipelineState,
+        for key: PipelineStateKey
+    ) -> MTLRenderPipelineState {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+
+        if let existingPipelineState = pipelineStates[key] {
+            return existingPipelineState
+        }
+
+        pipelineStates[key] = pipelineState
+        return pipelineState
     }
 
     private func uniforms(

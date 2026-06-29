@@ -481,6 +481,40 @@ final class MetalRenderExecutorCompoundTests: XCTestCase {
         XCTAssertEqual(executor.texturePoolEntryCount, 2)
         XCTAssertGreaterThanOrEqual(executor.texturePoolHitCount, poolHitsAfterFirstRender + 2)
     }
+
+    func testNFRSTAB003ConcurrentCompoundRendersSynchronizeExecutorState() throws {
+        let device = try metalDeviceOrSkip()
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 2,
+            height: 2,
+            bgraPixels: repeatedBGRA([255, 0, 0, 255], count: 4)
+        )
+        let executor = try MetalRenderExecutor(
+            device: device,
+            maximumCacheEntryCount: 3,
+            maximumPooledTextureCount: 4
+        )
+        let provider = ConstantSourceTextureProvider(texture: sourceTexture)
+        let stressResult = runConcurrentCompoundRenderStress(
+            executor: executor,
+            graphs: try makeConcurrentCompoundStressGraphs(),
+            outputs: concurrentCompoundStressOutputs(),
+            sourceProvider: provider
+        )
+
+        XCTAssertTrue(stressResult.completed)
+        guard stressResult.completed else {
+            return
+        }
+
+        XCTAssertTrue(
+            stressResult.failureMessages.isEmpty,
+            stressResult.failureMessages.joined(separator: "\n")
+        )
+        XCTAssertLessThanOrEqual(executor.cacheEntryCount, 3)
+        XCTAssertGreaterThan(executor.cacheMissCount, 0)
+    }
 }
 
 final class MetalRenderExecutorCacheTests: XCTestCase {
@@ -648,6 +682,162 @@ private final class ClipTextureProvider: RenderSourceTextureProvider {
             throw TestTextureError.metalTextureUnavailable
         }
         return texture
+    }
+}
+
+private final class ConstantSourceTextureProvider: RenderSourceTextureProvider {
+    private let sourceTexture: MTLTexture
+
+    init(texture: MTLTexture) {
+        sourceTexture = texture
+    }
+
+    func texture(for _: RenderSourceNode) throws -> MTLTexture {
+        sourceTexture
+    }
+}
+
+private struct ConcurrentRenderStressResult {
+    var completed: Bool
+    var failureMessages: [String]
+}
+
+private func makeConcurrentCompoundStressGraphs() throws -> [RenderGraph] {
+    try [
+        makeCompoundClipGraph(),
+        makeCompoundClipGraph(
+            compoundTransform: ClipTransform(
+                position: CanvasPoint(x: RationalValue(1), y: .zero)
+            )
+        ),
+        makeCompoundClipGraph(innerSourceStartFrame: 1)
+    ]
+}
+
+private func concurrentCompoundStressOutputs() -> [RenderOutputDescriptor] {
+    [
+        RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 2, height: 2)),
+        RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 3, height: 2)),
+        RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 2, height: 3))
+    ]
+}
+
+private struct ConcurrentRenderStressContext {
+    var executor: MetalRenderExecutor
+    var graphs: [RenderGraph]
+    var outputs: [RenderOutputDescriptor]
+    var sourceProvider: any RenderSourceTextureProvider
+}
+
+private func runConcurrentCompoundRenderStress(
+    executor: MetalRenderExecutor,
+    graphs: [RenderGraph],
+    outputs: [RenderOutputDescriptor],
+    sourceProvider: any RenderSourceTextureProvider
+) -> ConcurrentRenderStressResult {
+    let workerCount = 8
+    let iterationCount = 12
+    let context = ConcurrentRenderStressContext(
+        executor: executor,
+        graphs: graphs,
+        outputs: outputs,
+        sourceProvider: sourceProvider
+    )
+    let startGate = DispatchSemaphore(value: 0)
+    let group = DispatchGroup()
+    let failureRecorder = ConcurrentStressFailureRecorder()
+    let queue = DispatchQueue(
+        label: "MetalRenderExecutor.concurrentCompoundStress",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+
+    for workerIndex in 0..<workerCount {
+        group.enter()
+        queue.async {
+            startGate.wait()
+            runConcurrentCompoundRenderStressWorker(
+                workerIndex: workerIndex,
+                iterationCount: iterationCount,
+                context: context,
+                failureRecorder: failureRecorder
+            )
+            group.leave()
+        }
+    }
+
+    for _ in 0..<workerCount {
+        startGate.signal()
+    }
+
+    return ConcurrentRenderStressResult(
+        completed: group.wait(timeout: .now() + .seconds(30)) == .success,
+        failureMessages: failureRecorder.messages()
+    )
+}
+
+private func runConcurrentCompoundRenderStressWorker(
+    workerIndex: Int,
+    iterationCount: Int,
+    context: ConcurrentRenderStressContext,
+    failureRecorder: ConcurrentStressFailureRecorder
+) {
+    for iteration in 0..<iterationCount {
+        if let message = concurrentRenderFailureMessage(
+            workerIndex: workerIndex,
+            iteration: iteration,
+            context: context
+        ) {
+            failureRecorder.append(message)
+        }
+    }
+}
+
+private func concurrentRenderFailureMessage(
+    workerIndex: Int,
+    iteration: Int,
+    context: ConcurrentRenderStressContext
+) -> String? {
+    let graph = context.graphs[(workerIndex + iteration) % context.graphs.count]
+    let output = context.outputs[(workerIndex + iteration) % context.outputs.count]
+
+    do {
+        let frame = try context.executor.render(
+            graph: graph,
+            output: output,
+            sourceProvider: context.sourceProvider
+        )
+        guard let commandBuffer = frame.commandBuffer else {
+            return nil
+        }
+
+        commandBuffer.waitUntilCompleted()
+        if let error = commandBuffer.error {
+            return "worker \(workerIndex) iteration \(iteration) failed: \(error)"
+        }
+        guard commandBuffer.status == .completed else {
+            return "worker \(workerIndex) iteration \(iteration) ended with \(commandBuffer.status)"
+        }
+        return nil
+    } catch {
+        return "worker \(workerIndex) iteration \(iteration) threw: \(error)"
+    }
+}
+
+private final class ConcurrentStressFailureRecorder {
+    private let lock = NSLock()
+    private var recordedMessages: [String] = []
+
+    func append(_ message: String) {
+        lock.lock()
+        recordedMessages.append(message)
+        lock.unlock()
+    }
+
+    func messages() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedMessages
     }
 }
 
