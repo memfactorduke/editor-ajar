@@ -39,11 +39,7 @@ public enum ProjectValidationError: Equatable, Sendable {
     )
 
     /// Track audio gain or pan is outside the supported range.
-    case invalidTrackAudioMix(
-        sequenceID: UUID,
-        trackID: UUID,
-        error: AudioMixValidationError
-    )
+    case invalidTrackAudioMix(sequenceID: UUID, trackID: UUID, error: AudioMixValidationError)
 
     /// Timeline items are not sorted by start time.
     case itemsNotSorted(sequenceID: UUID, trackID: UUID, previousIndex: Int, itemIndex: Int)
@@ -112,11 +108,11 @@ public enum ProjectValidationError: Equatable, Sendable {
 
     /// A clip audio mix is outside the supported range.
     case invalidClipAudioMix(
-        sequenceID: UUID,
-        trackID: UUID,
-        clipID: UUID,
-        error: AudioMixValidationError
+        sequenceID: UUID, trackID: UUID, clipID: UUID, error: AudioMixValidationError
     )
+
+    /// A sequence ducking rule is outside the supported range or references invalid tracks.
+    case invalidAudioDucking(sequenceID: UUID, ruleIndex: Int, error: AudioDuckingValidationError)
 }
 
 enum ProjectValidator {
@@ -167,6 +163,7 @@ enum ProjectValidator {
                 state: &state
             )
             validateMarkers(in: sequence, state: &state)
+            validateAudioDucking(in: sequence, state: &state)
         }
 
         if state.errors.isEmpty {

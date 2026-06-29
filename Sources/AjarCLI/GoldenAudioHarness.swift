@@ -161,7 +161,9 @@ private extension GoldenAudioHarness {
         workingDirectory: URL
     ) throws -> Project {
         let media = try makeMedia(manifest: manifest, workingDirectory: workingDirectory)
-        let tracks = try makeTracks(manifest: manifest, media: media)
+        let trackSpecs = try manifest.trackSpecs()
+        let trackIDs = try makeTrackIDs(count: trackSpecs.count)
+        let tracks = try makeTracks(trackSpecs: trackSpecs, trackIDs: trackIDs, media: media)
         let frameRate = try FrameRate(frames: Int64(manifest.sampleRate))
         let sequence = Sequence(
             id: try numberedUUID(72_100),
@@ -169,6 +171,7 @@ private extension GoldenAudioHarness {
             videoTracks: [],
             audioTracks: tracks,
             markers: [],
+            audioDucking: try manifest.audioDuckingRules(trackIDs: trackIDs),
             timebase: frameRate
         )
 
@@ -201,11 +204,15 @@ private extension GoldenAudioHarness {
         }
     }
 
+    static func makeTrackIDs(count: Int) throws -> [UUID] {
+        try (0..<count).map { try numberedUUID(72_200 + $0) }
+    }
+
     static func makeTracks(
-        manifest: GoldenAudioManifest,
+        trackSpecs: [GoldenAudioTrackSpec],
+        trackIDs: [UUID],
         media: [MediaRef]
     ) throws -> [Track] {
-        let trackSpecs = try manifest.trackSpecs()
         return try trackSpecs.enumerated().map { trackIndex, trackSpec in
             let clips = try makeClips(
                 trackSpec.clips,
@@ -213,7 +220,7 @@ private extension GoldenAudioHarness {
                 media: media
             )
             return trackSpec.track(
-                id: try numberedUUID(72_200 + trackIndex),
+                id: trackIDs[trackIndex],
                 items: clips.map { .clip($0) }
             )
         }

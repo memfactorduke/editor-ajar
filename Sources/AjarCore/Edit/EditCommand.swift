@@ -287,6 +287,12 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Renames a sequence.
     case renameSequence(sequenceID: UUID, name: String)
 
+    /// Replaces sequence-level sidechain ducking rules.
+    case setSequenceAudioDucking(sequenceID: UUID, ducking: [AudioDuckingRule])
+
+    /// Clears sequence-level sidechain ducking rules.
+    case clearSequenceAudioDucking(sequenceID: UUID)
+
     /// Adds a marker to a sequence.
     case addMarker(sequenceID: UUID, marker: Marker)
 
@@ -426,6 +432,13 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A track audio mix failed semantic validation.
     case invalidTrackAudioMix(trackID: UUID, error: AudioMixValidationError)
+
+    /// A sequence ducking rule failed semantic validation.
+    case invalidAudioDucking(
+        sequenceID: UUID,
+        ruleIndex: Int,
+        error: AudioDuckingValidationError
+    )
 
     /// Detaching audio requires the clip to be part of a linked A/V group.
     case detachAudioRequiresLinkedAudio(clipID: UUID)

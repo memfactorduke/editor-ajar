@@ -90,6 +90,10 @@ public extension EditCommand {
             return "Duplicate Sequence"
         case .renameSequence:
             return "Rename Sequence"
+        case .setSequenceAudioDucking:
+            return "Set Audio Ducking"
+        case .clearSequenceAudioDucking:
+            return "Clear Audio Ducking"
         case .addMarker:
             return "Add Marker"
         case .removeMarker:

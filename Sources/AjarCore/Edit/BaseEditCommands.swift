@@ -438,7 +438,8 @@ extension EditReducer {
         name: String? = nil,
         videoTracks: [Track]? = nil,
         audioTracks: [Track]? = nil,
-        markers: [Marker]? = nil
+        markers: [Marker]? = nil,
+        audioDucking: [AudioDuckingRule]? = nil
     ) -> Sequence {
         Sequence(
             id: sequence.id,
@@ -446,6 +447,7 @@ extension EditReducer {
             videoTracks: videoTracks ?? sequence.videoTracks,
             audioTracks: audioTracks ?? sequence.audioTracks,
             markers: markers ?? sequence.markers,
+            audioDucking: audioDucking ?? sequence.audioDucking,
             timebase: sequence.timebase
         )
     }

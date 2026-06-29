@@ -75,13 +75,17 @@ func makeSequence(items: [TimelineItem]) throws -> Sequence {
     try makeSequence(tracks: [makeTrack(items: items)])
 }
 
-func makeSequence(tracks: [Track]) throws -> Sequence {
+func makeSequence(
+    tracks: [Track],
+    audioDucking: [AudioDuckingRule] = []
+) throws -> Sequence {
     Sequence(
         id: try uuid("00000000-0000-0000-0000-000000085401"),
         name: "Audio Mix",
         videoTracks: [],
         audioTracks: tracks,
         markers: [],
+        audioDucking: audioDucking,
         timebase: try FrameRate(frames: 4)
     )
 }
