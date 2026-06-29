@@ -143,6 +143,9 @@ final class AjarCommandTests: XCTestCase {
         XCTAssertTrue(firstOutput.lines.contains { line in
             line.contains("PASS ducking-sidechain")
         })
+        XCTAssertTrue(firstOutput.lines.contains { line in
+            line.contains("PASS ducking-ramp-envelope")
+        })
         XCTAssertTrue(firstOutput.lines.contains { line in line.contains("PASS gain-pan-fade") })
         XCTAssertTrue(firstOutput.lines.contains { line in
             line.contains("PASS multi-track-summing")

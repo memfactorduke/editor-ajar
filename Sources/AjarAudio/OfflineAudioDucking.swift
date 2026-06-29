@@ -166,6 +166,8 @@ extension OfflineAudioMixer {
                 * panMultiplier(pan: pan, channel: outputChannel, format: frame.mix.format)
             peak = max(peak, panned * gain)
         }
+        // FR-AUD-004 sidechain detection is a peak detector: overlapping trigger clips use the
+        // loudest per-frame contribution rather than summing into a bus-level trigger.
         levels[frame.outputFrame] = max(levels[frame.outputFrame], peak)
     }
 
@@ -191,7 +193,6 @@ extension OfflineAudioMixer {
                 duckingAmount = rampUp(duckingAmount, attackFrames: attackFrames)
             } else if holdRemaining > 0 {
                 holdRemaining -= 1
-                duckingAmount = 1
             } else {
                 duckingAmount = rampDown(duckingAmount, releaseFrames: releaseFrames)
             }
