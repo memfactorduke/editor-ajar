@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AjarAudio
 import AjarCore
+import Foundation
 import XCTest
 
 @testable import EditorAjar
@@ -55,7 +57,7 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(audioCoordinator.stopCount, 1)
     }
 
-    func testFRAUD007StepAndScrubRepublishLiveAudioAtVideoPlayhead() {
+    func testFRPLAY003StepAndScrubDoNotRepublishLiveAudioWhilePaused() {
         let audioCoordinator = FakeAudioCoordinator()
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
@@ -67,8 +69,51 @@ final class EditorAjarAppModelTests: XCTestCase {
         model.stepBackward()
 
         XCTAssertFalse(model.isPlaying)
-        XCTAssertEqual(audioCoordinator.seekFrames, [12, 13, 12])
+        XCTAssertEqual(audioCoordinator.seekFrames, [])
         XCTAssertEqual(audioCoordinator.stopCount, 3)
+    }
+
+    func testFRAUD007CoordinatorRefillsLiveAudioAtPlaybackWindowMargin() throws {
+        let driver = FakeAudioOutputDriver()
+        let coordinator = EditorAjarLiveAudioCoordinator(driver: driver)
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+        let durationFrames = try Self.durationFrames(for: sequence)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: durationFrames
+        )
+        coordinator.drainPendingRendersForTesting()
+
+        XCTAssertEqual(driver.startCount, 1)
+        XCTAssertEqual(driver.publishCount, 1)
+        XCTAssertEqual(driver.publishedFrameCounts, [96_000])
+        XCTAssertEqual(driver.publishWasOnMainThread, [false])
+
+        try coordinator.ensurePlaybackPlan(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 29,
+            durationFrames: durationFrames
+        )
+        coordinator.drainPendingRendersForTesting()
+
+        XCTAssertEqual(driver.publishCount, 1)
+
+        try coordinator.ensurePlaybackPlan(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 30,
+            durationFrames: durationFrames
+        )
+        coordinator.drainPendingRendersForTesting()
+
+        XCTAssertEqual(driver.publishCount, 2)
+        XCTAssertEqual(driver.publishedFrameCounts, [96_000, 96_000])
+        XCTAssertEqual(driver.publishWasOnMainThread, [false, false])
     }
 
     func testFRPLAY001DisplayLinkAdvancesPlayheadAtSequenceFrameRate() throws {
@@ -975,6 +1020,25 @@ final class EditorAjarAppModelTests: XCTestCase {
             line: line
         )
     }
+
+    private static func durationFrames(for sequence: Sequence) throws -> Int64 {
+        var endFrame: Int64 = 1
+        for track in sequence.videoTracks + sequence.audioTracks {
+            for item in track.items {
+                guard case .clip(let clip) = item else {
+                    continue
+                }
+                endFrame = max(
+                    endFrame,
+                    try clip.timelineRange.end().frameIndex(
+                        at: sequence.timebase,
+                        rounding: .nearestOrAwayFromZero
+                    )
+                )
+            }
+        }
+        return endFrame
+    }
 }
 
 private struct SampleLinkedSelection {
@@ -1020,5 +1084,33 @@ private final class FakeAudioCoordinator: EditorAjarAudioCoordinating {
         durationFrames: Int64
     ) throws {
         ensuredFrames.append(playheadFrame)
+    }
+}
+
+private final class FakeAudioOutputDriver: EditorAjarAudioOutputDriving {
+    private(set) var publishedFrameCounts: [Int] = []
+    private(set) var publishWasOnMainThread: [Bool] = []
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+
+    var publishCount: Int {
+        publishedFrameCounts.count
+    }
+
+    func publish(_ plan: RealtimeAudioRenderPlan) throws {
+        publishedFrameCounts.append(plan.safetyReport().preparedFrameCount)
+        publishWasOnMainThread.append(Thread.isMainThread)
+    }
+
+    func start() throws {
+        startCount += 1
+    }
+
+    func stop() {
+        stopCount += 1
+    }
+
+    func safetyReport() -> RealtimeAudioSafetyReport? {
+        nil
     }
 }

@@ -8,12 +8,17 @@ public enum LiveAudioOutputDriverError: Error, Equatable, Sendable, CustomString
     /// The requested PCM format cannot be represented by AVAudioEngine.
     case unsupportedFormat(sampleRate: Int, channelCount: Int)
 
+    /// A published render plan does not match the configured device channel count.
+    case channelCountMismatch(expected: Int, actual: Int)
+
     /// A human-readable description.
     public var description: String {
         switch self {
         case .unsupportedFormat(let sampleRate, let channelCount):
             "unsupported live audio output format sampleRate=\(sampleRate) "
                 + "channelCount=\(channelCount)"
+        case .channelCountMismatch(let expected, let actual):
+            "live audio plan channelCount=\(actual) does not match output channelCount=\(expected)"
         }
     }
 }
@@ -77,6 +82,12 @@ public final class LiveAudioOutputDriver: @unchecked Sendable {
 
     /// Publishes a fully prepared render plan from the control side.
     public func publish(_ plan: RealtimeAudioRenderPlan) throws {
+        guard plan.format.channelCount == channelCount else {
+            throw LiveAudioOutputDriverError.channelCountMismatch(
+                expected: channelCount,
+                actual: plan.format.channelCount
+            )
+        }
         try handoff.publish(plan)
     }
 
@@ -105,6 +116,19 @@ public final class LiveAudioOutputDriver: @unchecked Sendable {
     @discardableResult
     public func renderForTesting(into output: UnsafeMutableBufferPointer<Float>) -> Int {
         Self.renderInterleavedOutput(handoff: handoff, output: output)
+    }
+
+    /// Test hook for the non-interleaved render-block body without opening the hardware device.
+    @discardableResult
+    public func renderNonInterleavedForTesting(
+        audioBufferList: UnsafeMutablePointer<AudioBufferList>,
+        frameCount: Int
+    ) -> Int {
+        Self.renderNonInterleavedOutput(
+            handoff: handoff,
+            audioBufferList: audioBufferList,
+            frameCount: frameCount
+        )
     }
 
     private static func renderCallback(

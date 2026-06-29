@@ -43,10 +43,19 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
     private static let refillMarginSeconds: Int64 = 1
 
     private let driver: any EditorAjarAudioOutputDriving
+    private let renderQueue: DispatchQueue
     private var publishedRange: Range<Int64>?
+    private var pendingRange: Range<Int64>?
 
-    init(driver: any EditorAjarAudioOutputDriving) {
+    init(
+        driver: any EditorAjarAudioOutputDriving,
+        renderQueue: DispatchQueue = DispatchQueue(
+            label: "org.editorajar.live-audio-coordinator.render",
+            qos: .userInitiated
+        )
+    ) {
         self.driver = driver
+        self.renderQueue = renderQueue
     }
 
     convenience init() throws {
@@ -59,11 +68,12 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         playheadFrame: Int64,
         durationFrames: Int64
     ) throws {
-        try publishPlan(
+        try enqueuePlan(
             project: project,
             sequence: sequence,
             playheadFrame: playheadFrame,
-            durationFrames: durationFrames
+            durationFrames: durationFrames,
+            force: true
         )
         try driver.start()
     }
@@ -78,11 +88,12 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         playheadFrame: Int64,
         durationFrames: Int64
     ) throws {
-        try publishPlan(
+        try enqueuePlan(
             project: project,
             sequence: sequence,
             playheadFrame: playheadFrame,
-            durationFrames: durationFrames
+            durationFrames: durationFrames,
+            force: true
         )
     }
 
@@ -92,17 +103,24 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         playheadFrame: Int64,
         durationFrames: Int64
     ) throws {
-        if shouldPublishPlan(playheadFrame: playheadFrame, sequence: sequence) {
-            try publishPlan(
-                project: project,
-                sequence: sequence,
-                playheadFrame: playheadFrame,
-                durationFrames: durationFrames
-            )
-        }
+        try enqueuePlan(
+            project: project,
+            sequence: sequence,
+            playheadFrame: playheadFrame,
+            durationFrames: durationFrames,
+            force: false
+        )
+    }
+
+    func drainPendingRendersForTesting() {
+        renderQueue.sync {}
     }
 
     private func shouldPublishPlan(playheadFrame: Int64, sequence: Sequence) -> Bool {
+        if let pendingRange, pendingRange.contains(playheadFrame) {
+            return false
+        }
+
         guard let publishedRange else {
             return true
         }
@@ -114,12 +132,56 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         return publishedRange.upperBound - playheadFrame <= refillMargin
     }
 
-    private func publishPlan(
+    private func enqueuePlan(
+        project: Project,
+        sequence: Sequence,
+        playheadFrame: Int64,
+        durationFrames: Int64,
+        force: Bool
+    ) throws {
+        let request = try Self.renderRequest(
+            project: project,
+            sequence: sequence,
+            playheadFrame: playheadFrame,
+            durationFrames: durationFrames
+        )
+
+        renderQueue.async { [weak self] in
+            guard let self else {
+                return
+            }
+            guard force || self.shouldPublishPlan(
+                playheadFrame: request.playheadFrame,
+                sequence: sequence
+            ) else {
+                return
+            }
+
+            self.pendingRange = request.publishRange
+            defer {
+                self.pendingRange = nil
+            }
+
+            do {
+                let buffer = try Self.renderBuffer(
+                    project: project,
+                    sequence: sequence,
+                    range: request.renderRange
+                )
+                try self.driver.publish(RealtimeAudioRenderPlan(buffer: buffer))
+                self.publishedRange = request.publishRange
+            } catch {
+                self.publishedRange = nil
+            }
+        }
+    }
+
+    private static func renderRequest(
         project: Project,
         sequence: Sequence,
         playheadFrame: Int64,
         durationFrames: Int64
-    ) throws {
+    ) throws -> LiveAudioRenderRequest {
         let boundedPlayheadFrame = max(0, min(playheadFrame, max(0, durationFrames - 1)))
         let windowFrames = Self.windowFrames(
             from: boundedPlayheadFrame,
@@ -130,10 +192,18 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
             start: RationalTime.atFrame(boundedPlayheadFrame, frameRate: sequence.timebase),
             duration: sequence.timebase.duration(ofFrames: windowFrames)
         )
-        let buffer = try Self.renderBuffer(project: project, sequence: sequence, range: range)
 
-        try driver.publish(RealtimeAudioRenderPlan(buffer: buffer))
-        publishedRange = boundedPlayheadFrame..<(boundedPlayheadFrame + windowFrames)
+        return LiveAudioRenderRequest(
+            playheadFrame: boundedPlayheadFrame,
+            renderRange: range,
+            publishRange: boundedPlayheadFrame..<(boundedPlayheadFrame + windowFrames)
+        )
+    }
+
+    private struct LiveAudioRenderRequest {
+        let playheadFrame: Int64
+        let renderRange: TimeRange
+        let publishRange: Range<Int64>
     }
 
     private static func renderBuffer(
@@ -141,7 +211,11 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         sequence: Sequence,
         range: TimeRange
     ) throws -> RenderedAudioBuffer {
-        let provider = EditorAjarProjectAudioSourceProvider(project: project)
+        let provider = try EditorAjarProjectAudioSourceProvider(
+            project: project,
+            sequence: sequence,
+            range: range
+        )
         do {
             return try OfflineAudioMixer.render(
                 project: project,
@@ -171,7 +245,23 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         sampleRate: Int
     ) throws -> Int {
         let sampleFrames = try duration.value(atTimescale: Int64(sampleRate))
+        guard sampleFrames <= Int64(Int.max) else {
+            throw AudioRenderError.timeArithmetic("sample frame count \(sampleFrames) is out of range")
+        }
         return max(0, Int(sampleFrames))
+    }
+
+    fileprivate static func sampleFrameIndex(
+        for time: RationalTime,
+        sampleRate: Int,
+        rounding: FrameRoundingRule
+    ) throws -> Int {
+        let rate = try FrameRate(frames: Int64(sampleRate))
+        let value = try time.frameIndex(at: rate, rounding: rounding)
+        guard value >= 0, value <= Int64(Int.max) else {
+            throw AudioRenderError.timeArithmetic("sample index \(value) is out of range")
+        }
+        return Int(value)
     }
 
     private static func windowFrames(
@@ -194,6 +284,16 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
 
 private struct EditorAjarProjectAudioSourceProvider: AudioSourceProvider {
     let project: Project
+    let sourceWindowsByMediaID: [UUID: Range<Int>]
+
+    init(project: Project, sequence: Sequence, range: TimeRange) throws {
+        self.project = project
+        sourceWindowsByMediaID = try Self.sourceWindowsByMediaID(
+            project: project,
+            sequence: sequence,
+            range: range
+        )
+    }
 
     func audioSource(for mediaID: UUID) throws -> AudioSourceBuffer {
         guard let media = project.mediaPool.first(where: { $0.id == mediaID }),
@@ -206,24 +306,98 @@ private struct EditorAjarProjectAudioSourceProvider: AudioSourceProvider {
         return try Self.sampleToneSource(
             media: media,
             channelCount: layout.channelCount,
-            sampleRate: project.settings.audioSampleRate
+            sampleRate: project.settings.audioSampleRate,
+            sourceWindow: sourceWindowsByMediaID[mediaID]
         )
+    }
+
+    private static func sourceWindowsByMediaID(
+        project: Project,
+        sequence: Sequence,
+        range: TimeRange
+    ) throws -> [UUID: Range<Int>] {
+        var windows: [UUID: Range<Int>] = [:]
+        let sampleRate = project.settings.audioSampleRate
+        let renderEnd = try range.end()
+        var mediaByID: [UUID: MediaRef] = [:]
+        for media in project.mediaPool {
+            mediaByID[media.id] = media
+        }
+
+        for track in selectedAudioTracks(sequence.audioTracks) {
+            for item in track.items {
+                guard case .clip(let clip) = item,
+                      clip.kind == .audio,
+                      case .media(let mediaID) = clip.source,
+                      mediaByID[mediaID]?.metadata.codecID
+                        == EditorAjarSampleProjectFactory.sampleToneCodecID
+                else {
+                    continue
+                }
+
+                let clipEnd = try clip.timelineRange.end()
+                let intersectionStart = max(clip.timelineRange.start, range.start)
+                let intersectionEnd = min(clipEnd, renderEnd)
+                guard intersectionStart < intersectionEnd else {
+                    continue
+                }
+
+                let sourceStartOffset = try intersectionStart.subtracting(clip.timelineRange.start)
+                let sourceEndOffset = try intersectionEnd.subtracting(clip.timelineRange.start)
+                let sourceStart = try clip.sourceRange.start.adding(sourceStartOffset)
+                let sourceEnd = try clip.sourceRange.start.adding(sourceEndOffset)
+                let startFrame = try EditorAjarLiveAudioCoordinator.sampleFrameIndex(
+                    for: sourceStart,
+                    sampleRate: sampleRate,
+                    rounding: .down
+                )
+                let endFrame = try EditorAjarLiveAudioCoordinator.sampleFrameIndex(
+                    for: sourceEnd,
+                    sampleRate: sampleRate,
+                    rounding: .up
+                )
+                let sourceWindow = startFrame..<max(startFrame, endFrame + 1)
+                if let existing = windows[mediaID] {
+                    let lowerBound = min(existing.lowerBound, sourceWindow.lowerBound)
+                    let upperBound = max(existing.upperBound, sourceWindow.upperBound)
+                    windows[mediaID] = lowerBound..<upperBound
+                } else {
+                    windows[mediaID] = sourceWindow
+                }
+            }
+        }
+
+        return windows
+    }
+
+    private static func selectedAudioTracks(_ tracks: [Track]) -> [Track] {
+        let enabledTracks = tracks.filter { track in
+            track.kind == .audio && track.enabled && !track.muted
+        }
+        let soloTracks = enabledTracks.filter(\.solo)
+        return soloTracks.isEmpty ? enabledTracks : soloTracks
     }
 
     private static func sampleToneSource(
         media: MediaRef,
         channelCount: Int,
-        sampleRate: Int
+        sampleRate: Int,
+        sourceWindow: Range<Int>?
     ) throws -> AudioSourceBuffer {
-        let frameCount = try EditorAjarLiveAudioCoordinator.sampleFrameCount(
+        let mediaFrameCount = try EditorAjarLiveAudioCoordinator.sampleFrameCount(
             for: media.metadata.duration,
             sampleRate: sampleRate
         )
+        let requestedWindow = sourceWindow ?? 0..<mediaFrameCount
+        let frameOffset = min(max(0, requestedWindow.lowerBound), mediaFrameCount)
+        let upperBound = min(max(frameOffset, requestedWindow.upperBound), mediaFrameCount)
+        let frameCount = upperBound - frameOffset
         var samples: [Float] = []
         samples.reserveCapacity(frameCount * channelCount)
 
         for frame in 0..<frameCount {
-            let phase = 2.0 * Double.pi * 440.0 * Double(frame) / Double(sampleRate)
+            let absoluteFrame = frameOffset + frame
+            let phase = 2.0 * Double.pi * 440.0 * Double(absoluteFrame) / Double(sampleRate)
             let sample = Float(sin(phase) * 0.12)
             for _ in 0..<channelCount {
                 samples.append(sample)
@@ -233,7 +407,8 @@ private struct EditorAjarProjectAudioSourceProvider: AudioSourceProvider {
         return try AudioSourceBuffer(
             format: AudioRenderFormat(sampleRate: sampleRate, channelCount: channelCount),
             frameCount: frameCount,
-            samples: samples
+            samples: samples,
+            frameOffset: frameOffset
         )
     }
 }

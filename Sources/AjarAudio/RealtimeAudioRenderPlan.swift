@@ -130,7 +130,9 @@ public struct RealtimeAudioSafetyReport: Equatable, Sendable {
 
 /// Prepared realtime callback plan backed by immutable PCM and caller-owned output memory.
 public struct RealtimeAudioRenderPlan: Sendable {
-    private let format: AudioRenderFormat
+    /// PCM format expected by the render callback output buffers.
+    public let format: AudioRenderFormat
+
     private let storage: RealtimeAudioSampleStorage
     private let frameCount: Int
     private var nextFrame: Int
@@ -268,11 +270,12 @@ public struct RealtimeAudioRenderPlan: Sendable {
                 requestedFrameCount,
                 Int(buffers[bufferIndex].mDataByteSize) / MemoryLayout<Float>.stride
             )
-            guard framesToCopy < bufferFrameCapacity else {
+            let firstFrameToClear = bufferIndex < format.channelCount ? framesToCopy : 0
+            guard firstFrameToClear < bufferFrameCapacity else {
                 continue
             }
             let output = data.assumingMemoryBound(to: Float.self)
-            for frameIndex in framesToCopy..<bufferFrameCapacity {
+            for frameIndex in firstFrameToClear..<bufferFrameCapacity {
                 output[frameIndex] = 0
             }
         }

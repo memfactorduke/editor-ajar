@@ -23,6 +23,9 @@ public struct AudioSourceBuffer: Equatable, Sendable {
     /// Source PCM format.
     public let format: AudioRenderFormat
 
+    /// Absolute source-frame index represented by `samples[0]`.
+    public let frameOffset: Int
+
     /// Number of complete frames in `samples`.
     public let frameCount: Int
 
@@ -31,8 +34,31 @@ public struct AudioSourceBuffer: Equatable, Sendable {
 
     /// Creates and validates an audio source buffer.
     public init(format: AudioRenderFormat, frameCount: Int, samples: [Float]) throws {
+        try self.init(
+            format: format,
+            frameCount: frameCount,
+            samples: samples,
+            frameOffset: 0
+        )
+    }
+
+    /// Creates and validates an audio source buffer covering an absolute source-frame window.
+    public init(
+        format: AudioRenderFormat,
+        frameCount: Int,
+        samples: [Float],
+        frameOffset: Int
+    ) throws {
+        guard frameOffset >= 0 else {
+            throw AudioRenderError.invalidFormat(
+                sampleRate: format.sampleRate,
+                channelCount: format.channelCount,
+                frameCount: frameCount
+            )
+        }
         try AudioBufferValidator.validate(format: format, frameCount: frameCount, samples: samples)
         self.format = format
+        self.frameOffset = frameOffset
         self.frameCount = frameCount
         self.samples = samples
     }
