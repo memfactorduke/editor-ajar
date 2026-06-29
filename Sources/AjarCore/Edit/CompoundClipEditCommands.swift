@@ -91,6 +91,15 @@ extension EditReducer {
                 ),
                 in: project
             )
+        case .decomposeCompoundClip(let sequenceID, let trackID, let clipID):
+            return try decomposeCompoundClip(
+                DecomposeCompoundClipEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID
+                ),
+                in: project
+            )
         default:
             throw EditReducerError.validationFailed([])
         }
@@ -450,11 +459,8 @@ extension EditReducer {
         }
     }
 
-    private static func items(_ items: [TimelineItem], overlap range: TimeRange) throws -> Bool {
-        for item in items where try rangesIntersect(item.timelineRange, range) {
-            return true
-        }
-        return false
+    static func items(_ items: [TimelineItem], overlap range: TimeRange) throws -> Bool {
+        try items.contains { try rangesIntersect($0.timelineRange, range) }
     }
 
     private static func splitCompoundSelectionMarkers(

@@ -50,6 +50,8 @@ struct CompoundInsertFixture {
     let outerTrackID: UUID
     let compoundClipID: UUID
     let innerSequenceID: UUID
+    let innerTrackID: UUID
+    let innerClipID: UUID
 }
 
 struct CompoundInsertCycleFixture {
@@ -130,6 +132,7 @@ func makeCompoundInsertFixture(seed: Int) throws -> CompoundInsertFixture {
     let outerTrackID = try editUUID(base + 3)
     let innerSequenceID = try editUUID(base + 4)
     let innerTrackID = try editUUID(base + 5)
+    let innerClipID = try editUUID(base + 6)
     let media = try makeEditMediaRef(id: mediaID)
     let outerSequence = Sequence(
         id: outerSequenceID,
@@ -143,7 +146,7 @@ func makeCompoundInsertFixture(seed: Int) throws -> CompoundInsertFixture {
         InnerSequenceSpec(
             id: innerSequenceID,
             trackID: innerTrackID,
-            clipID: try editUUID(base + 6),
+            clipID: innerClipID,
             mediaID: mediaID,
             durationFrames: 12,
             timebase: FrameRate(frames: 24)
@@ -161,7 +164,9 @@ func makeCompoundInsertFixture(seed: Int) throws -> CompoundInsertFixture {
         outerSequenceID: outerSequenceID,
         outerTrackID: outerTrackID,
         compoundClipID: try editUUID(base + 7),
-        innerSequenceID: innerSequenceID
+        innerSequenceID: innerSequenceID,
+        innerTrackID: innerTrackID,
+        innerClipID: innerClipID
     )
 }
 
@@ -397,7 +402,8 @@ func makeCompoundClip(
     id: UUID,
     targetSequenceID: UUID,
     startFrame: Int64,
-    durationFrames: Int64
+    durationFrames: Int64,
+    speed: RationalValue = .one
 ) throws -> Clip {
     Clip(
         id: id,
@@ -405,7 +411,8 @@ func makeCompoundClip(
         sourceRange: try editRange(startFrame: 0, durationFrames: durationFrames),
         timelineRange: try editRange(startFrame: startFrame, durationFrames: durationFrames),
         kind: .video,
-        name: "Compound \(id.uuidString)"
+        name: "Compound \(id.uuidString)",
+        speed: speed
     )
 }
 

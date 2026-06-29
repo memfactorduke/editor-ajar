@@ -29,6 +29,17 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// No selected video track can host the replacement compound without overlapping leftovers.
     case compoundSelectionNeedsDestinationTrack(sequenceID: UUID)
 
+    /// Decomposing requires a sequence-backed compound clip.
+    case decomposeRequiresCompoundClip(clipID: UUID)
+
+    /// Decomposing would overlap an existing parent timeline item.
+    case compoundDecomposeWouldOverlap(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        timelineRange: TimeRange
+    )
+
     /// Roll requires two clips that share one edit point.
     case clipsNotAdjacent(leftClipID: UUID, rightClipID: UUID)
 

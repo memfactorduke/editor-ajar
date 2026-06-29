@@ -60,6 +60,9 @@ public enum EditCommand: Codable, Equatable, Sendable {
         name: String
     )
 
+    /// Expands a compound clip's referenced sequence back into the parent timeline.
+    case decomposeCompoundClip(sequenceID: UUID, trackID: UUID, clipID: UUID)
+
     /// Splits a clip at a timeline time into two adjacent clips.
     case bladeClip(
         sequenceID: UUID,

@@ -4,8 +4,9 @@ extension EditReducer {
     // swiftlint:disable:next cyclomatic_complexity
     static func applyUnchecked(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
-        case .addClip, .insertClip, .overwriteClip, .appendClip, .insertCompoundClip,
-            .makeCompoundClip, .removeClip, .replaceClipSource, .threePointEdit,
+        case .addClip, .insertClip, .overwriteClip, .appendClip,
+            .insertCompoundClip, .makeCompoundClip, .decomposeCompoundClip,
+            .removeClip, .replaceClipSource, .threePointEdit,
             .bladeClip, .rippleTrimClip, .rollEdit, .slipClip, .slideClip,
             .rippleDeleteClip, .liftClip, .moveClip, .trimClip, .setClipTransform,
             .setClipSpeed, .addClipTransformKeyframe, .moveClipTransformKeyframe,

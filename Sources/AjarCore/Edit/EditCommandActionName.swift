@@ -22,6 +22,8 @@ public extension EditCommand {
             return "Insert Compound Clip"
         case .makeCompoundClip:
             return "Make Compound Clip"
+        case .decomposeCompoundClip:
+            return "Decompose Compound Clip"
         case .bladeClip:
             return "Blade Clip"
         case .rippleTrimClip:
