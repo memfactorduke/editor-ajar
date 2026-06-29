@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-AUD-003/007/009 audio-engine checks with storage-kind-derived realtime safety
+  reporting, explicit float master-bus headroom and pan-law documentation, golden-audio
+  two-run determinism coverage, and solo/mute/disabled selection tests.
 - `AjarCore` and `AjarAudio` deterministic sidechain audio ducking for FR-AUD-004 with
   validated sequence rules, undoable set/clear commands, offline attack/hold/release envelope
   rendering, `.ajar` codec defaults, and golden-audio coverage.

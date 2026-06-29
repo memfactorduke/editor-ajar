@@ -4,9 +4,33 @@
 public enum RealtimeAudioStorageKind: Equatable, Sendable {
     /// Samples were copied off-thread into plan-owned pointer memory.
     case ownedPointer
+
+    /// Shared storage requiring a lock or mutex on the render callback path.
+    case lockedSharedBuffer
+
+    /// Storage that allocates scratch memory while rendering the callback.
+    case allocatingCallbackBuffer
+
+    var requiresRenderLocking: Bool {
+        switch self {
+        case .ownedPointer, .allocatingCallbackBuffer:
+            return false
+        case .lockedSharedBuffer:
+            return true
+        }
+    }
+
+    var requiresRenderAllocation: Bool {
+        switch self {
+        case .ownedPointer, .lockedSharedBuffer:
+            return false
+        case .allocatingCallbackBuffer:
+            return true
+        }
+    }
 }
 
-/// Static safety contract for a prepared realtime audio callback plan.
+/// Evidence-based safety contract for a prepared realtime audio callback plan.
 public struct RealtimeAudioSafetyReport: Equatable, Sendable {
     /// Whether the render callback uses locks.
     public let usesLocks: Bool
@@ -23,16 +47,19 @@ public struct RealtimeAudioSafetyReport: Equatable, Sendable {
     /// Whether output memory is supplied by the caller instead of allocated by the callback.
     public let usesCallerOwnedOutput: Bool
 
+    /// Whether the prepared callback path satisfies the current FR-AUD-007 realtime contract.
+    public var isRealtimeSafe: Bool {
+        !usesLocks && !allocatesDuringRender && usesCallerOwnedOutput
+    }
+
     /// Creates a safety report.
     public init(
-        usesLocks: Bool,
-        allocatesDuringRender: Bool,
         preparedFrameCount: Int,
         storageKind: RealtimeAudioStorageKind = .ownedPointer,
         usesCallerOwnedOutput: Bool = true
     ) {
-        self.usesLocks = usesLocks
-        self.allocatesDuringRender = allocatesDuringRender
+        usesLocks = storageKind.requiresRenderLocking
+        allocatesDuringRender = storageKind.requiresRenderAllocation
         self.preparedFrameCount = preparedFrameCount
         self.storageKind = storageKind
         self.usesCallerOwnedOutput = usesCallerOwnedOutput
@@ -57,8 +84,6 @@ public struct RealtimeAudioRenderPlan: Sendable {
     /// Returns the realtime-safety contract for this plan.
     public func safetyReport() -> RealtimeAudioSafetyReport {
         RealtimeAudioSafetyReport(
-            usesLocks: storage.requiresRenderLocking,
-            allocatesDuringRender: storage.requiresRenderAllocation,
             preparedFrameCount: frameCount,
             storageKind: storage.kind,
             usesCallerOwnedOutput: true
@@ -108,8 +133,6 @@ public struct RealtimeAudioRenderPlan: Sendable {
 
 private final class RealtimeAudioSampleStorage: @unchecked Sendable {
     let kind = RealtimeAudioStorageKind.ownedPointer
-    let requiresRenderLocking = false
-    let requiresRenderAllocation = false
 
     private let pointer: UnsafeMutablePointer<Float>
     private let sampleCount: Int
