@@ -118,24 +118,42 @@ final class AjarCommandTests: XCTestCase {
     }
 
     func testTESTING2ADR0011GoldenAudioHarnessComparesStoredReferenceSamples() async throws {
-        let output = BufferedTextOutput()
-        let errorOutput = BufferedTextOutput()
-        let exitCode = await AjarCommand.run(
+        let firstOutput = BufferedTextOutput()
+        let firstErrorOutput = BufferedTextOutput()
+        let secondOutput = BufferedTextOutput()
+        let secondErrorOutput = BufferedTextOutput()
+        let firstExitCode = await AjarCommand.run(
             arguments: ["golden-audio", fixtureGoldenAudioDirectory().path],
-            standardOutput: output,
-            standardError: errorOutput
+            standardOutput: firstOutput,
+            standardError: firstErrorOutput
+        )
+        let secondExitCode = await AjarCommand.run(
+            arguments: ["golden-audio", fixtureGoldenAudioDirectory().path],
+            standardOutput: secondOutput,
+            standardError: secondErrorOutput
         )
 
-        let diagnosticOutput = (output.lines + errorOutput.lines).joined(separator: "\n")
-        XCTAssertEqual(exitCode, 0, diagnosticOutput)
-        XCTAssertTrue(output.lines.contains { line in line.contains("PASS ducking-sidechain") })
-        XCTAssertTrue(output.lines.contains { line in line.contains("PASS gain-pan-fade") })
-        XCTAssertTrue(output.lines.contains { line in line.contains("PASS multi-track-summing") })
-        XCTAssertTrue(output.lines.contains { line in line.contains("PASS solo-track-selection") })
-        XCTAssertTrue(output.lines.contains { line in
+        let diagnosticOutput = (firstOutput.lines + firstErrorOutput.lines
+            + secondOutput.lines + secondErrorOutput.lines).joined(separator: "\n")
+        XCTAssertEqual(firstExitCode, 0, diagnosticOutput)
+        XCTAssertEqual(secondExitCode, 0, diagnosticOutput)
+        XCTAssertEqual(firstOutput.lines, secondOutput.lines)
+        XCTAssertEqual(firstErrorOutput.lines, secondErrorOutput.lines)
+
+        XCTAssertTrue(firstOutput.lines.contains { line in
+            line.contains("PASS ducking-sidechain")
+        })
+        XCTAssertTrue(firstOutput.lines.contains { line in line.contains("PASS gain-pan-fade") })
+        XCTAssertTrue(firstOutput.lines.contains { line in
+            line.contains("PASS multi-track-summing")
+        })
+        XCTAssertTrue(firstOutput.lines.contains { line in
+            line.contains("PASS solo-track-selection")
+        })
+        XCTAssertTrue(firstOutput.lines.contains { line in
             line.contains("PASS same-track-multiple-clips")
         })
-        XCTAssertTrue(output.lines.contains { line in line.contains("golden-audio passed") })
+        XCTAssertTrue(firstOutput.lines.contains { line in line.contains("golden-audio passed") })
     }
 
     func testGoldenAudioHarnessRecordsFormatMismatchAsFailureArtifact() async throws {

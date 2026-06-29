@@ -101,6 +101,7 @@ final class OfflineAudioMixerFollowUpTests: XCTestCase {
         XCTAssertTrue(report.usesCallerOwnedOutput)
         XCTAssertFalse(report.usesLocks)
         XCTAssertFalse(report.allocatesDuringRender)
+        XCTAssertTrue(report.isRealtimeSafe)
         XCTAssertEqual(report.preparedFrameCount, 2)
 
         var output = [Float](repeating: -1, count: 6)

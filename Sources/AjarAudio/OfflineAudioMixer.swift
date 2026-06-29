@@ -25,6 +25,10 @@ public enum OfflineAudioMixer {
     }
 
     /// Renders the first-stage master mix for a sequence.
+    ///
+    /// The master bus is a 32-bit floating-point mix bus. FR-AUD-003 renders preserve
+    /// above-unity headroom instead of clipping or limiting to +/-1.0; integer export paths must
+    /// add their own limiter, true-peak warning, or attenuation policy before quantization.
     public static func render(
         sequence: Sequence,
         range: TimeRange,
@@ -382,7 +386,8 @@ extension OfflineAudioMixer {
     }
 
     static func panMultiplier(pan: Double, channel: Int, format: AudioRenderFormat) -> Double {
-        // Linear-balance pan law: center is unity on both L/R channels.
+        // FR-AUD-003 uses a linear-balance pan law: center is unity on both L/R channels.
+        // This is intentionally not equal-power; tests and golden audio fixtures depend on it.
         guard format.channelCount >= 2 else {
             return 1
         }
