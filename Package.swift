@@ -46,10 +46,17 @@ let package = Package(
             path: "Sources/AjarMedia"
         ),
 
+        // Small C11-atomic shim used by AjarAudio realtime control handoff primitives.
+        .target(
+            name: "AjarAudioAtomics",
+            path: "Sources/AjarAudioAtomics",
+            publicHeadersPath: "include"
+        ),
+
         // Core Audio / AVAudioEngine real-time audio graph (ADR-0012 §audio).
         .target(
             name: "AjarAudio",
-            dependencies: ["AjarCore"],
+            dependencies: ["AjarCore", "AjarAudioAtomics"],
             path: "Sources/AjarAudio"
         ),
 
