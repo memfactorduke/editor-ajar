@@ -99,18 +99,55 @@ jobs:
 
       # ROADMAP M2 exit: launch the app, find labeled controls, and exercise transport playback.
       - name: XCUITest smoke (ROADMAP M2, NFR-A11Y-001)
+        shell: bash
         run: |
-          rm -rf /tmp/editor-ajar-ui-derived /tmp/editor-ajar-ui-smoke.xcresult
-          xcodebuild test \
-            -project app/EditorAjar/EditorAjar.xcodeproj \
-            -scheme EditorAjar \
-            -destination 'platform=macOS' \
-            -derivedDataPath /tmp/editor-ajar-ui-derived \
-            -only-testing:EditorAjarUITests \
-            -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 60 \
-            -maximum-test-execution-time-allowance 120 \
-            -resultBundlePath /tmp/editor-ajar-ui-smoke.xcresult
+          set -o pipefail
+
+          max_attempts=3
+          for attempt in $(seq 1 "$max_attempts"); do
+            log_path="/tmp/editor-ajar-ui-smoke-${attempt}.log"
+            result_bundle="/tmp/editor-ajar-ui-smoke-${attempt}.xcresult"
+            rm -rf /tmp/editor-ajar-ui-derived "$result_bundle" "$log_path"
+
+            echo "::group::UI smoke attempt ${attempt}/${max_attempts}"
+            set +e
+            xcodebuild test \
+              -project app/EditorAjar/EditorAjar.xcodeproj \
+              -scheme EditorAjar \
+              -destination 'platform=macOS' \
+              -derivedDataPath /tmp/editor-ajar-ui-derived \
+              -only-testing:EditorAjarUITests \
+              -test-timeouts-enabled YES \
+              -default-test-execution-time-allowance 60 \
+              -maximum-test-execution-time-allowance 120 \
+              -resultBundlePath "$result_bundle" 2>&1 | tee "$log_path"
+            status=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+
+            if ! grep -E -q \
+              -e "Application 'org.editorajar.EditorAjar' does not have a process ID" \
+              -e "Editor Ajar did not launch after" \
+              -e "Early unexpected exit" \
+              -e "operation never finished bootstrapping" \
+              -e "Test crashed with signal kill before establishing connection" \
+              "$log_path"; then
+              echo "::error::UI smoke failed without a known launch/bootstrap flake; not retrying."
+              exit "$status"
+            fi
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "::error::UI smoke hit the launch/bootstrap retry limit."
+              exit "$status"
+            fi
+
+            echo "::warning::UI smoke launch/bootstrap flake on attempt ${attempt}; retrying."
+            sleep 5
+          done
 
   benchmarks-report:
     name: Benchmarks (report)
