@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarAudio` waveform summary generation for FR-AUD-002 with deterministic per-channel
+  peak/RMS bins, partial-final-bin handling, typed resolution errors, and Codable cache output.
 - Hardened FR-AUD-003/007 audio mixer follow-ups with multi-clip and multi-track summation
   golden-audio fixtures, pointer-backed realtime render plans, selected-track crossfade
   validation, 5.1-to-stereo downmixing, and overflow-safe sample counts.
