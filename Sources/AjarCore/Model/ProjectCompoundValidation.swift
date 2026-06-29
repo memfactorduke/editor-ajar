@@ -36,37 +36,29 @@ extension ProjectValidator {
         targetID: UUID,
         referencesBySource: [UUID: [SequenceReferenceEdge]]
     ) -> Bool {
-        var visited = Set<UUID>()
         return sequenceReachable(
             from: targetID,
             to: sourceID,
-            referencesBySource: referencesBySource,
-            visited: &visited
+            referencesBySource: referencesBySource
         )
     }
 
     private static func sequenceReachable(
-        from currentID: UUID,
+        from startID: UUID,
         to goalID: UUID,
-        referencesBySource: [UUID: [SequenceReferenceEdge]],
-        visited: inout Set<UUID>
+        referencesBySource: [UUID: [SequenceReferenceEdge]]
     ) -> Bool {
-        if currentID == goalID {
-            return true
-        }
-        guard !visited.contains(currentID) else {
-            return false
-        }
+        var visited = Set<UUID>()
+        var stack = [startID]
 
-        visited.insert(currentID)
-
-        for edge in referencesBySource[currentID] ?? [] where sequenceReachable(
-            from: edge.targetID,
-            to: goalID,
-            referencesBySource: referencesBySource,
-            visited: &visited
-        ) {
-            return true
+        while let currentID = stack.popLast() {
+            if currentID == goalID {
+                return true
+            }
+            guard visited.insert(currentID).inserted else {
+                continue
+            }
+            stack.append(contentsOf: referencesBySource[currentID, default: []].map(\.targetID))
         }
 
         return false

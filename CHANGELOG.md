@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-TL-013 compound-clip cycle detection with iterative graph traversal plus
+  transitive decode, three-node cycle, and insert-command commit-guard coverage.
 - Added FR-SPD-001 constant-rate clip speed with exact rational speed storage,
   undoable speed edits, retimed render-graph source-time mapping, speed-aware audio rendering,
   `.ajar` round-trip/default coverage, and golden frame/audio fixtures for 2x and 0.5x retiming.
