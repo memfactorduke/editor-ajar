@@ -8,11 +8,16 @@ public enum AudioProgramLoudnessError: Error, Equatable, Sendable, CustomStringC
     /// The sample rate cannot support the BS.1770 K-weighting filters.
     case invalidSampleRate(Int)
 
+    /// Program loudness currently supports mono/stereo until layout-aware surround weights exist.
+    case unsupportedChannelCount(Int)
+
     /// A human-readable description.
     public var description: String {
         switch self {
         case .invalidSampleRate(let sampleRate):
             "invalid loudness analysis sample rate \(sampleRate)"
+        case .unsupportedChannelCount(let channelCount):
+            "unsupported loudness analysis channel count \(channelCount)"
         }
     }
 }
@@ -85,6 +90,7 @@ public extension AudioMixerMeterAnalyzer {
         buffer: RenderedAudioBuffer
     ) throws -> AudioProgramLoudnessReport {
         try BS1770.validate(sampleRate: buffer.format.sampleRate)
+        try BS1770.validate(channelCount: buffer.format.channelCount)
         let powers = BS1770.kWeightedPowers(buffer: buffer)
         let blockEnergies = BS1770.blockEnergies(
             powers: powers,
@@ -172,6 +178,12 @@ private enum BS1770 {
     static func validate(sampleRate: Int) throws {
         guard Double(sampleRate) > highShelfFrequency * 2 else {
             throw AudioProgramLoudnessError.invalidSampleRate(sampleRate)
+        }
+    }
+
+    static func validate(channelCount: Int) throws {
+        guard channelCount == 1 || channelCount == 2 else {
+            throw AudioProgramLoudnessError.unsupportedChannelCount(channelCount)
         }
     }
 
@@ -288,8 +300,8 @@ private extension BS1770 {
     }
 
     static func channelWeight(channel: Int) -> Double {
-        // FR-AUD-003 currently analyzes mono/stereo program loudness. Without surround layout
-        // metadata, extra channels are treated deterministically with the stereo L/R weight.
+        // FR-AUD-003 currently validates channel count before analysis, so this remains the
+        // BS.1770 mono/stereo L/R weight until layout-aware surround metadata exists.
         channel >= 0 ? 1 : 0
     }
 
@@ -365,9 +377,11 @@ private struct BiquadCoefficients {
         let kValue = tan(Double.pi * BS1770.highPassFrequency / Double(sampleRate))
         let a0 = 1 + (kValue / BS1770.highPassQ) + (kValue * kValue)
         return BiquadCoefficients(
-            b0: 1 / a0,
-            b1: -2 / a0,
-            b2: 1 / a0,
+            // ITU-R BS.1770-4 Table 1 keeps the RLB high-pass numerator at [1, -2, 1]
+            // and normalizes only the denominator terms by a0.
+            b0: 1,
+            b1: -2,
+            b2: 1,
             a1: (2 * ((kValue * kValue) - 1)) / a0,
             a2: (1 - (kValue / BS1770.highPassQ) + (kValue * kValue)) / a0
         )
