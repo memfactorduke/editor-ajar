@@ -6,12 +6,15 @@ import CoreVideo
 import Foundation
 
 enum EditorAjarSampleProjectFactory {
+    static let sampleToneCodecID = "editor-ajar-sample-tone"
+
     static func makeSampleProject() throws -> Project {
         let frameRate = try FrameRate(frames: 30)
         let width = 320
         let height = 180
         let frameCount: Int64 = 90
         let mediaURL = try sampleMovieURL()
+        let audioURL = try sampleToneURL()
         try writeMovie(
             to: mediaURL,
             width: width,
@@ -22,6 +25,7 @@ enum EditorAjarSampleProjectFactory {
 
         let duration = try frameRate.duration(ofFrames: frameCount)
         let mediaID = try uuid("00000000-0000-0000-0000-000000000025")
+        let audioMediaID = try uuid("00000000-0000-0000-0000-000000000026")
         let clipID = try uuid("00000000-0000-0000-0000-000000000125")
         let audioClipID = try uuid("00000000-0000-0000-0000-000000000126")
         let linkGroupID = try uuid("00000000-0000-0000-0000-000000000127")
@@ -40,6 +44,21 @@ enum EditorAjarSampleProjectFactory {
                 conformedFrameRate: nil
             )
         )
+        let audioMedia = MediaRef(
+            id: audioMediaID,
+            sourceURL: audioURL,
+            contentHash: ContentHash.sha256(data: Data("editor-ajar-sample-tone".utf8)),
+            metadata: MediaMetadata(
+                codecID: Self.sampleToneCodecID,
+                pixelDimensions: nil,
+                frameRate: nil,
+                duration: duration,
+                colorSpace: .unspecified,
+                audioChannelLayout: AudioChannelLayout(channelCount: 2, layoutTag: "stereo"),
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
         let clip = Clip(
             id: clipID,
             source: .media(id: mediaID),
@@ -51,7 +70,7 @@ enum EditorAjarSampleProjectFactory {
         )
         let audioClip = Clip(
             id: audioClipID,
-            source: .media(id: mediaID),
+            source: .media(id: audioMediaID),
             sourceRange: try TimeRange(start: .zero, duration: duration),
             timelineRange: try TimeRange(start: .zero, duration: duration),
             kind: .audio,
@@ -100,7 +119,7 @@ enum EditorAjarSampleProjectFactory {
                 colorSpace: .rec709,
                 audioSampleRate: 48_000
             ),
-            mediaPool: [media],
+            mediaPool: [media, audioMedia],
             sequences: [sequence]
         )
     }
@@ -110,6 +129,13 @@ enum EditorAjarSampleProjectFactory {
             .appendingPathComponent("editor-ajar-sample-media", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("single-clip-playback.mov")
+    }
+
+    private static func sampleToneURL() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("editor-ajar-sample-media", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("sample-tone.synthetic-audio")
     }
 
     private static func writeMovie(
@@ -144,16 +170,16 @@ enum EditorAjarSampleProjectFactory {
             throw EditorAjarSampleProjectError.writerFailed(writer.errorDescription)
         }
         writer.startSession(atSourceTime: .zero)
+        try appendFrames(
+            frameCount: frameCount,
+            frameRate: frameRate,
+            width: width,
+            height: height,
+            adaptor: adaptor,
+            input: input,
+            writer: writer
+        )
 
-        for frameIndex in 0..<frameCount {
-            let pixelBuffer = try makePixelBuffer(width: width, height: height, frameIndex: frameIndex)
-            let presentationTime = CMTime(value: Int64(frameIndex), timescale: frameRate)
-            guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
-                throw EditorAjarSampleProjectError.writerFailed(writer.errorDescription)
-            }
-        }
-
-        input.markAsFinished()
         let semaphore = DispatchSemaphore(value: 0)
         writer.finishWriting {
             semaphore.signal()
@@ -162,6 +188,57 @@ enum EditorAjarSampleProjectFactory {
 
         guard writer.status == .completed else {
             throw EditorAjarSampleProjectError.writerFailed(writer.errorDescription)
+        }
+    }
+
+    private static func appendFrames(
+        frameCount: Int,
+        frameRate: Int32,
+        width: Int,
+        height: Int,
+        adaptor: AVAssetWriterInputPixelBufferAdaptor,
+        input: AVAssetWriterInput,
+        writer: AVAssetWriter
+    ) throws {
+        let writingQueue = DispatchQueue(label: "org.editorajar.sample-movie-writer")
+        let inputFinished = DispatchSemaphore(value: 0)
+        var writeError: Error?
+        var frameIndex = 0
+
+        input.requestMediaDataWhenReady(on: writingQueue) {
+            while input.isReadyForMoreMediaData, frameIndex < frameCount {
+                do {
+                    let pixelBuffer = try makePixelBuffer(
+                        width: width,
+                        height: height,
+                        frameIndex: frameIndex
+                    )
+                    let presentationTime = CMTime(value: Int64(frameIndex), timescale: frameRate)
+                    guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
+                        writeError = EditorAjarSampleProjectError.writerFailed(writer.errorDescription)
+                        input.markAsFinished()
+                        inputFinished.signal()
+                        return
+                    }
+                    frameIndex += 1
+                } catch {
+                    writeError = error
+                    input.markAsFinished()
+                    inputFinished.signal()
+                    return
+                }
+            }
+
+            if frameIndex == frameCount {
+                input.markAsFinished()
+                inputFinished.signal()
+            }
+        }
+
+        inputFinished.wait()
+        if let writeError {
+            writer.cancelWriting()
+            throw writeError
         }
     }
 

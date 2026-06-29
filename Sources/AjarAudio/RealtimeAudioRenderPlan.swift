@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarAudioAtomics
+import CoreAudio
 
 /// Prepared storage kind used by a realtime audio callback plan.
 public enum RealtimeAudioStorageKind: Equatable, Sendable {
@@ -166,6 +167,29 @@ public struct RealtimeAudioRenderPlan: Sendable {
         return framesToCopy
     }
 
+    /// Copies the next frames into caller-owned non-interleaved Core Audio output buffers.
+    @discardableResult
+    public mutating func renderNonInterleaved(
+        into audioBufferList: UnsafeMutablePointer<AudioBufferList>,
+        frameCount requestedFrameCount: Int
+    ) -> Int {
+        let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
+        let outputFrameCapacity = nonInterleavedFrameCapacity(
+            buffers: buffers,
+            requestedFrameCount: requestedFrameCount
+        )
+        let availableFrames = max(0, frameCount - nextFrame)
+        let framesToCopy = min(outputFrameCapacity, availableFrames)
+        copyNonInterleavedFrames(framesToCopy, into: buffers)
+        clearNonInterleavedRemainder(
+            afterFrames: framesToCopy,
+            requestedFrameCount: requestedFrameCount,
+            in: buffers
+        )
+        nextFrame += framesToCopy
+        return framesToCopy
+    }
+
     private func copyFrames(
         _ framesToCopy: Int,
         into output: UnsafeMutableBufferPointer<Float>
@@ -188,6 +212,69 @@ public struct RealtimeAudioRenderPlan: Sendable {
         }
         for sampleIndex in start..<output.count {
             output[sampleIndex] = 0
+        }
+    }
+
+    private func nonInterleavedFrameCapacity(
+        buffers: UnsafeMutableAudioBufferListPointer,
+        requestedFrameCount: Int
+    ) -> Int {
+        guard requestedFrameCount > 0, buffers.count >= format.channelCount else {
+            return 0
+        }
+
+        var frameCapacity = requestedFrameCount
+        for channelIndex in 0..<format.channelCount {
+            guard buffers[channelIndex].mData != nil else {
+                return 0
+            }
+            let bufferFrameCapacity = Int(buffers[channelIndex].mDataByteSize)
+                / MemoryLayout<Float>.stride
+            frameCapacity = min(frameCapacity, bufferFrameCapacity)
+        }
+        return frameCapacity
+    }
+
+    private func copyNonInterleavedFrames(
+        _ framesToCopy: Int,
+        into buffers: UnsafeMutableAudioBufferListPointer
+    ) {
+        guard framesToCopy > 0 else {
+            return
+        }
+
+        storage.copyNonInterleavedFrames(
+            startingAt: nextFrame,
+            frameCount: framesToCopy,
+            channelCount: format.channelCount,
+            into: buffers
+        )
+    }
+
+    private func clearNonInterleavedRemainder(
+        afterFrames framesToCopy: Int,
+        requestedFrameCount: Int,
+        in buffers: UnsafeMutableAudioBufferListPointer
+    ) {
+        guard requestedFrameCount > 0 else {
+            return
+        }
+
+        for bufferIndex in 0..<buffers.count {
+            guard let data = buffers[bufferIndex].mData else {
+                continue
+            }
+            let bufferFrameCapacity = min(
+                requestedFrameCount,
+                Int(buffers[bufferIndex].mDataByteSize) / MemoryLayout<Float>.stride
+            )
+            guard framesToCopy < bufferFrameCapacity else {
+                continue
+            }
+            let output = data.assumingMemoryBound(to: Float.self)
+            for frameIndex in framesToCopy..<bufferFrameCapacity {
+                output[frameIndex] = 0
+            }
         }
     }
 }
@@ -396,43 +483,5 @@ private final class AtomicUInt64: @unchecked Sendable {
 
     static func threadFenceSeqCst() {
         AjarAudioAtomicThreadFenceSeqCst()
-    }
-}
-
-private final class RealtimeAudioSampleStorage: @unchecked Sendable {
-    let kind = RealtimeAudioStorageKind.ownedPointer
-
-    private let pointer: UnsafeMutablePointer<Float>
-    private let sampleCount: Int
-
-    init(samples: [Float]) {
-        sampleCount = samples.count
-        pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(sampleCount, 1))
-        guard sampleCount > 0 else {
-            return
-        }
-
-        samples.withUnsafeBufferPointer { source in
-            guard let baseAddress = source.baseAddress else {
-                return
-            }
-            pointer.initialize(from: baseAddress, count: source.count)
-        }
-    }
-
-    deinit {
-        pointer.deinitialize(count: sampleCount)
-        pointer.deallocate()
-    }
-
-    func copySamples(
-        startingAt sourceOffset: Int,
-        count: Int,
-        into output: UnsafeMutableBufferPointer<Float>
-    ) {
-        let sourceBase = pointer.advanced(by: sourceOffset)
-        for sampleIndex in 0..<count {
-            output[sampleIndex] = sourceBase[sampleIndex]
-        }
     }
 }

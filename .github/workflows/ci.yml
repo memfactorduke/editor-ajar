@@ -97,6 +97,20 @@ jobs:
       - name: Xcode version
         run: xcodebuild -version
 
+      - name: XCTest app unit tests (EditorAjarTests)
+        run: |
+          rm -rf /tmp/editor-ajar-app-derived /tmp/editor-ajar-app-tests.xcresult
+          xcodebuild test \
+            -project app/EditorAjar/EditorAjar.xcodeproj \
+            -scheme EditorAjar \
+            -destination 'platform=macOS' \
+            -derivedDataPath /tmp/editor-ajar-app-derived \
+            -only-testing:EditorAjarTests \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 60 \
+            -maximum-test-execution-time-allowance 120 \
+            -resultBundlePath /tmp/editor-ajar-app-tests.xcresult
+
       # ROADMAP M2 exit: launch the app, find labeled controls, and exercise transport playback.
       - name: XCUITest smoke (ROADMAP M2, NFR-A11Y-001)
         shell: bash

@@ -22,19 +22,25 @@ final class EditorAjarAppModel: ObservableObject {
     private var editHistory: EditHistory?
     private let autosaveCoordinator: EditorAjarAutosaveCoordinator?
     private let autosaveIntervalSeconds: TimeInterval
+    private let audioCoordinator: (any EditorAjarAudioCoordinating)?
     private var autosaveLoopTask: Task<Void, Never>?
     private var autosaveWriteTask: Task<Void, Never>?
     private var autosaveCommandCount = 0
     private var renderGeneration = 0
     private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
 
-    init(autosavePackageURL: URL? = nil, autosaveIntervalSeconds: TimeInterval = 5.0) {
+    init(
+        autosavePackageURL: URL? = nil,
+        autosaveIntervalSeconds: TimeInterval = 5.0,
+        audioCoordinator: (any EditorAjarAudioCoordinating)? = nil
+    ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
         if let autosavePackageURL {
             autosaveCoordinator = EditorAjarAutosaveCoordinator(packageURL: autosavePackageURL)
         } else {
             autosaveCoordinator = nil
         }
+        self.audioCoordinator = audioCoordinator ?? Self.makeAudioCoordinator()
 
         loadMessage = "Loading sample project"
 
@@ -100,6 +106,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     deinit {
+        audioCoordinator?.stop()
         autosaveLoopTask?.cancel()
         autosaveWriteTask?.cancel()
     }
@@ -306,8 +313,10 @@ final class EditorAjarAppModel: ObservableObject {
     func togglePlayback() {
         isPlaying.toggle()
         if isPlaying {
+            startAudioPlayback()
             displayLinkDriver?.start()
         } else {
+            stopAudioPlayback()
             displayLinkDriver?.stop()
         }
     }
@@ -322,6 +331,7 @@ final class EditorAjarAppModel: ObservableObject {
 
         persistActiveSequenceContext()
         isPlaying = false
+        stopAudioPlayback()
         displayLinkDriver?.stop()
         restoreActiveSequenceContext(for: sequence)
         requestRenderForCurrentFrame()
@@ -376,25 +386,31 @@ final class EditorAjarAppModel: ObservableObject {
 
     func stepBackward() {
         isPlaying = false
+        stopAudioPlayback()
         displayLinkDriver?.stop()
         playbackController?.stepBackward()
         syncPlayheadFromController()
+        publishAudioPlanForCurrentFrame()
         requestRenderForCurrentFrame()
     }
 
     func stepForward() {
         isPlaying = false
+        stopAudioPlayback()
         displayLinkDriver?.stop()
         playbackController?.stepForward()
         syncPlayheadFromController()
+        publishAudioPlanForCurrentFrame()
         requestRenderForCurrentFrame()
     }
 
     func scrub(to frame: Int64) {
         isPlaying = false
+        stopAudioPlayback()
         displayLinkDriver?.stop()
         playbackController?.scrub(to: frame)
         syncPlayheadFromController()
+        publishAudioPlanForCurrentFrame()
         requestRenderForCurrentFrame()
     }
 
@@ -1103,6 +1119,14 @@ final class EditorAjarAppModel: ObservableObject {
             .appendingPathComponent("Autosave.ajar", isDirectory: true)
     }
 
+    private static func makeAudioCoordinator() -> (any EditorAjarAudioCoordinating)? {
+        do {
+            return try EditorAjarLiveAudioCoordinator()
+        } catch {
+            return nil
+        }
+    }
+
     func autosaveCheckpointForTesting() async {
         await autosaveWriteTask?.value
         await autosaveCurrentProjectAndWait()
@@ -1114,12 +1138,78 @@ final class EditorAjarAppModel: ObservableObject {
         }
 
         syncPlayheadFromController()
+        ensureAudioPlanForPlayback()
         requestRenderForCurrentFrame()
     }
 
     private func syncPlayheadFromController() {
         playheadFrame = playbackController?.playheadFrame ?? 0
         persistActiveSequenceContext()
+    }
+
+    private func startAudioPlayback() {
+        guard let audioCoordinator,
+              let project,
+              let sequence = activeSequence
+        else {
+            return
+        }
+
+        do {
+            try audioCoordinator.start(
+                project: project,
+                sequence: sequence,
+                playheadFrame: playheadFrame,
+                durationFrames: durationFrames
+            )
+        } catch {
+            loadMessage = "Audio playback unavailable: \(error)"
+        }
+    }
+
+    private func stopAudioPlayback() {
+        audioCoordinator?.stop()
+    }
+
+    private func publishAudioPlanForCurrentFrame() {
+        guard let audioCoordinator,
+              let project,
+              let sequence = activeSequence
+        else {
+            return
+        }
+
+        do {
+            try audioCoordinator.publishSeek(
+                project: project,
+                sequence: sequence,
+                playheadFrame: playheadFrame,
+                durationFrames: durationFrames
+            )
+        } catch {
+            loadMessage = "Audio seek unavailable: \(error)"
+        }
+    }
+
+    private func ensureAudioPlanForPlayback() {
+        guard isPlaying,
+              let audioCoordinator,
+              let project,
+              let sequence = activeSequence
+        else {
+            return
+        }
+
+        do {
+            try audioCoordinator.ensurePlaybackPlan(
+                project: project,
+                sequence: sequence,
+                playheadFrame: playheadFrame,
+                durationFrames: durationFrames
+            )
+        } catch {
+            loadMessage = "Audio playback unavailable: \(error)"
+        }
     }
 
     private func requestRenderForCurrentFrame() {
@@ -1302,6 +1392,7 @@ final class EditorAjarAppModel: ObservableObject {
             presentedTexture = nil
         }
         requestRenderForCurrentFrame()
+        ensureAudioPlanForPlayback()
     }
 
     private func persistActiveSequenceContext() {

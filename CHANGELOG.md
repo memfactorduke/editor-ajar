@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added live FR-AUD-007 audio output with an AVAudioEngine driver consuming lock-free
+  realtime render plans, app transport start/stop/seek publishing, and a deterministic
+  sample-tone source for the bundled playback project.
 - Added deterministic FR-AUD-003 program loudness analysis with BS.1770/R128 integrated LUFS,
   gated silence handling, and 4x offline true-peak dBTP estimation for rendered mixes.
 - Added an FR-AUD-007 realtime render-plan handoff in `AjarAudio` using a lock-free atomic
