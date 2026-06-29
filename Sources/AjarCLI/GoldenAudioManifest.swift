@@ -220,6 +220,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
     let timelineStart: String
     let sourceStart: String
     let duration: String
+    let speed: RationalValue?
     let gain: Double
     let pan: Double
     let fadeIn: String?
@@ -230,6 +231,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         case timelineStart
         case sourceStart
         case duration
+        case speed
         case gain
         case pan
         case fadeIn
@@ -242,6 +244,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         timelineStart = try container.decodeIfPresent(String.self, forKey: .timelineStart) ?? "0"
         sourceStart = try container.decodeIfPresent(String.self, forKey: .sourceStart) ?? "0"
         duration = try container.decode(String.self, forKey: .duration)
+        speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed)
         gain = try container.decodeIfPresent(Double.self, forKey: .gain) ?? 1
         pan = try container.decodeIfPresent(Double.self, forKey: .pan) ?? 0
         fadeIn = try container.decodeIfPresent(String.self, forKey: .fadeIn)
@@ -250,6 +253,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
 
     func clip(id: UUID, mediaID: UUID) throws -> Clip {
         let clipDuration = try GoldenAudioManifest.rationalTime(duration)
+        let clipSpeed = speed ?? .one
         return Clip(
             id: id,
             source: .media(id: mediaID),
@@ -259,11 +263,12 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
             ),
             timelineRange: try TimeRange(
                 start: GoldenAudioManifest.rationalTime(timelineStart),
-                duration: clipDuration
+                duration: Clip.timelineDuration(forSourceDuration: clipDuration, speed: clipSpeed)
             ),
             kind: .audio,
             name: "Golden Audio Clip",
-            audioMix: try audioMix()
+            audioMix: try audioMix(),
+            speed: clipSpeed
         )
     }
 

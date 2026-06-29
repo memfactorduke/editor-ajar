@@ -1,0 +1,38 @@
+{
+  "clips" : [
+    {
+      "speed" : {
+        "denominator" : 2,
+        "numerator" : 1
+      },
+      "syntheticMedia" : {
+        "bgra" : [
+          0,
+          0,
+          255,
+          255
+        ],
+        "frameCount" : 128,
+        "frameRate" : 64,
+        "height" : 16,
+        "width" : 16
+      }
+    }
+  ],
+  "frame" : "2/1",
+  "id" : "clip-speed-half",
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-SPD-001",
+    "ADR-0009",
+    "TESTING-2",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 0,
+    "maximumDeltaE" : 25,
+    "minimumSSIM" : 0.9
+  }
+}

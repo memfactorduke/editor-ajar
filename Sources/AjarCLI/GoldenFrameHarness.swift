@@ -335,17 +335,22 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
         mediaID: UUID,
         index: Int
     ) throws -> Clip {
-        Clip(
+        let speed = clipSpec.speed ?? .one
+        return Clip(
             id: try numberedUUID(118 + index),
             source: try source(for: clipSpec, mediaID: mediaID, index: index),
             sourceRange: try TimeRange(start: .zero, duration: context.duration),
-            timelineRange: try TimeRange(start: .zero, duration: context.duration),
+            timelineRange: try TimeRange(
+                start: .zero,
+                duration: Clip.timelineDuration(forSourceDuration: context.duration, speed: speed)
+            ),
             kind: .video,
             name: "Golden \(context.manifestID) \(index)",
             transform: clipSpec.transform ?? .identity,
             transformAnimation: clipSpec.transformAnimation,
             effects: clipSpec.effects ?? .none,
-            effectsAnimation: clipSpec.effectsAnimation
+            effectsAnimation: clipSpec.effectsAnimation,
+            speed: speed
         )
     }
 
@@ -356,17 +361,22 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
         index: Int,
         compound: GoldenFrameCompoundSpec
     ) throws -> Clip {
-        Clip(
+        let speed = clipSpec.speed ?? .one
+        return Clip(
             id: try numberedUUID(618 + index),
             source: .media(id: mediaID),
             sourceRange: try TimeRange(start: .zero, duration: context.duration),
-            timelineRange: try TimeRange(start: .zero, duration: context.duration),
+            timelineRange: try TimeRange(
+                start: .zero,
+                duration: Clip.timelineDuration(forSourceDuration: context.duration, speed: speed)
+            ),
             kind: .video,
             name: "Golden nested \(context.manifestID) \(index)",
             transform: compound.innerTransform ?? .identity,
             transformAnimation: clipSpec.transformAnimation,
             effects: compound.innerEffects ?? .none,
-            effectsAnimation: clipSpec.effectsAnimation
+            effectsAnimation: clipSpec.effectsAnimation,
+            speed: speed
         )
     }
 
@@ -397,33 +407,15 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
     }
 }
 
-/// JSON manifest for one golden-frame case.
 struct GoldenFrameManifest: Codable, Equatable, Sendable {
-    /// Manifest schema version.
     let schemaVersion: Int
-
-    /// Stable case ID.
     let id: String
-
-    /// Requirement IDs or references covered by this golden.
     let requirements: [String]
-
-    /// Frame time passed to `ajar render --frame`.
     let frame: String
-
-    /// Reference PNG path relative to the manifest directory.
     let referencePNG: String
-
-    /// Optional output canvas dimensions. Defaults to the first synthetic clip dimensions.
     let outputDimensions: PixelDimensions?
-
-    /// Legacy single synthetic media source specification.
     let syntheticMedia: SyntheticMovieSpec?
-
-    /// Synthetic clips to stack bottom-to-top.
     let clips: [GoldenFrameClipSpec]?
-
-    /// Comparison tolerance.
     let tolerance: GoldenFrameTolerance
 
     static func load(from url: URL) throws -> GoldenFrameManifest {
@@ -460,6 +452,7 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
                 GoldenFrameClipSpec(
                     syntheticMedia: syntheticMedia,
                     compound: nil,
+                    speed: nil,
                     transform: nil,
                     transformAnimation: nil,
                     effects: nil,
@@ -476,6 +469,7 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
 struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let syntheticMedia: SyntheticMovieSpec
     let compound: GoldenFrameCompoundSpec?
+    let speed: RationalValue?
     let transform: ClipTransform?
     let transformAnimation: AnimatableClipTransform?
     let effects: ClipEffects?

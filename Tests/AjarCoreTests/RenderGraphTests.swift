@@ -386,7 +386,8 @@ private func makeClip(
     sourceStartFrame: Int64 = 0,
     durationFrames: Int64 = 10,
     transform: ClipTransform = .identity,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    speed: RationalValue = .one
 ) throws -> Clip {
     try makeClip(
         id: id,
@@ -395,7 +396,8 @@ private func makeClip(
         sourceStartFrame: sourceStartFrame,
         durationFrames: durationFrames,
         transform: transform,
-        effects: effects
+        effects: effects,
+        speed: speed
     )
 }
 
@@ -406,17 +408,24 @@ private func makeClip(
     sourceStartFrame: Int64,
     durationFrames: Int64 = 10,
     transform: ClipTransform = .identity,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    speed: RationalValue = .one
 ) throws -> Clip {
-    Clip(
+    let sourceDuration = try time(durationFrames)
+    let timelineDuration = try Clip.timelineDuration(
+        forSourceDuration: sourceDuration,
+        speed: speed
+    )
+    return Clip(
         id: id,
         source: source,
-        sourceRange: try range(startFrame: sourceStartFrame, durationFrames: durationFrames),
-        timelineRange: try range(startFrame: timelineStartFrame, durationFrames: durationFrames),
+        sourceRange: try TimeRange(start: time(sourceStartFrame), duration: sourceDuration),
+        timelineRange: try TimeRange(start: time(timelineStartFrame), duration: timelineDuration),
         kind: .video,
         name: "RenderGraph clip",
         transform: transform,
-        effects: effects
+        effects: effects,
+        speed: speed
     )
 }
 

@@ -154,13 +154,19 @@ func makeEditClip(
     transformAnimation: AnimatableClipTransform? = nil,
     effects: ClipEffects = .none,
     effectsAnimation: AnimatableClipEffects? = nil,
-    audioMix: ClipAudioMix = .identity
+    audioMix: ClipAudioMix = .identity,
+    speed: RationalValue = .one
 ) throws -> Clip {
-    Clip(
+    let sourceDuration = try editTime(durationFrames)
+    let timelineDuration = try Clip.timelineDuration(
+        forSourceDuration: sourceDuration,
+        speed: speed
+    )
+    return Clip(
         id: id,
         source: .media(id: mediaID),
-        sourceRange: try editRange(startFrame: 0, durationFrames: durationFrames),
-        timelineRange: try editRange(startFrame: startFrame, durationFrames: durationFrames),
+        sourceRange: try TimeRange(start: editTime(0), duration: sourceDuration),
+        timelineRange: try TimeRange(start: editTime(startFrame), duration: timelineDuration),
         kind: kind,
         name: "Clip \(id.uuidString)",
         linkGroupID: linkGroupID,
@@ -168,7 +174,8 @@ func makeEditClip(
         transformAnimation: transformAnimation,
         effects: effects,
         effectsAnimation: effectsAnimation,
-        audioMix: audioMix
+        audioMix: audioMix,
+        speed: speed
     )
 }
 

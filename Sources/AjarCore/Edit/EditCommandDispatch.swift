@@ -7,7 +7,7 @@ extension EditReducer {
         case .addClip, .insertClip, .overwriteClip, .appendClip, .insertCompoundClip,
             .removeClip, .replaceClipSource, .threePointEdit, .bladeClip,
             .rippleTrimClip, .rollEdit, .slipClip, .slideClip, .rippleDeleteClip,
-            .liftClip, .moveClip, .trimClip, .setClipTransform,
+            .liftClip, .moveClip, .trimClip, .setClipTransform, .setClipSpeed,
             .addClipTransformKeyframe, .moveClipTransformKeyframe,
             .deleteClipTransformKeyframe, .setClipChromaKey,
             .setClipLumaKey, .clearClipLumaKey,

@@ -51,6 +51,13 @@ extension EditReducer {
         let rightClip: Clip
     }
 
+    struct RollClipRanges {
+        let leftSourceRange: TimeRange
+        let leftTimelineRange: TimeRange
+        let rightSourceRange: TimeRange
+        let rightTimelineRange: TimeRange
+    }
+
     static func bladeClip(_ edit: BladeClipEdit, in project: Project) throws -> Project {
         try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
             var items = track.items
@@ -74,10 +81,23 @@ extension EditReducer {
 
             let leftDuration = try subtractTimes(edit.atTime, clip.timelineRange.start)
             let rightDuration = try subtractTimes(clipEnd, edit.atTime)
-            let rightSourceStart = try addTimes(clip.sourceRange.start, leftDuration)
+            let leftSourceDuration = try speedSourceDuration(
+                clipID: clip.id,
+                timelineDuration: leftDuration,
+                speed: clip.speed
+            )
+            let rightSourceDuration = try speedSourceDuration(
+                clipID: clip.id,
+                timelineDuration: rightDuration,
+                speed: clip.speed
+            )
+            let rightSourceStart = try addTimes(clip.sourceRange.start, leftSourceDuration)
             let leftClip = copying(
                 clip,
-                sourceRange: try makeRange(start: clip.sourceRange.start, duration: leftDuration),
+                sourceRange: try makeRange(
+                    start: clip.sourceRange.start,
+                    duration: leftSourceDuration
+                ),
                 timelineRange: try makeRange(
                     start: clip.timelineRange.start,
                     duration: leftDuration
@@ -86,10 +106,11 @@ extension EditReducer {
             let rightClip = Clip(
                 id: edit.rightClipID,
                 source: clip.source,
-                sourceRange: try makeRange(start: rightSourceStart, duration: rightDuration),
+                sourceRange: try makeRange(start: rightSourceStart, duration: rightSourceDuration),
                 timelineRange: try makeRange(start: edit.atTime, duration: rightDuration),
                 kind: clip.kind,
-                name: "\(clip.name) 2"
+                name: "\(clip.name) 2",
+                speed: clip.speed
             )
 
             items[index] = .clip(leftClip)
@@ -118,7 +139,8 @@ extension EditReducer {
             try validateMatchingDurations(
                 clipID: edit.clipID,
                 sourceRange: edit.sourceRange,
-                timelineRange: edit.timelineRange
+                timelineRange: edit.timelineRange,
+                speed: clip.speed
             )
             let oldEnd = try exactTime { try clip.timelineRange.end() }
             let newEnd = try exactTime { try edit.timelineRange.end() }
@@ -151,45 +173,19 @@ extension EditReducer {
         try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
             var items = track.items
             let selection = try rollClipSelection(edit, in: items)
-            let leftClip = selection.leftClip
-            let rightClip = selection.rightClip
-
-            let leftEnd = try exactTime { try leftClip.timelineRange.end() }
-            let rightEnd = try exactTime { try rightClip.timelineRange.end() }
-            guard leftEnd == rightClip.timelineRange.start else {
-                throw EditReducerError.invalidEdit(
-                    .clipsNotAdjacent(
-                        leftClipID: edit.leftClipID,
-                        rightClipID: edit.rightClipID
-                    )
-                )
-            }
-            guard edit.editTime > leftClip.timelineRange.start, edit.editTime < rightEnd else {
-                throw EditReducerError.invalidEdit(.nonPositiveDuration(clipID: edit.leftClipID))
-            }
-
-            let leftDuration = try subtractTimes(edit.editTime, leftClip.timelineRange.start)
-            let rightDuration = try subtractTimes(rightEnd, edit.editTime)
-            let rightSourceDelta = try subtractTimes(edit.editTime, rightClip.timelineRange.start)
-            let rightSourceStart = try addTimes(rightClip.sourceRange.start, rightSourceDelta)
+            let ranges = try rollClipRanges(edit, selection: selection)
             items[selection.leftIndex] = .clip(
                 copying(
-                    leftClip,
-                    sourceRange: try makeRange(
-                        start: leftClip.sourceRange.start,
-                        duration: leftDuration
-                    ),
-                    timelineRange: try makeRange(
-                        start: leftClip.timelineRange.start,
-                        duration: leftDuration
-                    )
+                    selection.leftClip,
+                    sourceRange: ranges.leftSourceRange,
+                    timelineRange: ranges.leftTimelineRange
                 )
             )
             items[selection.rightIndex] = .clip(
                 copying(
-                    rightClip,
-                    sourceRange: try makeRange(start: rightSourceStart, duration: rightDuration),
-                    timelineRange: try makeRange(start: edit.editTime, duration: rightDuration)
+                    selection.rightClip,
+                    sourceRange: ranges.rightSourceRange,
+                    timelineRange: ranges.rightTimelineRange
                 )
             )
             return copying(track, items: sortedItems(items))
@@ -249,7 +245,8 @@ extension EditReducer {
             try validateMatchingDurations(
                 clipID: edit.clipID,
                 sourceRange: edit.sourceRange,
-                timelineRange: clip.timelineRange
+                timelineRange: clip.timelineRange,
+                speed: clip.speed
             )
             items[index] = .clip(copying(clip, sourceRange: edit.sourceRange))
             return copying(track, items: sortedItems(items))
@@ -278,7 +275,8 @@ extension EditReducer {
             try validateMatchingDurations(
                 clipID: edit.clipID,
                 sourceRange: clip.sourceRange,
-                timelineRange: edit.timelineRange
+                timelineRange: edit.timelineRange,
+                speed: clip.speed
             )
 
             let previousIndex = items.index(before: index)
@@ -361,106 +359,5 @@ extension EditReducer {
             items[index] = .gap(clip.timelineRange)
             return copying(track, items: sortedItems(items))
         }
-    }
-}
-
-extension EditReducer {
-    static func validateMatchingDurations(
-        clipID: UUID,
-        sourceRange: TimeRange,
-        timelineRange: TimeRange
-    ) throws {
-        guard sourceRange.duration == timelineRange.duration else {
-            throw EditReducerError.invalidEdit(
-                .durationMismatch(
-                    clipID: clipID,
-                    sourceDuration: sourceRange.duration,
-                    timelineDuration: timelineRange.duration
-                )
-            )
-        }
-        guard timelineRange.duration > .zero else {
-            throw EditReducerError.invalidEdit(.nonPositiveDuration(clipID: clipID))
-        }
-    }
-
-    static func adjustingItemEnd(_ item: TimelineItem, end: RationalTime) throws -> TimelineItem {
-        let duration = try subtractTimes(end, item.timelineRange.start)
-        switch item {
-        case .clip(let clip):
-            let sourceRange = try makeRange(
-                start: clip.sourceRange.start,
-                duration: duration
-            )
-            let timelineRange = try makeRange(
-                start: clip.timelineRange.start,
-                duration: duration
-            )
-            return .clip(
-                copying(
-                    clip,
-                    sourceRange: sourceRange,
-                    timelineRange: timelineRange
-                )
-            )
-        case .gap:
-            return .gap(try makeRange(start: item.timelineRange.start, duration: duration))
-        case .transition(let transition):
-            let timelineRange = try makeRange(
-                start: item.timelineRange.start,
-                duration: duration
-            )
-            return .transition(
-                Transition(
-                    id: transition.id,
-                    timelineRange: timelineRange,
-                    kind: transition.kind,
-                    name: transition.name
-                )
-            )
-        }
-    }
-
-    static func adjustingItemStart(
-        _ item: TimelineItem,
-        start: RationalTime
-    ) throws -> TimelineItem {
-        let itemEnd = try exactTime { try item.timelineRange.end() }
-        let duration = try subtractTimes(itemEnd, start)
-        switch item {
-        case .clip(let clip):
-            let sourceDelta = try subtractTimes(start, clip.timelineRange.start)
-            let sourceStart = try addTimes(clip.sourceRange.start, sourceDelta)
-            return .clip(
-                copying(
-                    clip,
-                    sourceRange: try makeRange(start: sourceStart, duration: duration),
-                    timelineRange: try makeRange(start: start, duration: duration)
-                )
-            )
-        case .gap:
-            return .gap(try makeRange(start: start, duration: duration))
-        case .transition(let transition):
-            return .transition(
-                Transition(
-                    id: transition.id,
-                    timelineRange: try makeRange(start: start, duration: duration),
-                    kind: transition.kind,
-                    name: transition.name
-                )
-            )
-        }
-    }
-
-    static func addTimes(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
-        try exactTime { try left.adding(right) }
-    }
-
-    static func subtractTimes(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
-        try exactTime { try left.subtracting(right) }
-    }
-
-    static func negatedTime(_ time: RationalTime) throws -> RationalTime {
-        try exactTime { try time.negated() }
     }
 }

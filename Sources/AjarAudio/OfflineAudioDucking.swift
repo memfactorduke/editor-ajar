@@ -144,7 +144,7 @@ extension OfflineAudioMixer {
             sampleRate: frame.mix.format.sampleRate
         )
         let localTime = try subtract(renderTime, clip.timelineRange.start)
-        let sourceTime = try add(clip.sourceRange.start, localTime)
+        let sourceTime = try clipSourceTime(clip, at: renderTime)
         let sourceFrame = sourceTime.seconds * Double(source.format.sampleRate)
         let gain = gainMultiplier(
             clip: clip,

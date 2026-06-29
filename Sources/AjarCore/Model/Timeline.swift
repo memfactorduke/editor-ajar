@@ -244,6 +244,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Per-clip audio automation and fade metadata.
     public let audioMix: ClipAudioMix
 
+    /// Constant-rate playback speed. `1/1` is normal speed; values above one are faster.
+    public let speed: RationalValue
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -257,7 +260,8 @@ public struct Clip: Codable, Equatable, Sendable {
         transformAnimation: AnimatableClipTransform? = nil,
         effects: ClipEffects = .none,
         effectsAnimation: AnimatableClipEffects? = nil,
-        audioMix: ClipAudioMix = .identity
+        audioMix: ClipAudioMix = .identity,
+        speed: RationalValue = .one
     ) {
         self.id = id
         self.source = source
@@ -271,6 +275,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.effects = effects
         self.effectsAnimation = effectsAnimation ?? .constant(effects)
         self.audioMix = audioMix
+        self.speed = speed
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -286,6 +291,7 @@ public struct Clip: Codable, Equatable, Sendable {
         case effects
         case effectsAnimation
         case audioMix
+        case speed
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -311,6 +317,7 @@ public struct Clip: Codable, Equatable, Sendable {
         ) ?? .constant(effects)
         audioMix = try container.decodeIfPresent(ClipAudioMix.self, forKey: .audioMix)
             ?? .identity
+        speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed) ?? .one
     }
 
     /// Encodes the complete clip payload.
@@ -328,6 +335,7 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(effects, forKey: .effects)
         try container.encode(effectsAnimation, forKey: .effectsAnimation)
         try container.encode(audioMix, forKey: .audioMix)
+        try container.encode(speed, forKey: .speed)
     }
 }
 

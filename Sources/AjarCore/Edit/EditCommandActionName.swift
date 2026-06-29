@@ -48,6 +48,8 @@ public extension EditCommand {
             return "Trim Clip"
         case .setClipTransform:
             return "Set Clip Transform"
+        case .setClipSpeed:
+            return "Set Clip Speed"
         case .addClipTransformKeyframe:
             return "Add Transform Keyframe"
         case .moveClipTransformKeyframe:

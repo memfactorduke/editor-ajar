@@ -57,17 +57,20 @@ func makeClip(
     sourceStart: RationalTime = .zero,
     timelineStart: RationalTime = .zero,
     duration: RationalTime,
-    audioMix: ClipAudioMix = .identity
+    audioMix: ClipAudioMix = .identity,
+    speed: RationalValue = .one
 ) throws -> Clip {
     let clipID = try id ?? uuid("00000000-0000-0000-0000-000000085301")
+    let timelineDuration = try Clip.timelineDuration(forSourceDuration: duration, speed: speed)
     return Clip(
         id: clipID,
         source: .media(id: mediaID),
         sourceRange: try TimeRange(start: sourceStart, duration: duration),
-        timelineRange: try TimeRange(start: timelineStart, duration: duration),
+        timelineRange: try TimeRange(start: timelineStart, duration: timelineDuration),
         kind: .audio,
         name: "Audio",
-        audioMix: audioMix
+        audioMix: audioMix,
+        speed: speed
     )
 }
 

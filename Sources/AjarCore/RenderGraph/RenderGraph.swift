@@ -65,6 +65,15 @@ struct RenderCompositeNodeInput {
     let trackBlendMode: ClipBlendMode
 }
 
+struct RenderCompoundNodeSpec {
+    let sequenceID: UUID
+    let clipID: UUID
+    let sequenceTime: RationalTime
+    let speed: RationalValue
+    let graph: RenderGraph
+    let colorSpace: MediaColorSpace
+}
+
 /// Resolved media source parameters for a source render node.
 public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Stable media reference ID to decode.
@@ -76,6 +85,9 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Exact time in source media coordinates.
     public let sourceTime: RationalTime
 
+    /// Constant-rate playback speed that mapped sequence time to source time.
+    public let speed: RationalValue
+
     /// Tagged source color space used by the render pipeline.
     public let colorSpace: MediaColorSpace
 
@@ -84,11 +96,13 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         mediaID: UUID,
         clipID: UUID,
         sourceTime: RationalTime,
+        speed: RationalValue = .one,
         colorSpace: MediaColorSpace = .rec709
     ) {
         self.mediaID = mediaID
         self.clipID = clipID
         self.sourceTime = sourceTime
+        self.speed = speed
         self.colorSpace = colorSpace
     }
 }
@@ -104,6 +118,9 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
     /// Exact time in nested sequence coordinates.
     public let sequenceTime: RationalTime
 
+    /// Constant-rate playback speed that mapped sequence time to nested sequence time.
+    public let speed: RationalValue
+
     /// Nested sequence graph evaluated at `sequenceTime`.
     public let graph: RenderGraph
 
@@ -115,12 +132,14 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
         sequenceID: UUID,
         clipID: UUID,
         sequenceTime: RationalTime,
+        speed: RationalValue = .one,
         graph: RenderGraph,
         colorSpace: MediaColorSpace
     ) {
         self.sequenceID = sequenceID
         self.clipID = clipID
         self.sequenceTime = sequenceTime
+        self.speed = speed
         self.graph = graph
         self.colorSpace = colorSpace
     }
@@ -226,6 +245,7 @@ enum RenderNodeFactory {
         mediaID: UUID,
         clipID: UUID,
         sourceTime: RationalTime,
+        speed: RationalValue,
         colorSpace: MediaColorSpace
     ) throws -> RenderNode {
         let kind = RenderNodeKind.source(
@@ -233,6 +253,7 @@ enum RenderNodeFactory {
                 mediaID: mediaID,
                 clipID: clipID,
                 sourceTime: sourceTime,
+                speed: speed,
                 colorSpace: colorSpace
             )
         )
@@ -272,29 +293,24 @@ enum RenderNodeFactory {
         )
     }
 
-    static func makeCompoundNode(
-        sequenceID: UUID,
-        clipID: UUID,
-        sequenceTime: RationalTime,
-        graph: RenderGraph,
-        colorSpace: MediaColorSpace
-    ) throws -> RenderNode {
-        guard let outputHash = graph.outputNode?.contentHash else {
-            throw RenderGraphBuildError.missingNestedOutputNode(sequenceID: sequenceID)
+    static func makeCompoundNode(_ spec: RenderCompoundNodeSpec) throws -> RenderNode {
+        guard let outputHash = spec.graph.outputNode?.contentHash else {
+            throw RenderGraphBuildError.missingNestedOutputNode(sequenceID: spec.sequenceID)
         }
         let kind = RenderNodeKind.compound(
             RenderCompoundNode(
-                sequenceID: sequenceID,
-                clipID: clipID,
-                sequenceTime: sequenceTime,
-                graph: graph,
-                colorSpace: colorSpace
+                sequenceID: spec.sequenceID,
+                clipID: spec.clipID,
+                sequenceTime: spec.sequenceTime,
+                speed: spec.speed,
+                graph: spec.graph,
+                colorSpace: spec.colorSpace
             )
         )
         return try makeNode(
-            id: RenderNodeID(rawValue: "compound:\(clipID.uuidString)"),
+            id: RenderNodeID(rawValue: "compound:\(spec.clipID.uuidString)"),
             kind: kind,
-            inputIDs: [graph.outputNodeID],
+            inputIDs: [spec.graph.outputNodeID],
             inputHashes: [outputHash]
         )
     }

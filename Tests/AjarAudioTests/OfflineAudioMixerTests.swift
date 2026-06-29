@@ -40,6 +40,33 @@ final class OfflineAudioMixerTests: XCTestCase {
         assertSamples(buffer.samples, equal: [0, 0, 0.5, 0.5, 1, 1, 1, 1])
     }
 
+    func testFRSPD001ClipSpeedRetimesAudioSourceSamples() throws {
+        let mediaID = try uuid("00000000-0000-0000-0000-000000085003")
+        let fastClip = try makeClip(mediaID: mediaID, duration: time(1, 1), speed: RationalValue(2))
+        let fastBuffer = try render(
+            clip: fastClip,
+            mediaID: mediaID,
+            sourceSamples: [0, 1, 2, 3],
+            sourceSampleRate: 4
+        )
+
+        assertSamples(fastBuffer.samples, equal: [0, 0, 2, 2, 0, 0, 0, 0])
+
+        let slowClip = try makeClip(
+            mediaID: mediaID,
+            duration: time(1, 1),
+            speed: try RationalValue(numerator: 1, denominator: 2)
+        )
+        let slowBuffer = try render(
+            clip: slowClip,
+            mediaID: mediaID,
+            sourceSamples: [0, 1, 2, 3],
+            sourceSampleRate: 4
+        )
+
+        assertSamples(slowBuffer.samples, equal: [0, 0, 0.5, 0.5, 1, 1, 1.5, 1.5])
+    }
+
     func testCrossfadePartnerMustBeRealAdjacentClip() throws {
         let firstClipID = try uuid("00000000-0000-0000-0000-000000085101")
         let secondClipID = try uuid("00000000-0000-0000-0000-000000085102")
