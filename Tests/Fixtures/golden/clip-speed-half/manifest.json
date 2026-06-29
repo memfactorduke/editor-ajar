@@ -23,7 +23,7 @@
   "id" : "clip-speed-half",
   "referencePNG" : "reference.png",
   "requirements" : [
-    "FR-EDIT-007",
+    "FR-SPD-001",
     "ADR-0009",
     "TESTING-2",
     "ADR-0011",

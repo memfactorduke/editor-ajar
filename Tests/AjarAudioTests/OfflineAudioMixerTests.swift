@@ -40,7 +40,7 @@ final class OfflineAudioMixerTests: XCTestCase {
         assertSamples(buffer.samples, equal: [0, 0, 0.5, 0.5, 1, 1, 1, 1])
     }
 
-    func testFREDIT007ClipSpeedRetimesAudioSourceSamples() throws {
+    func testFRSPD001ClipSpeedRetimesAudioSourceSamples() throws {
         let mediaID = try uuid("00000000-0000-0000-0000-000000085003")
         let fastClip = try makeClip(mediaID: mediaID, duration: time(1, 1), speed: RationalValue(2))
         let fastBuffer = try render(

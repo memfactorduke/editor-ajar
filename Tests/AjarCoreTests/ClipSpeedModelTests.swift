@@ -6,7 +6,7 @@ import XCTest
 @testable import AjarCore
 
 final class ClipSpeedModelTests: XCTestCase {
-    func testFREDIT007ClipSpeedDefaultsToNormalAndMapsSourceTime() throws {
+    func testFRSPD001ClipSpeedDefaultsToNormalAndMapsSourceTime() throws {
         let fixture = try makeEditFixture(seed: 4_200)
         let clip = try requiredClip(fixture.clipID, in: fixture.project, fixture: fixture)
 
@@ -14,7 +14,7 @@ final class ClipSpeedModelTests: XCTestCase {
         XCTAssertEqual(try clip.sourceTime(at: try editTime(3)), try editTime(3))
     }
 
-    func testFREDIT007TimelineDurationIsSourceDurationDividedBySpeed() throws {
+    func testFRSPD001TimelineDurationIsSourceDurationDividedBySpeed() throws {
         let sourceDuration = try editTime(24)
         let doubleSpeed = RationalValue(2)
         let halfSpeed = try RationalValue(numerator: 1, denominator: 2)
@@ -29,7 +29,7 @@ final class ClipSpeedModelTests: XCTestCase {
         )
     }
 
-    func testFREDIT007SourceTimeMappingUsesConstantSpeed() throws {
+    func testFRSPD001SourceTimeMappingUsesConstantSpeed() throws {
         let mediaID = try editUUID(4_210_001)
         let clip = try makeEditClip(
             id: try editUUID(4_210_002),
@@ -54,7 +54,7 @@ final class ClipSpeedModelTests: XCTestCase {
         XCTAssertEqual(try halfSpeedClip.sourceTime(at: try editTime(14)), try editTime(2))
     }
 
-    func testFREDIT007SetClipSpeedIsUndoableAndAdjustsTimelineDuration() throws {
+    func testFRSPD001SetClipSpeedIsUndoableAndAdjustsTimelineDuration() throws {
         let fixture = try makeEditFixture(seed: 4_220)
         var history = EditHistory(project: fixture.project)
 
@@ -76,7 +76,7 @@ final class ClipSpeedModelTests: XCTestCase {
         XCTAssertEqual(try history.redo(), edited)
     }
 
-    func testFREDIT007ZeroAndNegativeSpeedsReturnTypedEditErrors() throws {
+    func testFRSPD001ZeroAndNegativeSpeedsReturnTypedEditErrors() throws {
         let fixture = try makeEditFixture(seed: 4_230)
         let invalidSpeeds = [
             RationalValue.zero,
@@ -108,7 +108,7 @@ final class ClipSpeedModelTests: XCTestCase {
         }
     }
 
-    func testFREDIT007ProjectValidationRejectsInvalidStoredSpeed() throws {
+    func testFRSPD001ProjectValidationRejectsInvalidStoredSpeed() throws {
         let fixture = try makeEditFixture(seed: 4_240)
         let invalidClip = Clip(
             id: try editUUID(4_240_100),
@@ -136,7 +136,7 @@ final class ClipSpeedModelTests: XCTestCase {
         )
     }
 
-    func testFREDIT007ProjectCodecRoundTripsSpeedAndLegacyDefaultsToNormal() throws {
+    func testFRSPD001ProjectCodecRoundTripsSpeedAndLegacyDefaultsToNormal() throws {
         let fixture = try makeEditFixture(seed: 4_250)
         let speed = try RationalValue(numerator: 3, denominator: 2)
         let retimedClip = try makeEditClip(

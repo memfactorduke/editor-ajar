@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Added FR-EDIT-007 constant-rate clip speed with exact rational speed storage,
+- Added FR-SPD-001 constant-rate clip speed with exact rational speed storage,
   undoable speed edits, retimed render-graph source-time mapping, speed-aware audio rendering,
   `.ajar` round-trip/default coverage, and golden frame/audio fixtures for 2x and 0.5x retiming.
 - Added M7 compound-clip video rendering for FR-TL-013/FR-CMP-006 with nested render graphs,

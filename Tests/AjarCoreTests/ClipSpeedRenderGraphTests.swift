@@ -6,7 +6,7 @@ import XCTest
 @testable import AjarCore
 
 final class ClipSpeedRenderGraphTests: XCTestCase {
-    func testFREDIT007ClipSpeedMapsRenderGraphSourceTime() throws {
+    func testFRSPD001ClipSpeedMapsRenderGraphSourceTime() throws {
         let mediaID = try uuid(130)
         let clipID = try uuid(131)
         let media = try makeMediaRef(id: mediaID)
@@ -43,7 +43,7 @@ final class ClipSpeedRenderGraphTests: XCTestCase {
         XCTAssertEqual(slowPayload.sourceTime, try time(2))
     }
 
-    func testADR0009FREDIT007ChangingSpeedInvalidatesSourceHashAtClipStart() throws {
+    func testADR0009FRSPD001ChangingSpeedInvalidatesSourceHashAtClipStart() throws {
         let mediaID = try uuid(132)
         let clipID = try uuid(133)
         let media = try makeMediaRef(id: mediaID)
