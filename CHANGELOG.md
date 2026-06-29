@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened NFR-STAB-003/ADR-0012 Metal render execution by synchronizing shared executor caches
+  and adding concurrent compound-render stress coverage for frame-cache and completion-handler
+  races.
 - Added FR-CMP-001 make-compound edit commands that collapse selected timeline clips into a new
   nested sequence, preserve relative multi-track layout, and route through undo/redo and codec
   coverage.
