@@ -161,6 +161,7 @@ struct AjarCompositeUniformLayout: Equatable, Sendable {
     let blendMode: Int
     let sourceTransfer: Int
     let sourcePrimaries: Int
+    let sourceIsLinearWorking: Int
     let workingPrimaries: Int
     let outputTransfer: Int
     let chromaKeyColorAndTolerance: Int
@@ -257,6 +258,11 @@ private struct RenderSchedule {
     var reusableTextures: [MTLTexture] = []
 }
 
+private enum CompositeOutputMode {
+    case presented
+    case linearWorking
+}
+
 // swiftlint:disable type_body_length
 /// Metal executor for GPU-resident render graph composites.
 public final class MetalRenderExecutor {
@@ -269,6 +275,7 @@ public final class MetalRenderExecutor {
     private var frameCacheAccessOrder: [FrameCacheKey] = []
     private var cacheHitCountValue = 0
     private var cacheMissCountValue = 0
+    private var outputPassCountValue = 0
     private let texturePoolLock = NSLock()
     private var texturePool: [TextureDescriptorKey: [MTLTexture]] = [:]
     private var texturePoolAccessOrder: [TextureDescriptorKey] = []
@@ -317,6 +324,13 @@ public final class MetalRenderExecutor {
         executorStateLock.lock()
         defer { executorStateLock.unlock() }
         return cacheMissCountValue
+    }
+
+    /// Number of display-transfer output passes encoded by this executor.
+    public var outputPassCount: Int {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        return outputPassCountValue
     }
 
     /// Creates an executor with the default Metal device.
@@ -424,6 +438,12 @@ public final class MetalRenderExecutor {
         cacheMissCountValue += 1
     }
 
+    private func recordOutputPass() {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        outputPassCountValue += 1
+    }
+
     private func cachedTexture(for key: FrameCacheKey) -> MTLTexture? {
         executorStateLock.lock()
         defer { executorStateLock.unlock() }
@@ -496,6 +516,10 @@ public final class MetalRenderExecutor {
         )
     }
 
+    private func outputMode(for output: RenderOutputDescriptor) -> CompositeOutputMode {
+        output.pixelFormat == Self.linearWorkingPixelFormat ? .linearWorking : .presented
+    }
+
     private func encode(
         graph: RenderGraph,
         output: RenderOutputDescriptor,
@@ -532,7 +556,8 @@ public final class MetalRenderExecutor {
                 composite: composite,
                 sourceInputs: sourceInputs,
                 outputTexture: outputTexture,
-                commandBuffer: commandBuffer
+                commandBuffer: commandBuffer,
+                outputMode: outputMode(for: output)
             )
             return RenderSchedule(
                 nestedFrames: sourceInputs.compactMap(\.retainedFrame),
@@ -549,6 +574,7 @@ public final class MetalRenderExecutor {
         let trackOpacity: RationalValue
         let trackBlendMode: ClipBlendMode
         let sourceColorSpace: MediaColorSpace
+        let sourceIsLinearWorking: Bool
         let retainedFrame: RenderedFrame?
     }
 
@@ -594,6 +620,7 @@ public final class MetalRenderExecutor {
                     trackOpacity: input.trackOpacity,
                     trackBlendMode: input.trackBlendMode,
                     sourceColorSpace: source.colorSpace,
+                    sourceIsLinearWorking: false,
                     retainedFrame: nil
                 )
             } catch {
@@ -622,6 +649,7 @@ public final class MetalRenderExecutor {
                 trackOpacity: input.trackOpacity,
                 trackBlendMode: input.trackBlendMode,
                 sourceColorSpace: compound.colorSpace,
+                sourceIsLinearWorking: true,
                 retainedFrame: frame
             )
         case .composite:
@@ -642,6 +670,31 @@ public final class MetalRenderExecutor {
     }
 
     private func encodeSourceComposite(
+        composite: RenderCompositeNode,
+        sourceInputs: [SourceCompositeInput],
+        outputTexture: MTLTexture,
+        commandBuffer: MTLCommandBuffer,
+        outputMode: CompositeOutputMode
+    ) throws -> [MTLTexture] {
+        switch outputMode {
+        case .presented:
+            return try encodePresentedSourceComposite(
+                composite: composite,
+                sourceInputs: sourceInputs,
+                outputTexture: outputTexture,
+                commandBuffer: commandBuffer
+            )
+        case .linearWorking:
+            return try encodeLinearWorkingSourceComposite(
+                composite: composite,
+                sourceInputs: sourceInputs,
+                outputTexture: outputTexture,
+                commandBuffer: commandBuffer
+            )
+        }
+    }
+
+    private func encodePresentedSourceComposite(
         composite: RenderCompositeNode,
         sourceInputs: [SourceCompositeInput],
         outputTexture: MTLTexture,
@@ -671,6 +724,39 @@ public final class MetalRenderExecutor {
             commandBuffer: commandBuffer
         )
         return [firstTexture, secondTexture]
+    }
+
+    private func encodeLinearWorkingSourceComposite(
+        composite: RenderCompositeNode,
+        sourceInputs: [SourceCompositeInput],
+        outputTexture: MTLTexture,
+        commandBuffer: MTLCommandBuffer
+    ) throws -> [MTLTexture] {
+        let intermediateTexture = try makeIntermediateTexture(matching: outputTexture)
+        var readTexture: MTLTexture
+        var writeTexture: MTLTexture
+        if sourceInputs.count.isMultiple(of: 2) {
+            try clear(outputTexture, commandBuffer: commandBuffer)
+            readTexture = outputTexture
+            writeTexture = intermediateTexture
+        } else {
+            try clear(intermediateTexture, commandBuffer: commandBuffer)
+            readTexture = intermediateTexture
+            writeTexture = outputTexture
+        }
+
+        for sourceInput in sourceInputs {
+            try encodeSourceCompositePass(
+                composite: composite,
+                sourceInput: sourceInput,
+                destinationTexture: readTexture,
+                outputTexture: writeTexture,
+                commandBuffer: commandBuffer
+            )
+            swap(&readTexture, &writeTexture)
+        }
+
+        return [intermediateTexture]
     }
 
     private func encodeSourceCompositePass(
@@ -735,6 +821,7 @@ public final class MetalRenderExecutor {
         )
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
         encoder.endEncoding()
+        recordOutputPass()
     }
 
     private func makeIntermediateTexture(matching outputTexture: MTLTexture) throws -> MTLTexture {
@@ -952,10 +1039,6 @@ public final class MetalRenderExecutor {
         let lumaKey = effects.lumaKey
         let colorCorrection = colorCorrectionUniforms(effects.colorCorrection)
         let masks = maskUniforms(effects.masks)
-        let colorPipeline = CompositeColorPipeline(
-            source: input.sourceColorSpace,
-            working: workingColorSpace
-        )
         let effectiveOpacity = clamp01(floatValue(transform.opacity))
             * clamp01(floatValue(input.trackOpacity))
         return AjarCompositeUniforms(
@@ -980,9 +1063,10 @@ public final class MetalRenderExecutor {
                     trackBlendMode: input.trackBlendMode
                 )
             ),
-            sourceTransfer: colorTransferValue(colorPipeline.source),
-            sourcePrimaries: colorPrimariesValue(colorPipeline.source),
-            workingPrimaries: colorPrimariesValue(colorPipeline.working),
+            sourceTransfer: colorTransferValue(input.sourceColorSpace),
+            sourcePrimaries: colorPrimariesValue(input.sourceColorSpace),
+            sourceIsLinearWorking: input.sourceIsLinearWorking ? 1 : 0,
+            workingPrimaries: colorPrimariesValue(workingColorSpace),
             outputTransfer: colorTransferValue(outputColorSpace),
             chromaKeyColorAndTolerance: chromaKeyColorAndTolerance(chromaKey),
             chromaKeyControls: chromaKeyControls(chromaKey),
@@ -1271,11 +1355,6 @@ public final class MetalRenderExecutor {
         let pixelFormatRawValue: UInt
     }
 
-    private struct CompositeColorPipeline {
-        let source: MediaColorSpace
-        let working: MediaColorSpace
-    }
-
     static var compositeUniformLayout: AjarCompositeUniformLayout {
         AjarCompositeUniformLayout(
             stride: MemoryLayout<AjarCompositeUniforms>.stride,
@@ -1298,6 +1377,8 @@ public final class MetalRenderExecutor {
                 .offset(of: \.sourceTransfer) ?? -1,
             sourcePrimaries: MemoryLayout<AjarCompositeUniforms>
                 .offset(of: \.sourcePrimaries) ?? -1,
+            sourceIsLinearWorking: MemoryLayout<AjarCompositeUniforms>
+                .offset(of: \.sourceIsLinearWorking) ?? -1,
             workingPrimaries: MemoryLayout<AjarCompositeUniforms>
                 .offset(of: \.workingPrimaries) ?? -1,
             outputTransfer: MemoryLayout<AjarCompositeUniforms>
@@ -1356,6 +1437,7 @@ public final class MetalRenderExecutor {
         var blendMode: UInt32
         var sourceTransfer: UInt32
         var sourcePrimaries: UInt32
+        var sourceIsLinearWorking: UInt32
         var workingPrimaries: UInt32
         var outputTransfer: UInt32
         var chromaKeyColorAndTolerance: SIMD4<Float>
@@ -1491,6 +1573,7 @@ public final class MetalRenderExecutor {
             uint blendMode;
             uint sourceTransfer;
             uint sourcePrimaries;
+            uint sourceIsLinearWorking;
             uint workingPrimaries;
             uint outputTransfer;
             float4 chromaKeyColorAndTolerance;
@@ -1634,6 +1717,20 @@ public final class MetalRenderExecutor {
                 uniforms.sourcePrimaries,
                 uniforms.workingPrimaries
             );
+        }
+
+        static float3 ajar_source_sample_to_working_linear(
+            float3 straightSource,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            if (uniforms.sourceIsLinearWorking != 0) {
+                return ajar_convert_primaries(
+                    straightSource,
+                    uniforms.sourcePrimaries,
+                    uniforms.workingPrimaries
+                );
+            }
+            return ajar_source_to_working_linear(straightSource, uniforms);
         }
 
         static float3 ajar_unpremultiply(float4 color) {
@@ -1825,10 +1922,10 @@ public final class MetalRenderExecutor {
         ) {
             float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
             float sourceTextureAlpha = saturate(sampledSource.a);
-            float3 sourceEncoded = sourceTextureAlpha > 0.00001
-                ? saturate(sampledSource.rgb / sourceTextureAlpha)
+            float3 straightSource = sourceTextureAlpha > 0.00001
+                ? sampledSource.rgb / sourceTextureAlpha
                 : float3(0.0);
-            return ajar_source_to_working_linear(sourceEncoded, uniforms);
+            return ajar_source_sample_to_working_linear(straightSource, uniforms);
         }
 
         static float ajar_chroma_base_alpha(
@@ -2186,10 +2283,10 @@ public final class MetalRenderExecutor {
 
             float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
             float sourceTextureAlpha = saturate(sampledSource.a);
-            float3 sourceEncoded = sourceTextureAlpha > 0.00001
-                ? saturate(sampledSource.rgb / sourceTextureAlpha)
+            float3 straightSource = sourceTextureAlpha > 0.00001
+                ? sampledSource.rgb / sourceTextureAlpha
                 : float3(0.0);
-            float3 sourceLinear = ajar_source_to_working_linear(sourceEncoded, uniforms);
+            float3 sourceLinear = ajar_source_sample_to_working_linear(straightSource, uniforms);
             float3 keyColor = float3(0.0);
             if (uniforms.chromaKeyControls.x > 0.0) {
                 keyColor = ajar_chroma_key_color(uniforms);
