@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `AjarCore` and `AjarAudio` deterministic sidechain audio ducking for FR-AUD-004 with
+  validated sequence rules, undoable set/clear commands, offline attack/hold/release envelope
+  rendering, `.ajar` codec defaults, and golden-audio coverage.
 - `AjarAudio` waveform summary generation for FR-AUD-002 with deterministic per-channel
   peak/RMS bins, partial-final-bin handling, typed resolution errors, and Codable cache output.
 - Hardened FR-AUD-003/007 audio mixer follow-ups with multi-clip and multi-track summation

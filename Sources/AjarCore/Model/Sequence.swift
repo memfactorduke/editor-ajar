@@ -19,6 +19,9 @@ public struct Sequence: Codable, Equatable, Sendable {
     /// Timeline markers.
     public let markers: [Marker]
 
+    /// Sequence-level sidechain ducking rules for offline/audio analysis renders.
+    public let audioDucking: [AudioDuckingRule]
+
     /// Sequence timebase.
     public let timebase: FrameRate
 
@@ -29,6 +32,7 @@ public struct Sequence: Codable, Equatable, Sendable {
         videoTracks: [Track],
         audioTracks: [Track],
         markers: [Marker],
+        audioDucking: [AudioDuckingRule] = [],
         timebase: FrameRate
     ) {
         self.id = id
@@ -36,7 +40,45 @@ public struct Sequence: Codable, Equatable, Sendable {
         self.videoTracks = videoTracks
         self.audioTracks = audioTracks
         self.markers = markers
+        self.audioDucking = audioDucking
         self.timebase = timebase
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case videoTracks
+        case audioTracks
+        case markers
+        case audioDucking
+        case timebase
+    }
+
+    /// Decodes sequences from current and legacy project schemas.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        videoTracks = try container.decode([Track].self, forKey: .videoTracks)
+        audioTracks = try container.decode([Track].self, forKey: .audioTracks)
+        markers = try container.decode([Marker].self, forKey: .markers)
+        audioDucking = try container.decodeIfPresent(
+            [AudioDuckingRule].self,
+            forKey: .audioDucking
+        ) ?? []
+        timebase = try container.decode(FrameRate.self, forKey: .timebase)
+    }
+
+    /// Encodes the complete sequence payload.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(videoTracks, forKey: .videoTracks)
+        try container.encode(audioTracks, forKey: .audioTracks)
+        try container.encode(markers, forKey: .markers)
+        try container.encode(audioDucking, forKey: .audioDucking)
+        try container.encode(timebase, forKey: .timebase)
     }
 }
 

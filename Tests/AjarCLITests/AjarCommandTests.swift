@@ -128,6 +128,7 @@ final class AjarCommandTests: XCTestCase {
 
         let diagnosticOutput = (output.lines + errorOutput.lines).joined(separator: "\n")
         XCTAssertEqual(exitCode, 0, diagnosticOutput)
+        XCTAssertTrue(output.lines.contains { line in line.contains("PASS ducking-sidechain") })
         XCTAssertTrue(output.lines.contains { line in line.contains("PASS gain-pan-fade") })
         XCTAssertTrue(output.lines.contains { line in line.contains("PASS multi-track-summing") })
         XCTAssertTrue(output.lines.contains { line in line.contains("PASS solo-track-selection") })

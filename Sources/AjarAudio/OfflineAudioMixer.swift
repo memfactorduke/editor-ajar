@@ -46,12 +46,23 @@ public enum OfflineAudioMixer {
         let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
         var output = Array(repeating: Float(0), count: outputSampleCount)
         var sourceCache: [UUID: AudioSourceBuffer] = [:]
+        let audioTracks = selectedAudioTracks(sequence.audioTracks)
+        let duckingMultipliers = try duckingMultipliersByTrackID(
+            rules: sequence.audioDucking,
+            tracks: audioTracks,
+            context: context,
+            sourceProvider: sourceProvider,
+            sourceCache: &sourceCache
+        )
 
-        for track in selectedAudioTracks(sequence.audioTracks) {
+        for track in audioTracks {
             try mixTrack(
                 track,
                 into: &output,
-                context: context,
+                context: OfflineTrackMixContext(
+                    mix: context,
+                    duckingMultipliers: duckingMultipliers[track.id]
+                ),
                 sourceProvider: sourceProvider,
                 sourceCache: &sourceCache
             )
@@ -61,16 +72,22 @@ public enum OfflineAudioMixer {
     }
 }
 
-private struct OfflineMixContext {
+struct OfflineMixContext {
     let frameCount: Int
     let range: TimeRange
     let format: AudioRenderFormat
 }
 
-private struct OfflineMixFrameContext {
+struct OfflineTrackMixContext {
+    let mix: OfflineMixContext
+    let duckingMultipliers: [Double]?
+}
+
+struct OfflineMixFrameContext {
     let renderTime: RationalTime
     let outputFrame: Int
     let format: AudioRenderFormat
+    let duckingMultiplier: Double
 }
 
 extension OfflineAudioMixer {
@@ -83,11 +100,11 @@ extension OfflineAudioMixer {
     }
 }
 
-private extension OfflineAudioMixer {
+extension OfflineAudioMixer {
     static func mixTrack(
         _ track: Track,
         into output: inout [Float],
-        context: OfflineMixContext,
+        context: OfflineTrackMixContext,
         sourceProvider: any AudioSourceProvider,
         sourceCache: inout [UUID: AudioSourceBuffer]
     ) throws {
@@ -131,13 +148,13 @@ private extension OfflineAudioMixer {
         track: Track,
         source: AudioSourceBuffer,
         into output: inout [Float],
-        context: OfflineMixContext
+        context: OfflineTrackMixContext
     ) throws {
         let intersection = try intersectionFrames(
             clip: clip,
-            range: context.range,
-            frameCount: context.frameCount,
-            sampleRate: context.format.sampleRate
+            range: context.mix.range,
+            frameCount: context.mix.frameCount,
+            sampleRate: context.mix.format.sampleRate
         )
         guard intersection.lowerBound < intersection.upperBound else {
             return
@@ -145,9 +162,9 @@ private extension OfflineAudioMixer {
 
         for outputFrame in intersection {
             let renderTime = try renderTime(
-                rangeStart: context.range.start,
+                rangeStart: context.mix.range.start,
                 outputFrame: outputFrame,
-                sampleRate: context.format.sampleRate
+                sampleRate: context.mix.format.sampleRate
             )
             try mixClipFrame(
                 clip,
@@ -156,7 +173,8 @@ private extension OfflineAudioMixer {
                 frame: OfflineMixFrameContext(
                     renderTime: renderTime,
                     outputFrame: outputFrame,
-                    format: context.format
+                    format: context.mix.format,
+                    duckingMultiplier: context.duckingMultipliers?[outputFrame] ?? 1
                 ),
                 output: &output
             )
@@ -180,7 +198,7 @@ private extension OfflineAudioMixer {
             track: track,
             renderTime: renderTime,
             localTime: localTime
-        )
+        ) * frame.duckingMultiplier
         let pan = panValue(clip: clip, track: track, renderTime: renderTime)
 
         for outputChannel in 0..<format.channelCount {
@@ -199,7 +217,7 @@ private extension OfflineAudioMixer {
     }
 }
 
-private extension OfflineAudioMixer {
+extension OfflineAudioMixer {
     static func intersectionFrames(
         clip: Clip,
         range: TimeRange,
@@ -254,7 +272,7 @@ private extension OfflineAudioMixer {
     }
 }
 
-private extension OfflineAudioMixer {
+extension OfflineAudioMixer {
     static func gainMultiplier(
         clip: Clip,
         track: Track,
@@ -304,7 +322,7 @@ private extension OfflineAudioMixer {
 
 }
 
-private extension OfflineAudioMixer {
+extension OfflineAudioMixer {
     static func mappedSourceSample(
         source: AudioSourceBuffer,
         framePosition: Double,
@@ -418,7 +436,7 @@ private extension OfflineAudioMixer {
     }
 }
 
-private extension OfflineAudioMixer {
+extension OfflineAudioMixer {
     static func add(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
         do {
             return try left.adding(right)

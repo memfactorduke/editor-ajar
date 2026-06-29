@@ -13,6 +13,7 @@ struct GoldenAudioManifest: Decodable, Equatable {
     let sources: [GoldenAudioSourceSpec]
     let clips: [GoldenAudioClipSpec]
     let tracks: [GoldenAudioTrackSpec]
+    let ducking: [GoldenAudioDuckingSpec]
     let referenceSamples: [Float]
 
     private enum CodingKeys: String, CodingKey {
@@ -24,6 +25,7 @@ struct GoldenAudioManifest: Decodable, Equatable {
         case sources
         case clips
         case tracks
+        case ducking
         case referenceSamples
     }
 
@@ -37,6 +39,8 @@ struct GoldenAudioManifest: Decodable, Equatable {
         sources = try container.decode([GoldenAudioSourceSpec].self, forKey: .sources)
         clips = try container.decodeIfPresent([GoldenAudioClipSpec].self, forKey: .clips) ?? []
         tracks = try container.decodeIfPresent([GoldenAudioTrackSpec].self, forKey: .tracks) ?? []
+        ducking = try container.decodeIfPresent([GoldenAudioDuckingSpec].self, forKey: .ducking)
+            ?? []
         referenceSamples = try container.decode([Float].self, forKey: .referenceSamples)
     }
 
@@ -67,6 +71,10 @@ struct GoldenAudioManifest: Decodable, Equatable {
         return [GoldenAudioTrackSpec(clips: clips)]
     }
 
+    func audioDuckingRules(trackIDs: [UUID]) throws -> [AudioDuckingRule] {
+        try ducking.map { try $0.rule(trackIDs: trackIDs) }
+    }
+
     static func rationalTime(_ rawValue: String) throws -> RationalTime {
         if rawValue.contains("/") {
             let parts = rawValue.split(separator: "/", omittingEmptySubsequences: false)
@@ -83,6 +91,60 @@ struct GoldenAudioManifest: Decodable, Equatable {
             throw AjarCLIError.invalidGoldenManifest("invalid audio time '\(rawValue)'")
         }
         return try RationalTime(value: seconds, timescale: 1)
+    }
+}
+
+struct GoldenAudioDuckingSpec: Decodable, Equatable {
+    let triggerTrackIndex: Int
+    let targetTrackIndexes: [Int]
+    let threshold: Double
+    let reductionGain: Double
+    let attack: String
+    let release: String
+    let hold: String
+
+    private enum CodingKeys: String, CodingKey {
+        case triggerTrackIndex
+        case targetTrackIndexes
+        case threshold
+        case reductionGain
+        case attack
+        case release
+        case hold
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        triggerTrackIndex = try container.decode(Int.self, forKey: .triggerTrackIndex)
+        targetTrackIndexes = try container.decode([Int].self, forKey: .targetTrackIndexes)
+        threshold = try container.decode(Double.self, forKey: .threshold)
+        reductionGain = try container.decode(Double.self, forKey: .reductionGain)
+        attack = try container.decodeIfPresent(String.self, forKey: .attack) ?? "0"
+        release = try container.decodeIfPresent(String.self, forKey: .release) ?? "0"
+        hold = try container.decodeIfPresent(String.self, forKey: .hold) ?? "0"
+    }
+
+    func rule(trackIDs: [UUID]) throws -> AudioDuckingRule {
+        guard triggerTrackIndex >= 0, triggerTrackIndex < trackIDs.count else {
+            throw AjarCLIError.invalidGoldenManifest("ducking triggerTrackIndex is out of range")
+        }
+        let targetIDs = try targetTrackIndexes.map { targetIndex in
+            guard targetIndex >= 0, targetIndex < trackIDs.count else {
+                throw AjarCLIError.invalidGoldenManifest(
+                    "ducking targetTrackIndexes contains an out-of-range index"
+                )
+            }
+            return trackIDs[targetIndex]
+        }
+        return AudioDuckingRule(
+            triggerTrackID: trackIDs[triggerTrackIndex],
+            targetTrackIDs: targetIDs,
+            threshold: RationalValue.approximating(threshold),
+            reductionGain: RationalValue.approximating(reductionGain),
+            attack: try GoldenAudioManifest.rationalTime(attack),
+            release: try GoldenAudioManifest.rationalTime(release),
+            hold: try GoldenAudioManifest.rationalTime(hold)
+        )
     }
 }
 

@@ -34,6 +34,12 @@ extension EditReducer {
             )
         case .renameSequence(let sequenceID, let name):
             return try renameSequence(sequenceID: sequenceID, name: name, in: project)
+        case .setSequenceAudioDucking(let sequenceID, let ducking):
+            return try setSequenceAudioDucking(
+                sequenceID: sequenceID, ducking: ducking, in: project
+            )
+        case .clearSequenceAudioDucking(let sequenceID):
+            return try clearSequenceAudioDucking(sequenceID: sequenceID, in: project)
         case .addMarker(let sequenceID, let marker):
             return try addMarker(marker, sequenceID: sequenceID, to: project)
         case .removeMarker(let sequenceID, let markerID):
@@ -42,17 +48,10 @@ extension EditReducer {
             return try updateMarker(marker, sequenceID: sequenceID, in: project)
         case .linkClips(let sequenceID, let linkGroupID, let clips):
             return try linkClips(
-                sequenceID: sequenceID,
-                linkGroupID: linkGroupID,
-                clips: clips,
-                in: project
+                sequenceID: sequenceID, linkGroupID: linkGroupID, clips: clips, in: project
             )
         case .unlinkClips(let sequenceID, let linkGroupID):
-            return try unlinkClips(
-                sequenceID: sequenceID,
-                linkGroupID: linkGroupID,
-                in: project
-            )
+            return try unlinkClips(sequenceID: sequenceID, linkGroupID: linkGroupID, in: project)
         case .setProjectSettings(let settings):
             return Project(
                 schemaVersion: project.schemaVersion,
