@@ -216,7 +216,8 @@ struct GoldenAudioSourceSpec: Decodable, Equatable {
 }
 
 struct GoldenAudioClipSpec: Decodable, Equatable {
-    let sourceIndex: Int
+    let sourceIndex: Int?
+    let compound: GoldenAudioCompoundSpec?
     let timelineStart: String
     let sourceStart: String
     let duration: String
@@ -228,6 +229,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case sourceIndex
+        case compound
         case timelineStart
         case sourceStart
         case duration
@@ -240,7 +242,8 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        sourceIndex = try container.decode(Int.self, forKey: .sourceIndex)
+        sourceIndex = try container.decodeIfPresent(Int.self, forKey: .sourceIndex)
+        compound = try container.decodeIfPresent(GoldenAudioCompoundSpec.self, forKey: .compound)
         timelineStart = try container.decodeIfPresent(String.self, forKey: .timelineStart) ?? "0"
         sourceStart = try container.decodeIfPresent(String.self, forKey: .sourceStart) ?? "0"
         duration = try container.decode(String.self, forKey: .duration)
@@ -251,12 +254,12 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         fadeOut = try container.decodeIfPresent(String.self, forKey: .fadeOut)
     }
 
-    func clip(id: UUID, mediaID: UUID) throws -> Clip {
+    func clip(id: UUID, source: ClipSource) throws -> Clip {
         let clipDuration = try GoldenAudioManifest.rationalTime(duration)
         let clipSpeed = speed ?? .one
         return Clip(
             id: id,
-            source: .media(id: mediaID),
+            source: source,
             sourceRange: try TimeRange(
                 start: GoldenAudioManifest.rationalTime(sourceStart),
                 duration: clipDuration
@@ -286,5 +289,31 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
             return .none
         }
         return ClipAudioFade(duration: try GoldenAudioManifest.rationalTime(edgeDuration))
+    }
+}
+
+struct GoldenAudioCompoundSpec: Decodable, Equatable {
+    let clips: [GoldenAudioClipSpec]
+    let tracks: [GoldenAudioTrackSpec]
+
+    private enum CodingKeys: String, CodingKey {
+        case clips
+        case tracks
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        clips = try container.decodeIfPresent([GoldenAudioClipSpec].self, forKey: .clips) ?? []
+        tracks = try container.decodeIfPresent([GoldenAudioTrackSpec].self, forKey: .tracks) ?? []
+    }
+
+    func trackSpecs() throws -> [GoldenAudioTrackSpec] {
+        if !tracks.isEmpty {
+            return tracks
+        }
+        guard !clips.isEmpty else {
+            throw AjarCLIError.invalidGoldenManifest("compound audio manifest has no clips")
+        }
+        return [GoldenAudioTrackSpec(clips: clips)]
     }
 }

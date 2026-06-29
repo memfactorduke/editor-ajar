@@ -13,8 +13,8 @@ extension OfflineAudioMixer {
         rules: [AudioDuckingRule],
         tracks: [Track],
         context: OfflineMixContext,
-        sourceProvider: any AudioSourceProvider,
-        sourceCache: inout [UUID: AudioSourceBuffer]
+        environment: inout OfflineAudioRenderEnvironment,
+        nestingDepth: Int
     ) throws -> [UUID: [Double]] {
         guard !rules.isEmpty, context.frameCount > 0 else {
             return [:]
@@ -32,9 +32,9 @@ extension OfflineAudioMixer {
             let triggerPeaks = try cachedPeakLevels(
                 for: triggerTrack,
                 context: context,
-                sourceProvider: sourceProvider,
-                sourceCache: &sourceCache,
-                peaksByTriggerID: &peaksByTriggerID
+                environment: &environment,
+                peaksByTriggerID: &peaksByTriggerID,
+                nestingDepth: nestingDepth
             )
             let ruleMultipliers = try duckingEnvelopeMultipliers(
                 levels: triggerPeaks,
@@ -57,9 +57,9 @@ extension OfflineAudioMixer {
     static func cachedPeakLevels(
         for triggerTrack: Track,
         context: OfflineMixContext,
-        sourceProvider: any AudioSourceProvider,
-        sourceCache: inout [UUID: AudioSourceBuffer],
-        peaksByTriggerID: inout [UUID: [Double]]
+        environment: inout OfflineAudioRenderEnvironment,
+        peaksByTriggerID: inout [UUID: [Double]],
+        nestingDepth: Int
     ) throws -> [Double] {
         if let cachedPeaks = peaksByTriggerID[triggerTrack.id] {
             return cachedPeaks
@@ -68,8 +68,8 @@ extension OfflineAudioMixer {
         let peaks = try trackPeakLevels(
             triggerTrack,
             context: context,
-            sourceProvider: sourceProvider,
-            sourceCache: &sourceCache
+            environment: &environment,
+            nestingDepth: nestingDepth
         )
         peaksByTriggerID[triggerTrack.id] = peaks
         return peaks
@@ -78,8 +78,8 @@ extension OfflineAudioMixer {
     static func trackPeakLevels(
         _ track: Track,
         context: OfflineMixContext,
-        sourceProvider: any AudioSourceProvider,
-        sourceCache: inout [UUID: AudioSourceBuffer]
+        environment: inout OfflineAudioRenderEnvironment,
+        nestingDepth: Int
     ) throws -> [Double] {
         var levels = Array(repeating: Double(0), count: context.frameCount)
         for item in track.items {
@@ -89,8 +89,9 @@ extension OfflineAudioMixer {
 
             let source = try sourceBuffer(
                 for: clip,
-                sourceProvider: sourceProvider,
-                sourceCache: &sourceCache
+                context: context,
+                environment: &environment,
+                nestingDepth: nestingDepth
             )
             try peakClipLevels(
                 clip,

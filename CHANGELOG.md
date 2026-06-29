@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added FR-CMP-001/FR-AUD-003 nested compound audio rendering so sequence-backed audio clips
+  contribute to offline/live control-side mixes, honor compound speed/gain, stop at the
+  defensive nesting limit with typed errors, and carry golden-audio coverage.
 - Hardened NFR-STAB-003/ADR-0012 Metal render execution by synchronizing shared executor caches
   and adding concurrent compound-render stress coverage for frame-cache and completion-handler
   races.

@@ -129,15 +129,14 @@ public extension AudioMixerMeterAnalyzer {
         sourceProvider: any AudioSourceProvider,
         channelCount: Int = 2
     ) throws -> AudioProgramLoudnessReport {
-        try measureProgramLoudness(
+        let buffer = try OfflineAudioMixer.render(
+            project: project,
             sequence: sequence,
             range: range,
-            format: AudioRenderFormat(
-                sampleRate: project.settings.audioSampleRate,
-                channelCount: channelCount
-            ),
-            sourceProvider: sourceProvider
+            sourceProvider: sourceProvider,
+            channelCount: channelCount
         )
+        return try measureProgramLoudness(buffer: buffer)
     }
 
     /// Renders a sequence window, then computes integrated loudness and true peak.

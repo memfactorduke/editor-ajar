@@ -90,6 +90,12 @@ private struct GoldenAudioComparison {
     let diagnostic: String?
 }
 
+private struct GoldenAudioProjectBuildState {
+    let sampleRate: Int
+    var nextNestedSequenceOrdinal = 0
+    var nestedSequences: [Sequence] = []
+}
+
 private extension GoldenAudioHarness {
     static func discoverManifestURLs(at url: URL) throws -> [URL] {
         var isDirectory: ObjCBool = false
@@ -163,7 +169,14 @@ private extension GoldenAudioHarness {
         let media = try makeMedia(manifest: manifest, workingDirectory: workingDirectory)
         let trackSpecs = try manifest.trackSpecs()
         let trackIDs = try makeTrackIDs(count: trackSpecs.count)
-        let tracks = try makeTracks(trackSpecs: trackSpecs, trackIDs: trackIDs, media: media)
+        var buildState = GoldenAudioProjectBuildState(sampleRate: manifest.sampleRate)
+        let tracks = try makeTracks(
+            trackSpecs: trackSpecs,
+            trackIDs: trackIDs,
+            media: media,
+            buildState: &buildState,
+            clipIDBase: 72_400
+        )
         let frameRate = try FrameRate(frames: Int64(manifest.sampleRate))
         let sequence = Sequence(
             id: try numberedUUID(72_100),
@@ -184,7 +197,7 @@ private extension GoldenAudioHarness {
                 audioSampleRate: manifest.sampleRate
             ),
             mediaPool: media,
-            sequences: [sequence]
+            sequences: [sequence] + buildState.nestedSequences
         )
     }
 
@@ -211,13 +224,17 @@ private extension GoldenAudioHarness {
     static func makeTracks(
         trackSpecs: [GoldenAudioTrackSpec],
         trackIDs: [UUID],
-        media: [MediaRef]
+        media: [MediaRef],
+        buildState: inout GoldenAudioProjectBuildState,
+        clipIDBase: Int
     ) throws -> [Track] {
         return try trackSpecs.enumerated().map { trackIndex, trackSpec in
             let clips = try makeClips(
                 trackSpec.clips,
                 trackIndex: trackIndex,
-                media: media
+                media: media,
+                buildState: &buildState,
+                clipIDBase: clipIDBase
             )
             return trackSpec.track(
                 id: trackIDs[trackIndex],
@@ -229,17 +246,86 @@ private extension GoldenAudioHarness {
     static func makeClips(
         _ clipSpecs: [GoldenAudioClipSpec],
         trackIndex: Int,
-        media: [MediaRef]
+        media: [MediaRef],
+        buildState: inout GoldenAudioProjectBuildState,
+        clipIDBase: Int
     ) throws -> [Clip] {
         try clipSpecs.enumerated().map { clipIndex, clipSpec in
-            guard clipSpec.sourceIndex >= 0, clipSpec.sourceIndex < media.count else {
-                throw AjarCLIError.invalidGoldenManifest("clip sourceIndex is out of range")
-            }
+            let source = try clipSource(
+                clipSpec,
+                media: media,
+                buildState: &buildState
+            )
             return try clipSpec.clip(
-                id: numberedUUID(72_400 + (trackIndex * 100) + clipIndex),
-                mediaID: media[clipSpec.sourceIndex].id
+                id: numberedUUID(clipIDBase + (trackIndex * 100) + clipIndex),
+                source: source
             )
         }
+    }
+
+    static func clipSource(
+        _ clipSpec: GoldenAudioClipSpec,
+        media: [MediaRef],
+        buildState: inout GoldenAudioProjectBuildState
+    ) throws -> ClipSource {
+        if let compound = clipSpec.compound {
+            guard clipSpec.sourceIndex == nil else {
+                throw AjarCLIError.invalidGoldenManifest(
+                    "compound audio clip cannot also set sourceIndex"
+                )
+            }
+            return .sequence(
+                id: try makeNestedSequence(
+                    compound: compound,
+                    media: media,
+                    buildState: &buildState
+                )
+            )
+        }
+
+        guard let sourceIndex = clipSpec.sourceIndex,
+              sourceIndex >= 0,
+              sourceIndex < media.count
+        else {
+            throw AjarCLIError.invalidGoldenManifest("clip sourceIndex is out of range")
+        }
+        return .media(id: media[sourceIndex].id)
+    }
+
+    static func makeNestedSequence(
+        compound: GoldenAudioCompoundSpec,
+        media: [MediaRef],
+        buildState: inout GoldenAudioProjectBuildState
+    ) throws -> UUID {
+        let sequenceOrdinal = buildState.nextNestedSequenceOrdinal
+        buildState.nextNestedSequenceOrdinal += 1
+        let sequenceID = try numberedUUID(72_500 + sequenceOrdinal)
+        let trackSpecs = try compound.trackSpecs()
+        let trackIDs = try makeNestedTrackIDs(
+            sequenceOrdinal: sequenceOrdinal,
+            count: trackSpecs.count
+        )
+        let tracks = try makeTracks(
+            trackSpecs: trackSpecs,
+            trackIDs: trackIDs,
+            media: media,
+            buildState: &buildState,
+            clipIDBase: 72_700 + (sequenceOrdinal * 1_000)
+        )
+        let sequence = Sequence(
+            id: sequenceID,
+            name: "Golden Nested Audio \(sequenceOrdinal)",
+            videoTracks: [],
+            audioTracks: tracks,
+            markers: [],
+            timebase: try FrameRate(frames: Int64(buildState.sampleRate))
+        )
+        buildState.nestedSequences.append(sequence)
+        return sequenceID
+    }
+
+    static func makeNestedTrackIDs(sequenceOrdinal: Int, count: Int) throws -> [UUID] {
+        try (0..<count).map { try numberedUUID(72_600 + (sequenceOrdinal * 100) + $0) }
     }
 
     static func mediaRef(source: AudioSourceBuffer, sourceURL: URL, id: UUID) throws -> MediaRef {

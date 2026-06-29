@@ -20,7 +20,8 @@ public enum OfflineAudioMixer {
                 sampleRate: project.settings.audioSampleRate,
                 channelCount: channelCount
             ),
-            sourceProvider: sourceProvider
+            sourceProvider: sourceProvider,
+            project: project
         )
     }
 
@@ -34,6 +35,42 @@ public enum OfflineAudioMixer {
         range: TimeRange,
         format: AudioRenderFormat,
         sourceProvider: any AudioSourceProvider
+    ) throws -> RenderedAudioBuffer {
+        try render(
+            sequence: sequence,
+            range: range,
+            format: format,
+            sourceProvider: sourceProvider,
+            project: nil
+        )
+    }
+
+    static func render(
+        sequence: Sequence,
+        range: TimeRange,
+        format: AudioRenderFormat,
+        sourceProvider: any AudioSourceProvider,
+        project: Project?
+    ) throws -> RenderedAudioBuffer {
+        var environment = OfflineAudioRenderEnvironment(
+            project: project,
+            sourceProvider: sourceProvider
+        )
+        return try render(
+            sequence: sequence,
+            range: range,
+            format: format,
+            environment: &environment,
+            nestingDepth: 0
+        )
+    }
+
+    static func render(
+        sequence: Sequence,
+        range: TimeRange,
+        format: AudioRenderFormat,
+        environment: inout OfflineAudioRenderEnvironment,
+        nestingDepth: Int
     ) throws -> RenderedAudioBuffer {
         try AudioBufferValidator.validate(format: format, frameCount: 0, samples: [])
         try validateCrossfades(in: sequence)
@@ -49,14 +86,13 @@ public enum OfflineAudioMixer {
         )
         let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
         var output = Array(repeating: Float(0), count: outputSampleCount)
-        var sourceCache: [UUID: AudioSourceBuffer] = [:]
         let audioTracks = selectedAudioTracks(sequence.audioTracks)
         let duckingMultipliers = try duckingMultipliersByTrackID(
             rules: sequence.audioDucking,
             tracks: audioTracks,
             context: context,
-            sourceProvider: sourceProvider,
-            sourceCache: &sourceCache
+            environment: &environment,
+            nestingDepth: nestingDepth
         )
 
         for track in audioTracks {
@@ -67,8 +103,8 @@ public enum OfflineAudioMixer {
                     mix: context,
                     duckingMultipliers: duckingMultipliers[track.id]
                 ),
-                sourceProvider: sourceProvider,
-                sourceCache: &sourceCache
+                environment: &environment,
+                nestingDepth: nestingDepth
             )
         }
 
@@ -109,8 +145,8 @@ extension OfflineAudioMixer {
         _ track: Track,
         into output: inout [Float],
         context: OfflineTrackMixContext,
-        sourceProvider: any AudioSourceProvider,
-        sourceCache: inout [UUID: AudioSourceBuffer]
+        environment: inout OfflineAudioRenderEnvironment,
+        nestingDepth: Int
     ) throws {
         for item in track.items {
             guard case .clip(let clip) = item, clip.kind == .audio else {
@@ -118,8 +154,9 @@ extension OfflineAudioMixer {
             }
             let source = try sourceBuffer(
                 for: clip,
-                sourceProvider: sourceProvider,
-                sourceCache: &sourceCache
+                context: context.mix,
+                environment: &environment,
+                nestingDepth: nestingDepth
             )
             try mixClip(
                 clip,
@@ -129,22 +166,6 @@ extension OfflineAudioMixer {
                 context: context
             )
         }
-    }
-
-    static func sourceBuffer(
-        for clip: Clip,
-        sourceProvider: any AudioSourceProvider,
-        sourceCache: inout [UUID: AudioSourceBuffer]
-    ) throws -> AudioSourceBuffer {
-        guard case .media(let mediaID) = clip.source else {
-            throw AudioRenderError.unsupportedClipSource(clipID: clip.id)
-        }
-        if let cached = sourceCache[mediaID] {
-            return cached
-        }
-        let source = try sourceProvider.audioSource(for: mediaID)
-        sourceCache[mediaID] = source
-        return source
     }
 
     static func mixClip(
@@ -445,7 +466,6 @@ extension OfflineAudioMixer {
         0.70710678
     }
 }
-
 extension OfflineAudioMixer {
     static func add(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
         do {
@@ -454,7 +474,6 @@ extension OfflineAudioMixer {
             throw AudioRenderError.timeArithmetic(String(describing: error))
         }
     }
-
     static func subtract(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
         do {
             return try left.subtracting(right)
@@ -462,7 +481,6 @@ extension OfflineAudioMixer {
             throw AudioRenderError.timeArithmetic(String(describing: error))
         }
     }
-
     static func end(of range: TimeRange) throws -> RationalTime {
         do {
             return try range.end()

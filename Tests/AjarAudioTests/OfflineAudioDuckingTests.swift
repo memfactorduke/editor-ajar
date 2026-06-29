@@ -286,7 +286,10 @@ private func duckingMultipliers(
     tracks: [Track],
     sources: [UUID: AudioSourceBuffer]
 ) throws -> [UUID: [Double]] {
-    var sourceCache: [UUID: AudioSourceBuffer] = [:]
+    var environment = OfflineAudioRenderEnvironment(
+        project: nil,
+        sourceProvider: InMemoryAudioSourceProvider(sources: sources)
+    )
     return try OfflineAudioMixer.duckingMultipliersByTrackID(
         rules: rules,
         tracks: tracks,
@@ -295,8 +298,8 @@ private func duckingMultipliers(
             range: TimeRange(start: .zero, duration: time(1, 1)),
             format: AudioRenderFormat(sampleRate: 4, channelCount: 2)
         ),
-        sourceProvider: InMemoryAudioSourceProvider(sources: sources),
-        sourceCache: &sourceCache
+        environment: &environment,
+        nestingDepth: 0
     )
 }
 
