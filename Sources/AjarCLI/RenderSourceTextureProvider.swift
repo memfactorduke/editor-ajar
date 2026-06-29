@@ -28,11 +28,7 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
         var textures: [RenderSourceKey: MTLTexture] = [:]
         var retainedFrames: [DecodedFrame] = []
 
-        for node in graph.nodes {
-            guard case .source(let source) = node.kind else {
-                continue
-            }
-
+        for source in graph.renderSourceNodes() {
             let media = try Self.media(for: source.mediaID, in: project)
             let frame = try await decoder.decodeFrame(from: media, at: source.sourceTime)
             guard let texture = CVMetalTextureGetTexture(frame.metalTexture) else {
@@ -64,5 +60,26 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
             throw AjarCLIError.missingMediaReference(mediaID)
         }
         return media
+    }
+}
+
+private extension RenderGraph {
+    func renderSourceNodes() -> [RenderSourceNode] {
+        var sources: [RenderSourceNode] = []
+        appendRenderSourceNodes(to: &sources)
+        return sources
+    }
+
+    func appendRenderSourceNodes(to sources: inout [RenderSourceNode]) {
+        for node in nodes {
+            switch node.kind {
+            case .source(let source):
+                sources.append(source)
+            case .compound(let compound):
+                compound.graph.appendRenderSourceNodes(to: &sources)
+            case .composite:
+                continue
+            }
+        }
     }
 }

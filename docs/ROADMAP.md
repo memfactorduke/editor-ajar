@@ -97,10 +97,11 @@ no dropouts during a stress mix.
 speed-ramp golden-frame tests; soak test stays leak-free (NFR-STAB-005).
 **Depends on:** M4, M5.
 
-**Current status:** M7 is open with the pure `AjarCore` compound source model: clips can reference
-another sequence by ID, resolve its current duration/timebase at query time, and central validation
-rejects direct or transitive compound cycles. Nested render-graph/cache support and retiming remain
-unfinished M7 work.
+**Current status:** M7 is open with the pure `AjarCore` compound source model plus video render
+support: clips can reference another sequence by ID, resolve its current duration/timebase at query
+time, reject direct/transitive cycles, render the referenced sequence as a nested GPU texture, and
+reuse unchanged nested output through the content-hash cache. Create/open/decompose UI, nested audio,
+disk cache warming, and retiming remain unfinished M7 work.
 
 ## M8 — Titles, effects, transitions & color depth
 

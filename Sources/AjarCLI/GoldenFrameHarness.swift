@@ -34,7 +34,7 @@ public struct GoldenFrameSummary: Equatable, Sendable {
 }
 
 /// Manifest-driven golden-frame harness for TESTING Section 2 and ADR-0011.
-public enum GoldenFrameHarness {
+public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
     /// Runs all manifests found under the suite path.
     public static func run(
         options: GoldenFrameOptions,
@@ -211,6 +211,11 @@ public enum GoldenFrameHarness {
             )
         }
         let tracks = try makeTracks(context: context, clipSpecs: clipSpecs, media: media)
+        let compoundSequences = try makeCompoundSequences(
+            context: context,
+            clipSpecs: clipSpecs,
+            media: media
+        )
         let sequence = Sequence(
             id: try uuid("00000000-0000-0000-0000-000000000218"),
             name: "Golden \(manifest.id)",
@@ -229,7 +234,7 @@ public enum GoldenFrameHarness {
                 audioSampleRate: 48_000
             ),
             mediaPool: media,
-            sequences: [sequence]
+            sequences: [sequence] + compoundSequences
         )
     }
 
@@ -254,6 +259,40 @@ public enum GoldenFrameHarness {
                 ],
                 opacity: clipSpecs[index].trackOpacity ?? .constant(.one),
                 blendMode: clipSpecs[index].trackBlendMode ?? .normal
+            )
+        }
+    }
+
+    private static func makeCompoundSequences(
+        context: GoldenFrameBuildContext,
+        clipSpecs: [GoldenFrameClipSpec],
+        media: [MediaRef]
+    ) throws -> [Sequence] {
+        try clipSpecs.indices.compactMap { index in
+            guard let compound = clipSpecs[index].compound else {
+                return nil
+            }
+
+            let clip = try makeMediaClip(
+                context: context,
+                clipSpec: clipSpecs[index],
+                mediaID: media[index].id,
+                index: index,
+                compound: compound
+            )
+            return Sequence(
+                id: try compoundSequenceID(index: index),
+                name: "Golden compound \(context.manifestID) \(index)",
+                videoTracks: [
+                    Track(
+                        id: try numberedUUID(518 + index),
+                        kind: .video,
+                        items: [.clip(clip)]
+                    )
+                ],
+                audioTracks: [],
+                markers: [],
+                timebase: context.frameRate
             )
         }
     }
@@ -298,7 +337,7 @@ public enum GoldenFrameHarness {
     ) throws -> Clip {
         Clip(
             id: try numberedUUID(118 + index),
-            source: .media(id: mediaID),
+            source: try source(for: clipSpec, mediaID: mediaID, index: index),
             sourceRange: try TimeRange(start: .zero, duration: context.duration),
             timelineRange: try TimeRange(start: .zero, duration: context.duration),
             kind: .video,
@@ -308,6 +347,42 @@ public enum GoldenFrameHarness {
             effects: clipSpec.effects ?? .none,
             effectsAnimation: clipSpec.effectsAnimation
         )
+    }
+
+    private static func makeMediaClip(
+        context: GoldenFrameBuildContext,
+        clipSpec: GoldenFrameClipSpec,
+        mediaID: UUID,
+        index: Int,
+        compound: GoldenFrameCompoundSpec
+    ) throws -> Clip {
+        Clip(
+            id: try numberedUUID(618 + index),
+            source: .media(id: mediaID),
+            sourceRange: try TimeRange(start: .zero, duration: context.duration),
+            timelineRange: try TimeRange(start: .zero, duration: context.duration),
+            kind: .video,
+            name: "Golden nested \(context.manifestID) \(index)",
+            transform: compound.innerTransform ?? .identity,
+            transformAnimation: clipSpec.transformAnimation,
+            effects: compound.innerEffects ?? .none,
+            effectsAnimation: clipSpec.effectsAnimation
+        )
+    }
+
+    private static func source(
+        for clipSpec: GoldenFrameClipSpec,
+        mediaID: UUID,
+        index: Int
+    ) throws -> ClipSource {
+        if clipSpec.compound != nil {
+            return .sequence(id: try compoundSequenceID(index: index))
+        }
+        return .media(id: mediaID)
+    }
+
+    private static func compoundSequenceID(index: Int) throws -> UUID {
+        try numberedUUID(418 + index)
     }
 
     private static func uuid(_ value: String) throws -> UUID {
@@ -384,6 +459,7 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
             return [
                 GoldenFrameClipSpec(
                     syntheticMedia: syntheticMedia,
+                    compound: nil,
                     transform: nil,
                     transformAnimation: nil,
                     effects: nil,
@@ -399,12 +475,18 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
 
 struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let syntheticMedia: SyntheticMovieSpec
+    let compound: GoldenFrameCompoundSpec?
     let transform: ClipTransform?
     let transformAnimation: AnimatableClipTransform?
     let effects: ClipEffects?
     let effectsAnimation: AnimatableClipEffects?
     let trackOpacity: Animatable<RationalValue>?
     let trackBlendMode: ClipBlendMode?
+}
+
+struct GoldenFrameCompoundSpec: Codable, Equatable, Sendable {
+    let innerTransform: ClipTransform?
+    let innerEffects: ClipEffects?
 }
 
 private struct GoldenFrameCaseResult {

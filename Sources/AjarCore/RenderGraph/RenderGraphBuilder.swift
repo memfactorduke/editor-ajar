@@ -7,8 +7,14 @@ public enum RenderGraphBuildError: Error, Equatable, Sendable, CustomStringConve
     /// A media-backed clip references a missing media ID.
     case missingMediaReference(clipID: UUID, mediaID: UUID)
 
-    /// M2 only supports media-backed clips.
-    case unsupportedClipSource(clipID: UUID, source: ClipSource)
+    /// A compound clip references a missing sequence ID.
+    case missingSequenceReference(clipID: UUID, sequenceID: UUID)
+
+    /// A nested graph did not produce its declared output node.
+    case missingNestedOutputNode(sequenceID: UUID)
+
+    /// Compound nesting exceeded the defensive render graph recursion limit.
+    case maximumCompoundNestingDepthExceeded(clipID: UUID, depth: Int)
 
     /// M2 only supports one active video clip at the requested time.
     case multipleActiveVideoClips(time: RationalTime, clipIDs: [UUID])
@@ -27,8 +33,12 @@ public enum RenderGraphBuildError: Error, Equatable, Sendable, CustomStringConve
         switch self {
         case .missingMediaReference(let clipID, let mediaID):
             "clip \(clipID) references missing media \(mediaID)"
-        case .unsupportedClipSource(let clipID, let source):
-            "clip \(clipID) uses unsupported render source \(source)"
+        case .missingSequenceReference(let clipID, let sequenceID):
+            "clip \(clipID) references missing sequence \(sequenceID)"
+        case .missingNestedOutputNode(let sequenceID):
+            "nested sequence \(sequenceID) did not produce an output node"
+        case .maximumCompoundNestingDepthExceeded(let clipID, let depth):
+            "clip \(clipID) exceeded maximum compound nesting depth \(depth)"
         case .multipleActiveVideoClips(let time, let clipIDs):
             "multiple active video clips at \(time): \(clipIDs)"
         case .timeMappingFailed(let error):
@@ -43,18 +53,35 @@ public enum RenderGraphBuildError: Error, Equatable, Sendable, CustomStringConve
 
 /// Pure builder for immutable render graph descriptions.
 public enum RenderGraphBuilder {
+    /// Defensive nesting limit for malformed projects that bypass validation.
+    public static let maximumCompoundNestingDepth = 16
+
     /// Builds a render graph for `sequence` at `time` using project media references.
     public static func build(
         for sequence: Sequence,
         at time: RationalTime,
         in project: Project
     ) throws -> RenderGraph {
+        try build(for: sequence, at: time, in: project, nestingDepth: 0)
+    }
+
+    private static func build(
+        for sequence: Sequence,
+        at time: RationalTime,
+        in project: Project,
+        nestingDepth: Int
+    ) throws -> RenderGraph {
         let candidates = try activeMediaClips(in: sequence, at: time)
         guard !candidates.isEmpty else {
             return try transparentGraph(outputColorSpace: project.settings.colorSpace)
         }
 
-        return try graph(for: candidates, at: time, in: project)
+        return try graph(
+            for: candidates,
+            at: time,
+            in: project,
+            nestingDepth: nestingDepth
+        )
     }
 
     private struct ActiveClipCandidate {
@@ -106,11 +133,17 @@ public enum RenderGraphBuilder {
     private static func graph(
         for candidates: [ActiveClipCandidate],
         at time: RationalTime,
-        in project: Project
+        in project: Project,
+        nestingDepth: Int
     ) throws -> RenderGraph {
         let sourceInputs = try candidates.map { candidate in
             RenderCompositeNodeInput(
-                node: try sourceNode(for: candidate.clip, at: time, in: project),
+                node: try sourceNode(
+                    for: candidate.clip,
+                    at: time,
+                    in: project,
+                    nestingDepth: nestingDepth
+                ),
                 transform: candidate.clip.transformAnimation.value(at: time),
                 effects: candidate.clip.effectsAnimation.value(at: time),
                 trackOpacity: candidate.trackOpacity,
@@ -132,16 +165,29 @@ public enum RenderGraphBuilder {
     private static func sourceNode(
         for clip: Clip,
         at time: RationalTime,
+        in project: Project,
+        nestingDepth: Int
+    ) throws -> RenderNode {
+        switch clip.source {
+        case .media(let mediaID):
+            return try mediaSourceNode(mediaID: mediaID, clip: clip, at: time, in: project)
+        case .sequence(let sequenceID):
+            return try compoundSourceNode(
+                sequenceID: sequenceID,
+                clip: clip,
+                at: time,
+                in: project,
+                nestingDepth: nestingDepth
+            )
+        }
+    }
+
+    private static func mediaSourceNode(
+        mediaID: UUID,
+        clip: Clip,
+        at time: RationalTime,
         in project: Project
     ) throws -> RenderNode {
-        let mediaID: UUID
-        switch clip.source {
-        case .media(let id):
-            mediaID = id
-        case .sequence:
-            throw RenderGraphBuildError.unsupportedClipSource(clipID: clip.id, source: clip.source)
-        }
-
         guard let media = project.mediaPool.first(where: { media in media.id == mediaID }) else {
             throw RenderGraphBuildError.missingMediaReference(clipID: clip.id, mediaID: mediaID)
         }
@@ -152,6 +198,44 @@ public enum RenderGraphBuilder {
             clipID: clip.id,
             sourceTime: sourceTime,
             colorSpace: media.metadata.colorSpace
+        )
+    }
+
+    private static func compoundSourceNode(
+        sequenceID: UUID,
+        clip: Clip,
+        at time: RationalTime,
+        in project: Project,
+        nestingDepth: Int
+    ) throws -> RenderNode {
+        guard nestingDepth < maximumCompoundNestingDepth else {
+            throw RenderGraphBuildError.maximumCompoundNestingDepthExceeded(
+                clipID: clip.id,
+                depth: nestingDepth
+            )
+        }
+        guard let sequence = project.sequences.first(where: { sequence in
+            sequence.id == sequenceID
+        }) else {
+            throw RenderGraphBuildError.missingSequenceReference(
+                clipID: clip.id,
+                sequenceID: sequenceID
+            )
+        }
+
+        let sequenceTime = try mapTimelineTime(time, toSourceTimeFor: clip)
+        let graph = try build(
+            for: sequence,
+            at: sequenceTime,
+            in: project,
+            nestingDepth: nestingDepth + 1
+        )
+        return try RenderNodeFactory.makeCompoundNode(
+            sequenceID: sequenceID,
+            clipID: clip.id,
+            sequenceTime: sequenceTime,
+            graph: graph,
+            colorSpace: project.settings.colorSpace
         )
     }
 

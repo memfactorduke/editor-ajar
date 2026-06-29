@@ -27,6 +27,11 @@ clip changes only the hashes of affected nodes, so only the affected subgraph re
 compound clips and segments replay from cache (FR-CMP-006, FR-PLAY-005). Background "render in
 place" warms the cache at low priority (ADR-0012).
 
+For compound clips, `AjarCore` emits a compound source node whose hash folds in the referenced
+sequence render graph's output hash. `AjarRender` renders that nested graph to a GPU-private texture
+and feeds it into the outer composite as the compound clip source. The in-memory cache is bounded
+and hit-tested by content hash; disk cache warming remains a later M7 step.
+
 ## Consequences
 
 - Fine-grained, correct cache invalidation for free (hash changes ⇒ recompute; else reuse).

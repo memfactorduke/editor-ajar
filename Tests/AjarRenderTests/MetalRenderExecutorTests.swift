@@ -319,6 +319,92 @@ final class MetalRenderExecutorTests: XCTestCase {
     }
 }
 
+final class MetalRenderExecutorCompoundTests: XCTestCase {
+    func testFRTL013RendersCompoundClipFromNestedGraphAndCachesNestedOutput() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeCompoundClipGraph()
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let provider = ClipTextureProvider(
+            textures: [try testUUID(TestIDs.innerClip): sourceTexture]
+        )
+        let output = RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1))
+
+        let first = try executor.render(graph: graph, output: output, sourceProvider: provider)
+        try waitForRender(first)
+        let outerEditGraph = try makeCompoundClipGraph(
+            compoundTransform: ClipTransform(position: CanvasPoint(x: RationalValue(1), y: .zero))
+        )
+        let outerEdit = try executor.render(
+            graph: outerEditGraph,
+            output: output,
+            sourceProvider: provider
+        )
+        try waitForRender(outerEdit)
+        let innerEditGraph = try makeCompoundClipGraph(innerSourceStartFrame: 1)
+        let innerEdit = try executor.render(
+            graph: innerEditGraph,
+            output: output,
+            sourceProvider: provider
+        )
+        try waitForRender(innerEdit)
+
+        XCTAssertFalse(first.cacheHit)
+        XCTAssertEqual(try readBGRA8(texture: first.texture, device: device), [0, 0, 255, 255])
+        XCTAssertFalse(outerEdit.cacheHit)
+        XCTAssertFalse(innerEdit.cacheHit)
+        XCTAssertEqual(
+            provider.requestedClipIDs,
+            [try testUUID(TestIDs.innerClip), try testUUID(TestIDs.innerClip)]
+        )
+        XCTAssertEqual(executor.cacheHitCount, 1)
+        XCTAssertEqual(executor.cacheMissCount, 5)
+    }
+
+    func testADR0009ContentHashCacheIsBoundedByEntryLimit() throws {
+        let device = try metalDeviceOrSkip()
+        let firstGraph = try makeSingleClipGraph()
+        let secondGraph = try makeSingleClipGraph(
+            transform: ClipTransform(position: CanvasPoint(x: RationalValue(1), y: .zero))
+        )
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [255, 0, 0, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device, maximumCacheEntryCount: 1)
+        let provider = CountingSourceTextureProvider(texture: sourceTexture)
+        let output = RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1))
+
+        let first = try executor.render(graph: firstGraph, output: output, sourceProvider: provider)
+        try waitForRender(first)
+        let second = try executor.render(
+            graph: secondGraph,
+            output: output,
+            sourceProvider: provider
+        )
+        try waitForRender(second)
+        let repeatedFirst = try executor.render(
+            graph: firstGraph,
+            output: output,
+            sourceProvider: provider
+        )
+        try waitForRender(repeatedFirst)
+
+        XCTAssertFalse(first.cacheHit)
+        XCTAssertFalse(second.cacheHit)
+        XCTAssertFalse(repeatedFirst.cacheHit)
+        XCTAssertEqual(executor.cacheEntryCount, 1)
+        XCTAssertEqual(provider.requestCount, 3)
+    }
+}
+
 final class MetalRenderExecutorBlendModeTests: XCTestCase {
     func testFRCOMP006NewBlendModesMatchLinearLightFormulas() throws {
         let device = try metalDeviceOrSkip()
@@ -403,6 +489,10 @@ private enum TestIDs {
     static let topMedia = "00000000-0000-0000-0000-000000000019"
     static let bottomClip = "00000000-0000-0000-0000-000000000118"
     static let topClip = "00000000-0000-0000-0000-000000000119"
+    static let innerMedia = "00000000-0000-0000-0000-000000000020"
+    static let innerClip = "00000000-0000-0000-0000-000000000120"
+    static let compoundClip = "00000000-0000-0000-0000-000000000121"
+    static let innerSequence = "00000000-0000-0000-0000-000000000122"
 }
 
 private final class CountingSourceTextureProvider: RenderSourceTextureProvider {
@@ -577,6 +667,57 @@ private func makeTwoClipGraph(
     return try buildRenderGraph(for: sequence, at: try time(0), in: project)
 }
 
+private func makeCompoundClipGraph(
+    compoundTransform: ClipTransform = .identity,
+    innerSourceStartFrame: Int64 = 0
+) throws -> RenderGraph {
+    let innerMediaID = try testUUID(TestIDs.innerMedia)
+    let innerSequenceID = try testUUID(TestIDs.innerSequence)
+    let innerClip = try makeRenderClip(
+        id: try testUUID(TestIDs.innerClip),
+        mediaID: innerMediaID,
+        sourceStartFrame: innerSourceStartFrame
+    )
+    let compoundClip = Clip(
+        id: try testUUID(TestIDs.compoundClip),
+        source: .sequence(id: innerSequenceID),
+        sourceRange: try range(startFrame: 0, durationFrames: 24),
+        timelineRange: try range(startFrame: 0, durationFrames: 24),
+        kind: .video,
+        name: "Compound",
+        transform: compoundTransform
+    )
+    let outerSequence = Sequence(
+        id: UUID(),
+        name: "Outer",
+        videoTracks: [Track(id: UUID(), kind: .video, items: [.clip(compoundClip)])],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+    let innerSequence = Sequence(
+        id: innerSequenceID,
+        name: "Inner",
+        videoTracks: [Track(id: UUID(), kind: .video, items: [.clip(innerClip)])],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+    let project = Project(
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
+        settings: ProjectSettings(
+            frameRate: try FrameRate(frames: 24),
+            resolution: PixelDimensions(width: 1, height: 1),
+            colorSpace: .rec709,
+            audioSampleRate: 48_000
+        ),
+        mediaPool: [try makeRenderMedia(id: innerMediaID)],
+        sequences: [outerSequence, innerSequence]
+    )
+
+    return try buildRenderGraph(for: outerSequence, at: try time(0), in: project)
+}
+
 private func renderBlendFixture(
     device: MTLDevice,
     sourceBGRA: [UInt8],
@@ -657,13 +798,14 @@ private func makeRenderMedia(id: UUID) throws -> MediaRef {
 private func makeRenderClip(
     id: UUID,
     mediaID: UUID,
+    sourceStartFrame: Int64 = 0,
     transform: ClipTransform = .identity,
     effects: ClipEffects = .none
 ) throws -> Clip {
     Clip(
         id: id,
         source: .media(id: mediaID),
-        sourceRange: try range(startFrame: 0, durationFrames: 24),
+        sourceRange: try range(startFrame: sourceStartFrame, durationFrames: 24),
         timelineRange: try range(startFrame: 0, durationFrames: 24),
         kind: .video,
         name: "Synthetic",

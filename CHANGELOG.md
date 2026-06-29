@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added M7 compound-clip video rendering for FR-TL-013/FR-CMP-006 with nested render graphs,
+  content-hash cache reuse/invalidation, bounded GPU texture cache coverage, and a golden-frame
+  fixture for a transformed inner sequence.
 - Added the M7 compound-clip core model for FR-TL-013/FR-CMP-001/005 with
   sequence-backed clip resolution, direct/transitive cycle validation, codec round trips,
   and an undoable insert-compound command.
