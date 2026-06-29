@@ -31,12 +31,35 @@ struct TransitiveCycleFixture {
     let secondClipID: UUID
 }
 
+struct ThreeNodeCycleFixture {
+    let project: Project
+    let firstSequenceID: UUID
+    let firstTrackID: UUID
+    let firstClipID: UUID
+    let secondSequenceID: UUID
+    let secondTrackID: UUID
+    let secondClipID: UUID
+    let thirdSequenceID: UUID
+    let thirdTrackID: UUID
+    let thirdClipID: UUID
+}
+
 struct CompoundInsertFixture {
     let project: Project
     let outerSequenceID: UUID
     let outerTrackID: UUID
     let compoundClipID: UUID
     let innerSequenceID: UUID
+}
+
+struct CompoundInsertCycleFixture {
+    let project: Project
+    let sourceSequenceID: UUID
+    let sourceTrackID: UUID
+    let sourceClipID: UUID
+    let targetSequenceID: UUID
+    let targetTrackID: UUID
+    let insertedClipID: UUID
 }
 
 struct InnerSequenceSpec {
@@ -227,6 +250,129 @@ func makeTransitiveCompoundCycleProject(seed: Int) throws -> TransitiveCycleFixt
         secondSequenceID: secondSequenceID,
         secondTrackID: secondTrackID,
         secondClipID: secondClipID
+    )
+}
+
+func makeThreeNodeCompoundCycleProject(seed: Int) throws -> ThreeNodeCycleFixture {
+    let base = seed * 1_000
+    let firstSequenceID = try editUUID(base + 1)
+    let firstTrackID = try editUUID(base + 2)
+    let firstClipID = try editUUID(base + 3)
+    let secondSequenceID = try editUUID(base + 4)
+    let secondTrackID = try editUUID(base + 5)
+    let secondClipID = try editUUID(base + 6)
+    let thirdSequenceID = try editUUID(base + 7)
+    let thirdTrackID = try editUUID(base + 8)
+    let thirdClipID = try editUUID(base + 9)
+    let firstSequence = try makeCompoundReferenceSequence(
+        id: firstSequenceID,
+        name: "Cycle A",
+        trackID: firstTrackID,
+        clipID: firstClipID,
+        targetSequenceID: secondSequenceID
+    )
+    let secondSequence = try makeCompoundReferenceSequence(
+        id: secondSequenceID,
+        name: "Cycle B",
+        trackID: secondTrackID,
+        clipID: secondClipID,
+        targetSequenceID: thirdSequenceID
+    )
+    let thirdSequence = try makeCompoundReferenceSequence(
+        id: thirdSequenceID,
+        name: "Cycle C",
+        trackID: thirdTrackID,
+        clipID: thirdClipID,
+        targetSequenceID: firstSequenceID
+    )
+    let project = Project(
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
+        settings: try compoundSettings(),
+        mediaPool: [],
+        sequences: [firstSequence, secondSequence, thirdSequence]
+    )
+
+    return ThreeNodeCycleFixture(
+        project: project,
+        firstSequenceID: firstSequenceID,
+        firstTrackID: firstTrackID,
+        firstClipID: firstClipID,
+        secondSequenceID: secondSequenceID,
+        secondTrackID: secondTrackID,
+        secondClipID: secondClipID,
+        thirdSequenceID: thirdSequenceID,
+        thirdTrackID: thirdTrackID,
+        thirdClipID: thirdClipID
+    )
+}
+
+func makeCompoundReferenceSequence(
+    id: UUID,
+    name: String,
+    trackID: UUID,
+    clipID: UUID,
+    targetSequenceID: UUID
+) throws -> Sequence {
+    let clip = try makeCompoundClip(
+        id: clipID,
+        targetSequenceID: targetSequenceID,
+        startFrame: 0,
+        durationFrames: 8
+    )
+    return Sequence(
+        id: id,
+        name: name,
+        videoTracks: [Track(id: trackID, kind: .video, items: [.clip(clip)])],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+}
+
+func makeCompoundInsertCycleFixture(seed: Int) throws -> CompoundInsertCycleFixture {
+    let base = seed * 1_000
+    let sourceSequenceID = try editUUID(base + 1)
+    let sourceTrackID = try editUUID(base + 2)
+    let sourceClipID = try editUUID(base + 3)
+    let targetSequenceID = try editUUID(base + 4)
+    let targetTrackID = try editUUID(base + 5)
+    let sourceClip = try makeCompoundClip(
+        id: sourceClipID,
+        targetSequenceID: targetSequenceID,
+        startFrame: 0,
+        durationFrames: 8
+    )
+    let sourceSequence = Sequence(
+        id: sourceSequenceID,
+        name: "Cycle Insert Source",
+        videoTracks: [Track(id: sourceTrackID, kind: .video, items: [.clip(sourceClip)])],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+    let targetSequence = Sequence(
+        id: targetSequenceID,
+        name: "Cycle Insert Target",
+        videoTracks: [Track(id: targetTrackID, kind: .video, items: [])],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+    let project = Project(
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
+        settings: try compoundSettings(),
+        mediaPool: [],
+        sequences: [sourceSequence, targetSequence]
+    )
+
+    return CompoundInsertCycleFixture(
+        project: project,
+        sourceSequenceID: sourceSequenceID,
+        sourceTrackID: sourceTrackID,
+        sourceClipID: sourceClipID,
+        targetSequenceID: targetSequenceID,
+        targetTrackID: targetTrackID,
+        insertedClipID: try editUUID(base + 6)
     )
 }
 

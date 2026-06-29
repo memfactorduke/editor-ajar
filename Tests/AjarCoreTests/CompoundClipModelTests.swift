@@ -64,6 +64,41 @@ final class CompoundClipModelTests: XCTestCase {
         )
     }
 
+    func testFRTL013ThreeNodeCompoundCycleIsRejectedByProjectValidation() throws {
+        let threeNodeCycle = try makeThreeNodeCompoundCycleProject(seed: 136)
+        let errors = compoundValidationErrors(from: threeNodeCycle.project)
+        XCTAssertTrue(
+            errors.contains(
+                .compoundSequenceCycle(
+                    sequenceID: threeNodeCycle.firstSequenceID,
+                    trackID: threeNodeCycle.firstTrackID,
+                    clipID: threeNodeCycle.firstClipID,
+                    targetID: threeNodeCycle.secondSequenceID
+                )
+            )
+        )
+        XCTAssertTrue(
+            errors.contains(
+                .compoundSequenceCycle(
+                    sequenceID: threeNodeCycle.secondSequenceID,
+                    trackID: threeNodeCycle.secondTrackID,
+                    clipID: threeNodeCycle.secondClipID,
+                    targetID: threeNodeCycle.thirdSequenceID
+                )
+            )
+        )
+        XCTAssertTrue(
+            errors.contains(
+                .compoundSequenceCycle(
+                    sequenceID: threeNodeCycle.thirdSequenceID,
+                    trackID: threeNodeCycle.thirdTrackID,
+                    clipID: threeNodeCycle.thirdClipID,
+                    targetID: threeNodeCycle.firstSequenceID
+                )
+            )
+        )
+    }
+
     func testFRTL013CompoundCycleDecodeReturnsTypedValidationError() throws {
         let cycle = try makeSelfReferencingCompoundProject(seed: 132)
         let projectDocument = Project(
@@ -93,6 +128,41 @@ final class CompoundClipModelTests: XCTestCase {
                         trackID: cycle.trackID,
                         clipID: cycle.clipID,
                         targetID: cycle.sequenceID
+                    )
+                )
+            )
+        }
+    }
+
+    func testFRTL013TransitiveCompoundCycleDecodeReturnsTypedValidationError() throws {
+        let cycle = try makeTransitiveCompoundCycleProject(seed: 137)
+        let projectDocument = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            settings: cycle.project.settings,
+            mediaPool: [],
+            sequences: cycle.project.sequences
+        )
+        let manifest = AjarMediaManifest(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            media: []
+        )
+        XCTAssertThrowsError(
+            try AjarProjectCodec.decode(
+                projectJSON: try compoundTestEncoder().encode(projectDocument),
+                mediaJSON: try compoundTestEncoder().encode(manifest)
+            )
+        ) { error in
+            guard case .validationFailed(let errors) = error as? AjarProjectCodecError else {
+                XCTFail("Expected validationFailed, got \(error)")
+                return
+            }
+            XCTAssertTrue(
+                errors.contains(
+                    .compoundSequenceCycle(
+                        sequenceID: cycle.firstSequenceID,
+                        trackID: cycle.firstTrackID,
+                        clipID: cycle.firstClipID,
+                        targetID: cycle.secondSequenceID
                     )
                 )
             )
@@ -161,5 +231,43 @@ final class CompoundClipModelTests: XCTestCase {
         XCTAssertEqual(edited.validate(), .valid)
         XCTAssertEqual(history.undo(), fixture.project)
         XCTAssertEqual(try history.redo(), edited)
+    }
+
+    func testFRTL013InsertCompoundClipRejectsCycleBeforeHistoryCommit() throws {
+        let fixture = try makeCompoundInsertCycleFixture(seed: 138)
+        XCTAssertEqual(fixture.project.validate(), .valid)
+        var history = EditHistory(project: fixture.project)
+
+        XCTAssertThrowsError(
+            try history.apply(
+                .insertCompoundClip(
+                    sequenceID: fixture.targetSequenceID,
+                    trackID: fixture.targetTrackID,
+                    clipID: fixture.insertedClipID,
+                    targetSequenceID: fixture.sourceSequenceID,
+                    timelineStart: .zero,
+                    kind: .video,
+                    name: "FR-TL-013 Cycle Guard"
+                )
+            )
+        ) { error in
+            guard case .validationFailed(let errors) = error as? EditReducerError else {
+                XCTFail("Expected validationFailed, got \(error)")
+                return
+            }
+            XCTAssertTrue(
+                errors.contains(
+                    .compoundSequenceCycle(
+                        sequenceID: fixture.targetSequenceID,
+                        trackID: fixture.targetTrackID,
+                        clipID: fixture.insertedClipID,
+                        targetID: fixture.sourceSequenceID
+                    )
+                )
+            )
+        }
+        XCTAssertEqual(history.currentProject, fixture.project)
+        XCTAssertEqual(history.undoCount, 0)
+        XCTAssertEqual(history.redoCount, 0)
     }
 }
