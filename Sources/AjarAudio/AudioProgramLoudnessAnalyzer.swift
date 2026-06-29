@@ -11,6 +11,12 @@ public enum AudioProgramLoudnessError: Error, Equatable, Sendable, CustomStringC
     /// Program loudness currently supports mono/stereo until layout-aware surround weights exist.
     case unsupportedChannelCount(Int)
 
+    /// The analyzed program contains no gated loudness energy and cannot be normalized.
+    case silentProgram
+
+    /// A normalization target or true-peak ceiling was not finite.
+    case nonFiniteNormalizationParameter(String)
+
     /// A human-readable description.
     public var description: String {
         switch self {
@@ -18,6 +24,10 @@ public enum AudioProgramLoudnessError: Error, Equatable, Sendable, CustomStringC
             "invalid loudness analysis sample rate \(sampleRate)"
         case .unsupportedChannelCount(let channelCount):
             "unsupported loudness analysis channel count \(channelCount)"
+        case .silentProgram:
+            "cannot normalize a silent program"
+        case .nonFiniteNormalizationParameter(let name):
+            "non-finite loudness normalization parameter \(name)"
         }
     }
 }
@@ -145,6 +155,7 @@ public extension AudioMixerMeterAnalyzer {
         )
         return try measureProgramLoudness(buffer: buffer)
     }
+
 }
 
 private enum BS1770 {

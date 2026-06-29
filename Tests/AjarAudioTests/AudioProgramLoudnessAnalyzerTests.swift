@@ -162,6 +162,136 @@ final class AudioProgramLoudnessAnalyzerTests: XCTestCase {
             XCTAssertEqual(error as? AudioProgramLoudnessError, .unsupportedChannelCount(6))
         }
     }
+
+    func testFRAUD003LoudnessNormalizationComputesMonoGainAndReachesTarget() throws {
+        let buffer = try renderedSineBuffer(channelCount: 1)
+        let targetLUFS = -14.0
+
+        let result = try AudioMixerMeterAnalyzer.normalizeProgramLoudness(
+            buffer: buffer,
+            targetLUFS: targetLUFS
+        )
+        let normalized = try AudioMixerMeterAnalyzer.measureProgramLoudness(
+            buffer: try scaledBuffer(buffer, gain: result.appliedLinearGain)
+        )
+        let decoded = try JSONDecoder().decode(
+            AudioProgramLoudnessNormalizationResult.self,
+            from: try JSONEncoder().encode(result)
+        )
+
+        XCTAssertEqual(decoded, result)
+        XCTAssertEqual(result.measuredIntegratedLUFS, -3.0036, accuracy: 0.01)
+        XCTAssertEqual(
+            result.requestedGainDB,
+            targetLUFS - result.measuredIntegratedLUFS,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(result.appliedGainDB, -10.9964, accuracy: 0.02)
+        XCTAssertEqual(
+            result.appliedLinearGain,
+            pow(10, result.appliedGainDB / 20),
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(result.achievedLUFS, targetLUFS, accuracy: 0.0001)
+        XCTAssertFalse(result.isTruePeakLimited)
+        XCTAssertEqual(try XCTUnwrap(normalized.integratedLUFS), targetLUFS, accuracy: 0.02)
+    }
+
+    func testFRAUD003LoudnessNormalizationComputesStereoGainAndReachesTarget() throws {
+        let buffer = try renderedSineBuffer(channelCount: 2)
+        let targetLUFS = -16.0
+
+        let result = try AudioMixerMeterAnalyzer.normalizeProgramLoudness(
+            buffer: buffer,
+            targetLUFS: targetLUFS
+        )
+        let normalized = try AudioMixerMeterAnalyzer.measureProgramLoudness(
+            buffer: try scaledBuffer(buffer, gain: result.appliedLinearGain)
+        )
+
+        XCTAssertEqual(result.measuredIntegratedLUFS, 0.0067, accuracy: 0.01)
+        XCTAssertEqual(result.appliedGainDB, -16.0067, accuracy: 0.02)
+        XCTAssertEqual(result.achievedLUFS, targetLUFS, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(normalized.integratedLUFS), targetLUFS, accuracy: 0.02)
+        XCTAssertFalse(result.isTruePeakLimited)
+    }
+
+    func testFRAUD003LoudnessNormalizationClampsToTruePeakCeiling() throws {
+        let buffer = try renderedSineBuffer(channelCount: 1)
+
+        let result = try AudioMixerMeterAnalyzer.normalizeProgramLoudness(
+            buffer: buffer,
+            targetLUFS: 0,
+            truePeakCeilingDBTP: -1
+        )
+        let normalized = try AudioMixerMeterAnalyzer.measureProgramLoudness(
+            buffer: try scaledBuffer(buffer, gain: result.appliedLinearGain)
+        )
+        let measuredTruePeakDBTP = try XCTUnwrap(result.measuredTruePeakDBTP)
+
+        XCTAssertTrue(result.isTruePeakLimited)
+        XCTAssertEqual(
+            result.appliedGainDB,
+            -1 - measuredTruePeakDBTP,
+            accuracy: 0.0001
+        )
+        XCTAssertLessThan(result.achievedLUFS, result.targetLUFS)
+        XCTAssertEqual(try XCTUnwrap(result.achievedTruePeakDBTP), -1, accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(normalized.truePeakDBTP), -0.99)
+        XCTAssertEqual(
+            try XCTUnwrap(normalized.integratedLUFS),
+            result.achievedLUFS,
+            accuracy: 0.02
+        )
+    }
+
+    func testFRAUD003LoudnessNormalizationRejectsSilenceWithTypedError() throws {
+        let buffer = try RenderedAudioBuffer(
+            format: AudioRenderFormat(sampleRate: loudnessSampleRate, channelCount: 2),
+            frameCount: loudnessSampleRate,
+            samples: [Float](repeating: 0, count: loudnessSampleRate * 2)
+        )
+
+        XCTAssertThrowsError(
+            try AudioMixerMeterAnalyzer.normalizeProgramLoudness(buffer: buffer, targetLUFS: -14)
+        ) { error in
+            XCTAssertEqual(error as? AudioProgramLoudnessError, .silentProgram)
+        }
+    }
+
+    func testFRAUD003LoudnessNormalizationRendersSequenceDeterministically() throws {
+        let mediaID = try uuid("00000000-0000-0000-0000-000000111002")
+        let sequence = try makeSequence(items: [
+            .clip(try makeClip(mediaID: mediaID, duration: time(1, 1)))
+        ])
+        let source = try AudioSourceBuffer(
+            format: AudioRenderFormat(sampleRate: loudnessSampleRate, channelCount: 1),
+            frameCount: loudnessSampleRate,
+            samples: sineSamples(channelCount: 1)
+        )
+        let provider = InMemoryAudioSourceProvider(sources: [mediaID: source])
+        let range = try TimeRange(start: .zero, duration: time(1, 1))
+
+        let first = try AudioMixerMeterAnalyzer.normalizeProgramLoudness(
+            sequence: sequence,
+            range: range,
+            format: AudioRenderFormat(sampleRate: loudnessSampleRate, channelCount: 2),
+            sourceProvider: provider,
+            targetLUFS: -23
+        )
+        let second = try AudioMixerMeterAnalyzer.normalizeProgramLoudness(
+            sequence: sequence,
+            range: range,
+            format: AudioRenderFormat(sampleRate: loudnessSampleRate, channelCount: 2),
+            sourceProvider: provider,
+            targetLUFS: -23
+        )
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first.measuredIntegratedLUFS, 0.0067, accuracy: 0.01)
+        XCTAssertEqual(first.appliedGainDB, -23.0067, accuracy: 0.02)
+        XCTAssertEqual(first.achievedLUFS, -23, accuracy: 0.0001)
+    }
 }
 
 private let loudnessSampleRate = 48_000
@@ -206,4 +336,15 @@ private func interleaveStereo(left: [Float], right: [Float]) -> [Float] {
         samples.append(right[index])
     }
     return samples
+}
+
+private func scaledBuffer(
+    _ buffer: RenderedAudioBuffer,
+    gain: Double
+) throws -> RenderedAudioBuffer {
+    try RenderedAudioBuffer(
+        format: buffer.format,
+        frameCount: buffer.frameCount,
+        samples: buffer.samples.map { Float(Double($0) * gain) }
+    )
 }
