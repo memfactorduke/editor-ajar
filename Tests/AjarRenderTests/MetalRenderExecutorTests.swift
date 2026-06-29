@@ -366,6 +366,46 @@ final class MetalRenderExecutorCompoundTests: XCTestCase {
         XCTAssertEqual(executor.cacheMissCount, 5)
     }
 
+    func testFRTL013NestedCompoundOutputCachesAsHalfFloatTexture() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeCompoundClipGraph()
+        let nestedGraph = try compoundNestedGraph(in: graph)
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let provider = ClipTextureProvider(
+            textures: [try testUUID(TestIDs.innerClip): sourceTexture]
+        )
+        let parentOutput = RenderOutputDescriptor(
+            pixelDimensions: PixelDimensions(width: 1, height: 1)
+        )
+        let nestedOutput = RenderOutputDescriptor(
+            pixelDimensions: parentOutput.pixelDimensions,
+            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat
+        )
+
+        let parent = try executor.render(
+            graph: graph,
+            output: parentOutput,
+            sourceProvider: provider
+        )
+        try waitForRender(parent)
+        let nested = try executor.render(
+            graph: nestedGraph,
+            output: nestedOutput,
+            sourceProvider: provider
+        )
+
+        XCTAssertFalse(parent.cacheHit)
+        XCTAssertTrue(nested.cacheHit)
+        XCTAssertEqual(nested.texture.pixelFormat, MetalRenderExecutor.linearWorkingPixelFormat)
+        XCTAssertEqual(provider.requestedClipIDs, [try testUUID(TestIDs.innerClip)])
+    }
+
     func testADR0009ContentHashCacheIsBoundedByEntryLimit() throws {
         let device = try metalDeviceOrSkip()
         let firstGraph = try makeSingleClipGraph()
@@ -402,6 +442,91 @@ final class MetalRenderExecutorCompoundTests: XCTestCase {
         XCTAssertFalse(repeatedFirst.cacheHit)
         XCTAssertEqual(executor.cacheEntryCount, 1)
         XCTAssertEqual(provider.requestCount, 3)
+    }
+
+    func testNFRPERF003ReusesPooledIntermediateTexturesAcrossCacheMisses() throws {
+        let device = try metalDeviceOrSkip()
+        let firstGraph = try makeSingleClipGraph()
+        let secondGraph = try makeSingleClipGraph(
+            transform: ClipTransform(position: CanvasPoint(x: RationalValue(1), y: .zero))
+        )
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [255, 0, 0, 255]
+        )
+        let executor = try MetalRenderExecutor(
+            device: device,
+            maximumCacheEntryCount: 4,
+            maximumPooledTextureCount: 2
+        )
+        let provider = CountingSourceTextureProvider(texture: sourceTexture)
+        let output = RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 2, height: 2))
+
+        let first = try executor.render(graph: firstGraph, output: output, sourceProvider: provider)
+        try waitForRender(first)
+        let poolHitsAfterFirstRender = executor.texturePoolHitCount
+        let poolEntriesAfterFirstRender = executor.texturePoolEntryCount
+        let second = try executor.render(
+            graph: secondGraph,
+            output: output,
+            sourceProvider: provider
+        )
+        try waitForRender(second)
+
+        XCTAssertFalse(first.cacheHit)
+        XCTAssertFalse(second.cacheHit)
+        XCTAssertEqual(poolEntriesAfterFirstRender, 2)
+        XCTAssertEqual(executor.texturePoolEntryCount, 2)
+        XCTAssertGreaterThanOrEqual(executor.texturePoolHitCount, poolHitsAfterFirstRender + 2)
+    }
+}
+
+final class MetalRenderExecutorCacheTests: XCTestCase {
+    func testADR0009ContentHashCacheSeparatesOutputDescriptors() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph()
+        let sourceTexture = try makeCVMetalTextureFixture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgra: [255, 0, 0, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let provider = CountingSourceTextureProvider(texture: sourceTexture.texture)
+        let smallOutput = RenderOutputDescriptor(
+            pixelDimensions: PixelDimensions(width: 1, height: 1)
+        )
+        let largeOutput = RenderOutputDescriptor(
+            pixelDimensions: PixelDimensions(width: 2, height: 2)
+        )
+
+        let small = try executor.render(
+            graph: graph,
+            output: smallOutput,
+            sourceProvider: provider
+        )
+        try waitForRender(small)
+        let large = try executor.render(
+            graph: graph,
+            output: largeOutput,
+            sourceProvider: provider
+        )
+        try waitForRender(large)
+        let repeatedLarge = try executor.render(
+            graph: graph,
+            output: largeOutput,
+            sourceProvider: provider
+        )
+
+        XCTAssertFalse(small.cacheHit)
+        XCTAssertFalse(large.cacheHit)
+        XCTAssertTrue(repeatedLarge.cacheHit)
+        XCTAssertEqual(large.texture.width, 2)
+        XCTAssertEqual(large.texture.height, 2)
+        XCTAssertEqual(executor.cacheEntryCount, 2)
+        XCTAssertEqual(provider.requestCount, 2)
     }
 }
 
@@ -716,6 +841,21 @@ private func makeCompoundClipGraph(
     )
 
     return try buildRenderGraph(for: outerSequence, at: try time(0), in: project)
+}
+
+private func compoundNestedGraph(in graph: RenderGraph) throws -> RenderGraph {
+    guard let node = graph.nodes.first(where: { node in
+        if case .compound = node.kind {
+            return true
+        }
+        return false
+    }) else {
+        throw TestTextureError.metalTextureUnavailable
+    }
+    guard case .compound(let compound) = node.kind else {
+        throw TestTextureError.metalTextureUnavailable
+    }
+    return compound.graph
 }
 
 private func renderBlendFixture(
