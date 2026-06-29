@@ -34,7 +34,7 @@ extension EditReducer {
 
     static func applyClipCommand(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
-        case .insertCompoundClip:
+        case .insertCompoundClip, .makeCompoundClip:
             return try applyCompoundClipCommand(command, to: project)
         case .insertClip, .overwriteClip, .appendClip, .replaceClipSource, .threePointEdit,
             .addClip, .removeClip:

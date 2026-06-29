@@ -5,12 +5,12 @@ extension EditReducer {
     static func applyUnchecked(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
         case .addClip, .insertClip, .overwriteClip, .appendClip, .insertCompoundClip,
-            .removeClip, .replaceClipSource, .threePointEdit, .bladeClip,
-            .rippleTrimClip, .rollEdit, .slipClip, .slideClip, .rippleDeleteClip,
-            .liftClip, .moveClip, .trimClip, .setClipTransform, .setClipSpeed,
-            .addClipTransformKeyframe, .moveClipTransformKeyframe,
-            .deleteClipTransformKeyframe, .setClipChromaKey,
-            .setClipLumaKey, .clearClipLumaKey,
+            .makeCompoundClip, .removeClip, .replaceClipSource, .threePointEdit,
+            .bladeClip, .rippleTrimClip, .rollEdit, .slipClip, .slideClip,
+            .rippleDeleteClip, .liftClip, .moveClip, .trimClip, .setClipTransform,
+            .setClipSpeed, .addClipTransformKeyframe, .moveClipTransformKeyframe,
+            .deleteClipTransformKeyframe, .setClipChromaKey, .setClipLumaKey,
+            .clearClipLumaKey,
             .setClipColorCorrection, .clearClipColorCorrection,
             .addClipMask, .removeClipMask, .moveClipMask, .setClipMask,
             .setClipAudioMix, .clearClipAudioMix,
