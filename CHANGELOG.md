@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added FR-AUD-003 loudness normalization reports that compute deterministic master-gain
+  recommendations for target LUFS values, optional true-peak ceilings, sequence rendering,
+  peak-limited outcomes, and silent-program typed errors.
 - Hardened FR-AUD-003 program loudness accuracy with the BS.1770-4 RLB high-pass numerator,
   standard-referenced LUFS baselines, stronger true-peak coverage, and an explicit
   mono/stereo guard until layout-aware surround weights are available.
