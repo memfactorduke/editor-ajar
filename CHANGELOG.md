@@ -14,9 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened FR-AUD-003 program loudness accuracy with the BS.1770-4 RLB high-pass numerator,
   standard-referenced LUFS baselines, stronger true-peak coverage, and an explicit
   mono/stereo guard until layout-aware surround weights are available.
-- Added live FR-AUD-007 audio output with an AVAudioEngine driver consuming lock-free
-  realtime render plans, app transport start/stop/seek publishing, and a deterministic
-  sample-tone source for the bundled playback project.
+- Hardened live FR-AUD-007 + FR-PLAY-001/003 audio playback with background look-ahead
+  refills, paused-scrub publishing gates, channel-count validation, extra-buffer zeroing,
+  and windowed deterministic sample-tone rendering for the bundled playback project.
+- Added live FR-AUD-007 + FR-PLAY-001/003 audio output with an AVAudioEngine driver
+  consuming lock-free realtime render plans, app transport start/stop publishing, and a
+  deterministic sample-tone source for the bundled playback project.
 - Added deterministic FR-AUD-003 program loudness analysis with BS.1770/R128 integrated LUFS,
   gated silence handling, and 4x offline true-peak dBTP estimation for rendered mixes.
 - Added an FR-AUD-007 realtime render-plan handoff in `AjarAudio` using a lock-free atomic

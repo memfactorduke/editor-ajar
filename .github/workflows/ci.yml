@@ -121,7 +121,7 @@ jobs:
           for attempt in $(seq 1 "$max_attempts"); do
             log_path="/tmp/editor-ajar-ui-smoke-${attempt}.log"
             result_bundle="/tmp/editor-ajar-ui-smoke-${attempt}.xcresult"
-            rm -rf /tmp/editor-ajar-ui-derived "$result_bundle" "$log_path"
+            rm -rf "$result_bundle" "$log_path"
 
             echo "::group::UI smoke attempt ${attempt}/${max_attempts}"
             set +e
@@ -129,7 +129,7 @@ jobs:
               -project app/EditorAjar/EditorAjar.xcodeproj \
               -scheme EditorAjar \
               -destination 'platform=macOS' \
-              -derivedDataPath /tmp/editor-ajar-ui-derived \
+              -derivedDataPath /tmp/editor-ajar-app-derived \
               -only-testing:EditorAjarUITests \
               -test-timeouts-enabled YES \
               -default-test-execution-time-allowance 60 \

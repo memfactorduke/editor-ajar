@@ -1172,7 +1172,8 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func publishAudioPlanForCurrentFrame() {
-        guard let audioCoordinator,
+        guard isPlaying,
+              let audioCoordinator,
               let project,
               let sequence = activeSequence
         else {

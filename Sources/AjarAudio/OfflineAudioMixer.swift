@@ -374,12 +374,17 @@ extension OfflineAudioMixer {
         guard framePosition.isFinite, framePosition >= 0, source.frameCount > 0 else {
             return 0
         }
-        let lowerFrame = Int(framePosition.rounded(.down))
+        let localFramePosition = framePosition - Double(source.frameOffset)
+        guard localFramePosition.isFinite, localFramePosition >= 0 else {
+            return 0
+        }
+
+        let lowerFrame = Int(localFramePosition.rounded(.down))
         guard lowerFrame < source.frameCount else {
             return 0
         }
         let upperFrame = min(lowerFrame + 1, source.frameCount - 1)
-        let fraction = Float(framePosition - Double(lowerFrame))
+        let fraction = Float(localFramePosition - Double(lowerFrame))
         let lower = source.samples[(lowerFrame * source.format.channelCount) + channel]
         let upper = source.samples[(upperFrame * source.format.channelCount) + channel]
         return lower + ((upper - lower) * fraction)
