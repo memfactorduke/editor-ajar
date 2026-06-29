@@ -113,6 +113,37 @@ public struct RenderOutputDescriptor: Equatable, Sendable {
     }
 }
 
+private struct TextureDescriptorKey: Hashable {
+    let pixelDimensions: PixelDimensions
+    let pixelFormatRawValue: UInt
+
+    init(pixelDimensions: PixelDimensions, pixelFormat: MTLPixelFormat) {
+        self.pixelDimensions = pixelDimensions
+        self.pixelFormatRawValue = pixelFormat.rawValue
+    }
+
+    init(output: RenderOutputDescriptor) {
+        self.init(pixelDimensions: output.pixelDimensions, pixelFormat: output.pixelFormat)
+    }
+
+    init(texture: MTLTexture) {
+        self.init(
+            pixelDimensions: PixelDimensions(width: texture.width, height: texture.height),
+            pixelFormat: texture.pixelFormat
+        )
+    }
+}
+
+private struct FrameCacheKey: Hashable {
+    let contentHash: ContentHash
+    let textureDescriptor: TextureDescriptorKey
+
+    init(contentHash: ContentHash, output: RenderOutputDescriptor) {
+        self.contentHash = contentHash
+        self.textureDescriptor = TextureDescriptorKey(output: output)
+    }
+}
+
 struct AjarCompositeUniformLayout: Equatable, Sendable {
     let stride: Int
     let alignment: Int
@@ -217,9 +248,13 @@ public struct RenderedFrame {
 
     /// Waits until the render command buffer has completed.
     public func waitForCompletion() async throws {
-        _ = retainedObjects.count
         try await completion?.wait()
     }
+}
+
+private struct RenderSchedule {
+    var nestedFrames: [RenderedFrame] = []
+    var reusableTextures: [MTLTexture] = []
 }
 
 // swiftlint:disable type_body_length
@@ -229,8 +264,13 @@ public final class MetalRenderExecutor {
     private let commandQueue: MTLCommandQueue
     private let library: MTLLibrary
     private var pipelineStates: [PipelineStateKey: MTLRenderPipelineState] = [:]
-    private var frameCache: [ContentHash: MTLTexture] = [:]
-    private var frameCacheAccessOrder: [ContentHash] = []
+    private var frameCache: [FrameCacheKey: MTLTexture] = [:]
+    private var frameCacheAccessOrder: [FrameCacheKey] = []
+    private let texturePoolLock = NSLock()
+    private var texturePool: [TextureDescriptorKey: [MTLTexture]] = [:]
+    private var texturePoolAccessOrder: [TextureDescriptorKey] = []
+    private var texturePoolStoredCount = 0
+    private var texturePoolHitCountValue = 0
 
     /// Half-float linear working format used between composite passes.
     public static let linearWorkingPixelFormat: MTLPixelFormat = .rgba16Float
@@ -238,9 +278,26 @@ public final class MetalRenderExecutor {
     /// Maximum number of content-hash cache entries retained by this executor.
     public let maximumCacheEntryCount: Int
 
+    /// Maximum number of completed reusable textures retained by this executor.
+    public let maximumPooledTextureCount: Int
+
     /// Number of content-hash cache entries retained by this executor.
     public var cacheEntryCount: Int {
         frameCache.count
+    }
+
+    /// Number of completed reusable textures retained by this executor.
+    public var texturePoolEntryCount: Int {
+        texturePoolLock.lock()
+        defer { texturePoolLock.unlock() }
+        return texturePoolStoredCount
+    }
+
+    /// Number of texture allocations avoided by the reusable texture pool.
+    public var texturePoolHitCount: Int {
+        texturePoolLock.lock()
+        defer { texturePoolLock.unlock() }
+        return texturePoolHitCountValue
     }
 
     /// Number of render calls satisfied by the content-hash cache.
@@ -259,9 +316,14 @@ public final class MetalRenderExecutor {
     }
 
     /// Creates an executor with an explicit Metal device.
-    public init(device: MTLDevice, maximumCacheEntryCount: Int = 16) throws {
+    public init(
+        device: MTLDevice,
+        maximumCacheEntryCount: Int = 16,
+        maximumPooledTextureCount: Int = 16
+    ) throws {
         self.device = device
         self.maximumCacheEntryCount = max(1, maximumCacheEntryCount)
+        self.maximumPooledTextureCount = max(0, maximumPooledTextureCount)
 
         guard let commandQueue = device.makeCommandQueue() else {
             throw MetalRenderError.commandQueueCreationFailed
@@ -286,7 +348,8 @@ public final class MetalRenderExecutor {
         sourceProvider: any RenderSourceTextureProvider
     ) throws -> RenderedFrame {
         let outputNode = try outputNode(in: graph)
-        if let cachedTexture = cachedTexture(for: outputNode.contentHash) {
+        let cacheKey = FrameCacheKey(contentHash: outputNode.contentHash, output: output)
+        if let cachedTexture = cachedTexture(for: cacheKey) {
             cacheHitCount += 1
             return RenderedFrame(
                 texture: cachedTexture,
@@ -302,7 +365,7 @@ public final class MetalRenderExecutor {
         let commandBuffer = try makeCommandBuffer()
         let completion = RenderCompletion()
         completion.attach(to: commandBuffer)
-        let nestedFrames = try encode(
+        let schedule = try encode(
             graph: graph,
             output: output,
             into: texture,
@@ -310,10 +373,11 @@ public final class MetalRenderExecutor {
             sourceProvider: sourceProvider
         )
         cacheMissCount += 1
-        storeCachedTexture(texture, for: outputNode.contentHash)
+        storeCachedTexture(texture, for: cacheKey)
+        recycleReusableTextures(schedule.reusableTextures, after: commandBuffer)
         commandBuffer.commit()
         var retainedObjects: [Any] = [sourceProvider]
-        retainedObjects.append(contentsOf: nestedFrames)
+        retainedObjects.append(contentsOf: schedule.nestedFrames)
 
         return RenderedFrame(
             texture: texture,
@@ -333,29 +397,29 @@ public final class MetalRenderExecutor {
         cacheMissCount = 0
     }
 
-    private func cachedTexture(for hash: ContentHash) -> MTLTexture? {
-        guard let texture = frameCache[hash] else {
+    private func cachedTexture(for key: FrameCacheKey) -> MTLTexture? {
+        guard let texture = frameCache[key] else {
             return nil
         }
-        markCacheEntryUsed(hash)
+        markCacheEntryUsed(key)
         return texture
     }
 
-    private func storeCachedTexture(_ texture: MTLTexture, for hash: ContentHash) {
-        frameCache[hash] = texture
-        markCacheEntryUsed(hash)
+    private func storeCachedTexture(_ texture: MTLTexture, for key: FrameCacheKey) {
+        frameCache[key] = texture
+        markCacheEntryUsed(key)
         evictExpiredCacheEntries()
     }
 
-    private func markCacheEntryUsed(_ hash: ContentHash) {
-        frameCacheAccessOrder.removeAll { $0 == hash }
-        frameCacheAccessOrder.append(hash)
+    private func markCacheEntryUsed(_ key: FrameCacheKey) {
+        frameCacheAccessOrder.removeAll { $0 == key }
+        frameCacheAccessOrder.append(key)
     }
 
     private func evictExpiredCacheEntries() {
         while frameCacheAccessOrder.count > maximumCacheEntryCount {
-            let expiredHash = frameCacheAccessOrder.removeFirst()
-            frameCache.removeValue(forKey: expiredHash)
+            let expiredKey = frameCacheAccessOrder.removeFirst()
+            frameCache.removeValue(forKey: expiredKey)
         }
     }
 
@@ -374,20 +438,14 @@ public final class MetalRenderExecutor {
     private func makeOutputTexture(_ output: RenderOutputDescriptor) throws -> MTLTexture {
         let width = output.pixelDimensions.width
         let height = output.pixelDimensions.height
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: output.pixelFormat,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        descriptor.usage = [.renderTarget, .shaderRead]
-        descriptor.storageMode = .private
-
-        guard width > 0, height > 0, let texture = device.makeTexture(descriptor: descriptor) else {
+        guard width > 0, height > 0 else {
             throw MetalRenderError.outputTextureCreationFailed(width: width, height: height)
         }
-
-        return texture
+        return try makeReusableTexture(
+            pixelFormat: output.pixelFormat,
+            width: width,
+            height: height
+        )
     }
 
     private func makeCommandBuffer() throws -> MTLCommandBuffer {
@@ -398,13 +456,22 @@ public final class MetalRenderExecutor {
         return commandBuffer
     }
 
+    private func nestedOutputDescriptor(
+        for output: RenderOutputDescriptor
+    ) -> RenderOutputDescriptor {
+        RenderOutputDescriptor(
+            pixelDimensions: output.pixelDimensions,
+            pixelFormat: Self.linearWorkingPixelFormat
+        )
+    }
+
     private func encode(
         graph: RenderGraph,
         output: RenderOutputDescriptor,
         into outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer,
         sourceProvider: any RenderSourceTextureProvider
-    ) throws -> [RenderedFrame] {
+    ) throws -> RenderSchedule {
         let outputNode = try outputNode(in: graph)
         guard case .composite(let composite) = outputNode.kind else {
             throw MetalRenderError.unsupportedOutputNode(outputNode.id)
@@ -413,7 +480,7 @@ public final class MetalRenderExecutor {
         switch outputNode.inputIDs.count {
         case 0:
             try encodeTransparentComposite(into: outputTexture, commandBuffer: commandBuffer)
-            return []
+            return RenderSchedule()
         default:
             guard composite.inputs.count == outputNode.inputIDs.count else {
                 throw MetalRenderError.compositeInputMetadataMismatch(nodeID: outputNode.id)
@@ -430,13 +497,16 @@ public final class MetalRenderExecutor {
                     sourceProvider: sourceProvider
                 )
             }
-            try encodeSourceComposite(
+            let reusableTextures = try encodeSourceComposite(
                 composite: composite,
                 sourceInputs: sourceInputs,
                 outputTexture: outputTexture,
                 commandBuffer: commandBuffer
             )
-            return sourceInputs.compactMap(\.retainedFrame)
+            return RenderSchedule(
+                nestedFrames: sourceInputs.compactMap(\.retainedFrame),
+                reusableTextures: reusableTextures
+            )
         }
     }
 
@@ -504,7 +574,7 @@ public final class MetalRenderExecutor {
         case .compound(let compound):
             let frame = try render(
                 graph: compound.graph,
-                output: output,
+                output: nestedOutputDescriptor(for: output),
                 sourceProvider: sourceProvider
             )
             return SourceCompositeInput(
@@ -545,7 +615,7 @@ public final class MetalRenderExecutor {
         sourceInputs: [SourceCompositeInput],
         outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer
-    ) throws {
+    ) throws -> [MTLTexture] {
         let firstTexture = try makeIntermediateTexture(matching: outputTexture)
         let secondTexture = try makeIntermediateTexture(matching: outputTexture)
         try clear(firstTexture, commandBuffer: commandBuffer)
@@ -569,6 +639,7 @@ public final class MetalRenderExecutor {
             composite: composite,
             commandBuffer: commandBuffer
         )
+        return [firstTexture, secondTexture]
     }
 
     private func encodeSourceCompositePass(
@@ -636,10 +707,30 @@ public final class MetalRenderExecutor {
     }
 
     private func makeIntermediateTexture(matching outputTexture: MTLTexture) throws -> MTLTexture {
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+        try makeReusableTexture(
             pixelFormat: Self.linearWorkingPixelFormat,
             width: outputTexture.width,
-            height: outputTexture.height,
+            height: outputTexture.height
+        )
+    }
+
+    private func makeReusableTexture(
+        pixelFormat: MTLPixelFormat,
+        width: Int,
+        height: Int
+    ) throws -> MTLTexture {
+        let key = TextureDescriptorKey(
+            pixelDimensions: PixelDimensions(width: width, height: height),
+            pixelFormat: pixelFormat
+        )
+        if let texture = pooledTexture(for: key) {
+            return texture
+        }
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: pixelFormat,
+            width: width,
+            height: height,
             mipmapped: false
         )
         descriptor.usage = [.renderTarget, .shaderRead]
@@ -647,12 +738,76 @@ public final class MetalRenderExecutor {
 
         guard let texture = device.makeTexture(descriptor: descriptor) else {
             throw MetalRenderError.outputTextureCreationFailed(
-                width: outputTexture.width,
-                height: outputTexture.height
+                width: width,
+                height: height
             )
         }
 
         return texture
+    }
+
+    private func pooledTexture(for key: TextureDescriptorKey) -> MTLTexture? {
+        texturePoolLock.lock()
+        defer { texturePoolLock.unlock() }
+
+        guard var bucket = texturePool[key], let texture = bucket.popLast() else {
+            return nil
+        }
+
+        if bucket.isEmpty {
+            texturePool.removeValue(forKey: key)
+        } else {
+            texturePool[key] = bucket
+        }
+        if let accessIndex = texturePoolAccessOrder.lastIndex(of: key) {
+            texturePoolAccessOrder.remove(at: accessIndex)
+        }
+        texturePoolStoredCount -= 1
+        texturePoolHitCountValue += 1
+        return texture
+    }
+
+    private func recycleReusableTextures(
+        _ textures: [MTLTexture],
+        after commandBuffer: MTLCommandBuffer
+    ) {
+        guard maximumPooledTextureCount > 0, !textures.isEmpty else {
+            return
+        }
+
+        commandBuffer.addCompletedHandler { [weak self] _ in
+            self?.storeReusableTextures(textures)
+        }
+    }
+
+    private func storeReusableTextures(_ textures: [MTLTexture]) {
+        texturePoolLock.lock()
+        defer { texturePoolLock.unlock() }
+
+        for texture in textures {
+            let key = TextureDescriptorKey(texture: texture)
+            texturePool[key, default: []].append(texture)
+            texturePoolAccessOrder.append(key)
+            texturePoolStoredCount += 1
+        }
+        evictExpiredReusableTextures()
+    }
+
+    private func evictExpiredReusableTextures() {
+        while texturePoolStoredCount > maximumPooledTextureCount,
+              let expiredKey = texturePoolAccessOrder.first {
+            texturePoolAccessOrder.removeFirst()
+            guard var bucket = texturePool[expiredKey], !bucket.isEmpty else {
+                continue
+            }
+            bucket.removeFirst()
+            texturePoolStoredCount -= 1
+            if bucket.isEmpty {
+                texturePool.removeValue(forKey: expiredKey)
+            } else {
+                texturePool[expiredKey] = bucket
+            }
+        }
     }
 
     private func clear(_ texture: MTLTexture, commandBuffer: MTLCommandBuffer) throws {

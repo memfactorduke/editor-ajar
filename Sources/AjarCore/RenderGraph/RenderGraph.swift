@@ -341,7 +341,10 @@ enum RenderNodeFactory {
         kind: RenderNodeKind,
         inputHashes: [ContentHash]
     ) throws -> ContentHash {
-        let payload = RenderNodeHashPayload(kind: kind, inputHashes: inputHashes)
+        let payload = RenderNodeHashPayload(
+            kind: RenderNodeHashKind(kind),
+            inputHashes: inputHashes
+        )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
 
@@ -353,7 +356,40 @@ enum RenderNodeFactory {
     }
 }
 
+private enum RenderNodeHashKind: Codable {
+    case source(RenderSourceNode)
+    case compound(RenderCompoundHashNode)
+    case composite(RenderCompositeNode)
+
+    init(_ kind: RenderNodeKind) {
+        switch kind {
+        case .source(let source):
+            self = .source(source)
+        case .compound(let compound):
+            self = .compound(RenderCompoundHashNode(compound))
+        case .composite(let composite):
+            self = .composite(composite)
+        }
+    }
+}
+
+private struct RenderCompoundHashNode: Codable {
+    let sequenceID: UUID
+    let clipID: UUID
+    let sequenceTime: RationalTime
+    let speed: RationalValue
+    let colorSpace: MediaColorSpace
+
+    init(_ compound: RenderCompoundNode) {
+        self.sequenceID = compound.sequenceID
+        self.clipID = compound.clipID
+        self.sequenceTime = compound.sequenceTime
+        self.speed = compound.speed
+        self.colorSpace = compound.colorSpace
+    }
+}
+
 private struct RenderNodeHashPayload: Codable {
-    let kind: RenderNodeKind
+    let kind: RenderNodeHashKind
     let inputHashes: [ContentHash]
 }

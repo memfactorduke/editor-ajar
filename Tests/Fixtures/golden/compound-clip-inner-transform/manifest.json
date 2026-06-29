@@ -31,11 +31,11 @@
           "position" : {
             "x" : {
               "denominator" : 1,
-              "numerator" : 1
+              "numerator" : 0
             },
             "y" : {
               "denominator" : 1,
-              "numerator" : 1
+              "numerator" : 0
             }
           },
           "rotation" : {
@@ -48,11 +48,11 @@
           "scale" : {
             "x" : {
               "denominator" : 1,
-              "numerator" : 1
+              "numerator" : 2
             },
             "y" : {
               "denominator" : 1,
-              "numerator" : 1
+              "numerator" : 2
             }
           }
         }
