@@ -76,14 +76,15 @@ public extension AudioMixerMeterAnalyzer {
         truePeakCeilingDBTP: Double? = nil,
         channelCount: Int = 2
     ) throws -> AudioProgramLoudnessNormalizationResult {
-        try normalizeProgramLoudness(
+        let buffer = try OfflineAudioMixer.render(
+            project: project,
             sequence: sequence,
             range: range,
-            format: AudioRenderFormat(
-                sampleRate: project.settings.audioSampleRate,
-                channelCount: channelCount
-            ),
             sourceProvider: sourceProvider,
+            channelCount: channelCount
+        )
+        return try normalizeProgramLoudness(
+            buffer: buffer,
             targetLUFS: targetLUFS,
             truePeakCeilingDBTP: truePeakCeilingDBTP
         )

@@ -4,7 +4,7 @@ import AjarCore
 import Foundation
 
 /// Interleaved PCM format used by the headless audio renderer.
-public struct AudioRenderFormat: Equatable, Sendable {
+public struct AudioRenderFormat: Equatable, Hashable, Sendable {
     /// Sample rate in hertz.
     public let sampleRate: Int
 

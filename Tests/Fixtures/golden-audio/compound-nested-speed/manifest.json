@@ -1,0 +1,42 @@
+{
+  "id": "compound-nested-speed",
+  "sampleRate": 4,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [1.0, 2.0, 3.0, 4.0]
+    }
+  ],
+  "clips": [
+    {
+      "compound": {
+        "clips": [
+          {
+            "sourceIndex": 0,
+            "timelineStart": "0",
+            "sourceStart": "0",
+            "duration": "1"
+          }
+        ]
+      },
+      "timelineStart": "0",
+      "sourceStart": "0",
+      "duration": "1",
+      "speed": {
+        "numerator": 2,
+        "denominator": 1
+      },
+      "gain": 0.5
+    }
+  ],
+  "referenceSamples": [
+    0.5, 0.5,
+    1.5, 1.5,
+    0.0, 0.0,
+    0.0, 0.0
+  ]
+}

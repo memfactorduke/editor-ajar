@@ -112,14 +112,19 @@ public enum AudioMixerMeterAnalyzer {
         sourceProvider: any AudioSourceProvider,
         channelCount: Int = 2
     ) throws -> AudioMixerMeterReport {
-        try measure(
+        var environment = OfflineAudioRenderEnvironment(
+            project: project,
+            sourceProvider: sourceProvider
+        )
+        return try measure(
             sequence: sequence,
             range: range,
             format: AudioRenderFormat(
                 sampleRate: project.settings.audioSampleRate,
                 channelCount: channelCount
             ),
-            sourceProvider: sourceProvider
+            environment: &environment,
+            nestingDepth: 0
         )
     }
 
@@ -132,6 +137,26 @@ public enum AudioMixerMeterAnalyzer {
         range: TimeRange,
         format: AudioRenderFormat,
         sourceProvider: any AudioSourceProvider
+    ) throws -> AudioMixerMeterReport {
+        var environment = OfflineAudioRenderEnvironment(
+            project: nil,
+            sourceProvider: sourceProvider
+        )
+        return try measure(
+            sequence: sequence,
+            range: range,
+            format: format,
+            environment: &environment,
+            nestingDepth: 0
+        )
+    }
+
+    static func measure(
+        sequence: Sequence,
+        range: TimeRange,
+        format: AudioRenderFormat,
+        environment: inout OfflineAudioRenderEnvironment,
+        nestingDepth: Int
     ) throws -> AudioMixerMeterReport {
         try AudioBufferValidator.validate(format: format, frameCount: 0, samples: [])
         try OfflineAudioMixer.validateCrossfades(in: sequence)
@@ -147,23 +172,22 @@ public enum AudioMixerMeterAnalyzer {
         )
         let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
         let audioTracks = OfflineAudioMixer.selectedAudioTracks(sequence.audioTracks)
-        var sourceCache: [UUID: AudioSourceBuffer] = [:]
         let duckingMultipliers = try OfflineAudioMixer.duckingMultipliersByTrackID(
             rules: sequence.audioDucking,
             tracks: audioTracks,
             context: context,
-            sourceProvider: sourceProvider,
-            sourceCache: &sourceCache
+            environment: &environment,
+            nestingDepth: nestingDepth
         )
         let measured = try measuredTracks(
             request: TrackMeasurementRequest(
                 tracks: audioTracks,
                 sampleCount: sampleCount,
                 context: context,
-                duckingMultipliers: duckingMultipliers,
-                sourceProvider: sourceProvider
+                duckingMultipliers: duckingMultipliers
             ),
-            sourceCache: &sourceCache
+            environment: &environment,
+            nestingDepth: nestingDepth
         )
 
         return AudioMixerMeterReport(
@@ -192,12 +216,12 @@ private extension AudioMixerMeterAnalyzer {
         let sampleCount: Int
         let context: OfflineMixContext
         let duckingMultipliers: [UUID: [Double]]
-        let sourceProvider: any AudioSourceProvider
     }
 
     static func measuredTracks(
         request: TrackMeasurementRequest,
-        sourceCache: inout [UUID: AudioSourceBuffer]
+        environment: inout OfflineAudioRenderEnvironment,
+        nestingDepth: Int
     ) throws -> MeasuredTracks {
         var trackLevels: [AudioTrackMeterReading] = []
         trackLevels.reserveCapacity(request.tracks.count)
@@ -212,8 +236,8 @@ private extension AudioMixerMeterAnalyzer {
                     mix: request.context,
                     duckingMultipliers: request.duckingMultipliers[track.id]
                 ),
-                sourceProvider: request.sourceProvider,
-                sourceCache: &sourceCache
+                environment: &environment,
+                nestingDepth: nestingDepth
             )
             for index in trackSamples.indices {
                 mixSamples[index] += trackSamples[index]

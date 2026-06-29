@@ -20,6 +20,12 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     /// A media clip did not reference a media source.
     case unsupportedClipSource(clipID: UUID)
 
+    /// A compound audio clip references a missing sequence.
+    case missingSequenceReference(clipID: UUID, sequenceID: UUID)
+
+    /// Compound audio nesting exceeded the defensive recursion limit.
+    case maximumCompoundNestingDepthExceeded(clipID: UUID, depth: Int)
+
     /// Exact timeline arithmetic failed.
     case timeArithmetic(String)
 
@@ -54,6 +60,10 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
             "missing audio source \(mediaID)"
         case .unsupportedClipSource(let clipID):
             "audio clip \(clipID) does not reference media"
+        case .missingSequenceReference(let clipID, let sequenceID):
+            "audio compound clip \(clipID) references missing sequence \(sequenceID)"
+        case .maximumCompoundNestingDepthExceeded(let clipID, let depth):
+            "audio compound clip \(clipID) exceeded maximum nesting depth \(depth)"
         case .timeArithmetic(let message):
             "audio time arithmetic failed: \(message)"
         case .crossfadePartnerMatchesClip(let edge, let clipID):
