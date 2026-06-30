@@ -169,6 +169,49 @@ final class CompoundRenderGraphTests: XCTestCase {
         )
     }
 
+    func testFRTL013FRSPD003ReversedCompoundBuildsNestedGraphAtLastFrame() throws {
+        let mediaID = try uuid(78)
+        let targetSequenceID = try uuid(79)
+        let clipID = try uuid(80)
+        let innerClipID = try uuid(81)
+        let compoundClip = try makeClip(
+            id: clipID,
+            source: .sequence(id: targetSequenceID),
+            timelineStartFrame: 0,
+            sourceStartFrame: 0,
+            durationFrames: 10,
+            reverse: true
+        )
+        let innerClip = try makeClip(
+            id: innerClipID,
+            mediaID: mediaID,
+            timelineStartFrame: 0,
+            sourceStartFrame: 0,
+            durationFrames: 10
+        )
+        let sequence = try makeSequence(with: compoundClip)
+        let targetSequence = try makeEmptySequence(
+            id: targetSequenceID,
+            videoTracks: [Track(id: try uuid(82), kind: .video, items: [.clip(innerClip)])]
+        )
+        let project = try makeProject(
+            mediaPool: [makeMediaRef(id: mediaID)],
+            sequences: [sequence, targetSequence]
+        )
+
+        let graph = try buildRenderGraph(for: sequence, at: try time(0), in: project)
+        let compound = try compoundPayload(in: graph)
+        let nestedSource = try sourceNode(in: compound.graph)
+
+        XCTAssertEqual(compound.sequenceTime, try time(9))
+        XCTAssertTrue(compound.reverse)
+        XCTAssertFalse(compound.freezeFrame)
+        guard case .source(let source) = nestedSource.kind else {
+            return XCTFail("Expected nested media source")
+        }
+        XCTAssertEqual(source.sourceTime, try time(9))
+    }
+
     func testNFRSTAB003MissingCompoundSequenceReturnsTypedRenderGraphError() throws {
         let missingSequenceID = try uuid(74)
         let clipID = try uuid(75)
@@ -316,7 +359,9 @@ private func makeClip(
     sourceStartFrame: Int64 = 0,
     durationFrames: Int64 = 10,
     transform: ClipTransform = .identity,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    reverse: Bool = false,
+    freezeFrame: Bool = false
 ) throws -> Clip {
     try makeClip(
         id: id,
@@ -325,7 +370,9 @@ private func makeClip(
         sourceStartFrame: sourceStartFrame,
         durationFrames: durationFrames,
         transform: transform,
-        effects: effects
+        effects: effects,
+        reverse: reverse,
+        freezeFrame: freezeFrame
     )
 }
 
@@ -336,7 +383,9 @@ private func makeClip(
     sourceStartFrame: Int64,
     durationFrames: Int64 = 10,
     transform: ClipTransform = .identity,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    reverse: Bool = false,
+    freezeFrame: Bool = false
 ) throws -> Clip {
     Clip(
         id: id,
@@ -346,7 +395,9 @@ private func makeClip(
         kind: .video,
         name: "RenderGraph clip",
         transform: transform,
-        effects: effects
+        effects: effects,
+        reverse: reverse,
+        freezeFrame: freezeFrame
     )
 }
 

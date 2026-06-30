@@ -11,11 +11,15 @@ struct RenderSourceKey: Hashable {
     let mediaID: UUID
     let clipID: UUID
     let sourceTime: RationalTime
+    let reverse: Bool
+    let freezeFrame: Bool
 
     init(_ source: RenderSourceNode) {
         mediaID = source.mediaID
         clipID = source.clipID
         sourceTime = source.sourceTime
+        reverse = source.reverse
+        freezeFrame = source.freezeFrame
     }
 }
 
@@ -30,7 +34,10 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
 
         for source in graph.renderSourceNodes() {
             let media = try Self.media(for: source.mediaID, in: project)
-            let frame = try await decoder.decodeFrame(from: media, at: source.sourceTime)
+            let frame = try await decoder.decodeFrame(
+                from: media,
+                at: try Self.decodeTime(for: source, media: media)
+            )
             guard let texture = CVMetalTextureGetTexture(frame.metalTexture) else {
                 throw AjarCLIError.decodedTextureUnavailable(source.mediaID)
             }
@@ -60,6 +67,28 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
             throw AjarCLIError.missingMediaReference(mediaID)
         }
         return media
+    }
+
+    private static func decodeTime(
+        for source: RenderSourceNode,
+        media: MediaRef
+    ) throws -> RationalTime {
+        guard
+            source.reverse,
+            !source.freezeFrame,
+            let sourceRange = source.sourceRange
+        else {
+            return source.sourceTime
+        }
+
+        let sourceEnd = try sourceRange.end()
+        let sourceOffsetFromEnd = try sourceEnd.subtracting(source.sourceTime)
+        guard let frameRate = media.metadata.conformedFrameRate ?? media.metadata.frameRate else {
+            return source.sourceTime
+        }
+        let frameDuration = try frameRate.duration(ofFrames: 1)
+        let lastFrameTime = max(sourceRange.start, try sourceEnd.subtracting(frameDuration))
+        return max(sourceRange.start, try lastFrameTime.subtracting(sourceOffsetFromEnd))
     }
 }
 

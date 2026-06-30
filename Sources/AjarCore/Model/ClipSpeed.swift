@@ -14,7 +14,7 @@ public enum ClipSpeedValidationError: Error, Equatable, Sendable, CustomStringCo
     }
 }
 
-/// Errors produced while mapping timeline time through a clip speed.
+/// Errors produced while mapping timeline time through a clip speed/remap.
 public enum ClipSpeedMappingError: Error, Equatable, Sendable, CustomStringConvertible {
     /// The speed value is invalid.
     case invalidSpeed(ClipSpeedValidationError)
@@ -28,7 +28,7 @@ public enum ClipSpeedMappingError: Error, Equatable, Sendable, CustomStringConve
         case .invalidSpeed(let error):
             error.description
         case .timeArithmetic(let error):
-            "clip speed time mapping failed: \(error)"
+            "clip speed/remap time mapping failed: \(error)"
         }
     }
 }
@@ -78,10 +78,20 @@ public extension Clip {
     }
 
     /// Maps an absolute sequence time to this clip's source time.
+    ///
+    /// Reverse clips use the mathematical half-open range end here. Consumers that decode discrete
+    /// frames or samples clamp that exclusive end to their last valid media quantum.
     func sourceTime(at timelineTime: RationalTime) throws -> RationalTime {
         do {
+            try Self.validateSpeedOrThrow(speed)
+            if freezeFrame {
+                return sourceRange.start
+            }
             let timelineOffset = try timelineTime.subtracting(timelineRange.start)
             let sourceOffset = try sourceOffset(forTimelineOffset: timelineOffset)
+            if reverse {
+                return try sourceRange.end().subtracting(sourceOffset)
+            }
             return try sourceRange.start.adding(sourceOffset)
         } catch let error as ClipSpeedMappingError {
             throw error
