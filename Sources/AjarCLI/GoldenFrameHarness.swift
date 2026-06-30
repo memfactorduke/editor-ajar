@@ -350,7 +350,9 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             transformAnimation: clipSpec.transformAnimation,
             effects: clipSpec.effects ?? .none,
             effectsAnimation: clipSpec.effectsAnimation,
-            speed: speed
+            speed: speed,
+            reverse: clipSpec.reverse ?? false,
+            freezeFrame: clipSpec.freezeFrame ?? false
         )
     }
 
@@ -376,7 +378,9 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             transformAnimation: clipSpec.transformAnimation,
             effects: compound.innerEffects ?? .none,
             effectsAnimation: clipSpec.effectsAnimation,
-            speed: speed
+            speed: speed,
+            reverse: clipSpec.reverse ?? false,
+            freezeFrame: clipSpec.freezeFrame ?? false
         )
     }
 
@@ -453,6 +457,8 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
                     syntheticMedia: syntheticMedia,
                     compound: nil,
                     speed: nil,
+                    reverse: nil,
+                    freezeFrame: nil,
                     transform: nil,
                     transformAnimation: nil,
                     effects: nil,
@@ -470,6 +476,8 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let syntheticMedia: SyntheticMovieSpec
     let compound: GoldenFrameCompoundSpec?
     let speed: RationalValue?
+    let reverse: Bool?
+    let freezeFrame: Bool?
     let transform: ClipTransform?
     let transformAnimation: AnimatableClipTransform?
     let effects: ClipEffects?

@@ -222,6 +222,8 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
     let sourceStart: String
     let duration: String
     let speed: RationalValue?
+    let reverse: Bool
+    let freezeFrame: Bool
     let gain: Double
     let pan: Double
     let fadeIn: String?
@@ -234,6 +236,8 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         case sourceStart
         case duration
         case speed
+        case reverse
+        case freezeFrame
         case gain
         case pan
         case fadeIn
@@ -248,6 +252,8 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         sourceStart = try container.decodeIfPresent(String.self, forKey: .sourceStart) ?? "0"
         duration = try container.decode(String.self, forKey: .duration)
         speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed)
+        reverse = try container.decodeIfPresent(Bool.self, forKey: .reverse) ?? false
+        freezeFrame = try container.decodeIfPresent(Bool.self, forKey: .freezeFrame) ?? false
         gain = try container.decodeIfPresent(Double.self, forKey: .gain) ?? 1
         pan = try container.decodeIfPresent(Double.self, forKey: .pan) ?? 0
         fadeIn = try container.decodeIfPresent(String.self, forKey: .fadeIn)
@@ -271,7 +277,9 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
             kind: .audio,
             name: "Golden Audio Clip",
             audioMix: try audioMix(),
-            speed: clipSpeed
+            speed: clipSpeed,
+            reverse: reverse,
+            freezeFrame: freezeFrame
         )
     }
 

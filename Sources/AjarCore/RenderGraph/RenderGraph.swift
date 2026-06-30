@@ -68,8 +68,11 @@ struct RenderCompositeNodeInput {
 struct RenderCompoundNodeSpec {
     let sequenceID: UUID
     let clipID: UUID
+    let sourceRange: TimeRange
     let sequenceTime: RationalTime
     let speed: RationalValue
+    let reverse: Bool
+    let freezeFrame: Bool
     let graph: RenderGraph
     let colorSpace: MediaColorSpace
 }
@@ -85,8 +88,17 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Exact time in source media coordinates.
     public let sourceTime: RationalTime
 
+    /// Source range used for discrete reverse/freeze boundary resolution.
+    public let sourceRange: TimeRange?
+
     /// Constant-rate playback speed that mapped sequence time to source time.
     public let speed: RationalValue
+
+    /// Whether the source node was resolved from a reversed clip.
+    public let reverse: Bool
+
+    /// Whether the source node was resolved from a freeze-frame clip.
+    public let freezeFrame: Bool
 
     /// Tagged source color space used by the render pipeline.
     public let colorSpace: MediaColorSpace
@@ -96,13 +108,19 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         mediaID: UUID,
         clipID: UUID,
         sourceTime: RationalTime,
+        sourceRange: TimeRange? = nil,
         speed: RationalValue = .one,
+        reverse: Bool = false,
+        freezeFrame: Bool = false,
         colorSpace: MediaColorSpace = .rec709
     ) {
         self.mediaID = mediaID
         self.clipID = clipID
         self.sourceTime = sourceTime
+        self.sourceRange = sourceRange
         self.speed = speed
+        self.reverse = reverse
+        self.freezeFrame = freezeFrame
         self.colorSpace = colorSpace
     }
 }
@@ -118,8 +136,17 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
     /// Exact time in nested sequence coordinates.
     public let sequenceTime: RationalTime
 
+    /// Source range used for the nested sequence remap.
+    public let sourceRange: TimeRange
+
     /// Constant-rate playback speed that mapped sequence time to nested sequence time.
     public let speed: RationalValue
+
+    /// Whether the compound node was resolved from a reversed clip.
+    public let reverse: Bool
+
+    /// Whether the compound node was resolved from a freeze-frame clip.
+    public let freezeFrame: Bool
 
     /// Nested sequence graph evaluated at `sequenceTime`.
     public let graph: RenderGraph
@@ -132,14 +159,20 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
         sequenceID: UUID,
         clipID: UUID,
         sequenceTime: RationalTime,
+        sourceRange: TimeRange,
         speed: RationalValue = .one,
+        reverse: Bool = false,
+        freezeFrame: Bool = false,
         graph: RenderGraph,
         colorSpace: MediaColorSpace
     ) {
         self.sequenceID = sequenceID
         self.clipID = clipID
         self.sequenceTime = sequenceTime
+        self.sourceRange = sourceRange
         self.speed = speed
+        self.reverse = reverse
+        self.freezeFrame = freezeFrame
         self.graph = graph
         self.colorSpace = colorSpace
     }
@@ -245,7 +278,10 @@ enum RenderNodeFactory {
         mediaID: UUID,
         clipID: UUID,
         sourceTime: RationalTime,
+        sourceRange: TimeRange,
         speed: RationalValue,
+        reverse: Bool,
+        freezeFrame: Bool,
         colorSpace: MediaColorSpace
     ) throws -> RenderNode {
         let kind = RenderNodeKind.source(
@@ -253,7 +289,10 @@ enum RenderNodeFactory {
                 mediaID: mediaID,
                 clipID: clipID,
                 sourceTime: sourceTime,
+                sourceRange: sourceRange,
                 speed: speed,
+                reverse: reverse,
+                freezeFrame: freezeFrame,
                 colorSpace: colorSpace
             )
         )
@@ -302,7 +341,10 @@ enum RenderNodeFactory {
                 sequenceID: spec.sequenceID,
                 clipID: spec.clipID,
                 sequenceTime: spec.sequenceTime,
+                sourceRange: spec.sourceRange,
                 speed: spec.speed,
+                reverse: spec.reverse,
+                freezeFrame: spec.freezeFrame,
                 graph: spec.graph,
                 colorSpace: spec.colorSpace
             )
@@ -377,14 +419,20 @@ private struct RenderCompoundHashNode: Codable {
     let sequenceID: UUID
     let clipID: UUID
     let sequenceTime: RationalTime
+    let sourceRange: TimeRange
     let speed: RationalValue
+    let reverse: Bool
+    let freezeFrame: Bool
     let colorSpace: MediaColorSpace
 
     init(_ compound: RenderCompoundNode) {
         self.sequenceID = compound.sequenceID
         self.clipID = compound.clipID
         self.sequenceTime = compound.sequenceTime
+        self.sourceRange = compound.sourceRange
         self.speed = compound.speed
+        self.reverse = compound.reverse
+        self.freezeFrame = compound.freezeFrame
         self.colorSpace = compound.colorSpace
     }
 }

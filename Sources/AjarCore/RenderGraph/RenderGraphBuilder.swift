@@ -202,7 +202,10 @@ public enum RenderGraphBuilder {
             mediaID: mediaID,
             clipID: clip.id,
             sourceTime: sourceTime,
+            sourceRange: clip.sourceRange,
             speed: clip.speed,
+            reverse: clip.reverse,
+            freezeFrame: clip.freezeFrame,
             colorSpace: media.metadata.colorSpace
         )
     }
@@ -229,7 +232,11 @@ public enum RenderGraphBuilder {
             )
         }
 
-        let sequenceTime = try mapTimelineTime(time, toSourceTimeFor: clip)
+        let sequenceTime = try renderableSequenceTime(
+            try mapTimelineTime(time, toSourceTimeFor: clip),
+            for: clip,
+            in: sequence
+        )
         let graph = try build(
             for: sequence,
             at: sequenceTime,
@@ -240,8 +247,11 @@ public enum RenderGraphBuilder {
             RenderCompoundNodeSpec(
                 sequenceID: sequenceID,
                 clipID: clip.id,
+                sourceRange: clip.sourceRange,
                 sequenceTime: sequenceTime,
                 speed: clip.speed,
+                reverse: clip.reverse,
+                freezeFrame: clip.freezeFrame,
                 graph: graph,
                 colorSpace: project.settings.colorSpace
             )
@@ -256,6 +266,31 @@ public enum RenderGraphBuilder {
             return try clip.sourceTime(at: time)
         } catch let error as ClipSpeedMappingError {
             throw RenderGraphBuildError.clipSpeedMappingFailed(clipID: clip.id, error: error)
+        }
+    }
+
+    private static func renderableSequenceTime(
+        _ time: RationalTime,
+        for clip: Clip,
+        in sequence: Sequence
+    ) throws -> RationalTime {
+        guard clip.reverse && !clip.freezeFrame else {
+            return time
+        }
+        do {
+            let sourceEnd = try clip.sourceRange.end()
+            let sourceOffsetFromEnd = try sourceEnd.subtracting(time)
+            let frameDuration = try sequence.timebase.duration(ofFrames: 1)
+            let lastFrameTime = max(
+                clip.sourceRange.start,
+                try sourceEnd.subtracting(frameDuration)
+            )
+            return max(
+                clip.sourceRange.start,
+                try lastFrameTime.subtracting(sourceOffsetFromEnd)
+            )
+        } catch let error as RationalTimeError {
+            throw RenderGraphBuildError.timeMappingFailed(error)
         }
     }
 }

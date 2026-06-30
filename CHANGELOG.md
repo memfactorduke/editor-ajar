@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added FR-SPD-003 reverse and freeze-frame clip time-remaps with legacy-safe model fields,
+  exact rational source-time mapping, render/audio compound handling, sustained freeze audio,
+  cache-key invalidation, codec coverage, and golden frame/audio fixtures.
 - Optimized NFR-QUAL-001 nested compound rendering so sequence-backed sources expose cached
   `rgba16Float` linear working textures directly, skip per-level present transfer passes, and
   keep same-content-hash cache entries separated by output descriptor.

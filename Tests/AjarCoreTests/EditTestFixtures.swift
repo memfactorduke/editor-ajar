@@ -155,7 +155,9 @@ func makeEditClip(
     effects: ClipEffects = .none,
     effectsAnimation: AnimatableClipEffects? = nil,
     audioMix: ClipAudioMix = .identity,
-    speed: RationalValue = .one
+    speed: RationalValue = .one,
+    reverse: Bool = false,
+    freezeFrame: Bool = false
 ) throws -> Clip {
     let sourceDuration = try editTime(durationFrames)
     let timelineDuration = try Clip.timelineDuration(
@@ -175,7 +177,9 @@ func makeEditClip(
         effects: effects,
         effectsAnimation: effectsAnimation,
         audioMix: audioMix,
-        speed: speed
+        speed: speed,
+        reverse: reverse,
+        freezeFrame: freezeFrame
     )
 }
 
