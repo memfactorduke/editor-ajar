@@ -52,64 +52,106 @@ extension EditReducer {
         return try decomposeCompoundClip(edit, targetSequence: targetSequence, in: project)
     }
 
+    private struct DecomposeCompoundTarget {
+        let location: TrackLocation
+        let itemIndex: Int
+        let compoundClip: Clip
+    }
+
     private static func decomposeCompoundClip(
         _ edit: DecomposeCompoundClipEdit,
         targetSequence: Sequence,
         in project: Project
     ) throws -> Project {
         try replacingSequence(in: project, sequenceID: edit.sequenceID) { parentSequence in
+            let target = try validatedDecomposeTarget(edit, in: parentSequence)
             var videoTracks = parentSequence.videoTracks
             var audioTracks = parentSequence.audioTracks
-            let compoundLocation = try locateTrack(edit.trackID, in: parentSequence)
-            let compoundTrack = track(
-                at: compoundLocation,
-                videoTracks: videoTracks,
-                audioTracks: audioTracks
-            )
-            guard
-                let itemIndex = clipIndex(edit.clipID, in: compoundTrack.items),
-                case .clip(let compoundClip) = compoundTrack.items[itemIndex]
-            else {
-                throw EditReducerError.clipNotFound(
-                    sequenceID: edit.sequenceID,
-                    trackID: edit.trackID,
-                    clipID: edit.clipID
-                )
-            }
-            guard case .sequence = compoundClip.source else {
-                throw EditReducerError.invalidEdit(
-                    .decomposeRequiresCompoundClip(clipID: edit.clipID)
-                )
-            }
 
             // Keep the referenced sequence. It may still be used by other compound instances,
             // and automatic orphan cleanup would be a separate explicit edit.
+            let compoundTrack = track(
+                at: target.location,
+                videoTracks: videoTracks,
+                audioTracks: audioTracks
+            )
             var compoundItems = compoundTrack.items
-            compoundItems.remove(at: itemIndex)
+            compoundItems.remove(at: target.itemIndex)
             setTrack(
                 copying(compoundTrack, items: compoundItems),
-                at: compoundLocation,
+                at: target.location,
                 videoTracks: &videoTracks,
                 audioTracks: &audioTracks
             )
 
-            try insertDecomposedTracks(
+            var expandedReferences: [ClipReference] = []
+            expandedReferences += try insertDecomposedTracks(
                 from: targetSequence.videoTracks,
-                compoundClip: compoundClip,
+                compoundClip: target.compoundClip,
                 sequenceID: edit.sequenceID,
                 videoTracks: &videoTracks,
                 audioTracks: &audioTracks
             )
-            try insertDecomposedTracks(
+            expandedReferences += try insertDecomposedTracks(
                 from: targetSequence.audioTracks,
-                compoundClip: compoundClip,
+                compoundClip: target.compoundClip,
                 sequenceID: edit.sequenceID,
                 videoTracks: &videoTracks,
                 audioTracks: &audioTracks
+            )
+            let restoredMarkers = try decomposedMarkers(
+                from: targetSequence,
+                compoundClip: target.compoundClip,
+                expandedReferences: Set(expandedReferences),
+                parentMarkerIDs: Set(parentSequence.markers.map(\.id))
             )
 
-            return copying(parentSequence, videoTracks: videoTracks, audioTracks: audioTracks)
+            return copying(
+                parentSequence,
+                videoTracks: videoTracks,
+                audioTracks: audioTracks,
+                markers: sortedMarkers(parentSequence.markers + restoredMarkers)
+            )
         }
+    }
+
+    private static func validatedDecomposeTarget(
+        _ edit: DecomposeCompoundClipEdit,
+        in parentSequence: Sequence
+    ) throws -> DecomposeCompoundTarget {
+        let location = try locateTrack(edit.trackID, in: parentSequence)
+        let compoundTrack = track(
+            at: location,
+            videoTracks: parentSequence.videoTracks,
+            audioTracks: parentSequence.audioTracks
+        )
+        guard
+            let itemIndex = clipIndex(edit.clipID, in: compoundTrack.items),
+            case .clip(let compoundClip) = compoundTrack.items[itemIndex]
+        else {
+            throw EditReducerError.clipNotFound(
+                sequenceID: edit.sequenceID,
+                trackID: edit.trackID,
+                clipID: edit.clipID
+            )
+        }
+        guard case .sequence = compoundClip.source else {
+            throw EditReducerError.invalidEdit(
+                .decomposeRequiresCompoundClip(clipID: edit.clipID)
+            )
+        }
+        try validateDecomposableCompoundAttributes(compoundClip)
+        try validateMatchingDurations(
+            clipID: compoundClip.id,
+            sourceRange: compoundClip.sourceRange,
+            timelineRange: compoundClip.timelineRange,
+            speed: compoundClip.speed
+        )
+        return DecomposeCompoundTarget(
+            location: location,
+            itemIndex: itemIndex,
+            compoundClip: compoundClip
+        )
     }
 
     private static func insertDecomposedTracks(
@@ -118,7 +160,8 @@ extension EditReducer {
         sequenceID: UUID,
         videoTracks: inout [Track],
         audioTracks: inout [Track]
-    ) throws {
+    ) throws -> [ClipReference] {
+        var expandedReferences: [ClipReference] = []
         for nestedTrack in nestedTracks {
             let clips = try decomposedClips(from: nestedTrack, compoundClip: compoundClip)
             guard !clips.isEmpty else {
@@ -132,7 +175,11 @@ extension EditReducer {
                 videoTracks: &videoTracks,
                 audioTracks: &audioTracks
             )
+            expandedReferences += clips.map {
+                ClipReference(trackID: nestedTrack.id, clipID: $0.id)
+            }
         }
+        return expandedReferences
     }
 
     private static func insertDecomposedClips(
@@ -182,72 +229,6 @@ extension EditReducer {
             videoTracks: &videoTracks,
             audioTracks: &audioTracks
         )
-    }
-
-    private static func decomposedClips(
-        from nestedTrack: Track,
-        compoundClip: Clip
-    ) throws -> [Clip] {
-        var clips: [Clip] = []
-        for item in nestedTrack.items {
-            guard case .clip(let clip) = item else {
-                continue
-            }
-            clips.append(
-                copying(
-                    clip,
-                    timelineRange: try decomposedTimelineRange(
-                        for: clip,
-                        compoundClip: compoundClip
-                    ),
-                    speed: try combinedSpeed(clip.speed, compoundClip.speed)
-                )
-            )
-        }
-        return clips
-    }
-
-    private static func decomposedTimelineRange(
-        for clip: Clip,
-        compoundClip: Clip
-    ) throws -> TimeRange {
-        let nestedStartOffset = try exactTime {
-            try clip.timelineRange.start.subtracting(compoundClip.sourceRange.start)
-        }
-        let parentStartOffset = try speedTimelineDuration(
-            clipID: compoundClip.id,
-            sourceDuration: nestedStartOffset,
-            speed: compoundClip.speed
-        )
-        let parentStart = try exactTime {
-            try compoundClip.timelineRange.start.adding(parentStartOffset)
-        }
-        let parentDuration = try speedTimelineDuration(
-            clipID: compoundClip.id,
-            sourceDuration: clip.timelineRange.duration,
-            speed: compoundClip.speed
-        )
-
-        return try makeRange(start: parentStart, duration: parentDuration)
-    }
-
-    private static func combinedSpeed(
-        _ clipSpeed: RationalValue,
-        _ compoundSpeed: RationalValue
-    ) throws -> RationalValue {
-        do {
-            let numerator = try RationalTime.multiplied(
-                clipSpeed.numerator,
-                by: compoundSpeed.numerator
-            )
-            let denominator = try RationalTime.multiplied(
-                clipSpeed.denominator,
-                by: compoundSpeed.denominator
-            )
-            return try RationalValue(numerator: numerator, denominator: denominator)
-        } catch let error as RationalTimeError {
-            throw EditReducerError.timeArithmeticFailed(error)
-        }
     }
 
     private static func existingTrackLocation(
