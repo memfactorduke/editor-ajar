@@ -73,6 +73,7 @@ struct RenderCompoundNodeSpec {
     let speed: RationalValue
     let reverse: Bool
     let freezeFrame: Bool
+    let timeRemap: ClipTimeRemap?
     let graph: RenderGraph
     let colorSpace: MediaColorSpace
 }
@@ -85,6 +86,7 @@ struct RenderSourceNodeSpec {
     let speed: RationalValue
     let reverse: Bool
     let freezeFrame: Bool
+    let timeRemap: ClipTimeRemap?
     let colorSpace: MediaColorSpace
 }
 
@@ -111,6 +113,9 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Whether the source node was resolved from a freeze-frame clip.
     public let freezeFrame: Bool
 
+    /// FR-SPD-002 time-remap curve that mapped sequence time to source time, when present.
+    public let timeRemap: ClipTimeRemap?
+
     /// Tagged source color space used by the render pipeline.
     public let colorSpace: MediaColorSpace
 
@@ -123,6 +128,7 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         speed: RationalValue = .one,
         reverse: Bool = false,
         freezeFrame: Bool = false,
+        timeRemap: ClipTimeRemap? = nil,
         colorSpace: MediaColorSpace = .rec709
     ) {
         self.mediaID = mediaID
@@ -132,6 +138,7 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         self.speed = speed
         self.reverse = reverse
         self.freezeFrame = freezeFrame
+        self.timeRemap = timeRemap
         self.colorSpace = colorSpace
     }
 }
@@ -159,6 +166,9 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
     /// Whether the compound node was resolved from a freeze-frame clip.
     public let freezeFrame: Bool
 
+    /// FR-SPD-002 time-remap curve that mapped sequence time to nested time, when present.
+    public let timeRemap: ClipTimeRemap?
+
     /// Nested sequence graph evaluated at `sequenceTime`.
     public let graph: RenderGraph
 
@@ -174,6 +184,7 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
         speed: RationalValue = .one,
         reverse: Bool = false,
         freezeFrame: Bool = false,
+        timeRemap: ClipTimeRemap? = nil,
         graph: RenderGraph,
         colorSpace: MediaColorSpace
     ) {
@@ -184,6 +195,7 @@ public struct RenderCompoundNode: Codable, Equatable, Sendable {
         self.speed = speed
         self.reverse = reverse
         self.freezeFrame = freezeFrame
+        self.timeRemap = timeRemap
         self.graph = graph
         self.colorSpace = colorSpace
     }
@@ -295,6 +307,7 @@ enum RenderNodeFactory {
                 speed: spec.speed,
                 reverse: spec.reverse,
                 freezeFrame: spec.freezeFrame,
+                timeRemap: spec.timeRemap,
                 colorSpace: spec.colorSpace
             )
         )
@@ -347,6 +360,7 @@ enum RenderNodeFactory {
                 speed: spec.speed,
                 reverse: spec.reverse,
                 freezeFrame: spec.freezeFrame,
+                timeRemap: spec.timeRemap,
                 graph: spec.graph,
                 colorSpace: spec.colorSpace
             )
@@ -425,6 +439,7 @@ private struct RenderCompoundHashNode: Codable {
     let speed: RationalValue
     let reverse: Bool
     let freezeFrame: Bool
+    let timeRemap: ClipTimeRemap?
     let colorSpace: MediaColorSpace
 
     init(_ compound: RenderCompoundNode) {
@@ -435,6 +450,7 @@ private struct RenderCompoundHashNode: Codable {
         self.speed = compound.speed
         self.reverse = compound.reverse
         self.freezeFrame = compound.freezeFrame
+        self.timeRemap = compound.timeRemap
         self.colorSpace = compound.colorSpace
     }
 }

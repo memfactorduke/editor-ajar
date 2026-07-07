@@ -122,6 +122,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         error: ClipSpeedValidationError
     )
 
+    /// A clip time-remap curve violates an FR-SPD-002 invariant.
+    case invalidClipTimeRemap(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: ClipTimeRemapValidationError
+    )
+
     /// A sequence ducking rule is outside the supported range or references invalid tracks.
     case invalidAudioDucking(sequenceID: UUID, ruleIndex: Int, error: AudioDuckingValidationError)
 }

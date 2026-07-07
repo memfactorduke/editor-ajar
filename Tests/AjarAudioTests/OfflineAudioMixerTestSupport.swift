@@ -60,10 +60,16 @@ func makeClip(
     audioMix: ClipAudioMix = .identity,
     speed: RationalValue = .one,
     reverse: Bool = false,
-    freezeFrame: Bool = false
+    freezeFrame: Bool = false,
+    timeRemap: ClipTimeRemap? = nil
 ) throws -> Clip {
     let clipID = try id ?? uuid("00000000-0000-0000-0000-000000085301")
-    let timelineDuration = try Clip.timelineDuration(forSourceDuration: duration, speed: speed)
+    let timelineDuration: RationalTime
+    if let timeRemap {
+        timelineDuration = timeRemap.duration
+    } else {
+        timelineDuration = try Clip.timelineDuration(forSourceDuration: duration, speed: speed)
+    }
     return Clip(
         id: clipID,
         source: .media(id: mediaID),
@@ -74,7 +80,8 @@ func makeClip(
         audioMix: audioMix,
         speed: speed,
         reverse: reverse,
-        freezeFrame: freezeFrame
+        freezeFrame: freezeFrame,
+        timeRemap: timeRemap
     )
 }
 

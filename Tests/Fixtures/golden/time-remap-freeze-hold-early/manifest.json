@@ -1,0 +1,29 @@
+{
+  "comment": "FR-SPD-002 within-clip freeze: the curve ramps at 4x for 1/4s (keyframes 0->0, 1/4->1), then holds source time 1 (frame 128 of 128 fps frame-index-coded media) until 3/2. Sampling t=1/2 inside the zero-slope span must decode source frame 128. The paired time-remap-freeze-hold-late fixture samples t=5/4 against the same held frame, proving the span holds. Ignoring the curve (1x) would decode frame 64 here and flattening to the constant-rate chord (2/3x) would decode frame 42; both are >= 64 green levels away.",
+  "schemaVersion": 1,
+  "id": "time-remap-freeze-hold-early",
+  "requirements": ["FR-SPD-002", "ADR-0009", "TESTING-2", "ADR-0011", "NFR-QUAL-001"],
+  "frame": "1/2",
+  "referencePNG": "reference.png",
+  "clips": [
+    {
+      "syntheticMedia": {
+        "width": 16,
+        "height": 16,
+        "frameCount": 256,
+        "frameRate": 128,
+        "bgra": [0, 0, 255, 255]
+      },
+      "timeRemap": [
+        { "time": "0", "sourceTime": "0" },
+        { "time": "1/4", "sourceTime": "1" },
+        { "time": "3/2", "sourceTime": "1" }
+      ]
+    }
+  ],
+  "tolerance": {
+    "maximumDeltaE": 4,
+    "minimumSSIM": 0.9,
+    "maximumAlphaDelta": 0
+  }
+}

@@ -207,6 +207,7 @@ public enum RenderGraphBuilder {
                 speed: clip.speed,
                 reverse: clip.reverse,
                 freezeFrame: clip.freezeFrame,
+                timeRemap: clip.timeRemap,
                 colorSpace: media.metadata.colorSpace
             )
         )
@@ -254,6 +255,7 @@ public enum RenderGraphBuilder {
                 speed: clip.speed,
                 reverse: clip.reverse,
                 freezeFrame: clip.freezeFrame,
+                timeRemap: clip.timeRemap,
                 graph: graph,
                 colorSpace: project.settings.colorSpace
             )
