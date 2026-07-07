@@ -247,6 +247,67 @@ final class ClipTimeRemapModelTests: XCTestCase {
         )
     }
 
+    func testFRSPD002NonFinalKeyframeOnExclusiveSourceEndIsRejected() throws {
+        let fixture = try makeEditFixture(seed: 4_355)
+
+        // Flat tail parked on the exclusive source end: offsets in [12, 24) would all read at
+        // the half-open boundary (past the last frame / sample) for half the clip.
+        let flatTailCurve = try ClipTimeRemap(keyframes: [
+            try remapKeyframe(0, 0),
+            try remapKeyframe(12, 24),
+            try remapKeyframe(24, 24)
+        ])
+        let flatTailClip = try makeRemapClip(
+            clipSeed: 4_356,
+            curve: flatTailCurve,
+            sourceDurationFrames: 24,
+            mediaID: fixture.mediaID
+        )
+        let expected = ClipTimeRemapValidationError.nonFinalKeyframeAtSourceEnd(
+            index: 1,
+            sourceTime: try editTime(24),
+            sourceRange: flatTailClip.sourceRange
+        )
+
+        XCTAssertEqual(flatTailClip.validateTimeRemap(), expected)
+        try assertValidationError(
+            replacingVideoItems([.clip(flatTailClip)], in: fixture),
+            fixture: fixture,
+            clipID: flatTailClip.id,
+            expected: expected
+        )
+        XCTAssertThrowsError(try flatTailClip.sourceTime(at: try editTime(28))) { error in
+            XCTAssertEqual(error as? ClipSpeedMappingError, .invalidTimeRemap(expected))
+        }
+    }
+
+    func testFRSPD002FinalKeyframeOnSourceEndWithIncreasingLastSegmentStaysValid() throws {
+        let fixture = try makeEditFixture(seed: 4_357)
+
+        // Only the final keyframe touches the exclusive source end, through a strictly
+        // increasing last segment; every active offset then maps strictly before the end.
+        let curve = try ClipTimeRemap(keyframes: [
+            try remapKeyframe(0, 0),
+            try remapKeyframe(12, 12),
+            try remapKeyframe(24, 24)
+        ])
+        let clip = try makeRemapClip(
+            clipSeed: 4_358,
+            curve: curve,
+            sourceDurationFrames: 24,
+            mediaID: fixture.mediaID
+        )
+
+        XCTAssertNil(clip.validateTimeRemap())
+        XCTAssertTrue(try replacingVideoItems([.clip(clip)], in: fixture).validate().isValid)
+
+        // The last active frame stays strictly inside the source range.
+        let lastActiveTime = try editTime(33)
+        let mapped = try clip.sourceTime(at: lastActiveTime)
+        XCTAssertEqual(mapped, try editTime(23))
+        XCTAssertLessThan(mapped, try clip.sourceRange.end())
+    }
+
     func testFRSPD002EvaluationClampsOutsideCurveDomainToEndpointSourceTimes() throws {
         let curve = try rampCurve()
 

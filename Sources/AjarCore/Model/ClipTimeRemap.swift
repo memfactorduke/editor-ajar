@@ -42,6 +42,17 @@ public enum ClipTimeRemapValidationError: Error, Equatable, Sendable, CustomStri
     /// A keyframe maps outside the clip's source range.
     case sourceTimeOutOfBounds(sourceTime: RationalTime, sourceRange: TimeRange)
 
+    /// A non-final keyframe maps to the exclusive source range end.
+    ///
+    /// The clip's timeline end is exclusive and never sampled, so only the final keyframe may
+    /// touch `sourceRange.end()`; an earlier keyframe there would make active timeline offsets
+    /// read at or past the last media quantum for the rest of the clip.
+    case nonFinalKeyframeAtSourceEnd(
+        index: Int,
+        sourceTime: RationalTime,
+        sourceRange: TimeRange
+    )
+
     /// Exact time arithmetic failed while validating the curve against the clip.
     case timeArithmetic(RationalTimeError)
 
@@ -65,6 +76,10 @@ public enum ClipTimeRemapValidationError: Error, Equatable, Sendable, CustomStri
         case .sourceTimeOutOfBounds(let sourceTime, let sourceRange):
             "time remap source time \(sourceTime) is outside source range "
                 + "\(sourceRange.start)+\(sourceRange.duration)"
+        case .nonFinalKeyframeAtSourceEnd(let index, let sourceTime, let sourceRange):
+            "time remap keyframe \(index) maps \(sourceTime) onto the exclusive end of source "
+                + "range \(sourceRange.start)+\(sourceRange.duration); only the final keyframe "
+                + "may touch the source end"
         case .timeArithmetic(let error):
             "time remap validation arithmetic failed: \(error)"
         }
@@ -225,6 +240,17 @@ public extension Clip {
             if timeRemap.sourceEnd > sourceEnd {
                 return .sourceTimeOutOfBounds(
                     sourceTime: timeRemap.sourceEnd,
+                    sourceRange: sourceRange
+                )
+            }
+            // Half-open semantics: the clip's timeline end is exclusive and never sampled, so
+            // only the final keyframe may sit on the exclusive source end. Monotonic curves then
+            // keep every active timeline offset strictly before the last media quantum.
+            for index in timeRemap.keyframes.indices.dropLast()
+            where timeRemap.keyframes[index].sourceTime >= sourceEnd {
+                return .nonFinalKeyframeAtSourceEnd(
+                    index: index,
+                    sourceTime: timeRemap.keyframes[index].sourceTime,
                     sourceRange: sourceRange
                 )
             }
