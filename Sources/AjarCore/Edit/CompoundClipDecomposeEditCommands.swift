@@ -102,7 +102,8 @@ extension EditReducer {
             let restoredMarkers = try decomposedMarkers(
                 from: targetSequence,
                 compoundClip: target.compoundClip,
-                expandedReferences: Set(expandedReferences)
+                expandedReferences: Set(expandedReferences),
+                parentMarkerIDs: Set(parentSequence.markers.map(\.id))
             )
 
             return copying(

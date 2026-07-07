@@ -40,6 +40,17 @@ struct RichRoundTripFixture {
     let selection: [ClipReference]
 }
 
+struct SharedNestedDecomposeFixture {
+    let project: Project
+    let parentSequenceID: UUID
+    let targetSequenceID: UUID
+    let trackID: UUID
+    let firstCompoundClipID: UUID
+    let secondCompoundClipID: UUID
+    let innerClipID: UUID
+    let sharedMarkerID: UUID
+}
+
 private struct WindowedDecomposeIDs {
     let mediaID: UUID
     let parentSequenceID: UUID
@@ -297,6 +308,98 @@ private func makeRemappedTargetSequence(
         ],
         audioTracks: [],
         markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+}
+
+/// Two compound clips on one parent track referencing the same nested sequence, whose single
+/// inner clip carries one clip-anchored marker.
+func makeSharedNestedDecomposeFixture(seed: Int) throws -> SharedNestedDecomposeFixture {
+    let base = seed * 1_000
+    let mediaID = try editUUID(base + 1)
+    let parentSequenceID = try editUUID(base + 2)
+    let targetSequenceID = try editUUID(base + 3)
+    let trackID = try editUUID(base + 4)
+    let firstCompoundClipID = try editUUID(base + 5)
+    let secondCompoundClipID = try editUUID(base + 6)
+    let innerClipID = try editUUID(base + 7)
+    let sharedMarkerID = try editUUID(base + 8)
+    let targetSequence = try makeSharedNestedTargetSequence(
+        id: targetSequenceID,
+        trackID: trackID,
+        mediaID: mediaID,
+        innerClipID: innerClipID,
+        sharedMarkerID: sharedMarkerID
+    )
+    let firstCompound = try makeCompoundClip(
+        id: firstCompoundClipID,
+        targetSequenceID: targetSequenceID,
+        startFrame: 0,
+        durationFrames: 10
+    )
+    let secondCompound = try makeCompoundClip(
+        id: secondCompoundClipID,
+        targetSequenceID: targetSequenceID,
+        startFrame: 10,
+        durationFrames: 10
+    )
+    let parentSequence = Sequence(
+        id: parentSequenceID,
+        name: "FR-CMP-004 shared parent",
+        videoTracks: [
+            Track(id: trackID, kind: .video, items: [.clip(firstCompound), .clip(secondCompound)])
+        ],
+        audioTracks: [],
+        markers: [],
+        timebase: try FrameRate(frames: 24)
+    )
+    let project = Project(
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
+        settings: try compoundSettings(),
+        mediaPool: [try makeEditMediaRef(id: mediaID)],
+        sequences: [parentSequence, targetSequence]
+    )
+
+    return SharedNestedDecomposeFixture(
+        project: project,
+        parentSequenceID: parentSequenceID,
+        targetSequenceID: targetSequenceID,
+        trackID: trackID,
+        firstCompoundClipID: firstCompoundClipID,
+        secondCompoundClipID: secondCompoundClipID,
+        innerClipID: innerClipID,
+        sharedMarkerID: sharedMarkerID
+    )
+}
+
+private func makeSharedNestedTargetSequence(
+    id: UUID,
+    trackID: UUID,
+    mediaID: UUID,
+    innerClipID: UUID,
+    sharedMarkerID: UUID
+) throws -> Sequence {
+    let innerClip = try makeEditClip(
+        id: innerClipID,
+        mediaID: mediaID,
+        startFrame: 0,
+        durationFrames: 10
+    )
+    return Sequence(
+        id: id,
+        name: "FR-CMP-004 shared target",
+        videoTracks: [Track(id: trackID, kind: .video, items: [.clip(innerClip)])],
+        audioTracks: [],
+        markers: [
+            Marker(
+                id: sharedMarkerID,
+                time: try editTime(4),
+                name: "shared marker",
+                color: .purple,
+                note: "shared note",
+                anchor: .clip(trackID: trackID, clipID: innerClipID)
+            )
+        ],
         timebase: try FrameRate(frames: 24)
     )
 }

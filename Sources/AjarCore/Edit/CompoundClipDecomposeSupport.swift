@@ -173,12 +173,17 @@ extension EditReducer {
     ///
     /// Only markers anchored to an expanded clip and timed inside the compound's `sourceRange`
     /// window are restored; markers pointing at trimmed-away content stay in the nested
-    /// sequence, which decompose leaves in place.
+    /// sequence, which decompose leaves in place. Restored markers keep their original ID for
+    /// an exact make-compound inverse; when that ID already exists on the parent (for example
+    /// two compound clips referencing the same nested sequence), a deterministic replacement
+    /// ID is derived so the marker is never dropped and redo replays byte-identically.
     static func decomposedMarkers(
         from targetSequence: Sequence,
         compoundClip: Clip,
-        expandedReferences: Set<ClipReference>
+        expandedReferences: Set<ClipReference>,
+        parentMarkerIDs: Set<UUID>
     ) throws -> [Marker] {
+        var reservedIDs = parentMarkerIDs
         var markers: [Marker] = []
         for marker in targetSequence.markers {
             guard case .clip(let trackID, let clipID) = marker.anchor else {
@@ -192,23 +197,95 @@ extension EditReducer {
                 continue
             }
 
-            let nestedOffset = try subtractTimes(marker.time, compoundClip.sourceRange.start)
-            let parentOffset = try speedTimelineDuration(
-                clipID: compoundClip.id,
-                sourceDuration: nestedOffset,
-                speed: compoundClip.speed
+            let restored = try restoredMarker(
+                marker,
+                compoundClip: compoundClip,
+                reservedIDs: reservedIDs
             )
-            markers.append(
-                Marker(
-                    id: marker.id,
-                    time: try addTimes(compoundClip.timelineRange.start, parentOffset),
-                    name: marker.name,
-                    color: marker.color,
-                    note: marker.note,
-                    anchor: marker.anchor
-                )
-            )
+            reservedIDs.insert(restored.id)
+            markers.append(restored)
         }
         return markers
+    }
+
+    private static func restoredMarker(
+        _ marker: Marker,
+        compoundClip: Clip,
+        reservedIDs: Set<UUID>
+    ) throws -> Marker {
+        let nestedOffset = try subtractTimes(marker.time, compoundClip.sourceRange.start)
+        let parentOffset = try speedTimelineDuration(
+            clipID: compoundClip.id,
+            sourceDuration: nestedOffset,
+            speed: compoundClip.speed
+        )
+        return Marker(
+            id: restoredMarkerID(
+                original: marker.id,
+                compoundClipID: compoundClip.id,
+                reservedIDs: reservedIDs
+            ),
+            time: try addTimes(compoundClip.timelineRange.start, parentOffset),
+            name: marker.name,
+            color: marker.color,
+            note: marker.note,
+            anchor: marker.anchor
+        )
+    }
+
+    private static func restoredMarkerID(
+        original: UUID,
+        compoundClipID: UUID,
+        reservedIDs: Set<UUID>
+    ) -> UUID {
+        guard reservedIDs.contains(original) else {
+            return original
+        }
+
+        var attempt: UInt64 = 0
+        while true {
+            let candidate = derivedMarkerID(
+                original: original,
+                compoundClipID: compoundClipID,
+                attempt: attempt
+            )
+            if !reservedIDs.contains(candidate) {
+                return candidate
+            }
+            attempt &+= 1
+        }
+    }
+
+    /// Deterministically mixes the compound clip ID and an attempt counter into the original
+    /// marker ID. Candidates are distinct for every attempt, so the collision-escape loop in
+    /// `restoredMarkerID` terminates against any finite reserved-ID set.
+    private static func derivedMarkerID(
+        original: UUID,
+        compoundClipID: UUID,
+        attempt: UInt64
+    ) -> UUID {
+        let left = original.uuid
+        let right = compoundClipID.uuid
+        let mix = withUnsafeBytes(of: attempt.littleEndian) { Array($0) }
+        return UUID(
+            uuid: (
+                left.0 ^ right.0 ^ mix[0],
+                left.1 ^ right.1 ^ mix[1],
+                left.2 ^ right.2 ^ mix[2],
+                left.3 ^ right.3 ^ mix[3],
+                left.4 ^ right.4 ^ mix[4],
+                left.5 ^ right.5 ^ mix[5],
+                left.6 ^ right.6 ^ mix[6],
+                left.7 ^ right.7 ^ mix[7],
+                left.8 ^ right.8,
+                left.9 ^ right.9,
+                left.10 ^ right.10,
+                left.11 ^ right.11,
+                left.12 ^ right.12,
+                left.13 ^ right.13,
+                left.14 ^ right.14,
+                left.15 ^ right.15
+            )
+        )
     }
 }

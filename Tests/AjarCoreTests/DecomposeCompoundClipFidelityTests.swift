@@ -253,4 +253,49 @@ final class DecomposeCompoundClipFidelityTests: XCTestCase {
         XCTAssertEqual(try history.redo(), made)
         XCTAssertEqual(try history.redo(), decomposed)
     }
+
+    func testFRCMP004DecomposeTwoCompoundsSharingNestedSequenceKeepsMarkerIDsUnique() throws {
+        let fixture = try makeSharedNestedDecomposeFixture(seed: 1395)
+        var history = EditHistory(project: fixture.project)
+        _ = try history.apply(
+            .decomposeCompoundClip(
+                sequenceID: fixture.parentSequenceID,
+                trackID: fixture.trackID,
+                clipID: fixture.firstCompoundClipID
+            )
+        )
+
+        let decomposed = try history.apply(
+            .decomposeCompoundClip(
+                sequenceID: fixture.parentSequenceID,
+                trackID: fixture.trackID,
+                clipID: fixture.secondCompoundClipID
+            )
+        )
+
+        let parentSequence = try requiredDecomposeSequence(
+            fixture.parentSequenceID,
+            in: decomposed
+        )
+        XCTAssertEqual(parentSequence.markers.count, 2)
+        let first = try XCTUnwrap(parentSequence.markers.first)
+        let second = try XCTUnwrap(parentSequence.markers.last)
+        XCTAssertEqual(first.id, fixture.sharedMarkerID)
+        XCTAssertNotEqual(second.id, first.id)
+        XCTAssertEqual(first.time, try editTime(4))
+        XCTAssertEqual(second.time, try editTime(14))
+        for marker in parentSequence.markers {
+            XCTAssertEqual(marker.name, "shared marker")
+            XCTAssertEqual(marker.color, .purple)
+            XCTAssertEqual(marker.note, "shared note")
+            XCTAssertEqual(
+                marker.anchor,
+                .clip(trackID: fixture.trackID, clipID: fixture.innerClipID)
+            )
+        }
+        XCTAssertEqual(decomposed.validate(), .valid)
+        // Replaying the second decompose must reproduce the derived marker ID exactly.
+        XCTAssertNotNil(history.undo())
+        XCTAssertEqual(try history.redo(), decomposed)
+    }
 }
