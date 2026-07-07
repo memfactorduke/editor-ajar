@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened FR-CMP-004 decompose fidelity: expansion is now windowed to the compound clip's
+  `sourceRange` (trimming partially-overlapping inner clips — including reverse/freeze-frame
+  remaps — and dropping fully-outside ones), non-identity compound-level transform/effects/
+  audio-mix/reverse/freeze attributes and source-timeline duration mismatches are rejected with
+  typed errors instead of silently dropped, and nested clip-anchored markers are restored onto
+  the parent through the window and speed mapping.
 - Added FR-SPD-003 reverse and freeze-frame clip time-remaps with legacy-safe model fields,
   exact rational source-time mapping, render/audio compound handling, sustained freeze audio,
   cache-key invalidation, codec coverage, and golden frame/audio fixtures.

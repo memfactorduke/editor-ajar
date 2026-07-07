@@ -2,6 +2,24 @@
 
 import Foundation
 
+/// A compound-clip-level attribute that decompose cannot compose exactly onto expanded clips.
+public enum CompoundClipDecomposeAttribute: String, Equatable, Sendable {
+    /// A non-identity transform or transform animation on the compound clip.
+    case transform
+
+    /// Non-identity effects or an effects animation on the compound clip.
+    case effects
+
+    /// A non-identity audio mix on the compound clip.
+    case audioMix
+
+    /// A reverse time remap on the compound clip.
+    case reverse
+
+    /// A freeze-frame time remap on the compound clip.
+    case freezeFrame
+}
+
 /// Typed validation failures for semantic edit operations.
 public enum EditCommandValidationError: Equatable, Sendable {
     /// Blade time must be strictly inside the clip range.
@@ -31,6 +49,12 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// Decomposing requires a sequence-backed compound clip.
     case decomposeRequiresCompoundClip(clipID: UUID)
+
+    /// Decomposing cannot compose a compound-clip-level attribute exactly onto expanded clips.
+    case compoundDecomposeUnsupportedAttribute(
+        clipID: UUID,
+        attribute: CompoundClipDecomposeAttribute
+    )
 
     /// Decomposing would overlap an existing parent timeline item.
     case compoundDecomposeWouldOverlap(
