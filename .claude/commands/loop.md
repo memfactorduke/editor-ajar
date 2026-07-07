@@ -19,6 +19,19 @@ Each cycle:
    - Not yet → request changes with specific, actionable notes via `gh pr review` / `gh pr comment`.
 3. **Coordinate.** Comment on issues to clarify scope, re-prioritize, or split work that's too big.
 
+Review practices:
+
+- **Second opinion on risky PRs.** Before merging a PR that touches lock-free/real-time code,
+  Codable schemas, or other concurrency- or persistence-shaped changes, get an independent
+  GPT-5.5 review via the `/codex` skill (review or challenge mode) and verify its important
+  claims against the diff before acting on them.
+- **Fan out only to verify.** Use a workflow (one investigator per item plus a judge panel) when
+  triaging many PRs or issues at once. The merge sequence itself stays in this session — each PR
+  needs green CI and your review before the next lands.
+- **Time and churn are architecture signals.** A PR the builder lands in one push is a clean
+  merge; one that churns through several fix-commits or spans many builder heartbeats signals a
+  design problem — file an architecture issue rather than just merging or bouncing it.
+
 Stay on GitHub (issues, PR reviews, comments, merges) and reading code — never edit files or
 switch branches locally, so you never collide with the builder. Stability and performance over
 speed; nothing reaches `main` without your review.
