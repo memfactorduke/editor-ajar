@@ -18,6 +18,9 @@ public enum CompoundClipDecomposeAttribute: String, Equatable, Sendable {
 
     /// A freeze-frame time remap on the compound clip.
     case freezeFrame
+
+    /// An FR-SPD-002 keyframed time-remap curve on the compound clip or a nested clip.
+    case timeRemap
 }
 
 /// Typed validation failures for semantic edit operations.
@@ -130,6 +133,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A clip speed failed semantic validation.
     case invalidClipSpeed(clipID: UUID, error: ClipSpeedValidationError)
+
+    /// A clip time-remap curve failed FR-SPD-002 semantic validation.
+    case invalidClipTimeRemap(clipID: UUID, error: ClipTimeRemapValidationError)
 
     /// A track audio mix failed semantic validation.
     case invalidTrackAudioMix(trackID: UUID, error: AudioMixValidationError)

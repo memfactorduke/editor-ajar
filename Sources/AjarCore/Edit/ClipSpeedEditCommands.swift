@@ -104,6 +104,8 @@ extension EditReducer {
         switch speedMappingError {
         case .invalidSpeed(let error):
             return .invalidEdit(.invalidClipSpeed(clipID: clipID, error: error))
+        case .invalidTimeRemap(let error):
+            return .invalidEdit(.invalidClipTimeRemap(clipID: clipID, error: error))
         case .timeArithmetic(let error):
             return .timeArithmeticFailed(error)
         }

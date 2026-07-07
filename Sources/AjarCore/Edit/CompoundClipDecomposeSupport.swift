@@ -25,6 +25,9 @@ extension EditReducer {
         if compoundClip.freezeFrame {
             throw unsupportedDecomposeAttribute(compoundClip, .freezeFrame)
         }
+        if compoundClip.timeRemap != nil {
+            throw unsupportedDecomposeAttribute(compoundClip, .timeRemap)
+        }
     }
 
     private static func unsupportedDecomposeAttribute(
@@ -65,6 +68,12 @@ extension EditReducer {
         let window = compoundClip.sourceRange
         guard try rangesIntersect(clip.timelineRange, window) else {
             return nil
+        }
+        // FR-SPD-002 curves are defined against the nested clip's exact placement and speed;
+        // window trimming and compound-speed folding would need curve rebasing to stay exact,
+        // so decompose rejects remapped nested clips with a typed error instead.
+        guard clip.timeRemap == nil else {
+            throw unsupportedDecomposeAttribute(clip, .timeRemap)
         }
 
         let clipEnd = try exactTime { try clip.timelineRange.end() }

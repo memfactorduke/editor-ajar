@@ -1,0 +1,29 @@
+{
+  "comment": "FR-SPD-002 within-clip freeze, late sample: same clip as time-remap-freeze-hold-early (curve 0->0, 1/4->2, 3/2->2) sampled half a second later at t=1/1. The zero-slope span must still decode source frame 192 - the two fixtures ship byte-identical reference content, which is exactly the held-frame guarantee. Dropping the curve (1x) decodes frame 96 and flattening it to its constant-rate chord (4/3x) decodes frame 128 - measured failures maxDeltaE=61.3 and 42.6 against this reference. Tolerance 10 is ~2x the measured cross-machine ProRes/color-conversion noise floor (maxDeltaE 4.614 on the CI runner vs 0.000 locally) and every wrong-variant signal is >= 2x the tolerance; it is tighter than the repo's usual decode-path 25 so the suite-wide weakest FR-SPD-002 signal (22.2 on time-remap-ramp-quad) stays discriminating.",
+  "schemaVersion": 1,
+  "id": "time-remap-freeze-hold-late",
+  "requirements": ["FR-SPD-002", "ADR-0009", "TESTING-2", "ADR-0011", "NFR-QUAL-001"],
+  "frame": "1/1",
+  "referencePNG": "reference.png",
+  "clips": [
+    {
+      "syntheticMedia": {
+        "width": 16,
+        "height": 16,
+        "frameCount": 240,
+        "frameRate": 96,
+        "bgra": [0, 0, 255, 255]
+      },
+      "timeRemap": [
+        { "time": "0", "sourceTime": "0" },
+        { "time": "1/4", "sourceTime": "2" },
+        { "time": "3/2", "sourceTime": "2" }
+      ]
+    }
+  ],
+  "tolerance": {
+    "maximumDeltaE": 10,
+    "minimumSSIM": 0.9,
+    "maximumAlphaDelta": 0
+  }
+}

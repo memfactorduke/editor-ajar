@@ -20,5 +20,16 @@ extension ProjectValidator {
                 )
             )
         }
+
+        if let error = clip.validateTimeRemap() {
+            state.errors.append(
+                .invalidClipTimeRemap(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    error: error
+                )
+            )
+        }
     }
 }

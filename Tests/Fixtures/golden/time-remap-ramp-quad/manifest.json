@@ -1,0 +1,29 @@
+{
+  "comment": "FR-SPD-002 speed-ramp frame: a 1x -> 4x time-remap curve (keyframes 0->0, 1/2->1/2, 1->5/2) over synthetic media whose green channel encodes the frame index at 96 fps. Sampling t=2/3 inside the 4x segment must decode source frame 112. Dropping the curve (1x) decodes frame 64 and flattening it to its constant-rate chord (5/2x) decodes frame 160 - measured failures maxDeltaE=22.2 and 30.3 against this reference. Tolerance 10 is ~2x the measured cross-machine ProRes/color-conversion noise floor (maxDeltaE 4.614 on the CI runner vs 0.000 locally) while the weakest wrong-variant signal is ~2x the tolerance; the repo's usual decode-path tolerance of 25 would swallow the dropped-curve signal, hence the tighter budget. The ramp is steepened to 1x -> 4x because a strict 1x -> 2x curve mathematically caps the constant-chord divergence below this noise-safe margin; the 1x -> 2x spec example is still exercised exactly by the FR-SPD-002 constant-speed-equivalence and piecewise unit tests and by the golden-audio time-remap-ramp fixture.",
+  "schemaVersion": 1,
+  "id": "time-remap-ramp-quad",
+  "requirements": ["FR-SPD-002", "ADR-0009", "TESTING-2", "ADR-0011", "NFR-QUAL-001"],
+  "frame": "2/3",
+  "referencePNG": "reference.png",
+  "clips": [
+    {
+      "syntheticMedia": {
+        "width": 16,
+        "height": 16,
+        "frameCount": 240,
+        "frameRate": 96,
+        "bgra": [0, 0, 255, 255]
+      },
+      "timeRemap": [
+        { "time": "0", "sourceTime": "0" },
+        { "time": "1/2", "sourceTime": "1/2" },
+        { "time": "1", "sourceTime": "5/2" }
+      ]
+    }
+  ],
+  "tolerance": {
+    "maximumDeltaE": 10,
+    "minimumSSIM": 0.9,
+    "maximumAlphaDelta": 0
+  }
+}

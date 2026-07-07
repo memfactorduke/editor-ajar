@@ -336,13 +336,14 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
         index: Int
     ) throws -> Clip {
         let speed = clipSpec.speed ?? .one
+        let timeRemap = try clipSpec.timeRemap.map { try $0.clipTimeRemap() }
         return Clip(
             id: try numberedUUID(118 + index),
             source: try source(for: clipSpec, mediaID: mediaID, index: index),
             sourceRange: try TimeRange(start: .zero, duration: context.duration),
             timelineRange: try TimeRange(
                 start: .zero,
-                duration: Clip.timelineDuration(forSourceDuration: context.duration, speed: speed)
+                duration: timelineDuration(context: context, speed: speed, timeRemap: timeRemap)
             ),
             kind: .video,
             name: "Golden \(context.manifestID) \(index)",
@@ -352,7 +353,8 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             effectsAnimation: clipSpec.effectsAnimation,
             speed: speed,
             reverse: clipSpec.reverse ?? false,
-            freezeFrame: clipSpec.freezeFrame ?? false
+            freezeFrame: clipSpec.freezeFrame ?? false,
+            timeRemap: timeRemap
         )
     }
 
@@ -384,6 +386,17 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
         )
     }
 
+    private static func timelineDuration(
+        context: GoldenFrameBuildContext,
+        speed: RationalValue,
+        timeRemap: ClipTimeRemap?
+    ) throws -> RationalTime {
+        if let timeRemap {
+            return timeRemap.duration
+        }
+        return try Clip.timelineDuration(forSourceDuration: context.duration, speed: speed)
+    }
+
     private static func source(
         for clipSpec: GoldenFrameClipSpec,
         mediaID: UUID,
@@ -409,86 +422,6 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
     private static func numberedUUID(_ value: Int) throws -> UUID {
         try uuid(String(format: "00000000-0000-0000-0000-%012d", value))
     }
-}
-
-struct GoldenFrameManifest: Codable, Equatable, Sendable {
-    let schemaVersion: Int
-    let id: String
-    let requirements: [String]
-    let frame: String
-    let referencePNG: String
-    let outputDimensions: PixelDimensions?
-    let syntheticMedia: SyntheticMovieSpec?
-    let clips: [GoldenFrameClipSpec]?
-    let tolerance: GoldenFrameTolerance
-
-    static func load(from url: URL) throws -> GoldenFrameManifest {
-        do {
-            let manifest = try JSONDecoder().decode(
-                GoldenFrameManifest.self,
-                from: try Data(contentsOf: url)
-            )
-            guard manifest.schemaVersion == 1 else {
-                throw AjarCLIError.invalidGoldenManifest(
-                    "\(url.path) uses unsupported schema \(manifest.schemaVersion)"
-                )
-            }
-            guard !manifest.requirements.isEmpty else {
-                throw AjarCLIError.invalidGoldenManifest("\(url.path) has no requirement refs")
-            }
-            _ = try manifest.resolvedClipSpecs()
-            return manifest
-        } catch let error as AjarCLIError {
-            throw error
-        } catch {
-            throw AjarCLIError.invalidGoldenManifest(
-                "\(url.path): \(String(describing: error))"
-            )
-        }
-    }
-
-    func resolvedClipSpecs() throws -> [GoldenFrameClipSpec] {
-        if let clips, !clips.isEmpty {
-            return clips
-        }
-        if let syntheticMedia {
-            return [
-                GoldenFrameClipSpec(
-                    syntheticMedia: syntheticMedia,
-                    compound: nil,
-                    speed: nil,
-                    reverse: nil,
-                    freezeFrame: nil,
-                    transform: nil,
-                    transformAnimation: nil,
-                    effects: nil,
-                    effectsAnimation: nil,
-                    trackOpacity: nil,
-                    trackBlendMode: nil
-                )
-            ]
-        }
-        throw AjarCLIError.invalidGoldenManifest("\(id) has no synthetic media")
-    }
-}
-
-struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
-    let syntheticMedia: SyntheticMovieSpec
-    let compound: GoldenFrameCompoundSpec?
-    let speed: RationalValue?
-    let reverse: Bool?
-    let freezeFrame: Bool?
-    let transform: ClipTransform?
-    let transformAnimation: AnimatableClipTransform?
-    let effects: ClipEffects?
-    let effectsAnimation: AnimatableClipEffects?
-    let trackOpacity: Animatable<RationalValue>?
-    let trackBlendMode: ClipBlendMode?
-}
-
-struct GoldenFrameCompoundSpec: Codable, Equatable, Sendable {
-    let innerTransform: ClipTransform?
-    let innerEffects: ClipEffects?
 }
 
 private struct GoldenFrameCaseResult {

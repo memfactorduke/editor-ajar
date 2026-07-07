@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added FR-SPD-002 speed ramping via keyframed time-remap curves: a validated, monotonic
+  non-decreasing `timeRemap` keyframe list on clips with exact rational piecewise-linear
+  evaluation (a two-keyframe curve reduces exactly to constant speed), typed rejection when
+  combined with `reverse`/`freezeFrame`/non-unit `speed` or when the curve leaves the clip's
+  source bounds or timeline domain (half-open: only the final keyframe may touch the exclusive
+  source end, so active offsets never read past the last media quantum), render/audio/compound
+  mapping through the curve, cache-key invalidation on keyframe edits, legacy-safe codec
+  coverage, and discriminating golden frame/audio ramp and within-clip freeze fixtures
+  calibrated ~2x above the measured cross-machine decode noise floor.
 - Hardened FR-CMP-004 decompose fidelity: expansion is now windowed to the compound clip's
   `sourceRange` (trimming partially-overlapping inner clips — including reverse/freeze-frame
   remaps — and dropping fully-outside ones), non-identity compound-level transform/effects/

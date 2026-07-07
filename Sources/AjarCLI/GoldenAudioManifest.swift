@@ -224,6 +224,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
     let speed: RationalValue?
     let reverse: Bool
     let freezeFrame: Bool
+    let timeRemap: [GoldenTimeRemapKeyframeSpec]?
     let gain: Double
     let pan: Double
     let fadeIn: String?
@@ -238,6 +239,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         case speed
         case reverse
         case freezeFrame
+        case timeRemap
         case gain
         case pan
         case fadeIn
@@ -254,6 +256,10 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed)
         reverse = try container.decodeIfPresent(Bool.self, forKey: .reverse) ?? false
         freezeFrame = try container.decodeIfPresent(Bool.self, forKey: .freezeFrame) ?? false
+        timeRemap = try container.decodeIfPresent(
+            [GoldenTimeRemapKeyframeSpec].self,
+            forKey: .timeRemap
+        )
         gain = try container.decodeIfPresent(Double.self, forKey: .gain) ?? 1
         pan = try container.decodeIfPresent(Double.self, forKey: .pan) ?? 0
         fadeIn = try container.decodeIfPresent(String.self, forKey: .fadeIn)
@@ -263,6 +269,16 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
     func clip(id: UUID, source: ClipSource) throws -> Clip {
         let clipDuration = try GoldenAudioManifest.rationalTime(duration)
         let clipSpeed = speed ?? .one
+        let clipTimeRemap = try timeRemap.map { try $0.clipTimeRemap() }
+        let timelineDuration: RationalTime
+        if let clipTimeRemap {
+            timelineDuration = clipTimeRemap.duration
+        } else {
+            timelineDuration = try Clip.timelineDuration(
+                forSourceDuration: clipDuration,
+                speed: clipSpeed
+            )
+        }
         return Clip(
             id: id,
             source: source,
@@ -272,14 +288,15 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
             ),
             timelineRange: try TimeRange(
                 start: GoldenAudioManifest.rationalTime(timelineStart),
-                duration: Clip.timelineDuration(forSourceDuration: clipDuration, speed: clipSpeed)
+                duration: timelineDuration
             ),
             kind: .audio,
             name: "Golden Audio Clip",
             audioMix: try audioMix(),
             speed: clipSpeed,
             reverse: reverse,
-            freezeFrame: freezeFrame
+            freezeFrame: freezeFrame,
+            timeRemap: clipTimeRemap
         )
     }
 

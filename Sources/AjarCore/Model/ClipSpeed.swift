@@ -19,6 +19,9 @@ public enum ClipSpeedMappingError: Error, Equatable, Sendable, CustomStringConve
     /// The speed value is invalid.
     case invalidSpeed(ClipSpeedValidationError)
 
+    /// The FR-SPD-002 time-remap curve is invalid for this clip.
+    case invalidTimeRemap(ClipTimeRemapValidationError)
+
     /// Exact time arithmetic failed.
     case timeArithmetic(RationalTimeError)
 
@@ -26,6 +29,8 @@ public enum ClipSpeedMappingError: Error, Equatable, Sendable, CustomStringConve
     public var description: String {
         switch self {
         case .invalidSpeed(let error):
+            error.description
+        case .invalidTimeRemap(let error):
             error.description
         case .timeArithmetic(let error):
             "clip speed/remap time mapping failed: \(error)"
@@ -79,10 +84,21 @@ public extension Clip {
 
     /// Maps an absolute sequence time to this clip's source time.
     ///
+    /// A clip with an FR-SPD-002 time-remap curve evaluates the curve piecewise; the curve is
+    /// rejected with a typed error when combined with `reverse`, `freezeFrame`, or non-unit
+    /// `speed` (see `Clip.validateTimeRemap()` for the composition policy).
+    ///
     /// Reverse clips use the mathematical half-open range end here. Consumers that decode discrete
     /// frames or samples clamp that exclusive end to their last valid media quantum.
     func sourceTime(at timelineTime: RationalTime) throws -> RationalTime {
         do {
+            if let timeRemap {
+                if let error = validateTimeRemap() {
+                    throw ClipSpeedMappingError.invalidTimeRemap(error)
+                }
+                let timelineOffset = try timelineTime.subtracting(timelineRange.start)
+                return try timeRemap.sourceTime(atOffset: timelineOffset)
+            }
             try Self.validateSpeedOrThrow(speed)
             if freezeFrame {
                 return sourceRange.start

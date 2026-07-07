@@ -253,6 +253,9 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Whether this clip holds its source range start for every rendered timeline time.
     public let freezeFrame: Bool
 
+    /// Optional FR-SPD-002 keyframed time-remap curve. Absent means constant-rate playback.
+    public let timeRemap: ClipTimeRemap?
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -269,7 +272,8 @@ public struct Clip: Codable, Equatable, Sendable {
         audioMix: ClipAudioMix = .identity,
         speed: RationalValue = .one,
         reverse: Bool = false,
-        freezeFrame: Bool = false
+        freezeFrame: Bool = false,
+        timeRemap: ClipTimeRemap? = nil
     ) {
         self.id = id
         self.source = source
@@ -286,6 +290,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.speed = speed
         self.reverse = reverse
         self.freezeFrame = freezeFrame
+        self.timeRemap = timeRemap
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -304,6 +309,7 @@ public struct Clip: Codable, Equatable, Sendable {
         case speed
         case reverse
         case freezeFrame
+        case timeRemap
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -332,6 +338,7 @@ public struct Clip: Codable, Equatable, Sendable {
         speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed) ?? .one
         reverse = try container.decodeIfPresent(Bool.self, forKey: .reverse) ?? false
         freezeFrame = try container.decodeIfPresent(Bool.self, forKey: .freezeFrame) ?? false
+        timeRemap = try container.decodeIfPresent(ClipTimeRemap.self, forKey: .timeRemap)
     }
 
     /// Encodes the complete clip payload.
@@ -352,6 +359,7 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(speed, forKey: .speed)
         try container.encode(reverse, forKey: .reverse)
         try container.encode(freezeFrame, forKey: .freezeFrame)
+        try container.encodeIfPresent(timeRemap, forKey: .timeRemap)
     }
 }
 
