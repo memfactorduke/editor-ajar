@@ -199,14 +199,16 @@ public enum RenderGraphBuilder {
 
         let sourceTime = try mapTimelineTime(time, toSourceTimeFor: clip)
         return try RenderNodeFactory.makeSourceNode(
-            mediaID: mediaID,
-            clipID: clip.id,
-            sourceTime: sourceTime,
-            sourceRange: clip.sourceRange,
-            speed: clip.speed,
-            reverse: clip.reverse,
-            freezeFrame: clip.freezeFrame,
-            colorSpace: media.metadata.colorSpace
+            RenderSourceNodeSpec(
+                mediaID: mediaID,
+                clipID: clip.id,
+                sourceTime: sourceTime,
+                sourceRange: clip.sourceRange,
+                speed: clip.speed,
+                reverse: clip.reverse,
+                freezeFrame: clip.freezeFrame,
+                colorSpace: media.metadata.colorSpace
+            )
         )
     }
 

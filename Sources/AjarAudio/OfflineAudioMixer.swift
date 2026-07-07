@@ -300,31 +300,6 @@ extension OfflineAudioMixer {
         return frameCount * channelCount
     }
 
-    static func sourceFramePosition(
-        clip: Clip,
-        source: AudioSourceBuffer,
-        sourceTime: RationalTime
-    ) throws -> Double {
-        let framePosition = sourceTime.seconds * Double(source.format.sampleRate)
-        guard clip.reverse && !clip.freezeFrame else {
-            return framePosition
-        }
-
-        let sourceEnd = try end(of: clip.sourceRange)
-        let sourceOffsetFromEnd = try subtract(sourceEnd, sourceTime)
-        let endFrame = try sampleIndex(
-            for: sourceEnd,
-            sampleRate: source.format.sampleRate,
-            rounding: .nearestOrAwayFromZero
-        )
-        let startFrame = try sampleIndex(
-            for: clip.sourceRange.start,
-            sampleRate: source.format.sampleRate,
-            rounding: .nearestOrAwayFromZero
-        )
-        let offsetFrames = sourceOffsetFromEnd.seconds * Double(source.format.sampleRate)
-        return max(Double(startFrame), Double(max(0, endFrame - 1)) - offsetFrames)
-    }
 }
 
 extension OfflineAudioMixer {
@@ -494,36 +469,5 @@ extension OfflineAudioMixer {
 
     static var surroundDownmixGain: Float {
         0.70710678
-    }
-}
-extension OfflineAudioMixer {
-    static func add(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
-        do {
-            return try left.adding(right)
-        } catch {
-            throw AudioRenderError.timeArithmetic(String(describing: error))
-        }
-    }
-    static func subtract(_ left: RationalTime, _ right: RationalTime) throws -> RationalTime {
-        do {
-            return try left.subtracting(right)
-        } catch {
-            throw AudioRenderError.timeArithmetic(String(describing: error))
-        }
-    }
-    static func end(of range: TimeRange) throws -> RationalTime {
-        do {
-            return try range.end()
-        } catch {
-            throw AudioRenderError.timeArithmetic(String(describing: error))
-        }
-    }
-
-    static func clipSourceTime(_ clip: Clip, at renderTime: RationalTime) throws -> RationalTime {
-        do {
-            return try clip.sourceTime(at: renderTime)
-        } catch {
-            throw AudioRenderError.timeArithmetic(String(describing: error))
-        }
     }
 }

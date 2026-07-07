@@ -77,6 +77,17 @@ struct RenderCompoundNodeSpec {
     let colorSpace: MediaColorSpace
 }
 
+struct RenderSourceNodeSpec {
+    let mediaID: UUID
+    let clipID: UUID
+    let sourceTime: RationalTime
+    let sourceRange: TimeRange
+    let speed: RationalValue
+    let reverse: Bool
+    let freezeFrame: Bool
+    let colorSpace: MediaColorSpace
+}
+
 /// Resolved media source parameters for a source render node.
 public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Stable media reference ID to decode.
@@ -274,30 +285,21 @@ public struct RenderGraph: Codable, Equatable, Sendable {
 }
 
 enum RenderNodeFactory {
-    static func makeSourceNode(
-        mediaID: UUID,
-        clipID: UUID,
-        sourceTime: RationalTime,
-        sourceRange: TimeRange,
-        speed: RationalValue,
-        reverse: Bool,
-        freezeFrame: Bool,
-        colorSpace: MediaColorSpace
-    ) throws -> RenderNode {
+    static func makeSourceNode(_ spec: RenderSourceNodeSpec) throws -> RenderNode {
         let kind = RenderNodeKind.source(
             RenderSourceNode(
-                mediaID: mediaID,
-                clipID: clipID,
-                sourceTime: sourceTime,
-                sourceRange: sourceRange,
-                speed: speed,
-                reverse: reverse,
-                freezeFrame: freezeFrame,
-                colorSpace: colorSpace
+                mediaID: spec.mediaID,
+                clipID: spec.clipID,
+                sourceTime: spec.sourceTime,
+                sourceRange: spec.sourceRange,
+                speed: spec.speed,
+                reverse: spec.reverse,
+                freezeFrame: spec.freezeFrame,
+                colorSpace: spec.colorSpace
             )
         )
         return try makeNode(
-            id: RenderNodeID(rawValue: "source:\(clipID.uuidString)"),
+            id: RenderNodeID(rawValue: "source:\(spec.clipID.uuidString)"),
             kind: kind,
             inputIDs: [],
             inputHashes: []
