@@ -11,6 +11,8 @@ final class ClipSpeedModelTests: XCTestCase {
         let clip = try requiredClip(fixture.clipID, in: fixture.project, fixture: fixture)
 
         XCTAssertEqual(clip.speed, .one)
+        XCTAssertFalse(clip.reverse)
+        XCTAssertFalse(clip.freezeFrame)
         XCTAssertEqual(try clip.sourceTime(at: try editTime(3)), try editTime(3))
     }
 
@@ -52,6 +54,49 @@ final class ClipSpeedModelTests: XCTestCase {
 
         XCTAssertEqual(halfSpeedClip.timelineRange.duration, try editTime(32))
         XCTAssertEqual(try halfSpeedClip.sourceTime(at: try editTime(14)), try editTime(2))
+    }
+
+    func testFRSPD003ReverseMapsSourceTimeFromRangeEndAndComposesWithSpeed() throws {
+        let mediaID = try editUUID(4_215_001)
+        let reversedClip = try makeEditClip(
+            id: try editUUID(4_215_002),
+            mediaID: mediaID,
+            startFrame: 10,
+            durationFrames: 16,
+            reverse: true
+        )
+        let doubleSpeedReversedClip = try makeEditClip(
+            id: try editUUID(4_215_003),
+            mediaID: mediaID,
+            startFrame: 10,
+            durationFrames: 16,
+            speed: RationalValue(2),
+            reverse: true
+        )
+
+        XCTAssertEqual(try reversedClip.sourceTime(at: try editTime(10)), try editTime(16))
+        XCTAssertEqual(try reversedClip.sourceTime(at: try editTime(14)), try editTime(12))
+        XCTAssertEqual(
+            try doubleSpeedReversedClip.sourceTime(at: try editTime(12)),
+            try editTime(12)
+        )
+    }
+
+    func testFRSPD003FreezeFrameMapsEveryTimeToSourceRangeStart() throws {
+        let mediaID = try editUUID(4_216_001)
+        let frozenClip = try makeEditClip(
+            id: try editUUID(4_216_002),
+            mediaID: mediaID,
+            startFrame: 10,
+            durationFrames: 16,
+            speed: RationalValue(2),
+            reverse: true,
+            freezeFrame: true
+        )
+
+        XCTAssertEqual(try frozenClip.sourceTime(at: try editTime(10)), try editTime(0))
+        XCTAssertEqual(try frozenClip.sourceTime(at: try editTime(12)), try editTime(0))
+        XCTAssertEqual(try frozenClip.sourceTime(at: try editTime(17)), try editTime(0))
     }
 
     func testFRSPD001SetClipSpeedIsUndoableAndAdjustsTimelineDuration() throws {
@@ -136,7 +181,7 @@ final class ClipSpeedModelTests: XCTestCase {
         )
     }
 
-    func testFRSPD001ProjectCodecRoundTripsSpeedAndLegacyDefaultsToNormal() throws {
+    func testFRSPD001FRSPD003ProjectCodecRoundTripsRemapAndLegacyDefaultsToNormal() throws {
         let fixture = try makeEditFixture(seed: 4_250)
         let speed = try RationalValue(numerator: 3, denominator: 2)
         let retimedClip = try makeEditClip(
@@ -144,7 +189,9 @@ final class ClipSpeedModelTests: XCTestCase {
             mediaID: fixture.mediaID,
             startFrame: 0,
             durationFrames: 12,
-            speed: speed
+            speed: speed,
+            reverse: true,
+            freezeFrame: true
         )
         let retimedProject = try replacingVideoItems([.clip(retimedClip)], in: fixture)
         let package = try AjarProjectCodec.encode(retimedProject)
@@ -157,6 +204,8 @@ final class ClipSpeedModelTests: XCTestCase {
         let loadedClip = try requiredClip(fixture.clipID, in: loaded, fixture: fixture)
 
         XCTAssertEqual(loadedClip.speed, speed)
+        XCTAssertTrue(loadedClip.reverse)
+        XCTAssertTrue(loadedClip.freezeFrame)
         XCTAssertEqual(loadedClip.timelineRange.duration, try editTime(8))
 
         let legacyPackage = try AjarProjectCodec.encode(fixture.project)
@@ -170,6 +219,8 @@ final class ClipSpeedModelTests: XCTestCase {
         let legacyClip = try requiredClip(fixture.clipID, in: legacyLoaded, fixture: fixture)
 
         XCTAssertEqual(legacyClip.speed, RationalValue.one)
+        XCTAssertFalse(legacyClip.reverse)
+        XCTAssertFalse(legacyClip.freezeFrame)
     }
 }
 
@@ -192,6 +243,8 @@ private func projectJSONWithoutClipSpeed(_ data: Data) throws -> Data {
 private func stripSpeed(from value: Any) throws -> Any {
     if var dictionary = value as? [String: Any] {
         dictionary.removeValue(forKey: "speed")
+        dictionary.removeValue(forKey: "reverse")
+        dictionary.removeValue(forKey: "freezeFrame")
         for (key, nested) in dictionary {
             dictionary[key] = try stripSpeed(from: nested)
         }

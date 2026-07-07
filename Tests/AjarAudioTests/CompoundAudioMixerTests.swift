@@ -76,6 +76,40 @@ final class CompoundAudioMixerTests: XCTestCase {
         ])
     }
 
+    func testFRCMP001FRSPD003RendersReversedNestedSequenceAudio() throws {
+        let mediaID = try uuid("00000000-0000-0000-0000-000000086014")
+        let nestedSequenceID = try uuid("00000000-0000-0000-0000-000000086015")
+        let parentSequenceID = try uuid("00000000-0000-0000-0000-000000086016")
+        let nestedSequence = try audioSequence(
+            id: nestedSequenceID,
+            items: [
+                .clip(try makeClip(mediaID: mediaID, duration: time(1, 1)))
+            ]
+        )
+        let compoundClip = try makeCompoundClip(
+            sequenceID: nestedSequenceID,
+            duration: time(1, 1),
+            reverse: true
+        )
+        let parentSequence = try audioSequence(
+            id: parentSequenceID,
+            items: [.clip(compoundClip)]
+        )
+        let project = try audioProject(sequences: [parentSequence, nestedSequence])
+        let buffer = try render(
+            project: project,
+            sequence: parentSequence,
+            sources: [mediaID: try audioSource(samples: [0, 1, 2, 3])]
+        )
+
+        assertSamples(buffer.samples, equal: [
+            3, 3,
+            2, 2,
+            1, 1,
+            0, 0
+        ])
+    }
+
     func testFRCMP001FRAUD003NestedAudioCycleStopsAtTypedDepthError() throws {
         let sequenceID = try uuid("00000000-0000-0000-0000-000000086021")
         let clipID = try uuid("00000000-0000-0000-0000-000000086022")
@@ -149,7 +183,9 @@ private func makeCompoundClip(
     timelineStart: RationalTime = .zero,
     duration: RationalTime,
     audioMix: ClipAudioMix = .identity,
-    speed: RationalValue = .one
+    speed: RationalValue = .one,
+    reverse: Bool = false,
+    freezeFrame: Bool = false
 ) throws -> Clip {
     let clipSpeed = speed
     return Clip(
@@ -163,7 +199,9 @@ private func makeCompoundClip(
         kind: .audio,
         name: "Compound Audio",
         audioMix: audioMix,
-        speed: clipSpeed
+        speed: clipSpeed,
+        reverse: reverse,
+        freezeFrame: freezeFrame
     )
 }
 

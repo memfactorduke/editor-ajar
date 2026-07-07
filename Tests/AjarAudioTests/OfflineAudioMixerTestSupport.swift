@@ -58,7 +58,9 @@ func makeClip(
     timelineStart: RationalTime = .zero,
     duration: RationalTime,
     audioMix: ClipAudioMix = .identity,
-    speed: RationalValue = .one
+    speed: RationalValue = .one,
+    reverse: Bool = false,
+    freezeFrame: Bool = false
 ) throws -> Clip {
     let clipID = try id ?? uuid("00000000-0000-0000-0000-000000085301")
     let timelineDuration = try Clip.timelineDuration(forSourceDuration: duration, speed: speed)
@@ -70,7 +72,9 @@ func makeClip(
         kind: .audio,
         name: "Audio",
         audioMix: audioMix,
-        speed: speed
+        speed: speed,
+        reverse: reverse,
+        freezeFrame: freezeFrame
     )
 }
 

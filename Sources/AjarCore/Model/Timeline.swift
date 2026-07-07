@@ -247,6 +247,12 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Constant-rate playback speed. `1/1` is normal speed; values above one are faster.
     public let speed: RationalValue
 
+    /// Whether this clip maps timeline time backward through its source range.
+    public let reverse: Bool
+
+    /// Whether this clip holds its source range start for every rendered timeline time.
+    public let freezeFrame: Bool
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -261,7 +267,9 @@ public struct Clip: Codable, Equatable, Sendable {
         effects: ClipEffects = .none,
         effectsAnimation: AnimatableClipEffects? = nil,
         audioMix: ClipAudioMix = .identity,
-        speed: RationalValue = .one
+        speed: RationalValue = .one,
+        reverse: Bool = false,
+        freezeFrame: Bool = false
     ) {
         self.id = id
         self.source = source
@@ -276,6 +284,8 @@ public struct Clip: Codable, Equatable, Sendable {
         self.effectsAnimation = effectsAnimation ?? .constant(effects)
         self.audioMix = audioMix
         self.speed = speed
+        self.reverse = reverse
+        self.freezeFrame = freezeFrame
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -292,6 +302,8 @@ public struct Clip: Codable, Equatable, Sendable {
         case effectsAnimation
         case audioMix
         case speed
+        case reverse
+        case freezeFrame
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -318,6 +330,8 @@ public struct Clip: Codable, Equatable, Sendable {
         audioMix = try container.decodeIfPresent(ClipAudioMix.self, forKey: .audioMix)
             ?? .identity
         speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed) ?? .one
+        reverse = try container.decodeIfPresent(Bool.self, forKey: .reverse) ?? false
+        freezeFrame = try container.decodeIfPresent(Bool.self, forKey: .freezeFrame) ?? false
     }
 
     /// Encodes the complete clip payload.
@@ -336,6 +350,8 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(effectsAnimation, forKey: .effectsAnimation)
         try container.encode(audioMix, forKey: .audioMix)
         try container.encode(speed, forKey: .speed)
+        try container.encode(reverse, forKey: .reverse)
+        try container.encode(freezeFrame, forKey: .freezeFrame)
     }
 }
 

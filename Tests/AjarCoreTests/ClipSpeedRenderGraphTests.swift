@@ -71,6 +71,84 @@ final class ClipSpeedRenderGraphTests: XCTestCase {
         )
         XCTAssertNotEqual(normalGraph.outputNode?.contentHash, fastGraph.outputNode?.contentHash)
     }
+
+    func testFRSPD003ReverseAndFreezeMapRenderGraphSourceTimes() throws {
+        let mediaID = try uuid(134)
+        let clipID = try uuid(135)
+        let media = try makeMediaRef(id: mediaID)
+        let reversedClip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            durationFrames: 16,
+            reverse: true
+        )
+        let frozenClip = try makeClip(
+            id: clipID,
+            mediaID: mediaID,
+            durationFrames: 16,
+            reverse: true,
+            freezeFrame: true
+        )
+        let reversedSequence = try makeSequence(with: reversedClip)
+        let frozenSequence = try makeSequence(with: frozenClip)
+        let reversedProject = try makeProject(mediaPool: [media], sequences: [reversedSequence])
+        let frozenProject = try makeProject(mediaPool: [media], sequences: [frozenSequence])
+
+        let reversedGraph = try buildRenderGraph(
+            for: reversedSequence,
+            at: try time(4),
+            in: reversedProject
+        )
+        let frozenGraph = try buildRenderGraph(
+            for: frozenSequence,
+            at: try time(4),
+            in: frozenProject
+        )
+
+        guard case .source(let reversedPayload) = try sourceNode(in: reversedGraph).kind else {
+            return XCTFail("Expected reversed source node")
+        }
+        guard case .source(let frozenPayload) = try sourceNode(in: frozenGraph).kind else {
+            return XCTFail("Expected frozen source node")
+        }
+
+        XCTAssertEqual(reversedPayload.sourceTime, try time(12))
+        XCTAssertEqual(reversedPayload.sourceRange, reversedClip.sourceRange)
+        XCTAssertTrue(reversedPayload.reverse)
+        XCTAssertFalse(reversedPayload.freezeFrame)
+        XCTAssertEqual(frozenPayload.sourceTime, try time(0))
+        XCTAssertTrue(frozenPayload.reverse)
+        XCTAssertTrue(frozenPayload.freezeFrame)
+    }
+
+    func testADR0009FRSPD003RemapModeInvalidatesSourceHashAtClipStart() throws {
+        let mediaID = try uuid(136)
+        let clipID = try uuid(137)
+        let media = try makeMediaRef(id: mediaID)
+        let normalClip = try makeClip(id: clipID, mediaID: mediaID)
+        let frozenClip = try makeClip(id: clipID, mediaID: mediaID, freezeFrame: true)
+        let normalSequence = try makeSequence(with: normalClip)
+        let frozenSequence = try makeSequence(with: frozenClip)
+        let normalProject = try makeProject(mediaPool: [media], sequences: [normalSequence])
+        let frozenProject = try makeProject(mediaPool: [media], sequences: [frozenSequence])
+
+        let normalGraph = try buildRenderGraph(
+            for: normalSequence,
+            at: try time(0),
+            in: normalProject
+        )
+        let frozenGraph = try buildRenderGraph(
+            for: frozenSequence,
+            at: try time(0),
+            in: frozenProject
+        )
+
+        XCTAssertNotEqual(
+            try sourceNode(in: normalGraph).contentHash,
+            try sourceNode(in: frozenGraph).contentHash
+        )
+        XCTAssertNotEqual(normalGraph.outputNode?.contentHash, frozenGraph.outputNode?.contentHash)
+    }
 }
 
 private func sourceNode(in graph: RenderGraph) throws -> RenderNode {
@@ -135,7 +213,9 @@ private func makeClip(
     id: UUID,
     mediaID: UUID,
     durationFrames: Int64 = 10,
-    speed: RationalValue = .one
+    speed: RationalValue = .one,
+    reverse: Bool = false,
+    freezeFrame: Bool = false
 ) throws -> Clip {
     let sourceDuration = try time(durationFrames)
     let timelineDuration = try Clip.timelineDuration(
@@ -149,7 +229,9 @@ private func makeClip(
         timelineRange: try TimeRange(start: time(0), duration: timelineDuration),
         kind: .video,
         name: "RenderGraph speed clip",
-        speed: speed
+        speed: speed,
+        reverse: reverse,
+        freezeFrame: freezeFrame
     )
 }
 

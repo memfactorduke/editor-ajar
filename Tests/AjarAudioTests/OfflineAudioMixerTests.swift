@@ -67,6 +67,59 @@ final class OfflineAudioMixerTests: XCTestCase {
         assertSamples(slowBuffer.samples, equal: [0, 0, 0.5, 0.5, 1, 1, 1.5, 1.5])
     }
 
+    func testFRSPD003ReverseClipRetimesAudioSourceSamplesBackward() throws {
+        let mediaID = try uuid("00000000-0000-0000-0000-000000085004")
+        let clip = try makeClip(
+            mediaID: mediaID,
+            duration: time(1, 1),
+            reverse: true
+        )
+        let buffer = try render(
+            clip: clip,
+            mediaID: mediaID,
+            sourceSamples: [0, 1, 2, 3],
+            sourceSampleRate: 4
+        )
+
+        assertSamples(buffer.samples, equal: [3, 3, 2, 2, 1, 1, 0, 0])
+    }
+
+    func testFRSPD003ReverseClipComposesWithSpeedForAudio() throws {
+        let mediaID = try uuid("00000000-0000-0000-0000-000000085005")
+        let clip = try makeClip(
+            mediaID: mediaID,
+            duration: time(1, 1),
+            speed: RationalValue(2),
+            reverse: true
+        )
+        let buffer = try render(
+            clip: clip,
+            mediaID: mediaID,
+            sourceSamples: [0, 1, 2, 3],
+            sourceSampleRate: 4
+        )
+
+        assertSamples(buffer.samples, equal: [3, 3, 1, 1, 0, 0, 0, 0])
+    }
+
+    func testFRSPD003FreezeFrameAudioSustainsSourceStartSample() throws {
+        let mediaID = try uuid("00000000-0000-0000-0000-000000085006")
+        let clip = try makeClip(
+            mediaID: mediaID,
+            sourceStart: time(1, 4),
+            duration: time(1, 2),
+            freezeFrame: true
+        )
+        let buffer = try render(
+            clip: clip,
+            mediaID: mediaID,
+            sourceSamples: [0, 1, 2, 3],
+            sourceSampleRate: 4
+        )
+
+        assertSamples(buffer.samples, equal: [1, 1, 1, 1, 0, 0, 0, 0])
+    }
+
     func testCrossfadePartnerMustBeRealAdjacentClip() throws {
         let firstClipID = try uuid("00000000-0000-0000-0000-000000085101")
         let secondClipID = try uuid("00000000-0000-0000-0000-000000085102")
