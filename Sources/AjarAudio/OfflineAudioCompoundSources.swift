@@ -24,6 +24,46 @@ struct OfflineAudioRenderEnvironment {
 }
 
 extension OfflineAudioMixer {
+    /// Tracks that contribute audio to an offline mix (FR-CMP-001, FR-AUD-003).
+    ///
+    /// Enabled, unmuted audio tracks contribute their audio clips. Enabled, unmuted video
+    /// tracks contribute only sequence-backed compound clips: an FR-CMP-001 collapse replaces
+    /// the selection with one `.video` compound clip on a video track whose nested sequence
+    /// carries the collapsed audio, so skipping video tracks would silence it. Solo applies
+    /// across both sets: if any contributor is soloed, only soloed contributors play.
+    static func audioContributorTracks(in sequence: Sequence) -> [Track] {
+        let audioTracks = sequence.audioTracks.filter { track in
+            track.kind == .audio && track.enabled && !track.muted
+        }
+        let compoundVideoTracks = sequence.videoTracks.filter { track in
+            track.kind == .video && track.enabled && !track.muted
+                && track.items.contains { item in
+                    guard case .clip(let clip) = item else {
+                        return false
+                    }
+                    return clipCarriesAudio(clip, on: track)
+                }
+        }
+        let contributors = audioTracks + compoundVideoTracks
+        let soloContributors = contributors.filter(\.solo)
+        return soloContributors.isEmpty ? contributors : soloContributors
+    }
+
+    /// Whether a clip contributes audio when mixed from `track`.
+    ///
+    /// Audio tracks mix their audio clips. Video tracks mix only sequence-backed compound
+    /// clips; media video clips keep their audio in linked audio clips, so mixing them here
+    /// would double-count.
+    static func clipCarriesAudio(_ clip: Clip, on track: Track) -> Bool {
+        if track.kind == .audio {
+            return clip.kind == .audio
+        }
+        guard case .sequence = clip.source else {
+            return false
+        }
+        return true
+    }
+
     static func sourceBuffer(
         for clip: Clip,
         context: OfflineMixContext,

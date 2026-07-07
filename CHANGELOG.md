@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Completed the FR-CMP-001 make-compound follow-ups: collapsing now transplants FR-AUD-004
+  sidechain ducking rules whose referenced audio tracks are all fully collapsed into the nested
+  sequence (rules referencing no collapsed track stay outer; rules spanning the collapse
+  boundary reject the edit with a typed `compoundSelectionSeversAudioDucking` error instead of
+  silently severing the sidechain, and undo restores the exact original ducking configuration),
+  and fixed nested audio playback so the `.video` compound clip a collapse leaves on a video
+  track contributes its nested-sequence audio to offline mixes — previously that audio rendered
+  as silence — with full-chain, mute/solo, and golden-audio coverage plus a golden-audio
+  manifest `kind: "video"` track option to exercise video-track compounds.
 - Added FR-SPD-002 speed ramping via keyframed time-remap curves: a validated, monotonic
   non-decreasing `timeRemap` keyframe list on clips with exact rational piecewise-linear
   evaluation (a two-keyframe curve reduces exactly to constant speed), typed rejection when

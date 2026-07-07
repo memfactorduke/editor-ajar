@@ -86,16 +86,16 @@ public enum OfflineAudioMixer {
         )
         let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
         var output = Array(repeating: Float(0), count: outputSampleCount)
-        let audioTracks = selectedAudioTracks(sequence.audioTracks)
+        let contributorTracks = audioContributorTracks(in: sequence)
         let duckingMultipliers = try duckingMultipliersByTrackID(
             rules: sequence.audioDucking,
-            tracks: audioTracks,
+            tracks: contributorTracks.filter { $0.kind == .audio },
             context: context,
             environment: &environment,
             nestingDepth: nestingDepth
         )
 
-        for track in audioTracks {
+        for track in contributorTracks {
             try mixTrack(
                 track,
                 into: &output,
@@ -149,7 +149,7 @@ extension OfflineAudioMixer {
         nestingDepth: Int
     ) throws {
         for item in track.items {
-            guard case .clip(let clip) = item, clip.kind == .audio else {
+            guard case .clip(let clip) = item, clipCarriesAudio(clip, on: track) else {
                 continue
             }
             let source = try sourceBuffer(

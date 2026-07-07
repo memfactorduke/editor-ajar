@@ -181,8 +181,8 @@ private extension GoldenAudioHarness {
         let sequence = Sequence(
             id: try numberedUUID(72_100),
             name: "Golden Audio \(manifest.id)",
-            videoTracks: [],
-            audioTracks: tracks,
+            videoTracks: tracks.filter { $0.kind == .video },
+            audioTracks: tracks.filter { $0.kind == .audio },
             markers: [],
             audioDucking: try manifest.audioDuckingRules(trackIDs: trackIDs),
             timebase: frameRate
@@ -230,7 +230,7 @@ private extension GoldenAudioHarness {
     ) throws -> [Track] {
         return try trackSpecs.enumerated().map { trackIndex, trackSpec in
             let clips = try makeClips(
-                trackSpec.clips,
+                for: trackSpec,
                 trackIndex: trackIndex,
                 media: media,
                 buildState: &buildState,
@@ -244,13 +244,13 @@ private extension GoldenAudioHarness {
     }
 
     static func makeClips(
-        _ clipSpecs: [GoldenAudioClipSpec],
+        for trackSpec: GoldenAudioTrackSpec,
         trackIndex: Int,
         media: [MediaRef],
         buildState: inout GoldenAudioProjectBuildState,
         clipIDBase: Int
     ) throws -> [Clip] {
-        try clipSpecs.enumerated().map { clipIndex, clipSpec in
+        try trackSpec.clips.enumerated().map { clipIndex, clipSpec in
             let source = try clipSource(
                 clipSpec,
                 media: media,
@@ -258,7 +258,8 @@ private extension GoldenAudioHarness {
             )
             return try clipSpec.clip(
                 id: numberedUUID(clipIDBase + (trackIndex * 100) + clipIndex),
-                source: source
+                source: source,
+                kind: trackSpec.kind
             )
         }
     }
@@ -315,8 +316,8 @@ private extension GoldenAudioHarness {
         let sequence = Sequence(
             id: sequenceID,
             name: "Golden Nested Audio \(sequenceOrdinal)",
-            videoTracks: [],
-            audioTracks: tracks,
+            videoTracks: tracks.filter { $0.kind == .video },
+            audioTracks: tracks.filter { $0.kind == .audio },
             markers: [],
             timebase: try FrameRate(frames: Int64(buildState.sampleRate))
         )
