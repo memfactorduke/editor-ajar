@@ -204,6 +204,122 @@ final class OfflineAudioPitchCorrectedMixerTests: XCTestCase {
             0.1
         )
     }
+
+    func testFRSPD001NonDivisibleSpeedLastTimelineFrameIsNotSilent() throws {
+        // 1000 source frames at 3x span 333.33 timeline frames; the mixer renders half-open
+        // ranges with ceiling semantics (frames 0...333), so the stretched buffer must use
+        // ceil(1000/3) = 334 frames — nearest rounding would leave frame 333 silent.
+        let rate = 1_000
+        let mediaID = try uuid("00000000-0000-0000-0000-000000086012")
+        let source = [Float](repeating: 0.5, count: rate)
+        let clip = try makeRetimedClip(
+            id: try uuid("00000000-0000-0000-0000-000000086013"),
+            mediaID: mediaID,
+            speed: try RationalValue(numerator: 3, denominator: 1),
+            retimeMode: .pitchCorrected,
+            sourceDurationFrames: rate,
+            sampleRate: rate
+        )
+
+        let rendered = try renderSequence(
+            clips: [clip],
+            sources: [mediaID: try monoSource(source, sampleRate: rate)],
+            renderFrames: 334,
+            sampleRate: rate
+        )
+
+        let mono = channelSamples(rendered, channel: 0)
+        XCTAssertEqual(mono.count, 334)
+        XCTAssertEqual(mono[1], 0.5, accuracy: 1e-6)
+        XCTAssertGreaterThan(abs(mono[333]), 0.4, "last timeline frame must not read silence")
+        XCTAssertEqual(
+            try WSOLATimeStretcher.stretchedFrameCount(
+                frameCount: 1_000,
+                speed: try RationalValue(numerator: 3, denominator: 1)
+            ),
+            334
+        )
+    }
+
+    func testFRSPD001FractionalSourceStartUnitSpeedIsBitIdenticalToVarispeed() throws {
+        // A source range starting on a fractional sample (100.5 frames): unit-speed
+        // pitch-corrected playback must be bit-identical to varispeed, crossfade tail
+        // included — extraction floors the window start and the read path re-applies the
+        // exact varispeed source-time mapping shifted by the integer extraction start.
+        let rate = 1_000
+        let source = makeTestSignal(frameCount: 1_300, channelCount: 1)
+
+        let correctedPair = try makeFractionalStartPair(
+            retimeMode: .pitchCorrected,
+            source: source,
+            rate: rate
+        )
+        let varispeedPair = try makeFractionalStartPair(
+            retimeMode: .pitchShifted,
+            source: source,
+            rate: rate
+        )
+        let corrected = try renderSequence(
+            clips: correctedPair.clips,
+            sources: correctedPair.sources,
+            renderFrames: 1_100,
+            sampleRate: rate
+        )
+        let varispeed = try renderSequence(
+            clips: varispeedPair.clips,
+            sources: varispeedPair.sources,
+            renderFrames: 1_100,
+            sampleRate: rate
+        )
+
+        XCTAssertEqual(corrected.samples, varispeed.samples)
+    }
+
+    func testFRSPD001DuplicateClipIDsGetIndependentStretches() throws {
+        // Duplicate clip IDs are legal (compound decompose can emit the same inner clip IDs
+        // twice), so the stretch cache must key on the actual stretch inputs: two same-ID
+        // clips with different speeds in one render get independent, correct audio.
+        let rate = 1_000
+        let mediaID = try uuid("00000000-0000-0000-0000-000000086014")
+        let sharedClipID = try uuid("00000000-0000-0000-0000-000000086015")
+        let source = makeTestSignal(frameCount: rate, channelCount: 1)
+        let unitClip = try makeRetimedClip(
+            id: sharedClipID,
+            mediaID: mediaID,
+            speed: .one,
+            retimeMode: .pitchCorrected,
+            sourceDurationFrames: rate,
+            sampleRate: rate
+        )
+        let doubleClip = try makeRetimedClip(
+            id: sharedClipID,
+            mediaID: mediaID,
+            speed: try RationalValue(numerator: 2, denominator: 1),
+            retimeMode: .pitchCorrected,
+            timelineStartFrames: Int64(rate),
+            sourceDurationFrames: rate,
+            sampleRate: rate
+        )
+
+        let rendered = try renderSequence(
+            clips: [unitClip, doubleClip],
+            sources: [mediaID: try monoSource(source, sampleRate: rate)],
+            renderFrames: 1_500,
+            sampleRate: rate
+        )
+
+        let mono = channelSamples(rendered, channel: 0)
+        let oracle = try WSOLATimeStretcher.stretch(
+            samples: source,
+            channelCount: 1,
+            sampleRate: rate,
+            speed: try RationalValue(numerator: 2, denominator: 1)
+        )
+        // Unit-speed region plays the source verbatim; the 2x region plays its own stretch,
+        // never the cached unit-speed buffer of the same-ID clip.
+        XCTAssertEqual(Array(mono[0..<1_000]), source)
+        XCTAssertEqual(Array(mono[1_000..<1_500]), Array(oracle[0..<500]))
+    }
 }
 
 private extension OfflineAudioPitchCorrectedMixerTests {
@@ -268,100 +384,4 @@ private extension OfflineAudioPitchCorrectedMixerTests {
             by: buffer.format.channelCount
         ).map { buffer.samples[$0] }
     }
-}
-
-private struct CrossfadePairFixture {
-    let clips: [Clip]
-    let sources: [UUID: AudioSourceBuffer]
-}
-
-/// One pitch-corrected 2x clip with a 0.1 s linear trailing crossfade into an abutting
-/// silent clip carrying the mirroring leading record (ADR-0015 pair taxonomy).
-private func makeCrossfadePair(
-    source: [Float],
-    tailRate: Int
-) throws -> CrossfadePairFixture {
-    let mediaID = try uuid("00000000-0000-0000-0000-000000086008")
-    let silentID = try uuid("00000000-0000-0000-0000-000000086009")
-    let clipAID = try uuid("00000000-0000-0000-0000-000000086010")
-    let clipBID = try uuid("00000000-0000-0000-0000-000000086011")
-    let crossfadeDuration = try time(1, 10)
-    let crossfade = ClipAudioCrossfade(
-        partnerClipID: clipBID,
-        duration: crossfadeDuration,
-        curve: .linear
-    )
-    let mirror = ClipAudioCrossfade(
-        partnerClipID: clipAID,
-        duration: crossfadeDuration,
-        curve: .linear
-    )
-    let clipA = try makeRetimedClip(
-        id: clipAID,
-        mediaID: mediaID,
-        speed: try RationalValue(numerator: 2, denominator: 1),
-        retimeMode: .pitchCorrected,
-        sourceDurationFrames: tailRate,
-        sampleRate: tailRate,
-        audioMix: ClipAudioMix(trailingCrossfade: crossfade, retimeMode: .pitchCorrected)
-    )
-    let clipB = try makeRetimedClip(
-        id: clipBID,
-        mediaID: silentID,
-        speed: .one,
-        retimeMode: .pitchShifted,
-        timelineStartFrames: 500,
-        sourceDurationFrames: 400,
-        sampleRate: tailRate,
-        audioMix: ClipAudioMix(leadingCrossfade: mirror)
-    )
-    return CrossfadePairFixture(
-        clips: [clipA, clipB],
-        sources: [
-            mediaID: try monoSource(source, sampleRate: tailRate),
-            silentID: try monoSource([Float](repeating: 0, count: 400), sampleRate: tailRate)
-        ]
-    )
-}
-
-private func makeRetimedClip(
-    id: UUID,
-    mediaID: UUID,
-    speed: RationalValue,
-    retimeMode: ClipAudioRetimeMode,
-    reverse: Bool = false,
-    freezeFrame: Bool = false,
-    timelineStartFrames: Int64 = 0,
-    sourceDurationFrames: Int,
-    sampleRate: Int = 2_000,
-    audioMix: ClipAudioMix? = nil
-) throws -> Clip {
-    let rate = Int64(sampleRate)
-    let sourceDuration = try time(Int64(sourceDurationFrames), rate)
-    let timelineDuration = freezeFrame
-        ? sourceDuration
-        : try Clip.timelineDuration(forSourceDuration: sourceDuration, speed: speed)
-    return Clip(
-        id: id,
-        source: .media(id: mediaID),
-        sourceRange: try TimeRange(start: .zero, duration: sourceDuration),
-        timelineRange: try TimeRange(
-            start: try time(timelineStartFrames, rate),
-            duration: timelineDuration
-        ),
-        kind: .audio,
-        name: "Retimed Audio",
-        audioMix: audioMix ?? ClipAudioMix(retimeMode: retimeMode),
-        speed: speed,
-        reverse: reverse,
-        freezeFrame: freezeFrame
-    )
-}
-
-private func monoSource(_ samples: [Float], sampleRate: Int) throws -> AudioSourceBuffer {
-    try AudioSourceBuffer(
-        format: AudioRenderFormat(sampleRate: sampleRate, channelCount: 1),
-        frameCount: samples.count,
-        samples: samples
-    )
 }

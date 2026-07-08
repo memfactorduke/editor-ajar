@@ -81,9 +81,13 @@ public enum WSOLATimeStretcher {
         analysisWindowFrameCount(sampleRate: sampleRate) / 2
     }
 
-    /// Exact stretched output length: `round(frameCount / speed)` computed with integer
-    /// rational arithmetic (`(frameCount · den + num/2) / num`), so output timeline duration
-    /// equals source duration divided by speed to within half a frame.
+    /// Exact stretched output length: `ceil(frameCount / speed)` computed with integer
+    /// rational arithmetic (`(frameCount · den + num − 1) / num`).
+    ///
+    /// Ceiling, not nearest: the offline mixer renders half-open timeline ranges with ceiling
+    /// semantics (a clip covering 1.33 output frames mixes frames 0 and 1), so the stretched
+    /// buffer must cover the final partial output frame — nearest rounding would make the
+    /// last valid timeline frame of a non-divisible speed ratio read silence.
     public static func stretchedFrameCount(
         frameCount: Int,
         speed: RationalValue
@@ -91,7 +95,7 @@ public enum WSOLATimeStretcher {
         try validate(speed: speed)
         let numerator = speed.numerator
         let scaled = Int64(frameCount).multipliedReportingOverflow(by: speed.denominator)
-        let rounded = scaled.partialValue.addingReportingOverflow(numerator / 2)
+        let rounded = scaled.partialValue.addingReportingOverflow(numerator - 1)
         guard !scaled.overflow, !rounded.overflow else {
             throw WSOLATimeStretchError.frameCountOverflow(frameCount: frameCount, speed: speed)
         }
