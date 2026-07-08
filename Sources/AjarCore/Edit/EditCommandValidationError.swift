@@ -156,6 +156,11 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// the ADR does not define; the edit is rejected rather than guessed at.
     case bladeInsideCrossfadeRegion(clipID: UUID, atTime: RationalTime)
 
+    /// Blading a reversed or time-remapped clip needs direction-aware source-split math
+    /// that does not exist yet; the edit is rejected rather than silently producing wrong
+    /// source ranges (FR-SPD-003).
+    case bladeUnsupportedForRetimedClip(clipID: UUID)
+
     /// A clip speed failed semantic validation.
     case invalidClipSpeed(clipID: UUID, error: ClipSpeedValidationError)
 

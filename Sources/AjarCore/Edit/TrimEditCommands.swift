@@ -104,6 +104,14 @@ extension EditReducer {
         edit: BladeClipEdit,
         clipEnd: RationalTime
     ) throws -> (left: Clip, right: Clip) {
+        // The forward source-split math below is wrong for reversed playback (the left
+        // half would need the *tail* source range) and undefined for keyframed remaps;
+        // reject rather than silently produce wrong source ranges (FR-SPD-003).
+        guard !clip.reverse, clip.timeRemap == nil else {
+            throw EditReducerError.invalidEdit(
+                .bladeUnsupportedForRetimedClip(clipID: clip.id)
+            )
+        }
         let leftDuration = try subtractTimes(edit.atTime, clip.timelineRange.start)
         let rightDuration = try subtractTimes(clipEnd, edit.atTime)
         let leftSourceDuration = try speedSourceDuration(
@@ -116,7 +124,11 @@ extension EditReducer {
             timelineDuration: rightDuration,
             speed: clip.speed
         )
-        let rightSourceStart = try addTimes(clip.sourceRange.start, leftSourceDuration)
+        // A freeze frame holds `sourceRange.start` for every rendered time, so the right
+        // half keeps the same source start and both halves hold the same frame.
+        let rightSourceStart = clip.freezeFrame
+            ? clip.sourceRange.start
+            : try addTimes(clip.sourceRange.start, leftSourceDuration)
         let leftClip = copying(
             clip,
             sourceRange: try makeRange(
@@ -127,11 +139,11 @@ extension EditReducer {
                 start: clip.timelineRange.start,
                 duration: leftDuration
             ),
-            audioMix: copying(clip.audioMix, trailingCrossfade: .some(nil))
+            audioMix: bladeLeftAudioMix(clip.audioMix)
         )
-        let rightAudioMix = clip.audioMix.trailingCrossfade.map {
-            ClipAudioMix(trailingCrossfade: $0)
-        }
+        // Keyframed transform/effects animations stay on the left half only (their
+        // timeline-absolute keyframes cannot be carried into the right half's range
+        // without curve splitting); the evaluated base values are preserved on both.
         let rightClip = Clip(
             id: edit.rightClipID,
             source: clip.source,
@@ -139,10 +151,25 @@ extension EditReducer {
             timelineRange: try makeRange(start: edit.atTime, duration: rightDuration),
             kind: clip.kind,
             name: "\(clip.name) 2",
-            audioMix: rightAudioMix ?? .identity,
-            speed: clip.speed
+            transform: clip.transform,
+            effects: clip.effects,
+            audioMix: bladeRightAudioMix(clip.audioMix),
+            speed: clip.speed,
+            freezeFrame: clip.freezeFrame
         )
         return (left: leftClip, right: rightClip)
+    }
+
+    /// The left half keeps the start-edge audio metadata: gain/pan automation, `fadeIn`,
+    /// and the leading crossfade record (ADR-0015 §8 blade row).
+    static func bladeLeftAudioMix(_ mix: ClipAudioMix) -> ClipAudioMix {
+        copying(mix, fadeOut: ClipAudioFade.none, trailingCrossfade: .some(nil))
+    }
+
+    /// The right half keeps the end-edge audio metadata: gain/pan automation, `fadeOut`,
+    /// and the trailing crossfade record (ADR-0015 §8 blade row).
+    static func bladeRightAudioMix(_ mix: ClipAudioMix) -> ClipAudioMix {
+        copying(mix, fadeIn: ClipAudioFade.none, leadingCrossfade: .some(nil))
     }
 
     static func rippleTrimClipWithoutLinkedPartners(

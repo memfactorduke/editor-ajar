@@ -127,6 +127,22 @@ extension EditReducer {
                 audioTracks: &audioTracks
             )
 
+            // ADR-0015 §8: a move that breaks a cut removes its pair and clears the
+            // partner's mirror on both affected tracks; a move that keeps the partners
+            // abutting preserves the pair.
+            try applyCrossfadeMaintenance(
+                at: sourceLocation,
+                videoTracks: &videoTracks,
+                audioTracks: &audioTracks,
+                in: project
+            )
+            try applyCrossfadeMaintenance(
+                at: destinationLocation,
+                videoTracks: &videoTracks,
+                audioTracks: &audioTracks,
+                in: project
+            )
+
             return copying(sequence, videoTracks: videoTracks, audioTracks: audioTracks)
         }
     }
@@ -161,7 +177,12 @@ extension EditReducer {
                     timelineRange: edit.timelineRange
                 )
             )
-            return copying(track, items: sortedItems(items))
+            // ADR-0015 §8: a trim that pulls an edge off its partner removes the pair;
+            // a shrunk-but-still-abutting cut clamps it (zero removes).
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 

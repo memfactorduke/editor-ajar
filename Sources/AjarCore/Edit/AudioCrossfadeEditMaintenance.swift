@@ -20,6 +20,23 @@ extension EditReducer {
         return copying(track, items: items)
     }
 
+    /// Runs `maintainingCrossfades` on the track at `location` in place, for commands
+    /// (like move) that rewrite tracks through the sequence-level track arrays.
+    static func applyCrossfadeMaintenance(
+        at location: TrackLocation,
+        videoTracks: inout [Track],
+        audioTracks: inout [Track],
+        in project: Project
+    ) throws {
+        let current = track(at: location, videoTracks: videoTracks, audioTracks: audioTracks)
+        setTrack(
+            try maintainingCrossfades(current, in: project),
+            at: location,
+            videoTracks: &videoTracks,
+            audioTracks: &audioTracks
+        )
+    }
+
     /// Declared media durations keyed by media-pool ID, mirroring `ProjectValidator`.
     static func mediaDurationsByID(in project: Project) -> [UUID: RationalTime] {
         Dictionary(

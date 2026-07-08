@@ -13,17 +13,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   §5 pair atomically — the outgoing clip gets the owning trailing record, the incoming clip
   the non-rendering mirror, the duration is clamped to the §3 tail handle and clip durations
   (clamping to zero is the typed `crossfadeExceedsSourceHandle` rejection), the §4 curve is
-  auto-selected (`linear` for same-source contiguous blade-split edges, `equalPower`
-  otherwise, explicit override wins), and same-edge fades are cleared in the same undoable
-  command so `crossfadeConflictsWithFade` is unreachable through the command (§6). The §8
-  edit-command interaction matrix is implemented across the trim family: blade redistributes
-  the records (leading stays on the left half, trailing moves to the right half with the
-  partner mirror re-pointed) and rejects blading inside an active transition region with the
-  typed `bladeInsideCrossfadeRegion` error; ripple trim, roll, slip, and slide preserve pairs
-  and clamp their duration to the post-edit handle and clip durations, removing the pair when
-  the clamp reaches zero; lift and ripple delete remove the affected pairs and clear the
-  neighbors' mirrors with no automatic crossfade on new cuts. Every matrix behavior is
-  taxonomy-validated and undo-exact, and a new meter-parity test asserts
+  auto-selected direction-aware (`linear` for same-source contiguous blade-split edges —
+  forward pairs continue end-into-start, reversed pairs continue start-into-end —
+  `equalPower` otherwise, explicit override wins), and same-edge fades are cleared in the
+  same undoable command so `crossfadeConflictsWithFade` is unreachable through the command
+  (§6). The §8 edit-command interaction matrix is implemented across the edit commands that
+  mutate cut geometry: blade redistributes the records (leading stays on the left half,
+  trailing moves to the right half with the partner mirror re-pointed) and rejects blading
+  inside an active transition region with the typed `bladeInsideCrossfadeRegion` error;
+  ripple trim, roll, slip, slide, in-place trim, and constant-speed retimes preserve pairs
+  and clamp their duration to the post-edit handle and clip durations, removing the pair
+  when the clamp reaches zero or the partners no longer abut; lift, ripple delete, and
+  adjacency-breaking moves remove the affected pairs and clear the neighbors' mirrors with
+  no automatic crossfade on new cuts (the trim/move/set-speed rows were added to the ADR §8
+  table). Blade now preserves non-retime clip attributes on both halves (base transform,
+  effects, gain/pan automation; `fadeIn` stays on the left half, `fadeOut` moves to the
+  right half, a bladed freeze frame holds the same frame on both halves) and rejects
+  reversed or time-remapped clips with the typed `bladeUnsupportedForRetimedClip` error
+  instead of silently producing wrong source ranges (FR-SPD-003 follow-up: #166). Every
+  matrix behavior is taxonomy-validated and undo-exact, and a new meter-parity test asserts
   `AudioMixerMeterAnalyzer` agrees with the rendered mix across a crossfaded cut including
   the fade-tail region.
 - Landed slice 2 of the FR-AUD-002 audio crossfade work per ADR-0015: `OfflineAudioMixer` now

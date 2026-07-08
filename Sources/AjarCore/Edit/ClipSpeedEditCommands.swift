@@ -111,7 +111,13 @@ extension EditReducer {
                     items.append(item)
                 }
             }
-            return copying(track, items: sortedItems(items))
+            // ADR-0015 §8: the ripple keeps the cut abutting, so any pair is preserved
+            // with its duration clamped to the retimed clip duration and the
+            // speed-scaled tail handle (zero removes).
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 

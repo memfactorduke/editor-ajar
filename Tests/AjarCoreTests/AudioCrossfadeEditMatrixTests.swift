@@ -5,18 +5,18 @@ import XCTest
 
 @testable import AjarCore
 
-/// FR-AUD-002 / ADR-0015 §8 edit-command interaction matrix: blade redistributes and
-/// mirror-updates; ripple trim / roll / slip / slide preserve the pair with the duration
-/// clamped to the post-edit handle and clip durations (clamp-to-zero removes the pair);
-/// lift and ripple delete remove pairs and clear mirrors with no automatic crossfade.
-/// Every command keeps the project taxonomy-valid and is undo-exact.
+/// FR-AUD-002 / ADR-0015 §8 edit-command interaction matrix (see
+/// `AudioCrossfadeBladeEditTests` for the blade row): ripple trim / roll / slip / slide /
+/// trim / set-speed preserve the pair with the duration clamped to the post-edit handle
+/// and clip durations (clamp-to-zero removes the pair); lift, ripple delete, and
+/// adjacency-breaking trims/moves remove pairs and clear mirrors with no automatic
+/// crossfade. Every command keeps the project taxonomy-valid and is undo-exact.
 final class AudioCrossfadeEditMatrixTests: XCTestCase {
     private var sequenceID = UUID()
     private var trackID = UUID()
     private var outgoingID = UUID()
     private var incomingID = UUID()
     private var extraID = UUID()
-    private var bladeRightID = UUID()
 
     override func setUpWithError() throws {
         sequenceID = try CrossfadeFixtureID.sequence()
@@ -24,112 +24,6 @@ final class AudioCrossfadeEditMatrixTests: XCTestCase {
         outgoingID = try CrossfadeFixtureID.outgoingClip()
         incomingID = try CrossfadeFixtureID.incomingClip()
         extraID = try CrossfadeFixtureID.extraClip()
-        bladeRightID = try editUUID(900_010)
-    }
-
-    // MARK: - Blade
-
-    func testFRAUD002BladeMovesTrailingRecordToRightHalfAndMirrorUpdates() throws {
-        let project = try makeCrossfadePairProject()
-        let command = EditCommand.bladeClip(
-            sequenceID: sequenceID,
-            trackID: trackID,
-            clipID: outgoingID,
-            atTime: try editTime(5),
-            rightClipID: bladeRightID
-        )
-
-        let edited = try assertUndoRedoIdentity(project: project, command: command)
-
-        let left = try trackClip(outgoingID, in: edited)
-        let right = try trackClip(bladeRightID, in: edited)
-        let incoming = try trackClip(incomingID, in: edited)
-        XCTAssertNil(left.audioMix.trailingCrossfade)
-        XCTAssertNil(left.audioMix.leadingCrossfade)
-        XCTAssertEqual(
-            right.audioMix.trailingCrossfade,
-            ClipAudioCrossfade(
-                partnerClipID: incomingID,
-                duration: try editTime(4),
-                curve: .linear
-            )
-        )
-        // The new cut between the halves gets no automatic crossfade.
-        XCTAssertNil(right.audioMix.leadingCrossfade)
-        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.partnerClipID, bladeRightID)
-        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
-    }
-
-    func testFRAUD002BladeNearTheCutClampsTheRedistributedPair() throws {
-        // The right half is only 2 frames long, shorter than the 4-frame pair, so both
-        // records clamp to 2 frames per the §7/§8 clamp rule.
-        let project = try makeCrossfadePairProject()
-        let command = EditCommand.bladeClip(
-            sequenceID: sequenceID,
-            trackID: trackID,
-            clipID: outgoingID,
-            atTime: try editTime(8),
-            rightClipID: bladeRightID
-        )
-
-        let edited = try assertUndoRedoIdentity(project: project, command: command)
-
-        let right = try trackClip(bladeRightID, in: edited)
-        let incoming = try trackClip(incomingID, in: edited)
-        XCTAssertEqual(right.audioMix.trailingCrossfade?.duration, try editTime(2))
-        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.duration, try editTime(2))
-        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.partnerClipID, bladeRightID)
-    }
-
-    func testFRAUD002BladeInsideTransitionRegionIsRejectedTyped() throws {
-        // The pair's region is [10, 14) inside the incoming clip; ADR-0015 does not define
-        // blading inside it, so the edit is rejected with a typed error.
-        let project = try makeCrossfadePairProject()
-        let bladeTime = try editTime(12)
-
-        XCTAssertThrowsError(
-            try apply(
-                .bladeClip(
-                    sequenceID: sequenceID,
-                    trackID: trackID,
-                    clipID: incomingID,
-                    atTime: bladeTime,
-                    rightClipID: bladeRightID
-                ),
-                to: project
-            )
-        ) { error in
-            XCTAssertEqual(
-                error as? EditReducerError,
-                .invalidEdit(
-                    .bladeInsideCrossfadeRegion(clipID: incomingID, atTime: bladeTime)
-                )
-            )
-        }
-    }
-
-    func testFRAUD002BladeAtTransitionRegionEndKeepsLeadingRecordOnLeftHalf() throws {
-        // The region [10, 14) is half-open, so blading exactly at 14 is allowed; the
-        // leading record stays on the left half per the §8 blade row.
-        let project = try makeCrossfadePairProject()
-        let command = EditCommand.bladeClip(
-            sequenceID: sequenceID,
-            trackID: trackID,
-            clipID: incomingID,
-            atTime: try editTime(14),
-            rightClipID: bladeRightID
-        )
-
-        let edited = try assertUndoRedoIdentity(project: project, command: command)
-
-        let leftHalf = try trackClip(incomingID, in: edited)
-        let rightHalf = try trackClip(bladeRightID, in: edited)
-        let outgoing = try trackClip(outgoingID, in: edited)
-        XCTAssertEqual(leftHalf.audioMix.leadingCrossfade?.partnerClipID, outgoingID)
-        XCTAssertEqual(outgoing.audioMix.trailingCrossfade?.partnerClipID, incomingID)
-        XCTAssertNil(rightHalf.audioMix.leadingCrossfade)
-        XCTAssertNil(rightHalf.audioMix.trailingCrossfade)
-        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
     }
 
     // MARK: - Ripple trim
@@ -384,20 +278,119 @@ final class AudioCrossfadeEditMatrixTests: XCTestCase {
         XCTAssertNil(last.audioMix.trailingCrossfade)
         XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
     }
+
+    // MARK: - Trim (in place)
+
+    func testFRAUD002TrimPreservingAdjacencyClampsThePair() throws {
+        // Trimming the incoming clip's end keeps the cut abutting, so the pair is
+        // preserved with its duration clamped to the shrunken clip.
+        let project = try makeCrossfadePairProject()
+        let command = EditCommand.trimClip(
+            sequenceID: sequenceID,
+            trackID: trackID,
+            clipID: incomingID,
+            sourceRange: try editRange(startFrame: 0, durationFrames: 3),
+            timelineRange: try editRange(startFrame: 10, durationFrames: 3)
+        )
+
+        let edited = try assertUndoRedoIdentity(project: project, command: command)
+
+        let outgoing = try trackClip(outgoingID, in: edited)
+        let incoming = try trackClip(incomingID, in: edited)
+        XCTAssertEqual(outgoing.audioMix.trailingCrossfade?.duration, try editTime(3))
+        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.duration, try editTime(3))
+        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
+    }
+
+    func testFRAUD002TrimBreakingAdjacencyRemovesThePair() throws {
+        // Trimming the outgoing clip's end opens a gap before the partner: the pair is
+        // removed and the mirror cleared rather than failing validation loudly.
+        let project = try makeCrossfadePairProject()
+        let command = EditCommand.trimClip(
+            sequenceID: sequenceID,
+            trackID: trackID,
+            clipID: outgoingID,
+            sourceRange: try editRange(startFrame: 0, durationFrames: 8),
+            timelineRange: try editRange(startFrame: 0, durationFrames: 8)
+        )
+
+        let edited = try assertUndoRedoIdentity(project: project, command: command)
+
+        let outgoing = try trackClip(outgoingID, in: edited)
+        let incoming = try trackClip(incomingID, in: edited)
+        XCTAssertNil(outgoing.audioMix.trailingCrossfade)
+        XCTAssertNil(incoming.audioMix.leadingCrossfade)
+        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
+    }
+
+    // MARK: - Move
+
+    func testFRAUD002MoveBreakingTheCutRemovesPairAndMirror() throws {
+        let project = try makeCrossfadePairProject()
+        let command = EditCommand.moveClip(
+            sequenceID: sequenceID,
+            sourceTrackID: trackID,
+            clipID: outgoingID,
+            destinationTrackID: trackID,
+            timelineRange: try editRange(startFrame: 30, durationFrames: 10)
+        )
+
+        let edited = try assertUndoRedoIdentity(project: project, command: command)
+
+        let moved = try trackClip(outgoingID, in: edited)
+        let incoming = try trackClip(incomingID, in: edited)
+        XCTAssertNil(moved.audioMix.trailingCrossfade)
+        XCTAssertNil(incoming.audioMix.leadingCrossfade)
+        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
+    }
+
+    // MARK: - Set speed
+
+    func testFRAUD002SetClipSpeedClampsPairToTheRetimedDuration() throws {
+        // Doubling the outgoing clip's speed halves it to 5 frames and ripples the
+        // partner into abutment, so the 8-frame pair clamps to 5 on both records.
+        let project = try makePairProject(durationFrames: 8)
+        let command = EditCommand.setClipSpeed(
+            sequenceID: sequenceID,
+            trackID: trackID,
+            clipID: outgoingID,
+            speed: RationalValue(2)
+        )
+
+        let edited = try assertUndoRedoIdentity(project: project, command: command)
+
+        let outgoing = try trackClip(outgoingID, in: edited)
+        let incoming = try trackClip(incomingID, in: edited)
+        try assertRange(outgoing.timelineRange, startFrame: 0, durationFrames: 5)
+        try assertRange(incoming.timelineRange, startFrame: 5, durationFrames: 10)
+        XCTAssertEqual(outgoing.audioMix.trailingCrossfade?.duration, try editTime(5))
+        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.duration, try editTime(5))
+        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
+    }
+
 }
 
 // MARK: - Fixtures
 
 extension AudioCrossfadeEditMatrixTests {
     /// A valid pair like `makeCrossfadePairProject`, but with a caller-chosen outgoing
-    /// source start so tests can shape the remaining tail handle.
-    private func makePairProject(outgoingSourceStartFrame: Int64) throws -> Project {
+    /// source start and pair duration so tests can shape the tail handle and clamps.
+    private func makePairProject(
+        outgoingSourceStartFrame: Int64 = 0,
+        durationFrames: Int64 = 4
+    ) throws -> Project {
         var outgoingSpec = CrossfadeClipSpec()
         outgoingSpec.sourceStartFrame = outgoingSourceStartFrame
-        outgoingSpec.audioMix = try outgoingCrossfadeMix(partner: incomingID)
+        outgoingSpec.audioMix = try outgoingCrossfadeMix(
+            partner: incomingID,
+            durationFrames: durationFrames
+        )
         var incomingSpec = CrossfadeClipSpec()
         incomingSpec.timelineStartFrame = 10
-        incomingSpec.audioMix = try incomingCrossfadeMix(partner: outgoingID)
+        incomingSpec.audioMix = try incomingCrossfadeMix(
+            partner: outgoingID,
+            durationFrames: durationFrames
+        )
         return try makeCrossfadeProject(items: [
             .clip(try makeCrossfadeClip(id: outgoingID, spec: outgoingSpec)),
             .clip(try makeCrossfadeClip(id: incomingID, spec: incomingSpec))

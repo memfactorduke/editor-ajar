@@ -67,6 +67,38 @@ final class AudioCrossfadeEditCommandTests: XCTestCase {
         XCTAssertEqual(outgoing.audioMix.trailingCrossfade?.curve, .equalPower)
     }
 
+    func testFRAUD002CreateCrossfadeAutoSelectsLinearForReversedContinuousMappings() throws {
+        // Reversed playback runs backward through the source, so the outgoing (left)
+        // half holds the LATER source range: continuity at the cut means the outgoing
+        // sourceRange.start meets the incoming sourceRange.end (ADR-0015 §4).
+        let fixture = try makeAdjacentPairFixture(
+            outgoingSourceStartFrame: 30,
+            incomingSourceStartFrame: 20,
+            reverse: true
+        )
+
+        let edited = try apply(try createCommand(durationFrames: 4), to: fixture.project)
+
+        let outgoing = try trackClip(fixture.outgoingID, in: edited)
+        XCTAssertEqual(outgoing.audioMix.trailingCrossfade?.curve, .linear)
+    }
+
+    func testFRAUD002CreateCrossfadeReversedForwardContiguityIsNotBladeSplit() throws {
+        // Forward contiguity (outgoing end == incoming start) is NOT playback continuity
+        // when both edges are reversed — the content does not continue across the cut,
+        // so the uncorrelated equal-power default applies.
+        let fixture = try makeAdjacentPairFixture(
+            outgoingSourceStartFrame: 20,
+            incomingSourceStartFrame: 30,
+            reverse: true
+        )
+
+        let edited = try apply(try createCommand(durationFrames: 4), to: fixture.project)
+
+        let outgoing = try trackClip(fixture.outgoingID, in: edited)
+        XCTAssertEqual(outgoing.audioMix.trailingCrossfade?.curve, .equalPower)
+    }
+
     func testFRAUD002CreateCrossfadeExplicitCurveOverrideWins() throws {
         // Blade-split signature would auto-select linear; the stored curve is the truth.
         let fixture = try makeAdjacentPairFixture(incomingSourceStartFrame: 10)
@@ -353,6 +385,7 @@ func makeAdjacentPairFixture(
     outgoingSourceStartFrame: Int64 = 0,
     incomingSourceStartFrame: Int64 = 0,
     incomingSpeed: RationalValue = .one,
+    reverse: Bool = false,
     outgoingMix: ClipAudioMix = .identity,
     incomingMix: ClipAudioMix = .identity,
     outgoingSpec explicitOutgoingSpec: CrossfadeClipSpec? = nil
@@ -361,11 +394,13 @@ func makeAdjacentPairFixture(
     let incomingID = try CrossfadeFixtureID.incomingClip()
     var outgoingSpec = explicitOutgoingSpec ?? CrossfadeClipSpec()
     outgoingSpec.sourceStartFrame = outgoingSourceStartFrame
+    outgoingSpec.reverse = reverse
     outgoingSpec.audioMix = outgoingMix
     var incomingSpec = CrossfadeClipSpec()
     incomingSpec.timelineStartFrame = 10
     incomingSpec.sourceStartFrame = incomingSourceStartFrame
     incomingSpec.speed = incomingSpeed
+    incomingSpec.reverse = reverse
     incomingSpec.audioMix = incomingMix
     let project = try makeCrossfadeProject(items: [
         .clip(try makeCrossfadeClip(id: outgoingID, spec: outgoingSpec)),

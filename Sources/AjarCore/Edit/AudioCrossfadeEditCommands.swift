@@ -250,8 +250,8 @@ extension EditReducer {
     }
 
     /// ADR-0015 §4 automatic selection: `linear` when the edges are same-source contiguous
-    /// mappings — same media/sequence ID, outgoing `sourceRange.end` equal to the incoming
-    /// `sourceRange.start`, identical `speed`/`reverse`, and neither edge frozen (a freeze
+    /// mappings — same media/sequence ID, source ranges contiguous under the shared
+    /// playback direction, identical `speed`/`reverse`, and neither edge frozen (a freeze
     /// frame holds one frame, so its content does not continue across the cut) — else
     /// `equalPower`.
     static func automaticCrossfadeCurve(outgoing: Clip, incoming: Clip) -> ClipAudioFadeCurve {
@@ -260,7 +260,24 @@ extension EditReducer {
             outgoing.speed == incoming.speed,
             outgoing.reverse == incoming.reverse,
             !outgoing.freezeFrame,
-            !incoming.freezeFrame,
+            !incoming.freezeFrame
+        else {
+            return .equalPower
+        }
+        // Playback continuity at the cut: forward pairs continue from the outgoing
+        // range's end into the incoming range's start; reversed pairs play backward, so
+        // the outgoing half holds the later source range and continuity means the
+        // outgoing range's start meets the incoming range's end.
+        if outgoing.reverse {
+            guard
+                let incomingSourceEnd = try? incoming.sourceRange.end(),
+                outgoing.sourceRange.start == incomingSourceEnd
+            else {
+                return .equalPower
+            }
+            return .linear
+        }
+        guard
             let outgoingSourceEnd = try? outgoing.sourceRange.end(),
             outgoingSourceEnd == incoming.sourceRange.start
         else {
