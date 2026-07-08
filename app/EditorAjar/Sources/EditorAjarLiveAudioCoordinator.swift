@@ -163,12 +163,12 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
             }
 
             do {
-                let buffer = try Self.renderBuffer(
+                let plan = try Self.renderPlan(
                     project: project,
                     sequence: sequence,
                     range: request.renderRange
                 )
-                try self.driver.publish(RealtimeAudioRenderPlan(buffer: buffer))
+                try self.driver.publish(plan)
                 self.publishedRange = request.publishRange
             } catch {
                 self.publishedRange = nil
@@ -206,18 +206,20 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         let publishRange: Range<Int64>
     }
 
-    private static func renderBuffer(
+    /// Builds the realtime callback plan off-thread, flattening compound/nested sources with
+    /// the same contributor semantics as the offline mix (FR-AUD-007, FR-CMP-001).
+    private static func renderPlan(
         project: Project,
         sequence: Sequence,
         range: TimeRange
-    ) throws -> RenderedAudioBuffer {
+    ) throws -> RealtimeAudioRenderPlan {
         let provider = try EditorAjarProjectAudioSourceProvider(
             project: project,
             sequence: sequence,
             range: range
         )
         do {
-            return try OfflineAudioMixer.render(
+            return try RealtimeAudioRenderPlan.preparingCompoundMix(
                 project: project,
                 sequence: sequence,
                 range: range,
@@ -226,7 +228,9 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
         } catch let error as AudioRenderError {
             switch error {
             case .missingAudioSource, .unsupportedClipSource:
-                return try silentBuffer(project: project, range: range)
+                return RealtimeAudioRenderPlan(
+                    buffer: try silentBuffer(project: project, range: range)
+                )
             default:
                 throw error
             }
