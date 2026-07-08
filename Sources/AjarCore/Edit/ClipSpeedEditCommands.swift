@@ -30,6 +30,10 @@ extension EditReducer {
         }
     }
 
+    /// Retimes a clip at a constant rate (FR-SPD-001) and propagates the same speed to its
+    /// FR-TL-009 linked partners so linked A/V stays sample-exact, mirroring how trim/ripple/
+    /// slip/slide fan out through the link group. Each affected track ripples by the duration
+    /// delta using the ripple-trim convention.
     static func setClipSpeed(_ edit: ClipSpeedEdit, in project: Project) throws -> Project {
         if let error = Clip.validateSpeed(edit.speed) {
             throw EditReducerError.invalidEdit(
@@ -37,11 +41,39 @@ extension EditReducer {
             )
         }
 
-        return try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
-            var items = track.items
+        let sequence = try sequence(edit.sequenceID, in: project)
+        let sourceLocation = try locateClip(
+            ClipReference(trackID: edit.trackID, clipID: edit.clipID),
+            in: sequence
+        )
+        var editedProject = try setClipSpeedWithoutLinkedPartners(edit, in: project)
+
+        for linkedClip in linkedPartnerLocations(for: sourceLocation, in: sequence) {
+            editedProject = try setClipSpeedWithoutLinkedPartners(
+                ClipSpeedEdit(
+                    sequenceID: edit.sequenceID,
+                    trackID: linkedClip.reference.trackID,
+                    clipID: linkedClip.clip.id,
+                    speed: edit.speed
+                ),
+                in: editedProject
+            )
+        }
+
+        return editedProject
+    }
+
+    /// Applies the retime to one clip and ripples later items on its track by the duration
+    /// delta, matching `rippleTrimClipWithoutLinkedPartners`: slow-downs push later items
+    /// right, speed-ups pull them left so no gap is introduced.
+    static func setClipSpeedWithoutLinkedPartners(
+        _ edit: ClipSpeedEdit,
+        in project: Project
+    ) throws -> Project {
+        try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
             guard
-                let index = clipIndex(edit.clipID, in: items),
-                case .clip(let clip) = items[index]
+                let clipIndex = clipIndex(edit.clipID, in: track.items),
+                case .clip(let clip) = track.items[clipIndex]
             else {
                 throw EditReducerError.clipNotFound(
                     sequenceID: edit.sequenceID,
@@ -62,13 +94,23 @@ extension EditReducer {
                 start: clip.timelineRange.start,
                 duration: timelineDuration
             )
-            items[index] = .clip(
-                copying(
-                    clip,
-                    timelineRange: timelineRange,
-                    speed: edit.speed
-                )
-            )
+            let oldEnd = try exactTime { try clip.timelineRange.end() }
+            let newEnd = try exactTime { try timelineRange.end() }
+            let downstreamOffset = try subtractTimes(newEnd, oldEnd)
+
+            var items: [TimelineItem] = []
+            for itemIndex in track.items.indices {
+                let item = track.items[itemIndex]
+                if itemIndex == clipIndex {
+                    items.append(
+                        .clip(copying(clip, timelineRange: timelineRange, speed: edit.speed))
+                    )
+                } else if item.timelineRange.start >= oldEnd {
+                    items.append(try offsetItem(item, by: downstreamOffset))
+                } else {
+                    items.append(item)
+                }
+            }
             return copying(track, items: sortedItems(items))
         }
     }
