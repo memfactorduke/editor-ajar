@@ -12,6 +12,7 @@ void AjarAudioAtomicUInt64Destroy(AjarAudioAtomicUInt64 *atomicValue);
 int AjarAudioAtomicUInt64IsLockFree(const AjarAudioAtomicUInt64 *atomicValue);
 uint64_t AjarAudioAtomicUInt64LoadAcquire(const AjarAudioAtomicUInt64 *atomicValue);
 void AjarAudioAtomicUInt64StoreRelease(AjarAudioAtomicUInt64 *atomicValue, uint64_t value);
-void AjarAudioAtomicThreadFenceSeqCst(void);
+uint64_t AjarAudioAtomicUInt64LoadSeqCst(const AjarAudioAtomicUInt64 *atomicValue);
+void AjarAudioAtomicUInt64StoreSeqCst(AjarAudioAtomicUInt64 *atomicValue, uint64_t value);
 
 #endif

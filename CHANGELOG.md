@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Realtime playback of compound audio (FR-AUD-007, FR-CMP-001):
+  `RealtimeAudioRenderPlan.preparingCompoundMix` builds the live callback plan off the audio
+  thread by flattening nested/compound sources — any depth, cycle-guarded with typed errors —
+  through the same offline-mixer contributor selection used by export renders and meters
+  (audible-content-gated video-track contribution, #156 solo/mute/enabled semantics), so
+  compound clips on audio tracks and sequence-backed compounds on video tracks are audible in
+  live playback and match the offline mix sample-for-sample; the render callback keeps
+  consuming a fixed-size, pre-rendered owned-pointer plan (no recursion, locks, or allocation),
+  and the app's live-audio coordinator now routes through the new builder. Strengthened the
+  plan-handoff hazard handshake from seq_cst fences around release/acquire tokens to explicit
+  `seq_cst` store/load atomics (a store-then-load-from-a-different-location handshake needs the
+  single total order), covered by a new compound plan-swap stress test that runs clean under
+  Thread Sanitizer alongside RT-vs-offline parity, video-track/solo/visual-only,
+  nested-depth-2, live-driver, and callback-contract safety-report tests.
 - Hardened the NFR-QUAL-001 nested-compound render contract: linear-working output is now an
   explicit `RenderOutputDescriptor.colorMode` (`.presented` by default) instead of being
   inferred from the rgba16Float pixel format, so a future HDR-presented half-float output can

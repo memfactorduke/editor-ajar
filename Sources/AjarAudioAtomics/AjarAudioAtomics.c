@@ -35,6 +35,10 @@ void AjarAudioAtomicUInt64StoreRelease(AjarAudioAtomicUInt64 *atomicValue, uint6
     atomic_store_explicit(&atomicValue->value, value, memory_order_release);
 }
 
-void AjarAudioAtomicThreadFenceSeqCst(void) {
-    atomic_thread_fence(memory_order_seq_cst);
+uint64_t AjarAudioAtomicUInt64LoadSeqCst(const AjarAudioAtomicUInt64 *atomicValue) {
+    return atomic_load_explicit(&atomicValue->value, memory_order_seq_cst);
+}
+
+void AjarAudioAtomicUInt64StoreSeqCst(AjarAudioAtomicUInt64 *atomicValue, uint64_t value) {
+    atomic_store_explicit(&atomicValue->value, value, memory_order_seq_cst);
 }
