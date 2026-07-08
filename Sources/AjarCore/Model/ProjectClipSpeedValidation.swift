@@ -31,5 +31,16 @@ extension ProjectValidator {
                 )
             )
         }
+
+        if let error = clip.validateAudioRetime() {
+            state.errors.append(
+                .invalidClipAudioRetime(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    error: error
+                )
+            )
+        }
     }
 }

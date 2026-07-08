@@ -289,6 +289,16 @@ public enum EditCommand: Codable, Equatable, Sendable {
         clipID: UUID
     )
 
+    /// Selects pitch-shifted (varispeed) or pitch-corrected (WSOLA) audio for a retimed clip
+    /// (FR-SPD-001). `pitchCorrected` is rejected with a typed error on freeze-frame or
+    /// time-remapped clips.
+    case setClipAudioRetimeMode(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        mode: ClipAudioRetimeMode
+    )
+
     /// Creates or updates the ADR-0015 crossfade pair on the cut after a clip: the
     /// addressed clip gets the owning trailing record, its abutting next clip the mirror
     /// (FR-AUD-002). A `nil` curve selects `linear` for same-source contiguous edges and

@@ -98,6 +98,13 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     /// (ADR-0015 §7) — a decoder fault must never render as silent zeros.
     case sourceUnderDelivered(clipID: UUID, missingRange: TimeRange)
 
+    /// A pitch-corrected clip violates the FR-SPD-001 composition policy (freeze frame or
+    /// time-remap curve). Defense in depth for sequences mixed without central validation.
+    case pitchCorrectedRetimeUnsupported(clipID: UUID)
+
+    /// The FR-SPD-001 WSOLA stage rejected a pitch-corrected clip's stretch input.
+    case pitchCorrectedStretchFailed(clipID: UUID, error: WSOLATimeStretchError)
+
     /// A human-readable description.
     public var description: String {
         switch self {
@@ -144,6 +151,11 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
         case .sourceUnderDelivered(let clipID, let missingRange):
             "audio source for clip \(clipID) under-delivered source time "
                 + "[\(missingRange.start), +\(missingRange.duration)) inside declared bounds"
+        case .pitchCorrectedRetimeUnsupported(let clipID):
+            "pitch-corrected clip \(clipID) cannot combine with freezeFrame or a time-remap "
+                + "curve (FR-SPD-001)"
+        case .pitchCorrectedStretchFailed(let clipID, let error):
+            "pitch-corrected stretch failed for clip \(clipID): \(error)"
         }
     }
 }

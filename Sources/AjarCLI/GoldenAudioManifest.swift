@@ -256,6 +256,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
     let reverse: Bool
     let freezeFrame: Bool
     let timeRemap: [GoldenTimeRemapKeyframeSpec]?
+    let audioRetimeMode: ClipAudioRetimeMode
     let gain: Double
     let pan: Double
     let fadeIn: String?
@@ -272,6 +273,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         case reverse
         case freezeFrame
         case timeRemap
+        case audioRetimeMode
         case gain
         case pan
         case fadeIn
@@ -293,6 +295,10 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
             [GoldenTimeRemapKeyframeSpec].self,
             forKey: .timeRemap
         )
+        audioRetimeMode = try container.decodeIfPresent(
+            ClipAudioRetimeMode.self,
+            forKey: .audioRetimeMode
+        ) ?? .pitchShifted
         gain = try container.decodeIfPresent(Double.self, forKey: .gain) ?? 1
         pan = try container.decodeIfPresent(Double.self, forKey: .pan) ?? 0
         fadeIn = try container.decodeIfPresent(String.self, forKey: .fadeIn)
@@ -356,7 +362,8 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
             fadeIn: try fade(edgeDuration: fadeIn),
             fadeOut: try fade(edgeDuration: fadeOut),
             leadingCrossfade: leadingCrossfade,
-            trailingCrossfade: trailingCrossfade
+            trailingCrossfade: trailingCrossfade,
+            retimeMode: audioRetimeMode
         )
     }
 

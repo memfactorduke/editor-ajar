@@ -94,11 +94,11 @@ extension OfflineAudioMixer {
                 nestingDepth: nestingDepth
             )
             try peakClipLevels(
-                state: clipMixState(
+                state: retimedClipMixState(
                     clip: clip,
                     track: track,
                     source: source,
-                    environment: environment
+                    environment: &environment
                 ),
                 levels: &levels,
                 context: context

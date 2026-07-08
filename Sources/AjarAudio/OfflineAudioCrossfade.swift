@@ -3,6 +3,21 @@
 import AjarCore
 import Foundation
 
+/// Read mapping for an FR-SPD-001 stretched timeline-domain buffer.
+struct OfflineStretchedReadState {
+    /// First extracted source frame: the floor of the effective window start, so a fractional
+    /// window start keeps its sub-frame remainder inside the extracted buffer.
+    let startFrame: Int
+
+    /// Exact rational read anchor added to the clip-local timeline offset before frame
+    /// conversion. Forward clips carry the fractional window start scaled into the stretched
+    /// domain (`(windowStart − startFrame/rate) / speed`); reverse clips carry the offset
+    /// between the ceiling extraction end and the varispeed frame anchor
+    /// (`(endFrame − round(windowEnd·rate)) / (speed·rate)`). Frame-aligned clips keep an
+    /// anchor of exactly zero and match the varispeed frame mapping one to one.
+    let anchor: RationalTime
+}
+
 /// Per-clip mixing state resolved once before the frame loop.
 struct OfflineClipMixState {
     let clip: Clip
@@ -12,6 +27,11 @@ struct OfflineClipMixState {
     /// Declared media end in source frames for ADR-0015 §7 tail EOF clamping, or `nil` when
     /// the clip has no trailing crossfade, is not media-backed, or no project is available.
     let declaredTailSourceEndFrame: Double?
+
+    /// FR-SPD-001 pitch-corrected clips read a pre-stretched buffer in the timeline domain:
+    /// positions advance 1:1 with timeline time from the read state's anchor. Reverse,
+    /// crossfade-tail, and EOF handling were baked in at stretch time. `nil` for varispeed.
+    let stretchedRead: OfflineStretchedReadState?
 }
 
 extension OfflineAudioMixer {
@@ -92,6 +112,23 @@ extension OfflineAudioMixer {
         renderTime: RationalTime
     ) throws -> Double? {
         let clip = state.clip
+        if let stretchedRead = state.stretchedRead {
+            // FR-SPD-001 pitch-corrected: the stretched buffer already lives in the timeline
+            // domain, so playback is a 1:1 read at the clip-local timeline offset plus the
+            // fractional-start anchor. Tail EOF and reverse mapping were resolved when the
+            // buffer was stretched.
+            let sampleRate = Double(state.source.format.sampleRate)
+            if clip.speed == .one, !clip.reverse {
+                // Bit-identity with varispeed at unit speed: compute the identical rational
+                // source time, convert once, then shift by the integer extraction start —
+                // an exact floating-point subtraction — so interpolation positions match
+                // the varispeed path bit for bit, crossfade tail included.
+                let sourceTime = try clipSourceTime(clip, at: renderTime)
+                return (sourceTime.seconds * sampleRate) - Double(stretchedRead.startFrame)
+            }
+            let timelineOffset = try subtract(renderTime, clip.timelineRange.start)
+            return try add(timelineOffset, stretchedRead.anchor).seconds * sampleRate
+        }
         let sourceTime = try clipSourceTime(clip, at: renderTime)
         let isTailFrame = try renderTime >= end(of: clip.timelineRange)
         let framePosition = try sourceFramePosition(
@@ -122,7 +159,8 @@ extension OfflineAudioMixer {
                 clip: clip,
                 source: source,
                 environment: environment
-            )
+            ),
+            stretchedRead: nil
         )
     }
 

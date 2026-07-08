@@ -18,11 +18,19 @@ struct OfflineAudioRenderEnvironment {
     var sourceCache: [UUID: AudioSourceBuffer]
     var compoundSourceCache: [CompoundAudioSourceKey: AudioSourceBuffer]
 
+    /// FR-SPD-001 stretched timeline-domain buffers keyed by the full stretch-input identity
+    /// (`PitchCorrectedSourceKey`), never by clip ID alone — duplicate clip IDs are legal
+    /// (compound decompose can emit the same inner clip IDs twice), so same-ID clips with
+    /// different windows or speeds get independent stretches while the mix and
+    /// ducking-detection passes still share one deterministic stretch per identity per render.
+    var pitchCorrectedSourceCache: [PitchCorrectedSourceKey: PitchCorrectedStretch]
+
     init(project: Project?, sourceProvider: any AudioSourceProvider) {
         self.project = project
         self.sourceProvider = sourceProvider
         sourceCache = [:]
         compoundSourceCache = [:]
+        pitchCorrectedSourceCache = [:]
     }
 }
 
