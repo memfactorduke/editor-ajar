@@ -24,6 +24,110 @@ struct OfflineAudioRenderEnvironment {
 }
 
 extension OfflineAudioMixer {
+    /// Tracks that contribute audio to an offline mix (FR-CMP-001, FR-AUD-003).
+    ///
+    /// Enabled, unmuted audio tracks contribute their audio clips. Enabled, unmuted video
+    /// tracks contribute only sequence-backed compound clips whose nested sequence actually
+    /// carries audio content: an FR-CMP-001 collapse replaces the selection with one `.video`
+    /// compound clip on a video track holding the collapsed audio, so skipping video tracks
+    /// would silence it — while a visual-only compound never joins the contributor set, so its
+    /// track's solo flag cannot mute real audio tracks. Solo applies across both sets: if any
+    /// contributor is soloed, only soloed contributors play.
+    static func audioContributorTracks(
+        in sequence: Sequence,
+        project: Project?,
+        nestingDepth: Int
+    ) -> [Track] {
+        let audioTracks = sequence.audioTracks.filter { track in
+            track.kind == .audio && track.enabled && !track.muted
+        }
+        let compoundVideoTracks = sequence.videoTracks.filter { track in
+            videoTrackContributesAudio(track, project: project, nestingDepth: nestingDepth)
+        }
+        let contributors = audioTracks + compoundVideoTracks
+        let soloContributors = contributors.filter(\.solo)
+        return soloContributors.isEmpty ? contributors : soloContributors
+    }
+
+    /// Whether a clip contributes audio when mixed from `track`.
+    ///
+    /// Audio tracks mix their audio clips. Video tracks mix only sequence-backed compound
+    /// clips; media video clips keep their audio in linked audio clips, so mixing them here
+    /// would double-count.
+    static func clipCarriesAudio(_ clip: Clip, on track: Track) -> Bool {
+        if track.kind == .audio {
+            return clip.kind == .audio
+        }
+        guard case .sequence = clip.source else {
+            return false
+        }
+        return true
+    }
+
+    /// Whether an enabled, unmuted video track holds at least one compound clip that resolves
+    /// to audio content, making it an audio contributor (FR-CMP-001).
+    static func videoTrackContributesAudio(
+        _ track: Track,
+        project: Project?,
+        nestingDepth: Int
+    ) -> Bool {
+        guard track.kind == .video, track.enabled, !track.muted else {
+            return false
+        }
+        return track.items.contains { item in
+            guard case .clip(let clip) = item, case .sequence(let sequenceID) = clip.source
+            else {
+                return false
+            }
+            return nestedSequenceCarriesAudio(
+                sequenceID,
+                project: project,
+                nestingDepth: nestingDepth + 1
+            )
+        }
+    }
+
+    /// Whether a referenced nested sequence carries any audio content: an enabled, unmuted
+    /// audio track with at least one audio clip, or (recursively, bounded by the defensive
+    /// compound nesting limit) a video track carrying an audible compound clip.
+    static func nestedSequenceCarriesAudio(
+        _ sequenceID: UUID,
+        project: Project?,
+        nestingDepth: Int
+    ) -> Bool {
+        guard nestingDepth < RenderGraphBuilder.maximumCompoundNestingDepth,
+            let project,
+            let sequence = project.sequences.first(where: { $0.id == sequenceID })
+        else {
+            return false
+        }
+
+        let audioTrackCarriesAudio = sequence.audioTracks.contains { track in
+            guard track.kind == .audio, track.enabled, !track.muted else {
+                return false
+            }
+            return track.items.contains { item in
+                guard case .clip(let clip) = item, clip.kind == .audio else {
+                    return false
+                }
+                guard case .sequence(let nestedID) = clip.source else {
+                    return true
+                }
+                return nestedSequenceCarriesAudio(
+                    nestedID,
+                    project: project,
+                    nestingDepth: nestingDepth + 1
+                )
+            }
+        }
+        if audioTrackCarriesAudio {
+            return true
+        }
+        return sequence.videoTracks.contains { track in
+            videoTrackContributesAudio(track, project: project, nestingDepth: nestingDepth)
+        }
+    }
+
     static func sourceBuffer(
         for clip: Clip,
         context: OfflineMixContext,

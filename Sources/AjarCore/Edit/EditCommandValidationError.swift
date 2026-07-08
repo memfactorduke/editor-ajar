@@ -50,6 +50,10 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// No selected video track can host the replacement compound without overlapping leftovers.
     case compoundSelectionNeedsDestinationTrack(sequenceID: UUID)
 
+    /// Collapsing would sever a sidechain ducking rule across the compound boundary, silently
+    /// changing audible behavior. Remove or retarget the rule, or change the selection.
+    case compoundSelectionSeversAudioDucking(sequenceID: UUID, ruleIndex: Int)
+
     /// Decomposing requires a sequence-backed compound clip.
     case decomposeRequiresCompoundClip(clipID: UUID)
 
@@ -58,6 +62,10 @@ public enum EditCommandValidationError: Equatable, Sendable {
         clipID: UUID,
         attribute: CompoundClipDecomposeAttribute
     )
+
+    /// Decomposing would sever a nested sidechain ducking rule across the expansion boundary,
+    /// silently changing audible behavior. Remove or retarget the nested rule first.
+    case compoundDecomposeSeversAudioDucking(sequenceID: UUID, ruleIndex: Int)
 
     /// Decomposing would overlap an existing parent timeline item.
     case compoundDecomposeWouldOverlap(

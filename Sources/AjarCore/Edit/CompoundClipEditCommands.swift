@@ -46,6 +46,15 @@ extension EditReducer {
         let selectedReferences: Set<ClipReference>
         let selectionStart: RationalTime
         let markers: [Marker]
+        let audioDucking: [AudioDuckingRule]
+    }
+
+    struct CompoundReplacementSpec {
+        let selectedReferences: Set<ClipReference>
+        let destinationTrackID: UUID
+        let compoundClip: Clip
+        let markers: [Marker]
+        let audioDucking: [AudioDuckingRule]
     }
 
     static func applyCompoundClipCommand(
@@ -183,6 +192,10 @@ extension EditReducer {
             selectedReferences: selectedReferences,
             selectionStart: extent.start
         )
+        let duckingSplit = try splitCompoundSelectionAudioDucking(
+            in: sourceSequence,
+            selectedReferences: selectedReferences
+        )
 
         let nestedSequence = try compoundNestedSequence(
             CompoundNestedSequenceSpec(
@@ -191,22 +204,19 @@ extension EditReducer {
                 sourceSequence: sourceSequence,
                 selectedReferences: selectedReferences,
                 selectionStart: extent.start,
-                markers: markerSplit.nested
+                markers: markerSplit.nested,
+                audioDucking: duckingSplit.nested
             )
         )
         let replacementSequence = try sourceSequenceReplacingCompoundSelection(
             sourceSequence,
-            selectedReferences: selectedReferences,
-            destinationTrackID: destinationTrackID,
-            compoundClip: Clip(
-                id: edit.compoundClipID,
-                source: .sequence(id: edit.compoundSequenceID),
-                sourceRange: try makeRange(start: .zero, duration: extent.duration),
-                timelineRange: try extent.range,
-                kind: .video,
-                name: edit.name
-            ),
-            markers: markerSplit.outer
+            spec: CompoundReplacementSpec(
+                selectedReferences: selectedReferences,
+                destinationTrackID: destinationTrackID,
+                compoundClip: try compoundReplacementClip(edit: edit, extent: extent),
+                markers: markerSplit.outer,
+                audioDucking: duckingSplit.outer
+            )
         )
 
         var sequences = project.sequences
@@ -217,6 +227,20 @@ extension EditReducer {
             settings: project.settings,
             mediaPool: project.mediaPool,
             sequences: sequences
+        )
+    }
+
+    private static func compoundReplacementClip(
+        edit: MakeCompoundClipEdit,
+        extent: CompoundSelectionExtent
+    ) throws -> Clip {
+        Clip(
+            id: edit.compoundClipID,
+            source: .sequence(id: edit.compoundSequenceID),
+            sourceRange: try makeRange(start: .zero, duration: extent.duration),
+            timelineRange: try extent.range,
+            kind: .video,
+            name: edit.name
         )
     }
 
@@ -351,6 +375,7 @@ extension EditReducer {
             videoTracks: videoTracks,
             audioTracks: audioTracks,
             markers: sortedMarkers(spec.markers),
+            audioDucking: spec.audioDucking,
             timebase: spec.sourceSequence.timebase
         )
     }
@@ -392,17 +417,14 @@ extension EditReducer {
 
     private static func sourceSequenceReplacingCompoundSelection(
         _ sourceSequence: Sequence,
-        selectedReferences: Set<ClipReference>,
-        destinationTrackID: UUID,
-        compoundClip: Clip,
-        markers: [Marker]
+        spec: CompoundReplacementSpec
     ) throws -> Sequence {
         let videoTracks = try sourceSequence.videoTracks.map { track in
             try sourceTrackReplacingCompoundSelection(
                 track,
-                selectedReferences: selectedReferences,
-                destinationTrackID: destinationTrackID,
-                compoundClip: compoundClip
+                selectedReferences: spec.selectedReferences,
+                destinationTrackID: spec.destinationTrackID,
+                compoundClip: spec.compoundClip
             )
         }
         let audioTracks = sourceSequence.audioTracks.map { track in
@@ -411,7 +433,7 @@ extension EditReducer {
                 items: itemsAfterRemovingSelection(
                     from: track,
                     trackID: track.id,
-                    selectedReferences: selectedReferences
+                    selectedReferences: spec.selectedReferences
                 )
             )
         }
@@ -421,8 +443,8 @@ extension EditReducer {
             name: sourceSequence.name,
             videoTracks: videoTracks,
             audioTracks: audioTracks,
-            markers: sortedMarkers(markers),
-            audioDucking: sourceSequence.audioDucking,
+            markers: sortedMarkers(spec.markers),
+            audioDucking: spec.audioDucking,
             timebase: sourceSequence.timebase
         )
     }
@@ -461,38 +483,5 @@ extension EditReducer {
 
     static func items(_ items: [TimelineItem], overlap range: TimeRange) throws -> Bool {
         try items.contains { try rangesIntersect($0.timelineRange, range) }
-    }
-
-    private static func splitCompoundSelectionMarkers(
-        in sequence: Sequence,
-        selectedReferences: Set<ClipReference>,
-        selectionStart: RationalTime
-    ) throws -> (outer: [Marker], nested: [Marker]) {
-        var outerMarkers: [Marker] = []
-        var nestedMarkers: [Marker] = []
-
-        for marker in sequence.markers {
-            guard case .clip(let trackID, let clipID) = marker.anchor else {
-                outerMarkers.append(marker)
-                continue
-            }
-
-            if selectedReferences.contains(ClipReference(trackID: trackID, clipID: clipID)) {
-                nestedMarkers.append(
-                    Marker(
-                        id: marker.id,
-                        time: try exactTime { try marker.time.subtracting(selectionStart) },
-                        name: marker.name,
-                        color: marker.color,
-                        note: marker.note,
-                        anchor: marker.anchor
-                    )
-                )
-            } else {
-                outerMarkers.append(marker)
-            }
-        }
-
-        return (outerMarkers, nestedMarkers)
     }
 }

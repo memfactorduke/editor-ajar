@@ -149,6 +149,7 @@ struct GoldenAudioDuckingSpec: Decodable, Equatable {
 }
 
 struct GoldenAudioTrackSpec: Decodable, Equatable {
+    let kind: TrackKind
     let enabled: Bool
     let muted: Bool
     let solo: Bool
@@ -157,6 +158,7 @@ struct GoldenAudioTrackSpec: Decodable, Equatable {
     let clips: [GoldenAudioClipSpec]
 
     private enum CodingKeys: String, CodingKey {
+        case kind
         case enabled
         case muted
         case solo
@@ -166,6 +168,7 @@ struct GoldenAudioTrackSpec: Decodable, Equatable {
     }
 
     init(clips: [GoldenAudioClipSpec]) {
+        kind = .audio
         enabled = true
         muted = false
         solo = false
@@ -176,6 +179,7 @@ struct GoldenAudioTrackSpec: Decodable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decodeIfPresent(TrackKind.self, forKey: .kind) ?? .audio
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         solo = try container.decodeIfPresent(Bool.self, forKey: .solo) ?? false
@@ -187,7 +191,7 @@ struct GoldenAudioTrackSpec: Decodable, Equatable {
     func track(id: UUID, items: [TimelineItem]) -> Track {
         Track(
             id: id,
-            kind: .audio,
+            kind: kind,
             items: items,
             enabled: enabled,
             muted: muted,
@@ -266,7 +270,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         fadeOut = try container.decodeIfPresent(String.self, forKey: .fadeOut)
     }
 
-    func clip(id: UUID, source: ClipSource) throws -> Clip {
+    func clip(id: UUID, source: ClipSource, kind: TrackKind) throws -> Clip {
         let clipDuration = try GoldenAudioManifest.rationalTime(duration)
         let clipSpeed = speed ?? .one
         let clipTimeRemap = try timeRemap.map { try $0.clipTimeRemap() }
@@ -290,7 +294,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
                 start: GoldenAudioManifest.rationalTime(timelineStart),
                 duration: timelineDuration
             ),
-            kind: .audio,
+            kind: kind,
             name: "Golden Audio Clip",
             audioMix: try audioMix(),
             speed: clipSpeed,

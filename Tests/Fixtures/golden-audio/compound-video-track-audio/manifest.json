@@ -1,0 +1,58 @@
+{
+  "id": "compound-video-track-audio",
+  "comment": "FR-CMP-001 make-compound audio playback: collapsing replaces the selection with one kind-video compound clip on a VIDEO track whose nested sequence carries the collapsed audio, so audio resolution must mix sequence-backed clips found on video tracks. Track 0 is that video track (kind: video) hosting a unit-gain compound over a mono staircase source [1,2,3,4]; track 1 is a plain outer audio bed at a constant 0.5. Reference = compound + bed = [1.5,2.5,3.5,4.5] on both channels. The pre-fix regression (audio resolution iterating only audio tracks / only kind-audio clips) renders just the bed and fails with maxAbsError=4.0 against the 1e-5 tolerance; the bed keeps the wrong output non-empty so the failure is specifically the missing compound contribution. Audio golden math is pure CPU rational/float arithmetic, machine-independent, so the tolerance stays at the suite-wide 1e-5.",
+  "sampleRate": 4,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [1.0, 2.0, 3.0, 4.0]
+    },
+    {
+      "sampleRate": 4,
+      "channelCount": 1,
+      "samples": [0.5, 0.5, 0.5, 0.5]
+    }
+  ],
+  "tracks": [
+    {
+      "kind": "video",
+      "clips": [
+        {
+          "compound": {
+            "clips": [
+              {
+                "sourceIndex": 0,
+                "timelineStart": "0",
+                "sourceStart": "0",
+                "duration": "1"
+              }
+            ]
+          },
+          "timelineStart": "0",
+          "sourceStart": "0",
+          "duration": "1"
+        }
+      ]
+    },
+    {
+      "clips": [
+        {
+          "sourceIndex": 1,
+          "timelineStart": "0",
+          "sourceStart": "0",
+          "duration": "1"
+        }
+      ]
+    }
+  ],
+  "referenceSamples": [
+    1.5, 1.5,
+    2.5, 2.5,
+    3.5, 3.5,
+    4.5, 4.5
+  ]
+}
