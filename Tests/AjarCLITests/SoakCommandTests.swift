@@ -92,6 +92,62 @@ final class SoakCommandTests: XCTestCase {
         }
     }
 
+    func testNFRSTAB005MemoryTrendSlowLinearLeakFailsFittedSlopeCheck() {
+        // 10 MiB of perfectly linear growth over 2,400 samples: inside the 64 MiB band, and
+        // the quartile-mean rise is 7.5 MiB — under the 8 MiB monotonic tolerance — so only
+        // the least-squares slope check can see this leak (~10 MiB/hour at soak pace).
+        let samples = makeLinearSamples(count: 2_400, totalGrowthMegabytes: 10)
+
+        XCTAssertThrowsError(
+            try SoakMemoryTrend.evaluate(samples: samples, policy: .standard)
+        ) { error in
+            guard case .linearGrowthDetected(let report)? = error as? SoakError else {
+                return XCTFail("expected linearGrowthDetected, got \(error)")
+            }
+            XCTAssertGreaterThan(
+                report.fittedGrowthBytes,
+                Double(SoakGrowthPolicy.standard.slopeToleranceBytes)
+            )
+            XCTAssertTrue(
+                String(describing: error).contains("fitted slope"),
+                "the typed error must report the fitted slope"
+            )
+        }
+    }
+
+    func testNFRSTAB005MemoryTrendSlopeCheckNotEnforcedBelowSampleFloor() throws {
+        // The same linear leak with fewer samples than the documented 2,000-sample floor:
+        // short (PR-duration) runs are jitter-dominated, so the slope check must not fire.
+        let samples = makeLinearSamples(count: 500, totalGrowthMegabytes: 10)
+
+        let report = try SoakMemoryTrend.evaluate(samples: samples, policy: .standard)
+
+        XCTAssertLessThan(samples.count, SoakMemoryTrend.slopeMinimumSampleCount)
+        XCTAssertEqual(report.fittedGrowthBytes, 10 * 1_024 * 1_024, accuracy: 64 * 1_024)
+    }
+
+    func testNFRSTAB005MemoryTrendJitteryFlatLongRunPassesAllChecks() throws {
+        // A long trend-free series with deterministic +/-5 MiB jitter passes the band,
+        // quartile, and fitted-slope checks alike.
+        let base = 200.0 * 1_024 * 1_024
+        let samples = (0..<2_400).map { index -> SoakMemorySample in
+            let jitter = sin(Double(index) * 0.7) * 5 * 1_024 * 1_024
+            let footprint = UInt64(base + jitter)
+            return SoakMemorySample(
+                iteration: index,
+                physicalFootprintBytes: footprint,
+                residentBytes: footprint
+            )
+        }
+
+        let report = try SoakMemoryTrend.evaluate(samples: samples, policy: .standard)
+
+        XCTAssertLessThan(
+            abs(report.fittedGrowthBytes),
+            Double(SoakGrowthPolicy.standard.slopeToleranceBytes)
+        )
+    }
+
     func testNFRSTAB005MemoryTrendInsufficientSamplesThrowsTypedError() {
         let samples = [makeSample(iteration: 0, megabytes: 200)]
 
@@ -173,6 +229,22 @@ final class SoakCommandTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private func makeLinearSamples(
+        count: Int,
+        totalGrowthMegabytes: Double
+    ) -> [SoakMemorySample] {
+        let base = 200.0 * 1_024 * 1_024
+        let perStep = totalGrowthMegabytes * 1_024 * 1_024 / Double(count - 1)
+        return (0..<count).map { index in
+            let footprint = UInt64(base + Double(index) * perStep)
+            return SoakMemorySample(
+                iteration: index,
+                physicalFootprintBytes: footprint,
+                residentBytes: footprint
+            )
+        }
+    }
 
     private func makeSample(iteration: Int, megabytes: Int64) -> SoakMemorySample {
         let footprint = UInt64(megabytes) * 1_024 * 1_024

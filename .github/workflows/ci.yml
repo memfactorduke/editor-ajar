@@ -166,6 +166,8 @@ jobs:
   soak:
     name: Soak (short, NFR-STAB-005)
     runs-on: macos-14
+    # A stability gate must fail fast on a hang instead of riding the runner default.
+    timeout-minutes: 10
     needs: [build-test, lint]
     steps:
       - uses: actions/checkout@v4

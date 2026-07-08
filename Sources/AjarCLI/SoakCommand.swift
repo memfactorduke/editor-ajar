@@ -342,7 +342,8 @@ private struct SoakOptionParser {
             warmupIterations: warmupIterations,
             policy: SoakGrowthPolicy(
                 growthBandBytes: growthBandBytes,
-                monotonicToleranceBytes: SoakGrowthPolicy.standard.monotonicToleranceBytes
+                monotonicToleranceBytes: SoakGrowthPolicy.standard.monotonicToleranceBytes,
+                slopeToleranceBytes: SoakGrowthPolicy.standard.slopeToleranceBytes
             )
         )
     }

@@ -18,9 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   present — offline video renders through the CLI decode path with disk-frame-cache
   persist/lookup/quarantine/reset churn and RAM-tier eviction across three cycled synthetic
   project variants. After a documented warmup, the mach `task_info` footprint trend must stay
-  within a configurable growth band (default 64 MiB) with no monotonic quartile growth beyond
-  8 MiB; violations fail with typed `SoakError`s carrying the growth curve. CI runs
-  `ajar soak --duration-seconds 150` per PR; the 1-hour run
+  within a configurable growth band (default 64 MiB), with no monotonic quartile growth beyond
+  8 MiB and — from 2,000 post-warmup samples up, so short runs cannot flake on jitter — a
+  least-squares fitted growth of at most 8 MiB across the window, giving the 1-hour acceptance
+  run a documented ~8 MiB/hour slow-linear-leak detection floor (TESTING §8); violations fail
+  with typed `SoakError`s carrying the growth curve. CI runs
+  `ajar soak --duration-seconds 150` per PR (`timeout-minutes: 10`); the 1-hour run
   (`ajar soak --duration-seconds 3600`) is the pre-release NFR-STAB-005 acceptance run.
 - Blade fidelity for retimed and keyframe-animated clips (FR-SPD-002, FR-SPD-003, FR-TL-004,
   FR-XFORM-008), closing #166 and lifting the `bladeUnsupportedForRetimedClip` limitation from
