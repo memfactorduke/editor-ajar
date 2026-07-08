@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-SPD-005 M7-exit verification benchmarks in `ajar bench` (report-only CI job, #175). Seven
+  retimed-playback metrics render one cold frame over synthetic retimed timelines — constant
+  2x, constant 1/2x, a 1x→4x time-remap ramp, reverse, freeze frame, frame-blend at 1/2x, and
+  a nested compound whose inner sequences are retimed — each carrying the 30 fps playback
+  frame budget (1000/30 ms, 5% noise band, docs/PERFORMANCE.md §3/§4). Three realtime audio
+  plan-build metrics measure `RealtimeAudioRenderPlan.preparingCompoundMix` over the live
+  coordinator's two-second look-ahead window against the one-second refill-margin budget: a
+  retimed timeline with a WSOLA pitch-corrected clip (FR-SPD-005), a depth-five nested
+  compound chain (FR-AUD-007, the issue #146 refill-pressure evidence), and a wide
+  sixteen-track timeline (FR-AUD-007). Metric definitions now carry their budget
+  (`budgetMilliseconds`, `noiseBandPercent`, `withinBudget` in the JSON report), so flipping
+  the report-only job to a regression gate is mechanical; existing metrics are unchanged.
 - Pitch-corrected audio for constant clip speed via deterministic WSOLA (FR-SPD-001), closing
   #160 and completing the "pitch-corrected or pitch-shifted" requirement: a new
   `ClipAudioRetimeMode` (`pitchShifted` default | `pitchCorrected`) on `ClipAudioMix`, additive

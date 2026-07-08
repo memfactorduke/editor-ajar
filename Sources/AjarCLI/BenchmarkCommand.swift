@@ -53,64 +53,6 @@ public enum BenchmarkMetricSelection: Equatable, Sendable {
     }
 }
 
-/// One benchmark metric emitted by the report-only harness.
-public enum BenchmarkMetric: String, CaseIterable, Sendable {
-    /// Build graph, decode source, execute render, and wait until the frame is present-ready.
-    case singleFrameRenderSeekLatency = "single-frame-render-seek-latency"
-
-    /// Load and decode the `.ajar` project package.
-    case projectOpenDecodeLoad = "project-open-decode-load"
-
-    /// In-process CLI startup proxy until app signposts are wired.
-    case coldStartProxy = "cold-start-proxy"
-
-    /// Render a transformed four-layer frame as a report-only proxy for timeline playback.
-    case multiLayerTransformPlayback = "multi-layer-transform-playback"
-
-    /// Render a 4K30 two-layer frame with chroma key and choke enabled.
-    case twoLayerChromaKeyChoke4K30Playback = "two-layer-chroma-key-choke-4k30-playback"
-
-    /// Compute FR-COL-003 scopes for one display-encoded frame.
-    case scopeAnalyzerCompute = "scope-analyzer-compute"
-
-    /// Warm a fresh executor's RAM tier from a persisted disk cache entry and serve the frame.
-    case diskCacheWarmStartPlayback = "disk-cache-warm-start-playback"
-
-    var requirementID: String {
-        switch self {
-        case .singleFrameRenderSeekLatency:
-            "NFR-PERF-005"
-        case .projectOpenDecodeLoad:
-            "NFR-PERF-002"
-        case .coldStartProxy:
-            "NFR-PERF-001"
-        case .multiLayerTransformPlayback:
-            "NFR-PERF-003"
-        case .twoLayerChromaKeyChoke4K30Playback:
-            "NFR-PERF-004"
-        case .scopeAnalyzerCompute:
-            "FR-COL-003"
-        case .diskCacheWarmStartPlayback:
-            "FR-PLAY-005"
-        }
-    }
-}
-
-/// Structured JSON benchmark result.
-public struct BenchmarkResult: Codable, Equatable, Sendable {
-    /// Stable metric slug.
-    public let metric: String
-
-    /// Median measured value.
-    public let value: Double
-
-    /// Unit for `value`.
-    public let unit: String
-
-    /// SPEC requirement this metric covers.
-    public let requirementID: String
-}
-
 /// Implements `ajar bench`.
 public enum BenchmarkCommand {
     /// Runs the selected report-only benchmark metrics.
@@ -152,30 +94,41 @@ public enum BenchmarkCommand {
         metric: BenchmarkMetric,
         projectURL: URL
     ) async throws -> BenchmarkResult {
-        let value: Double
-        switch metric {
-        case .singleFrameRenderSeekLatency:
-            value = try await measureSingleFrameRenderSeek(projectURL: projectURL)
-        case .projectOpenDecodeLoad:
-            value = try await measureProjectOpen(projectURL: projectURL)
-        case .coldStartProxy:
-            value = try await measureColdStartProxy()
-        case .multiLayerTransformPlayback:
-            value = try await measureMultiLayerTransformPlayback(projectURL: projectURL)
-        case .twoLayerChromaKeyChoke4K30Playback:
-            value = try await measureTwoLayerChromaKeyChoke4K30Playback()
-        case .scopeAnalyzerCompute:
-            value = try await measureScopeAnalyzerCompute()
-        case .diskCacheWarmStartPlayback:
-            value = try await measureDiskCacheWarmStartPlayback(projectURL: projectURL)
-        }
-
+        let value = try await measureValue(metric: metric, projectURL: projectURL)
+        let budget = metric.budget
         return BenchmarkResult(
             metric: metric.rawValue,
             value: value,
             unit: "ms",
-            requirementID: metric.requirementID
+            requirementID: metric.requirementID,
+            budgetMilliseconds: budget?.targetMilliseconds,
+            noiseBandPercent: budget?.noiseBandPercent,
+            withinBudget: budget.map { value <= $0.allowedMilliseconds }
         )
+    }
+
+    private static func measureValue(
+        metric: BenchmarkMetric,
+        projectURL: URL
+    ) async throws -> Double {
+        switch metric {
+        case .singleFrameRenderSeekLatency:
+            try await measureSingleFrameRenderSeek(projectURL: projectURL)
+        case .projectOpenDecodeLoad:
+            try await measureProjectOpen(projectURL: projectURL)
+        case .coldStartProxy:
+            try await measureColdStartProxy()
+        case .multiLayerTransformPlayback:
+            try await measureMultiLayerTransformPlayback(projectURL: projectURL)
+        case .twoLayerChromaKeyChoke4K30Playback:
+            try await measureTwoLayerChromaKeyChoke4K30Playback()
+        case .scopeAnalyzerCompute:
+            try await measureScopeAnalyzerCompute()
+        case .diskCacheWarmStartPlayback:
+            try await measureDiskCacheWarmStartPlayback(projectURL: projectURL)
+        default:
+            try await measureRetimeMetric(metric)
+        }
     }
 
     private static func measureSingleFrameRenderSeek(projectURL: URL) async throws -> Double {
@@ -384,7 +337,7 @@ public enum BenchmarkCommand {
         }
     }
 
-    private static func medianMilliseconds(
+    static func medianMilliseconds(
         warmupIterations: Int = 1,
         measuredIterations: Int = 3,
         operation: () async throws -> Void

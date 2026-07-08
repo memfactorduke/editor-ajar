@@ -210,7 +210,17 @@ final class AjarCommandTests: XCTestCase {
             "multi-layer-transform-playback": "NFR-PERF-003",
             "two-layer-chroma-key-choke-4k30-playback": "NFR-PERF-004",
             "scope-analyzer-compute": "FR-COL-003",
-            "disk-cache-warm-start-playback": "FR-PLAY-005"
+            "disk-cache-warm-start-playback": "FR-PLAY-005",
+            "retimed-constant-2x-playback-fr-spd-005": "FR-SPD-005",
+            "retimed-constant-half-speed-playback-fr-spd-005": "FR-SPD-005",
+            "retimed-time-remap-ramp-playback-fr-spd-005": "FR-SPD-005",
+            "retimed-reverse-playback-fr-spd-005": "FR-SPD-005",
+            "retimed-freeze-frame-playback-fr-spd-005": "FR-SPD-005",
+            "retimed-frame-blend-half-speed-playback-fr-spd-005": "FR-SPD-005",
+            "retimed-nested-compound-playback-fr-spd-005": "FR-SPD-005",
+            "rt-audio-plan-build-retimed-fr-spd-005": "FR-SPD-005",
+            "rt-audio-plan-build-nested-compound-fr-aud-007": "FR-AUD-007",
+            "rt-audio-plan-build-wide-timeline-fr-aud-007": "FR-AUD-007"
         ]
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))
