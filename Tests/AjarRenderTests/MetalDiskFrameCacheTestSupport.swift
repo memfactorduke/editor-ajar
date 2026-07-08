@@ -174,3 +174,43 @@ private func diskCacheTestRange(durationFrames: Int64) throws -> TimeRange {
         duration: try diskCacheTestTime(durationFrames)
     )
 }
+
+func makeDiskCacheOutput() -> RenderOutputDescriptor {
+    RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1))
+}
+
+/// The tier-shared identity a 1x1 presented BGRA8 frame is stored under.
+func diskCacheEntryIdentity(contentHash: ContentHash) -> RenderFrameCacheIdentity {
+    RenderFrameCacheIdentity(
+        contentHash: contentHash,
+        colorModeRawValue: 0,
+        pixelFormatRawValue: UInt32(clamping: MTLPixelFormat.bgra8Unorm.rawValue),
+        width: 1,
+        height: 1
+    )
+}
+
+func diskCacheEntryFileNames(in directory: URL) throws -> [String] {
+    try diskCacheEntryFileURLs(in: directory).map(\.lastPathComponent)
+}
+
+/// Renders the graph once and persists it through the offline population route, returning
+/// the rendered pixels for later comparison.
+func persistDiskCacheWarmEntry(
+    device: MTLDevice,
+    directory: URL,
+    graph: RenderGraph,
+    output: RenderOutputDescriptor
+) async throws -> [UInt8] {
+    let diskCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
+    let executor = try MetalRenderExecutor(device: device, diskCache: diskCache)
+    let frame = try executor.render(
+        graph: graph,
+        output: output,
+        sourceProvider: ClosureRenderSourceTextureProvider { _ in
+            try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
+        }
+    )
+    try await diskCache.persist(frame: frame, output: output)
+    return try readDiskCacheBGRA8(texture: frame.texture, device: device)
+}

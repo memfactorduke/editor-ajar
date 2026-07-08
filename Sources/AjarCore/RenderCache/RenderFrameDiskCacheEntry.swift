@@ -52,9 +52,11 @@ public enum RenderFrameDiskCacheEntryError: Error, Equatable, Sendable, CustomSt
 /// magic `AJFC` (4 bytes), format version (u32), color mode raw (u32), pixel format raw (u32),
 /// width (u32), height (u32), bytes per row (u32), hash algorithm UTF-8 length (u32) + bytes,
 /// hash digest UTF-8 length (u32) + bytes, payload FNV-1a 64 checksum (u64), payload byte
-/// count (u64), payload bytes. Any truncation, corruption, or identity mismatch decodes as a
+/// count (u64), payload bytes. Any truncation, corruption, inconsistent row geometry
+/// (`bytesPerRow * height` must equal the payload size), or identity mismatch decodes as a
 /// typed error so the platform tier can treat the entry as a miss and quarantine it — the disk
-/// tier never returns wrong pixels.
+/// tier never returns wrong pixels. The platform tier additionally verifies the stride is the
+/// canonical stride for the identity's pixel format and width before upload.
 public struct RenderFrameDiskCacheEntry: Equatable, Sendable {
     /// The current on-disk format version written by `encoded()`.
     public static let formatVersion: UInt32 = 1
@@ -122,6 +124,11 @@ public struct RenderFrameDiskCacheEntry: Equatable, Sendable {
         }
         guard fnv1a64(payload) == checksum else {
             throw RenderFrameDiskCacheEntryError.payloadChecksumMismatch
+        }
+        let (geometryPayloadCount, geometryOverflowed) = bytesPerRow
+            .multipliedReportingOverflow(by: identity.height)
+        guard !geometryOverflowed, payload.count == geometryPayloadCount else {
+            throw RenderFrameDiskCacheEntryError.invalidHeaderField("bytes per row")
         }
         if let expectedIdentity, expectedIdentity != identity {
             throw RenderFrameDiskCacheEntryError.identityMismatch

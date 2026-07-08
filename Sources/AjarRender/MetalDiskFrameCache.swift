@@ -128,6 +128,18 @@ public final class MetalDiskFrameCache {
         ioQueue.sync {}
     }
 
+    /// Test hook: pauses the serial cache queue so cross-thread orderings can be forced
+    /// deterministically. Every `suspendIO` must be balanced by `resumeIO` before the cache is
+    /// released. Never call from production code.
+    func suspendIO() {
+        ioQueue.suspend()
+    }
+
+    /// Test hook: resumes the serial cache queue after `suspendIO`.
+    func resumeIO() {
+        ioQueue.resume()
+    }
+
     /// Persists a completed rendered frame to the disk tier.
     ///
     /// This is the write-behind population route: only offline/background render paths call it,
@@ -212,8 +224,12 @@ public final class MetalDiskFrameCache {
             return nil
         }
 
-        guard let texture = makeTexture(from: entry) else {
-            recordMiss()
+        // A checksummed entry whose row stride is not the canonical stride for its format and
+        // width would upload as garbled pixels; treat it exactly like corruption. A decodable
+        // entry that fails texture upload is quarantined too, so a bad entry can never be
+        // re-read in a loop.
+        guard hasExpectedStride(entry), let texture = makeTexture(from: entry) else {
+            quarantine(fileName: fileName)
             return nil
         }
 
@@ -226,6 +242,17 @@ public final class MetalDiskFrameCache {
         diskHitCountValue += 1
         stateLock.unlock()
         return texture
+    }
+
+    /// Whether the entry's stored row stride is the canonical stride for its pixel format and
+    /// width. The identity comparison alone cannot catch a re-strided payload, so this check is
+    /// part of read-time integrity (a mismatch is quarantined, never uploaded).
+    private func hasExpectedStride(_ entry: RenderFrameDiskCacheEntry) -> Bool {
+        guard let pixelFormat = MTLPixelFormat(rawValue: UInt(entry.identity.pixelFormatRawValue)),
+              let bytesPerPixel = try? Self.bytesPerPixel(for: pixelFormat) else {
+            return false
+        }
+        return entry.bytesPerRow == entry.identity.width * bytesPerPixel
     }
 
     private func makeTexture(from entry: RenderFrameDiskCacheEntry) -> MTLTexture? {
@@ -441,6 +468,11 @@ extension MetalDiskFrameCache {
         removeEntryFiles(named: evictedFileNames)
     }
 }
+
+// Thread-safety: all mutable state (`index`, counters) is guarded by `stateLock`, and every
+// file-system mutation is serialized on the private `ioQueue`; the Metal objects are immutable
+// references. Hence the unchecked conformance.
+extension MetalDiskFrameCache: @unchecked Sendable {}
 
 extension RenderOutputColorMode {
     /// Stable raw value used by the tier-shared cache identity; never renumber existing cases.

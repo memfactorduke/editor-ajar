@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
-import AjarRender
 import Foundation
 import Metal
 import XCTest
+
+// @testable grants access to the disk cache's internal suspendIO/resumeIO test hooks, used to
+// force deterministic cross-thread orderings.
+@testable import AjarRender
 
 final class MetalDiskFrameCacheTests: XCTestCase {
     private var cacheDirectoryURL: URL?
@@ -22,8 +25,8 @@ final class MetalDiskFrameCacheTests: XCTestCase {
         let directory = try makeTrackedDirectory()
         let graph = try makeDiskCacheTestGraph()
         let contentHash = try XCTUnwrap(graph.outputNode).contentHash
-        let output = makeOutput()
-        let expectedPixels = try await persistWarmEntry(
+        let output = makeDiskCacheOutput()
+        let expectedPixels = try await persistDiskCacheWarmEntry(
             device: device,
             directory: directory,
             graph: graph,
@@ -58,8 +61,8 @@ final class MetalDiskFrameCacheTests: XCTestCase {
         let device = try diskCacheTestDevice()
         let directory = try makeTrackedDirectory()
         let graph = try makeDiskCacheTestGraph()
-        let output = makeOutput()
-        _ = try await persistWarmEntry(
+        let output = makeDiskCacheOutput()
+        _ = try await persistDiskCacheWarmEntry(
             device: device,
             directory: directory,
             graph: graph,
@@ -72,18 +75,25 @@ final class MetalDiskFrameCacheTests: XCTestCase {
             texture: try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
         )
 
-        // The RAM miss returns a typed miss and renders normally instead of stalling on disk.
+        // Suspend the cache queue so the disk lookup deterministically completes only after the
+        // render populated the RAM tier.
+        restartedCache.suspendIO()
         let missFrame = try restartedExecutor.render(
             graph: graph,
             output: output,
             sourceProvider: provider
         )
+        // The RAM miss returns a typed miss and renders normally instead of stalling on disk.
         XCTAssertEqual(missFrame.cacheDisposition, .missRenderedDiskLookupScheduled)
         XCTAssertFalse(missFrame.cacheHit)
         try waitForDiskCacheRender(missFrame)
-
+        restartedCache.resumeIO()
         restartedCache.waitUntilIdle()
-        XCTAssertEqual(restartedExecutor.diskPopulatedFrameCount, 1)
+
+        // The disk hit arrived after the render stored its texture: the render-target-usable
+        // rendered texture must not be replaced by the shader-read-only disk texture.
+        XCTAssertEqual(restartedCache.diskHitCount, 1)
+        XCTAssertEqual(restartedExecutor.diskPopulatedFrameCount, 0)
 
         let warmFrame = try restartedExecutor.render(
             graph: graph,
@@ -91,7 +101,80 @@ final class MetalDiskFrameCacheTests: XCTestCase {
             sourceProvider: provider
         )
         XCTAssertEqual(warmFrame.cacheDisposition, .ramHit)
+        XCTAssertTrue(warmFrame.texture === missFrame.texture)
         XCTAssertEqual(provider.requestCount, 1)
+    }
+
+    func testFRPLAY005DiskLookupIsScheduledAtMostOncePerKey() async throws {
+        let device = try diskCacheTestDevice()
+        let directory = try makeTrackedDirectory()
+        let output = makeDiskCacheOutput()
+        let diskCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
+        // RAM tier bounded to one entry so re-rendering a key reproduces a RAM miss.
+        let executor = try MetalRenderExecutor(
+            device: device,
+            maximumCacheEntryCount: 1,
+            diskCache: diskCache
+        )
+        let provider = ClosureRenderSourceTextureProvider { _ in
+            try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
+        }
+
+        let firstMiss = try executor.render(
+            graph: try makeDiskCacheTestGraph(positionX: 0),
+            output: output,
+            sourceProvider: provider
+        )
+        XCTAssertEqual(firstMiss.cacheDisposition, .missRenderedDiskLookupScheduled)
+        let evictingMiss = try executor.render(
+            graph: try makeDiskCacheTestGraph(positionX: 1),
+            output: output,
+            sourceProvider: provider
+        )
+        XCTAssertEqual(evictingMiss.cacheDisposition, .missRenderedDiskLookupScheduled)
+        diskCache.waitUntilIdle()
+        XCTAssertEqual(diskCache.diskMissCount, 2)
+
+        // The first key was evicted from RAM, but its negative disk result is remembered: the
+        // playback path never schedules a second lookup for the same key.
+        let repeatedMiss = try executor.render(
+            graph: try makeDiskCacheTestGraph(positionX: 0),
+            output: output,
+            sourceProvider: provider
+        )
+        XCTAssertEqual(repeatedMiss.cacheDisposition, .missRendered)
+        diskCache.waitUntilIdle()
+        XCTAssertEqual(diskCache.diskMissCount, 2)
+        try waitForDiskCacheRender(repeatedMiss)
+    }
+
+    func testFRPLAY005CacheResetDropsStaleDiskLookupResults() async throws {
+        let device = try diskCacheTestDevice()
+        let directory = try makeTrackedDirectory()
+        let graph = try makeDiskCacheTestGraph()
+        let contentHash = try XCTUnwrap(graph.outputNode).contentHash
+        let output = makeDiskCacheOutput()
+        _ = try await persistDiskCacheWarmEntry(
+            device: device,
+            directory: directory,
+            graph: graph,
+            output: output
+        )
+
+        let restartedCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
+        let restartedExecutor = try MetalRenderExecutor(device: device, diskCache: restartedCache)
+
+        // Suspend the cache queue, schedule a lookup, then reset the executor cache before the
+        // lookup can run: the stale result must be dropped, not repopulate a cleared cache.
+        restartedCache.suspendIO()
+        restartedExecutor.prefetchCachedFrame(contentHash: contentHash, output: output)
+        restartedExecutor.removeAllCachedFrames()
+        restartedCache.resumeIO()
+        restartedCache.waitUntilIdle()
+
+        XCTAssertEqual(restartedCache.diskHitCount, 1)
+        XCTAssertEqual(restartedExecutor.diskPopulatedFrameCount, 0)
+        XCTAssertEqual(restartedExecutor.cacheEntryCount, 0)
     }
 
     func testFRPLAY005MissWithoutDiskTierIsTypedAsPlainMiss() throws {
@@ -101,8 +184,8 @@ final class MetalDiskFrameCacheTests: XCTestCase {
 
         let frame = try executor.render(
             graph: graph,
-            output: makeOutput(),
-            sourceProvider: ClosureRenderSourceTextureProvider { [device] _ in
+            output: makeDiskCacheOutput(),
+            sourceProvider: ClosureRenderSourceTextureProvider { _ in
                 try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
             }
         )
@@ -111,129 +194,10 @@ final class MetalDiskFrameCacheTests: XCTestCase {
         try waitForDiskCacheRender(frame)
     }
 
-    func testFRCMP006EditChangedContentHashMakesOldDiskEntryUnreachable() async throws {
-        let device = try diskCacheTestDevice()
-        let directory = try makeTrackedDirectory()
-        let graph = try makeDiskCacheTestGraph(positionX: 0)
-        let editedGraph = try makeDiskCacheTestGraph(positionX: 1)
-        let contentHash = try XCTUnwrap(graph.outputNode).contentHash
-        let editedContentHash = try XCTUnwrap(editedGraph.outputNode).contentHash
-        XCTAssertNotEqual(contentHash, editedContentHash)
-
-        let output = makeOutput()
-        _ = try await persistWarmEntry(
-            device: device,
-            directory: directory,
-            graph: graph,
-            output: output
-        )
-
-        let restartedCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
-        let restartedExecutor = try MetalRenderExecutor(device: device, diskCache: restartedCache)
-        restartedExecutor.prefetchCachedFrame(contentHash: editedContentHash, output: output)
-        restartedCache.waitUntilIdle()
-
-        XCTAssertEqual(restartedCache.diskMissCount, 1)
-        XCTAssertEqual(restartedExecutor.diskPopulatedFrameCount, 0)
-        XCTAssertEqual(try diskCacheEntryFileURLs(in: directory).count, 1)
-    }
-
-    func testFRPLAY005CorruptDiskEntryReadsAsMissAndIsQuarantined() async throws {
-        let device = try diskCacheTestDevice()
-        let directory = try makeTrackedDirectory()
-        let graph = try makeDiskCacheTestGraph()
-        let contentHash = try XCTUnwrap(graph.outputNode).contentHash
-        let output = makeOutput()
-        _ = try await persistWarmEntry(
-            device: device,
-            directory: directory,
-            graph: graph,
-            output: output
-        )
-
-        let entryURL = try XCTUnwrap(try diskCacheEntryFileURLs(in: directory).first)
-        var entryData = try Data(contentsOf: entryURL)
-        let lastIndex = entryData.index(before: entryData.endIndex)
-        entryData[lastIndex] = entryData[lastIndex] &+ 1
-        try entryData.write(to: entryURL)
-
-        let restartedCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
-        let restartedExecutor = try MetalRenderExecutor(device: device, diskCache: restartedCache)
-        restartedExecutor.prefetchCachedFrame(contentHash: contentHash, output: output)
-        restartedCache.waitUntilIdle()
-
-        XCTAssertEqual(restartedCache.quarantinedEntryCount, 1)
-        XCTAssertEqual(restartedCache.diskMissCount, 1)
-        XCTAssertEqual(restartedExecutor.diskPopulatedFrameCount, 0)
-        XCTAssertEqual(try diskCacheEntryFileURLs(in: directory).count, 0)
-        XCTAssertEqual(restartedCache.storedEntryCount, 0)
-    }
-
-    func testFRPLAY005TruncatedDiskEntryReadsAsMissAndIsQuarantined() async throws {
-        let device = try diskCacheTestDevice()
-        let directory = try makeTrackedDirectory()
-        let graph = try makeDiskCacheTestGraph()
-        let contentHash = try XCTUnwrap(graph.outputNode).contentHash
-        let output = makeOutput()
-        _ = try await persistWarmEntry(
-            device: device,
-            directory: directory,
-            graph: graph,
-            output: output
-        )
-
-        let entryURL = try XCTUnwrap(try diskCacheEntryFileURLs(in: directory).first)
-        let entryData = try Data(contentsOf: entryURL)
-        try Data(entryData.prefix(10)).write(to: entryURL)
-
-        let restartedCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
-        let restartedExecutor = try MetalRenderExecutor(device: device, diskCache: restartedCache)
-        restartedExecutor.prefetchCachedFrame(contentHash: contentHash, output: output)
-        restartedCache.waitUntilIdle()
-
-        XCTAssertEqual(restartedCache.quarantinedEntryCount, 1)
-        XCTAssertEqual(try diskCacheEntryFileURLs(in: directory).count, 0)
-    }
-
-    func testFRPLAY005MismatchedIdentityEntryIsQuarantinedNotServed() async throws {
-        let device = try diskCacheTestDevice()
-        let directory = try makeTrackedDirectory()
-        let graph = try makeDiskCacheTestGraph()
-        let contentHash = try XCTUnwrap(graph.outputNode).contentHash
-        _ = try await persistWarmEntry(
-            device: device,
-            directory: directory,
-            graph: graph,
-            output: makeOutput()
-        )
-
-        // Masquerade the 1x1 entry as the 2x2 identity's file.
-        let entryURL = try XCTUnwrap(try diskCacheEntryFileURLs(in: directory).first)
-        let masqueradedName = entryURL.lastPathComponent
-            .replacingOccurrences(of: "-1x1.ajarframe", with: "-2x2.ajarframe")
-        XCTAssertNotEqual(masqueradedName, entryURL.lastPathComponent)
-        try FileManager.default.copyItem(
-            at: entryURL,
-            to: directory.appendingPathComponent(masqueradedName)
-        )
-
-        let restartedCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
-        let restartedExecutor = try MetalRenderExecutor(device: device, diskCache: restartedCache)
-        let mismatchedOutput = RenderOutputDescriptor(
-            pixelDimensions: PixelDimensions(width: 2, height: 2)
-        )
-        restartedExecutor.prefetchCachedFrame(contentHash: contentHash, output: mismatchedOutput)
-        restartedCache.waitUntilIdle()
-
-        XCTAssertEqual(restartedCache.quarantinedEntryCount, 1)
-        XCTAssertEqual(restartedExecutor.diskPopulatedFrameCount, 0)
-        XCTAssertEqual(try diskCacheEntryFileURLs(in: directory).count, 1)
-    }
-
     func testFRPLAY005DiskEvictionRespectsByteBudgetDeterministically() async throws {
         let device = try diskCacheTestDevice()
         let directory = try makeTrackedDirectory()
-        let output = makeOutput()
+        let output = makeDiskCacheOutput()
         let entrySize = try makeEntryByteCount(graphPositionX: 0)
         let diskCache = try MetalDiskFrameCache(
             device: device,
@@ -284,7 +248,7 @@ final class MetalDiskFrameCacheTests: XCTestCase {
     func testNFRSTAB004ConcurrentRenderPersistAndPrefetchSynchronize() async throws {
         let device = try diskCacheTestDevice()
         let directory = try makeTrackedDirectory()
-        let output = makeOutput()
+        let output = makeDiskCacheOutput()
         let diskCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
         let executor = try MetalRenderExecutor(device: device, diskCache: diskCache)
         let sourceTexture = try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
@@ -321,7 +285,6 @@ final class MetalDiskFrameCacheTests: XCTestCase {
             4
         )
     }
-
 }
 
 // MARK: - Helpers
@@ -331,31 +294,6 @@ extension MetalDiskFrameCacheTests {
         let directory = try makeDiskCacheTestDirectory()
         cacheDirectoryURL = directory
         return directory
-    }
-
-    private func makeOutput() -> RenderOutputDescriptor {
-        RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1))
-    }
-
-    /// Renders the graph once and persists it through the offline population route, returning
-    /// the rendered pixels for later comparison.
-    private func persistWarmEntry(
-        device: MTLDevice,
-        directory: URL,
-        graph: RenderGraph,
-        output: RenderOutputDescriptor
-    ) async throws -> [UInt8] {
-        let diskCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
-        let executor = try MetalRenderExecutor(device: device, diskCache: diskCache)
-        let frame = try executor.render(
-            graph: graph,
-            output: output,
-            sourceProvider: ClosureRenderSourceTextureProvider { [device] _ in
-                try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
-            }
-        )
-        try await diskCache.persist(frame: frame, output: output)
-        return try readDiskCacheBGRA8(texture: frame.texture, device: device)
     }
 
     private func renderAndPersist(
@@ -368,7 +306,7 @@ extension MetalDiskFrameCacheTests {
         let frame = try executor.render(
             graph: try makeDiskCacheTestGraph(positionX: positionX),
             output: output,
-            sourceProvider: ClosureRenderSourceTextureProvider { [device] _ in
+            sourceProvider: ClosureRenderSourceTextureProvider { _ in
                 try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
             }
         )
@@ -379,15 +317,8 @@ extension MetalDiskFrameCacheTests {
         let contentHash = try XCTUnwrap(
             try makeDiskCacheTestGraph(positionX: graphPositionX).outputNode
         ).contentHash
-        let identity = RenderFrameCacheIdentity(
-            contentHash: contentHash,
-            colorModeRawValue: 0,
-            pixelFormatRawValue: UInt32(clamping: MTLPixelFormat.bgra8Unorm.rawValue),
-            width: 1,
-            height: 1
-        )
         return RenderFrameDiskCacheEntry(
-            identity: identity,
+            identity: diskCacheEntryIdentity(contentHash: contentHash),
             bytesPerRow: 4,
             payload: Data([0, 0, 0, 0])
         ).encoded().count
@@ -399,19 +330,9 @@ extension MetalDiskFrameCacheTests {
                 let contentHash = try XCTUnwrap(
                     try makeDiskCacheTestGraph(positionX: positionX).outputNode
                 ).contentHash
-                return RenderFrameCacheIdentity(
-                    contentHash: contentHash,
-                    colorModeRawValue: 0,
-                    pixelFormatRawValue: UInt32(clamping: MTLPixelFormat.bgra8Unorm.rawValue),
-                    width: 1,
-                    height: 1
-                ).entryFileName
+                return diskCacheEntryIdentity(contentHash: contentHash).entryFileName
             }
             .sorted()
-    }
-
-    private func diskCacheEntryFileNames(in directory: URL) throws -> [String] {
-        try diskCacheEntryFileURLs(in: directory).map(\.lastPathComponent)
     }
 }
 

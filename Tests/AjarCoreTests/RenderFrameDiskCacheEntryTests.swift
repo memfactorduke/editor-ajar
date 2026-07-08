@@ -91,6 +91,22 @@ final class RenderFrameDiskCacheEntryTests: XCTestCase {
         }
     }
 
+    func testFRPLAY005InconsistentRowGeometryDecodesAsTypedError() throws {
+        // Header declares a row stride that does not tile the payload for the entry's height.
+        let entry = RenderFrameDiskCacheEntry(
+            identity: try makeIdentity(width: 2, height: 1),
+            bytesPerRow: 5,
+            payload: Data([1, 2, 3, 4, 5, 6, 7, 8])
+        )
+
+        XCTAssertThrowsError(try RenderFrameDiskCacheEntry.decode(entry.encoded())) { error in
+            XCTAssertEqual(
+                error as? RenderFrameDiskCacheEntryError,
+                .invalidHeaderField("bytes per row")
+            )
+        }
+    }
+
     func testFRPLAY005EntryFileNameIsDeterministicAndIdentityComplete() throws {
         let identity = try makeIdentity(width: 2, height: 1)
         let sameIdentity = try makeIdentity(width: 2, height: 1)
