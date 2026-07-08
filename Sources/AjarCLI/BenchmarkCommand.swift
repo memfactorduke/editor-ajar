@@ -73,6 +73,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Compute FR-COL-003 scopes for one display-encoded frame.
     case scopeAnalyzerCompute = "scope-analyzer-compute"
 
+    /// Warm a fresh executor's RAM tier from a persisted disk cache entry and serve the frame.
+    case diskCacheWarmStartPlayback = "disk-cache-warm-start-playback"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -87,6 +90,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "NFR-PERF-004"
         case .scopeAnalyzerCompute:
             "FR-COL-003"
+        case .diskCacheWarmStartPlayback:
+            "FR-PLAY-005"
         }
     }
 }
@@ -161,6 +166,8 @@ public enum BenchmarkCommand {
             value = try await measureTwoLayerChromaKeyChoke4K30Playback()
         case .scopeAnalyzerCompute:
             value = try await measureScopeAnalyzerCompute()
+        case .diskCacheWarmStartPlayback:
+            value = try await measureDiskCacheWarmStartPlayback(projectURL: projectURL)
         }
 
         return BenchmarkResult(
@@ -255,6 +262,49 @@ public enum BenchmarkCommand {
                 output: RenderOutputDescriptor(pixelDimensions: fixture.dimensions),
                 sourceProvider: fixture.sourceProvider
             )
+            try await frame.waitForCompletion()
+        }
+    }
+
+    private static func measureDiskCacheWarmStartPlayback(projectURL: URL) async throws -> Double {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw MetalRenderError.metalDeviceUnavailable
+        }
+
+        let fixture = try await BenchmarkDiskCacheFixture(projectURL: projectURL, device: device)
+        defer {
+            fixture.removeGeneratedFiles()
+        }
+
+        // Each iteration simulates a process restart: a fresh executor with an empty RAM tier
+        // warms itself from the persisted disk entry and serves the frame without decoding or
+        // rendering (FR-PLAY-005). The source provider throws to prove no source is touched.
+        return try await medianMilliseconds {
+            let diskCache = try MetalDiskFrameCache(
+                device: device,
+                directoryURL: fixture.cacheDirectoryURL
+            )
+            let executor = try MetalRenderExecutor(device: device, diskCache: diskCache)
+            let graph = try buildRenderGraph(
+                for: fixture.sequence,
+                at: fixture.renderTime,
+                in: fixture.project
+            )
+            guard let contentHash = graph.outputNode?.contentHash else {
+                throw AjarCLIError.benchmarkFailed("benchmark graph has no output node")
+            }
+            executor.prefetchCachedFrame(contentHash: contentHash, output: fixture.output)
+            diskCache.waitUntilIdle()
+            let frame = try executor.render(
+                graph: graph,
+                output: fixture.output,
+                sourceProvider: ClosureRenderSourceTextureProvider { _ in
+                    throw AjarCLIError.benchmarkFailed("warm disk start must not decode sources")
+                }
+            )
+            guard frame.cacheHit else {
+                throw AjarCLIError.benchmarkFailed("warm disk start did not hit the frame cache")
+            }
             try await frame.waitForCompletion()
         }
     }

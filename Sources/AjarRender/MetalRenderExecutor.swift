@@ -167,6 +167,18 @@ private struct FrameCacheKey: Hashable {
         self.textureDescriptor = TextureDescriptorKey(output: output)
         self.colorMode = output.colorMode
     }
+
+    /// The tier-shared identity for this key; must stay field-for-field identical to
+    /// `MetalDiskFrameCache.identity(contentHash:output:)` used by the persist route.
+    var diskIdentity: RenderFrameCacheIdentity {
+        RenderFrameCacheIdentity(
+            contentHash: contentHash,
+            colorModeRawValue: colorMode.cacheIdentityRawValue,
+            pixelFormatRawValue: UInt32(clamping: textureDescriptor.pixelFormatRawValue),
+            width: textureDescriptor.pixelDimensions.width,
+            height: textureDescriptor.pixelDimensions.height
+        )
+    }
 }
 
 struct AjarCompositeUniformLayout: Equatable, Sendable {
@@ -239,6 +251,20 @@ public struct ClosureRenderSourceTextureProvider: RenderSourceTextureProvider {
     }
 }
 
+/// Typed outcome of the RAM cache lookup for one render call (FR-PLAY-005).
+public enum RenderFrameCacheDisposition: Equatable, Sendable {
+    /// The frame was served from the RAM tier.
+    case ramHit
+
+    /// The RAM tier missed and the frame was rendered; no disk tier is attached.
+    case missRendered
+
+    /// The RAM tier missed and the frame was rendered; an asynchronous disk-tier lookup was
+    /// scheduled so a warm entry can populate the RAM tier for subsequent requests. The render
+    /// path never waits for the disk tier (ADR-0012).
+    case missRenderedDiskLookupScheduled
+}
+
 /// Result of scheduling one render graph execution.
 public struct RenderedFrame {
     /// The output texture containing the rendered frame.
@@ -250,6 +276,9 @@ public struct RenderedFrame {
     /// Whether the texture was returned from the content-hash cache.
     public let cacheHit: Bool
 
+    /// Typed RAM-tier lookup outcome, including whether a disk-tier lookup was scheduled.
+    public let cacheDisposition: RenderFrameCacheDisposition
+
     /// Command buffer that writes `texture` when `cacheHit` is false.
     public let commandBuffer: MTLCommandBuffer?
 
@@ -259,14 +288,15 @@ public struct RenderedFrame {
     init(
         texture: MTLTexture,
         contentHash: ContentHash,
-        cacheHit: Bool,
+        cacheDisposition: RenderFrameCacheDisposition,
         commandBuffer: MTLCommandBuffer?,
         completion: RenderCompletion?,
         retainedObjects: [Any]
     ) {
         self.texture = texture
         self.contentHash = contentHash
-        self.cacheHit = cacheHit
+        self.cacheHit = cacheDisposition == .ramHit
+        self.cacheDisposition = cacheDisposition
         self.commandBuffer = commandBuffer
         self.completion = completion
         self.retainedObjects = retainedObjects
@@ -296,6 +326,10 @@ public final class MetalRenderExecutor {
     private var cacheHitCountValue = 0
     private var cacheMissCountValue = 0
     private var outputPassCountValue = 0
+    private let diskCache: MetalDiskFrameCache?
+    private var diskLookupAttemptedKeys: Set<FrameCacheKey> = []
+    private var diskCacheGenerationValue: UInt64 = 0
+    private var diskPopulatedFrameCountValue = 0
     private let texturePoolLock = NSLock()
     private var texturePool: [TextureDescriptorKey: [MTLTexture]] = [:]
     private var texturePoolAccessOrder: [TextureDescriptorKey] = []
@@ -362,15 +396,17 @@ public final class MetalRenderExecutor {
         try self.init(device: device)
     }
 
-    /// Creates an executor with an explicit Metal device.
+    /// Creates an executor with an explicit Metal device and an optional disk cache tier.
     public init(
         device: MTLDevice,
         maximumCacheEntryCount: Int = 16,
-        maximumPooledTextureCount: Int = 16
+        maximumPooledTextureCount: Int = 16,
+        diskCache: MetalDiskFrameCache? = nil
     ) throws {
         self.device = device
         self.maximumCacheEntryCount = max(1, maximumCacheEntryCount)
         self.maximumPooledTextureCount = max(0, maximumPooledTextureCount)
+        self.diskCache = diskCache
 
         guard let commandQueue = device.makeCommandQueue() else {
             throw MetalRenderError.commandQueueCreationFailed
@@ -396,18 +432,27 @@ public final class MetalRenderExecutor {
     ) throws -> RenderedFrame {
         let outputNode = try outputNode(in: graph)
         let cacheKey = FrameCacheKey(contentHash: outputNode.contentHash, output: output)
-        if let cachedTexture = cachedTexture(for: cacheKey) {
-            recordCacheHit()
+        let lookup = lookUpFrameCache(for: cacheKey)
+        if case .hit(let cachedTexture) = lookup {
             return RenderedFrame(
                 texture: cachedTexture,
                 contentHash: outputNode.contentHash,
-                cacheHit: true,
+                cacheDisposition: .ramHit,
                 commandBuffer: nil,
                 completion: nil,
                 retainedObjects: []
             )
         }
 
+        // A RAM miss never waits for the disk tier: at most one lookup is ever scheduled per key
+        // (negative results are remembered under the same lock acquisition the RAM lookup already
+        // takes), and a warm entry populates the RAM cache asynchronously for subsequent frames
+        // (FR-PLAY-005, ADR-0012).
+        var diskLookupScheduled = false
+        if case .miss(scheduleDiskLookup: true, let generation) = lookup {
+            diskLookupScheduled = true
+            dispatchDiskLookup(for: cacheKey, generation: generation)
+        }
         let texture = try makeOutputTexture(output)
         let commandBuffer = try makeCommandBuffer()
         let completion = RenderCompletion()
@@ -429,14 +474,104 @@ public final class MetalRenderExecutor {
         return RenderedFrame(
             texture: texture,
             contentHash: outputNode.contentHash,
-            cacheHit: false,
+            cacheDisposition: diskLookupScheduled
+                ? .missRenderedDiskLookupScheduled
+                : .missRendered,
             commandBuffer: commandBuffer,
             completion: completion,
             retainedObjects: retainedObjects
         )
     }
 
-    /// Removes all cached frame textures.
+    /// Requests background warm-up of one frame from the disk tier into the RAM tier.
+    ///
+    /// Used by cache-warming/background routes (ADR-0012): the lookup runs off the playback
+    /// path and a valid entry appears as a RAM hit on later `render` calls. A no-op when the
+    /// frame is already resident, no disk cache is attached, or the key has already been looked
+    /// up in this cache generation (see `removeAllCachedFrames`).
+    public func prefetchCachedFrame(contentHash: ContentHash, output: RenderOutputDescriptor) {
+        let cacheKey = FrameCacheKey(contentHash: contentHash, output: output)
+        executorStateLock.lock()
+        let generation = diskCacheGenerationValue
+        let shouldSchedule = frameCache[cacheKey] == nil
+            && diskCache != nil
+            && !diskLookupAttemptedKeys.contains(cacheKey)
+        if shouldSchedule {
+            diskLookupAttemptedKeys.insert(cacheKey)
+        }
+        executorStateLock.unlock()
+        guard shouldSchedule else {
+            return
+        }
+        dispatchDiskLookup(for: cacheKey, generation: generation)
+    }
+
+    /// Number of RAM cache entries populated from the disk tier.
+    public var diskPopulatedFrameCount: Int {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        return diskPopulatedFrameCountValue
+    }
+
+    private enum FrameCacheLookup {
+        case hit(MTLTexture)
+        case miss(scheduleDiskLookup: Bool, diskCacheGeneration: UInt64)
+    }
+
+    /// One locked RAM lookup that also decides disk scheduling, so the playback path performs
+    /// no additional lock acquisitions for the disk tier: the negative-result bookkeeping is
+    /// O(1) work under the lock `render` already takes, and each key is scheduled at most once
+    /// per cache generation.
+    private func lookUpFrameCache(for key: FrameCacheKey) -> FrameCacheLookup {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        if let texture = frameCache[key] {
+            markCacheEntryUsedLocked(key)
+            cacheHitCountValue += 1
+            return .hit(texture)
+        }
+
+        let generation = diskCacheGenerationValue
+        guard diskCache != nil, !diskLookupAttemptedKeys.contains(key) else {
+            return .miss(scheduleDiskLookup: false, diskCacheGeneration: generation)
+        }
+        diskLookupAttemptedKeys.insert(key)
+        return .miss(scheduleDiskLookup: true, diskCacheGeneration: generation)
+    }
+
+    private func dispatchDiskLookup(for cacheKey: FrameCacheKey, generation: UInt64) {
+        guard let diskCache else {
+            return
+        }
+        diskCache.scheduleLoad(for: cacheKey.diskIdentity) { [weak self] texture in
+            self?.completeDiskLookup(cacheKey: cacheKey, generation: generation, texture: texture)
+        }
+    }
+
+    private func completeDiskLookup(
+        cacheKey: FrameCacheKey,
+        generation: UInt64,
+        texture: MTLTexture?
+    ) {
+        executorStateLock.lock()
+        defer { executorStateLock.unlock() }
+        // Drop stale results: the cache was reset since this lookup was scheduled, or a render
+        // populated the key meanwhile (the rendered texture is render-target-usable and must not
+        // be replaced by the shader-read-only disk texture).
+        guard generation == diskCacheGenerationValue,
+              frameCache[cacheKey] == nil,
+              let texture else {
+            return
+        }
+        frameCache[cacheKey] = texture
+        markCacheEntryUsedLocked(cacheKey)
+        evictExpiredCacheEntriesLocked()
+        diskPopulatedFrameCountValue += 1
+    }
+
+    /// Removes all cached frame textures and starts a new disk-tier cache generation: pending
+    /// disk lookups from earlier generations are dropped and per-key negative results are
+    /// forgotten.
     public func removeAllCachedFrames() {
         executorStateLock.lock()
         defer { executorStateLock.unlock() }
@@ -444,12 +579,8 @@ public final class MetalRenderExecutor {
         frameCacheAccessOrder.removeAll()
         cacheHitCountValue = 0
         cacheMissCountValue = 0
-    }
-
-    private func recordCacheHit() {
-        executorStateLock.lock()
-        defer { executorStateLock.unlock() }
-        cacheHitCountValue += 1
+        diskLookupAttemptedKeys.removeAll()
+        diskCacheGenerationValue += 1
     }
 
     private func recordCacheMiss() {
@@ -462,16 +593,6 @@ public final class MetalRenderExecutor {
         executorStateLock.lock()
         defer { executorStateLock.unlock() }
         outputPassCountValue += 1
-    }
-
-    private func cachedTexture(for key: FrameCacheKey) -> MTLTexture? {
-        executorStateLock.lock()
-        defer { executorStateLock.unlock() }
-        guard let texture = frameCache[key] else {
-            return nil
-        }
-        markCacheEntryUsedLocked(key)
-        return texture
     }
 
     private func storeCachedTexture(_ texture: MTLTexture, for key: FrameCacheKey) {

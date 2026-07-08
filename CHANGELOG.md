@@ -29,6 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keyframe shapes the approach into the cut, mirroring the
   FR-SPD-002 final-keyframe-at-source-end rule. The now-unreachable
   `bladeUnsupportedForRetimedClip` typed error is removed.
+- Disk-backed render cache behind the RAM tier (FR-PLAY-005, FR-CMP-006, ADR-0009): a new
+  `MetalDiskFrameCache` persists rendered frames keyed by the same identity as the executor's
+  RAM cache (content hash + color mode + pixel format + dimensions) in a versioned, checksummed
+  on-disk format (`AJFC` v1). The playback path never blocks on disk (ADR-0012): a RAM miss
+  returns a typed `RenderFrameCacheDisposition` miss and renders normally while an asynchronous
+  disk lookup warms the RAM tier for subsequent frames; population is write-behind via
+  `persist(frame:output:)`, called only from offline/background render routes so CPU readback
+  never runs on the playback path. Corrupt, truncated, or identity-mismatched entries read as
+  misses and are quarantined (deleted), never wrong pixels. Eviction is deterministic
+  byte-budgeted LRU (pure `ByteBudgetedLRUIndex` in `AjarCore`, 512 MiB default budget), and
+  `MetalRenderExecutor.prefetchCachedFrame` warms frames across process restarts. A new
+  `disk-cache-warm-start-playback` benchmark shows warm-disk start beating a cold render.
 - Landed the final slice of the FR-AUD-002 audio crossfade work per ADR-0015, closing #102:
   new `setClipAudioCrossfade` / `removeClipAudioCrossfade` edit commands create and delete a
   §5 pair atomically — the outgoing clip gets the owning trailing record, the incoming clip
