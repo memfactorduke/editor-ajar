@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Blade fidelity for retimed and keyframe-animated clips (FR-SPD-002, FR-SPD-003, FR-TL-004,
+  FR-XFORM-008), closing #166 and lifting the `bladeUnsupportedForRetimedClip` limitation from
+  the ADR-0015 §8 blade work: blading a **reversed** clip now splits the source range
+  direction-aware — the left half receives the TAIL of the source range (`[e − L·speed, e)` for
+  a blade at timeline offset `L` of source `[s, e)`) so both halves reproduce the unbladed
+  timeline-to-source mapping RationalTime-exactly, and the redistributed crossfade pair still
+  clamps against the reversed tail handle past `sourceRange.start`; blading a **time-remapped**
+  clip splits the FR-SPD-002 curve at the blade offset — a boundary keyframe evaluated at the
+  split point re-terminates the left curve and anchors the right curve at its new local time
+  zero, with every curve invariant preserved; blading a **keyframe-animated** clip splits every
+  animatable transform/effects parameter at the cut — each half keeps its own keyframes plus a
+  shared boundary keyframe evaluated at the cut, and the segment crossing the cut has its
+  easing subdivided (De Casteljau split of the cubic Bezier timing curve, renormalized to unit
+  curves — exact for overshooting easings too, with an interior keyframe baked when the
+  overshoot returns to an endpoint progress exactly at the cut and a renormalization
+  denominator vanishes) so the rendered animation is unchanged by the blade. Keyframe-time
+  validation now
+  accepts the closed range `[start, end]` — the exclusive end is never sampled, but an end
+  keyframe shapes the approach into the cut, mirroring the
+  FR-SPD-002 final-keyframe-at-source-end rule. The now-unreachable
+  `bladeUnsupportedForRetimedClip` typed error is removed.
 - Landed the final slice of the FR-AUD-002 audio crossfade work per ADR-0015, closing #102:
   new `setClipAudioCrossfade` / `removeClipAudioCrossfade` edit commands create and delete a
   §5 pair atomically — the outgoing clip gets the owning trailing record, the incoming clip
@@ -28,9 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no automatic crossfade on new cuts (the trim/move/set-speed rows were added to the ADR §8
   table). Blade now preserves non-retime clip attributes on both halves (base transform,
   effects, gain/pan automation; `fadeIn` stays on the left half, `fadeOut` moves to the
-  right half, a bladed freeze frame holds the same frame on both halves) and rejects
-  reversed or time-remapped clips with the typed `bladeUnsupportedForRetimedClip` error
-  instead of silently producing wrong source ranges (FR-SPD-003 follow-up: #166). Every
+  right half, a bladed freeze frame holds the same frame on both halves); reversed and
+  time-remapped clips were initially rejected with a typed error rather than silently
+  producing wrong source ranges (the limitation was lifted by #166 above). Every
   matrix behavior is taxonomy-validated and undo-exact, and a new meter-parity test asserts
   `AudioMixerMeterAnalyzer` agrees with the rendered mix across a crossfaded cut including
   the fade-tail region.

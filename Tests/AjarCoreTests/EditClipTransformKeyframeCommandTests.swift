@@ -62,9 +62,11 @@ final class EditClipTransformKeyframeCommandTests: XCTestCase {
     }
 
     func testFRKEY002OutOfRangeTransformKeyframeReturnsTypedError() throws {
+        // The clip covers [0, 10); frame 11 is past even the closed keyframe range
+        // [start, end] (an exact-end keyframe is allowed as a blade boundary, FR-XFORM-008).
         let fixture = try makeEditFixture(seed: 917)
         let keyframe = try transformKeyframe(
-            frame: 10,
+            frame: 11,
             value: .position(.zero),
             interpolation: .linear
         )
@@ -75,10 +77,29 @@ final class EditClipTransformKeyframeCommandTests: XCTestCase {
             expected: .transformKeyframeTimeOutsideClip(
                 clipID: fixture.clipID,
                 parameter: .position,
-                time: try editTime(10),
+                time: try editTime(11),
                 clipRange: try editRange(startFrame: 0, durationFrames: 10)
             )
         )
+    }
+
+    func testFRXFORM008TransformKeyframeAtExactClipEndIsAllowed() throws {
+        // The timeline end is exclusive and never sampled, but an end keyframe shapes the
+        // approach into the cut — blade boundary keyframes land there (FR-XFORM-008).
+        let fixture = try makeEditFixture(seed: 922)
+        let keyframe = try positionKeyframe(frame: 10)
+
+        let edited = try apply(
+            addPositionKeyframeCommand(keyframe, fixture: fixture),
+            to: fixture.project
+        )
+
+        let editedClip = try requiredClip(fixture.clipID, in: edited, fixture: fixture)
+        XCTAssertEqual(
+            editedClip.transformAnimation.position.keyframes.map(\.time),
+            [try editTime(10)]
+        )
+        XCTAssertEqual(edited.validate(), .valid)
     }
 
     func testFRKEY002MismatchedTransformKeyframeValueReturnsTypedError() throws {
@@ -164,7 +185,7 @@ final class EditClipTransformKeyframeCommandTests: XCTestCase {
                     trackID: fixture.videoTrackID,
                     clipID: invalidClip.id,
                     parameter: .opacity,
-                    time: try editTime(10),
+                    time: try editTime(11),
                     clipRange: invalidClip.timelineRange
                 )
             )
@@ -311,11 +332,13 @@ private func deletePositionKeyframe(
 }
 
 private func makeClipWithOutOfRangeOpacityKeyframe(fixture: EditFixture) throws -> Clip {
+    // Frame 11 is past the clip's closed keyframe range [0, 10] — an exact-end keyframe is
+    // allowed as a blade boundary (FR-XFORM-008), so out-of-range means strictly beyond it.
     let animation = try AnimatableClipTransform(
         opacity: Animatable(
             base: .one,
             keyframes: [
-                Keyframe(time: editTime(10), value: .one, interpolation: .linear)
+                Keyframe(time: editTime(11), value: .one, interpolation: .linear)
             ]
         )
     )

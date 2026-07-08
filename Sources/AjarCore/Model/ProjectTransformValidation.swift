@@ -69,7 +69,12 @@ extension ProjectValidator {
         state: inout ValidationState
     ) {
         do {
-            if !(try clip.timelineRange.contains(time)) {
+            // Keyframes may sit anywhere in the closed range [start, end]. The timeline end
+            // is exclusive and never sampled, but a keyframe exactly at the end shapes the
+            // approach into the cut — blade boundary keyframes land there (FR-XFORM-008),
+            // mirroring the FR-SPD-002 final-keyframe-at-source-end rule.
+            let clipEnd = try clip.timelineRange.end()
+            if time < clip.timelineRange.start || time > clipEnd {
                 state.errors.append(
                     .transformKeyframeTimeOutsideClip(
                         sequenceID: context.sequenceID,

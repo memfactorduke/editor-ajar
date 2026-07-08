@@ -9,7 +9,8 @@ import XCTest
 /// half, the trailing record moves to the right half with the partner mirror
 /// re-pointed, the new cut gets no automatic crossfade, blading inside an active
 /// transition region is rejected typed, and non-crossfade clip attributes are
-/// preserved on both halves (reverse/time-remap blades are rejected, FR-SPD-003).
+/// preserved on both halves — including reversed clips, whose redistributed pair still
+/// clamps against the reversed tail handle past `sourceRange.start` (FR-SPD-003).
 final class AudioCrossfadeBladeEditTests: XCTestCase {
     private var sequenceID = UUID()
     private var trackID = UUID()
@@ -184,37 +185,73 @@ final class AudioCrossfadeBladeEditTests: XCTestCase {
         XCTAssertEqual(right.audioMix.fadeOut, audioMix.fadeOut)
     }
 
-    func testFRAUD002BladeReversedOrRemappedClipIsRejectedTyped() throws {
-        let reversed = try makeAdjacentPairFixture(
-            outgoingSourceStartFrame: 20,
-            reverse: true
+    func testFRSPD003BladeReversedClipRedistributesPairAndKeepsReversedTailHandle() throws {
+        // Reversed outgoing clip on [0, 10) with source [3, 13) and a 3-frame trailing
+        // pair — exactly the reversed tail handle `sourceRange.start` = 3 that keeps
+        // reading backward past the source start (ADR-0015 §3). Blading at 5 gives the
+        // left half the source TAIL [8, 13) and the right half [3, 8): the right half's
+        // source start is unchanged, so the redistributed pair keeps its full duration.
+        let fixture = try makeAdjacentPairFixture(
+            outgoingSourceStartFrame: 3,
+            reverse: true,
+            outgoingMix: try outgoingCrossfadeMix(partner: incomingID, durationFrames: 3),
+            incomingMix: try incomingCrossfadeMix(partner: outgoingID, durationFrames: 3)
         )
-        var remapSpec = CrossfadeClipSpec()
-        remapSpec.timeRemap = try ClipTimeRemap(keyframes: [
-            TimeRemapKeyframe(time: try editTime(0), sourceTime: try editTime(0)),
-            TimeRemapKeyframe(time: try editTime(10), sourceTime: try editTime(10))
-        ])
-        let remapped = try makeAdjacentPairFixture(outgoingSpec: remapSpec)
+        let command = EditCommand.bladeClip(
+            sequenceID: sequenceID,
+            trackID: trackID,
+            clipID: outgoingID,
+            atTime: try editTime(5),
+            rightClipID: bladeRightID
+        )
 
-        for project in [reversed.project, remapped.project] {
-            XCTAssertThrowsError(
-                try apply(
-                    .bladeClip(
-                        sequenceID: sequenceID,
-                        trackID: trackID,
-                        clipID: outgoingID,
-                        atTime: try editTime(5),
-                        rightClipID: bladeRightID
-                    ),
-                    to: project
-                )
-            ) { error in
-                XCTAssertEqual(
-                    error as? EditReducerError,
-                    .invalidEdit(.bladeUnsupportedForRetimedClip(clipID: outgoingID))
-                )
-            }
-        }
+        let edited = try assertUndoRedoIdentity(project: fixture.project, command: command)
+
+        let left = try trackClip(outgoingID, in: edited)
+        let right = try trackClip(bladeRightID, in: edited)
+        let incoming = try trackClip(incomingID, in: edited)
+        XCTAssertEqual(left.sourceRange, try editRange(startFrame: 8, durationFrames: 5))
+        XCTAssertEqual(right.sourceRange, try editRange(startFrame: 3, durationFrames: 5))
+        XCTAssertNil(left.audioMix.trailingCrossfade)
+        XCTAssertEqual(
+            right.audioMix.trailingCrossfade,
+            ClipAudioCrossfade(
+                partnerClipID: incomingID,
+                duration: try editTime(3),
+                curve: .linear
+            )
+        )
+        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.partnerClipID, bladeRightID)
+        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
+    }
+
+    func testFRSPD003BladeReversedClipNearTheCutClampsPairToRightHalfDuration() throws {
+        // Blading at 8 leaves a 2-frame reversed right half, shorter than the 3-frame
+        // pair; the §7/§8 clamp shortens both records to 2 while the reversed tail handle
+        // (still `sourceRange.start` = 3 on the right half) stays sufficient.
+        let fixture = try makeAdjacentPairFixture(
+            outgoingSourceStartFrame: 3,
+            reverse: true,
+            outgoingMix: try outgoingCrossfadeMix(partner: incomingID, durationFrames: 3),
+            incomingMix: try incomingCrossfadeMix(partner: outgoingID, durationFrames: 3)
+        )
+        let command = EditCommand.bladeClip(
+            sequenceID: sequenceID,
+            trackID: trackID,
+            clipID: outgoingID,
+            atTime: try editTime(8),
+            rightClipID: bladeRightID
+        )
+
+        let edited = try assertUndoRedoIdentity(project: fixture.project, command: command)
+
+        let right = try trackClip(bladeRightID, in: edited)
+        let incoming = try trackClip(incomingID, in: edited)
+        XCTAssertEqual(right.sourceRange, try editRange(startFrame: 3, durationFrames: 2))
+        XCTAssertEqual(right.audioMix.trailingCrossfade?.duration, try editTime(2))
+        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.duration, try editTime(2))
+        XCTAssertEqual(incoming.audioMix.leadingCrossfade?.partnerClipID, bladeRightID)
+        XCTAssertTrue(projectCrossfadeErrors(in: edited).isEmpty)
     }
 
     func testFRAUD002BladeFreezeFrameKeepsTheSameHeldFrameOnBothHalves() throws {
