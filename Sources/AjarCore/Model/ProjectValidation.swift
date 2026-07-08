@@ -114,6 +114,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         sequenceID: UUID, trackID: UUID, clipID: UUID, error: AudioMixValidationError
     )
 
+    /// A clip audio crossfade violates the ADR-0015 pair or source-handle contract.
+    case invalidClipAudioCrossfade(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: AudioCrossfadeValidationError
+    )
+
     /// A clip speed is zero or negative.
     case invalidClipSpeed(
         sequenceID: UUID,
@@ -139,6 +147,7 @@ enum ProjectValidator {
         let mediaIDs: Set<UUID>
         let sequenceIDs: Set<UUID>
         let sequenceReferencesBySource: [UUID: [SequenceReferenceEdge]]
+        let mediaDurationsByID: [UUID: RationalTime]
         let frame: PixelDimensions
         var errors: [ProjectValidationError] = []
     }
@@ -159,6 +168,10 @@ enum ProjectValidator {
             mediaIDs: Set(project.mediaPool.map(\.id)),
             sequenceIDs: Set(project.sequences.map(\.id)),
             sequenceReferencesBySource: sequenceReferenceGraph(in: project),
+            mediaDurationsByID: Dictionary(
+                project.mediaPool.map { ($0.id, $0.metadata.duration) },
+                uniquingKeysWith: { first, _ in first }
+            ),
             frame: project.settings.resolution
         )
 
@@ -219,6 +232,7 @@ enum ProjectValidator {
 
             validateTrackCompositing(track, context: context, state: &state)
             validateTrackAudioMix(track, context: context, state: &state)
+            validateTrackCrossfades(track, context: context, state: &state)
             validateTrackItems(
                 track.items,
                 context: context,
@@ -255,81 +269,6 @@ enum ProjectValidator {
                 state: &state
             )
         }
-    }
-
-    private static func validateMarkers(
-        in sequence: Sequence,
-        state: inout ValidationState
-    ) {
-        var seenIDs = Set<UUID>()
-        var previousMarker: Marker?
-        var previousIndex: Int?
-
-        for markerIndex in sequence.markers.indices {
-            let marker = sequence.markers[markerIndex]
-            if seenIDs.contains(marker.id) {
-                state.errors.append(
-                    .duplicateMarkerID(sequenceID: sequence.id, markerID: marker.id)
-                )
-            } else {
-                seenIDs.insert(marker.id)
-            }
-
-            if let previousMarker, let previousIndex {
-                if markerSortPrecedes(marker, previousMarker) {
-                    state.errors.append(
-                        .markersNotSorted(
-                            sequenceID: sequence.id,
-                            previousIndex: previousIndex,
-                            markerIndex: markerIndex
-                        )
-                    )
-                }
-            }
-
-            validateMarkerAnchor(marker, in: sequence, state: &state)
-            previousMarker = marker
-            previousIndex = markerIndex
-        }
-    }
-
-    private static func validateMarkerAnchor(
-        _ marker: Marker,
-        in sequence: Sequence,
-        state: inout ValidationState
-    ) {
-        guard case .clip(let trackID, let clipID) = marker.anchor else {
-            return
-        }
-
-        if !clipExists(trackID: trackID, clipID: clipID, in: sequence) {
-            state.errors.append(
-                .missingMarkerClipReference(
-                    sequenceID: sequence.id,
-                    markerID: marker.id,
-                    trackID: trackID,
-                    clipID: clipID
-                )
-            )
-        }
-    }
-
-    private static func markerSortPrecedes(_ marker: Marker, _ previousMarker: Marker) -> Bool {
-        if marker.time == previousMarker.time {
-            return marker.id.uuidString < previousMarker.id.uuidString
-        }
-        return marker.time < previousMarker.time
-    }
-
-    private static func clipExists(trackID: UUID, clipID: UUID, in sequence: Sequence) -> Bool {
-        for track in sequence.videoTracks + sequence.audioTracks where track.id == trackID {
-            for item in track.items {
-                if case .clip(let clip) = item, clip.id == clipID {
-                    return true
-                }
-            }
-        }
-        return false
     }
 
     private static func validateItemKind(
@@ -462,5 +401,84 @@ enum ProjectValidator {
                 )
             )
         }
+    }
+}
+
+// MARK: - Marker validation
+
+private extension ProjectValidator {
+    static func validateMarkers(
+        in sequence: Sequence,
+        state: inout ValidationState
+    ) {
+        var seenIDs = Set<UUID>()
+        var previousMarker: Marker?
+        var previousIndex: Int?
+
+        for markerIndex in sequence.markers.indices {
+            let marker = sequence.markers[markerIndex]
+            if seenIDs.contains(marker.id) {
+                state.errors.append(
+                    .duplicateMarkerID(sequenceID: sequence.id, markerID: marker.id)
+                )
+            } else {
+                seenIDs.insert(marker.id)
+            }
+
+            if let previousMarker, let previousIndex {
+                if markerSortPrecedes(marker, previousMarker) {
+                    state.errors.append(
+                        .markersNotSorted(
+                            sequenceID: sequence.id,
+                            previousIndex: previousIndex,
+                            markerIndex: markerIndex
+                        )
+                    )
+                }
+            }
+
+            validateMarkerAnchor(marker, in: sequence, state: &state)
+            previousMarker = marker
+            previousIndex = markerIndex
+        }
+    }
+
+    static func validateMarkerAnchor(
+        _ marker: Marker,
+        in sequence: Sequence,
+        state: inout ValidationState
+    ) {
+        guard case .clip(let trackID, let clipID) = marker.anchor else {
+            return
+        }
+
+        if !clipExists(trackID: trackID, clipID: clipID, in: sequence) {
+            state.errors.append(
+                .missingMarkerClipReference(
+                    sequenceID: sequence.id,
+                    markerID: marker.id,
+                    trackID: trackID,
+                    clipID: clipID
+                )
+            )
+        }
+    }
+
+    static func markerSortPrecedes(_ marker: Marker, _ previousMarker: Marker) -> Bool {
+        if marker.time == previousMarker.time {
+            return marker.id.uuidString < previousMarker.id.uuidString
+        }
+        return marker.time < previousMarker.time
+    }
+
+    static func clipExists(trackID: UUID, clipID: UUID, in sequence: Sequence) -> Bool {
+        for track in sequence.videoTracks + sequence.audioTracks where track.id == trackID {
+            for item in track.items {
+                if case .clip(let clip) = item, clip.id == clipID {
+                    return true
+                }
+            }
+        }
+        return false
     }
 }

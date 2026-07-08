@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Landed slice 1 of the FR-AUD-002 audio crossfade work per ADR-0015: the additive
+  `equalPower` fade curve (`sin(πx/2)`, round-tripped through the full project codec with a
+  nested-legacy decode test), the §5 pair-agreement taxonomy as validation in `AjarCore`
+  (`ClipAudioCrossfadeValidator`, surfaced as `invalidClipAudioCrossfade` project validation
+  errors and reused by the render-time `OfflineAudioMixer` crossfade check) with typed errors
+  `crossfadeMirrorMissing`, `crossfadePairMismatched`, `crossfadeDirectionInvalid`, and
+  `crossfadeSeparatedByGap` alongside the existing partner checks, the §6 fade × crossfade
+  same-edge exclusion (`crossfadeConflictsWithFade`), the §4 curve restriction
+  (`crossfadeCurveUnsupported` for ease curves on crossfade edges), the §2 time-remap
+  rejection (`crossfadeUnsupportedWithTimeRemap`), and §3 effective-read-window handle
+  validation (`crossfadeExceedsSourceHandle`: constant speed multiplies the tail window,
+  reverse extends backward past `sourceRange.start`, freeze frames need no extra media).
+  Mixer tail rendering, edit-command crossfade maintenance, and realtime parity are later
+  slices of #102.
 - Realtime playback of compound audio (FR-AUD-007, FR-CMP-001):
   `RealtimeAudioRenderPlan.preparingCompoundMix` builds the live callback plan off the audio
   thread by flattening nested/compound sources — any depth, cycle-guarded with typed errors —
