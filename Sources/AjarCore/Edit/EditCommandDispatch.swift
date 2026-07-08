@@ -15,6 +15,7 @@ extension EditReducer {
             .setClipColorCorrection, .clearClipColorCorrection,
             .addClipMask, .removeClipMask, .moveClipMask, .setClipMask,
             .setClipAudioMix, .clearClipAudioMix,
+            .setClipAudioCrossfade, .removeClipAudioCrossfade,
             .detachClipAudio, .replaceClipAudioSource:
             return try applyClipCommand(command, to: project)
         case .setTrackState, .setTrackCompositing, .setTrackAudioMix, .clearTrackAudioMix:

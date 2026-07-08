@@ -54,6 +54,8 @@ extension EditReducer {
             return try applyClipMaskCommand(command, to: project)
         case .setClipAudioMix, .clearClipAudioMix:
             return try applyClipAudioMixCommand(command, to: project)
+        case .setClipAudioCrossfade, .removeClipAudioCrossfade:
+            return try applyClipAudioCrossfadeCommand(command, to: project)
         case .detachClipAudio, .replaceClipAudioSource:
             return try applyClipAudioSourceCommand(command, to: project)
         default:

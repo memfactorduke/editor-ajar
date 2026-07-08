@@ -289,6 +289,26 @@ public enum EditCommand: Codable, Equatable, Sendable {
         clipID: UUID
     )
 
+    /// Creates or updates the ADR-0015 crossfade pair on the cut after a clip: the
+    /// addressed clip gets the owning trailing record, its abutting next clip the mirror
+    /// (FR-AUD-002). A `nil` curve selects `linear` for same-source contiguous edges and
+    /// `equalPower` otherwise; the duration is clamped to the available tail handle.
+    case setClipAudioCrossfade(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        duration: RationalTime,
+        curve: ClipAudioFadeCurve? = nil
+    )
+
+    /// Removes both records of the crossfade pair owned by a clip's trailing edge
+    /// (FR-AUD-002).
+    case removeClipAudioCrossfade(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID
+    )
+
     /// Breaks a linked A/V clip group so the audio clip can be edited independently.
     case detachClipAudio(sequenceID: UUID, trackID: UUID, clipID: UUID)
 
