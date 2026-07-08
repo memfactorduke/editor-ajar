@@ -120,19 +120,33 @@ public struct CubicBezierTimingCurve: Codable, Equatable, Sendable {
     }
 }
 
+/// The two renormalized halves of a timing curve subdivided at a horizontal fraction.
+///
+/// A `nil` half means that half's renormalization is division-degenerate: the split point
+/// sits on that half's far corner in x or y — for y, the curve's progress at the split
+/// equals that endpoint's progress, which happens when an overshooting curve returns to an
+/// endpoint progress exactly at the cut. Overshoot alone (progress outside `[0, 1]` at the
+/// split point) is not degenerate; the affine renormalization stays exact for it.
+struct SubdividedTimingCurve {
+    /// The renormalized left half, or `nil` when its renormalization is degenerate.
+    let left: CubicBezierTimingCurve?
+
+    /// The renormalized right half, or `nil` when its renormalization is degenerate.
+    let right: CubicBezierTimingCurve?
+}
+
 extension CubicBezierTimingCurve {
     /// Splits the timing curve at the horizontal (linear-time) `fraction` and renormalizes
     /// both halves back to unit curves, so evaluating the left half over `[0, fraction]` and
     /// the right half over `[fraction, 1]` reproduces the original easing. Blade edits use
     /// this to keep a keyframed segment's shape unchanged across the cut (FR-XFORM-008).
     ///
-    /// Returns `nil` for degenerate splits — a fraction at or outside the endpoints, or a
-    /// non-monotone overshoot curve whose split progress falls outside `(0, 1)`.
-    func subdivided(
-        atFraction fraction: Double
-    ) -> (left: CubicBezierTimingCurve, right: CubicBezierTimingCurve)? {
+    /// De Casteljau subdivision is exact for any control points, including overshooting y
+    /// values; only a vanishing renormalization denominator makes a half unavailable (see
+    /// `SubdividedTimingCurve`). Fractions at or outside the endpoints yield no halves.
+    func subdivided(atFraction fraction: Double) -> SubdividedTimingCurve {
         guard fraction > 0, fraction < 1 else {
-            return nil
+            return SubdividedTimingCurve(left: nil, right: nil)
         }
         let parameter = curveParameter(forX: fraction)
         let control1 = BezierCurvePoint(
@@ -150,18 +164,22 @@ extension CubicBezierTimingCurve {
         let leftInner = firstLeg.lerp(to: middleLeg, at: parameter)
         let rightInner = middleLeg.lerp(to: lastLeg, at: parameter)
         let split = leftInner.lerp(to: rightInner, at: parameter)
-        guard split.x > 0, split.x < 1, split.y > 0, split.y < 1 else {
-            return nil
+        let epsilon = 1e-9
+        var left: CubicBezierTimingCurve?
+        if split.x > epsilon, abs(split.y) > epsilon {
+            left = CubicBezierTimingCurve(
+                controlPoint1: firstLeg.normalizedToward(split).controlPoint,
+                controlPoint2: leftInner.normalizedToward(split).controlPoint
+            )
         }
-        let left = CubicBezierTimingCurve(
-            controlPoint1: firstLeg.normalizedToward(split).controlPoint,
-            controlPoint2: leftInner.normalizedToward(split).controlPoint
-        )
-        let right = CubicBezierTimingCurve(
-            controlPoint1: rightInner.normalizedFrom(split).controlPoint,
-            controlPoint2: lastLeg.normalizedFrom(split).controlPoint
-        )
-        return (left: left, right: right)
+        var right: CubicBezierTimingCurve?
+        if split.x < 1 - epsilon, abs(1 - split.y) > epsilon {
+            right = CubicBezierTimingCurve(
+                controlPoint1: rightInner.normalizedFrom(split).controlPoint,
+                controlPoint2: lastLeg.normalizedFrom(split).controlPoint
+            )
+        }
+        return SubdividedTimingCurve(left: left, right: right)
     }
 
     /// The Bezier parameter whose horizontal coordinate matches `targetX`, found with the

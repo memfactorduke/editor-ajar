@@ -21,11 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   animatable transform/effects parameter at the cut — each half keeps its own keyframes plus a
   shared boundary keyframe evaluated at the cut, and the segment crossing the cut has its
   easing subdivided (De Casteljau split of the cubic Bezier timing curve, renormalized to unit
-  curves) so the rendered animation is unchanged by the blade. Keyframe-time validation now
+  curves — exact for overshooting easings too, with an interior keyframe baked when the
+  overshoot returns to an endpoint progress exactly at the cut and a renormalization
+  denominator vanishes) so the rendered animation is unchanged by the blade. Keyframe-time
+  validation now
   accepts the closed range `[start, end]` — the exclusive end is never sampled, but an end
-  keyframe shapes the approach into the cut, mirroring the FR-SPD-002
-  final-keyframe-at-source-end rule. The now-unreachable `bladeUnsupportedForRetimedClip`
-  typed error is removed.
+  keyframe shapes the approach into the cut, mirroring the
+  FR-SPD-002 final-keyframe-at-source-end rule. The now-unreachable
+  `bladeUnsupportedForRetimedClip` typed error is removed.
 - Landed the final slice of the FR-AUD-002 audio crossfade work per ADR-0015, closing #102:
   new `setClipAudioCrossfade` / `removeClipAudioCrossfade` edit commands create and delete a
   §5 pair atomically — the outgoing clip gets the owning trailing record, the incoming clip
