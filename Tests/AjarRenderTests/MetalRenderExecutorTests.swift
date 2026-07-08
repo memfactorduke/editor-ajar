@@ -385,7 +385,8 @@ final class MetalRenderExecutorCompoundTests: XCTestCase {
         )
         let nestedOutput = RenderOutputDescriptor(
             pixelDimensions: parentOutput.pixelDimensions,
-            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat
+            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat,
+            colorMode: .linearWorking
         )
 
         let parent = try executor.render(
@@ -425,7 +426,8 @@ final class MetalRenderExecutorCompoundTests: XCTestCase {
         )
         let nestedOutput = RenderOutputDescriptor(
             pixelDimensions: parentOutput.pixelDimensions,
-            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat
+            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat,
+            colorMode: .linearWorking
         )
 
         let parent = try executor.render(
@@ -686,6 +688,93 @@ final class MetalRenderExecutorBlendModeTests: XCTestCase {
         )
         XCTAssertGreaterThan(pixels[0], 160)
         XCTAssertGreaterThan(pixels[2], 160)
+    }
+}
+
+final class MetalRenderExecutorOutputColorModeTests: XCTestCase {
+    func testNFRQUAL001PresentedHalfFloatOutputStillEncodesPresentPass() throws {
+        // NFR-QUAL-001: linear-working output is an explicit descriptor property, never
+        // inferred from the pixel format. A future HDR-presented rgba16Float output must
+        // still receive the display-transfer present pass.
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph()
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let output = RenderOutputDescriptor(
+            pixelDimensions: PixelDimensions(width: 1, height: 1),
+            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat
+        )
+
+        let frame = try executor.render(
+            graph: graph,
+            output: output,
+            sourceProvider: CountingSourceTextureProvider(texture: sourceTexture)
+        )
+        try waitForRender(frame)
+
+        XCTAssertEqual(output.colorMode, .presented)
+        XCTAssertFalse(frame.cacheHit)
+        XCTAssertEqual(executor.outputPassCount, 1)
+    }
+
+    func testNFRQUAL001LinearWorkingOutputSkipsPresentPassAndCachesSeparately() throws {
+        // NFR-QUAL-001: `.linearWorking` skips the present pass, and its frames must never
+        // collide in the content-hash cache with a presented output of identical dimensions
+        // and pixel format.
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph()
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [0, 0, 255, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let provider = CountingSourceTextureProvider(texture: sourceTexture)
+        let presentedOutput = RenderOutputDescriptor(
+            pixelDimensions: PixelDimensions(width: 1, height: 1),
+            pixelFormat: MetalRenderExecutor.linearWorkingPixelFormat
+        )
+        let linearOutput = RenderOutputDescriptor(
+            pixelDimensions: presentedOutput.pixelDimensions,
+            pixelFormat: presentedOutput.pixelFormat,
+            colorMode: .linearWorking
+        )
+
+        let presented = try executor.render(
+            graph: graph,
+            output: presentedOutput,
+            sourceProvider: provider
+        )
+        try waitForRender(presented)
+        let linear = try executor.render(
+            graph: graph,
+            output: linearOutput,
+            sourceProvider: provider
+        )
+        try waitForRender(linear)
+        let linearRepeat = try executor.render(
+            graph: graph,
+            output: linearOutput,
+            sourceProvider: provider
+        )
+        let presentedRepeat = try executor.render(
+            graph: graph,
+            output: presentedOutput,
+            sourceProvider: provider
+        )
+
+        XCTAssertFalse(presented.cacheHit)
+        XCTAssertFalse(linear.cacheHit)
+        XCTAssertTrue(linearRepeat.cacheHit)
+        XCTAssertTrue(presentedRepeat.cacheHit)
+        XCTAssertFalse(presented.texture === linear.texture)
+        XCTAssertEqual(executor.outputPassCount, 1)
     }
 }
 
