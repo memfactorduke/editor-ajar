@@ -162,10 +162,19 @@ extension OfflineAudioMixer {
                 environment: &environment,
                 nestingDepth: nestingDepth
             )
-            try mixClip(
-                clip,
-                track: track,
+            try validateTailSourceDelivery(
+                clip: clip,
                 source: source,
+                context: context.mix,
+                environment: environment
+            )
+            try mixClip(
+                state: clipMixState(
+                    clip: clip,
+                    track: track,
+                    source: source,
+                    environment: environment
+                ),
                 into: &output,
                 context: context
             )
@@ -173,14 +182,12 @@ extension OfflineAudioMixer {
     }
 
     static func mixClip(
-        _ clip: Clip,
-        track: Track,
-        source: AudioSourceBuffer,
+        state: OfflineClipMixState,
         into output: inout [Float],
         context: OfflineTrackMixContext
     ) throws {
         let intersection = try intersectionFrames(
-            clip: clip,
+            clip: state.clip,
             range: context.mix.range,
             frameCount: context.mix.frameCount,
             sampleRate: context.mix.format.sampleRate
@@ -196,9 +203,7 @@ extension OfflineAudioMixer {
                 sampleRate: context.mix.format.sampleRate
             )
             try mixClipFrame(
-                clip,
-                track: track,
-                source: source,
+                state: state,
                 frame: OfflineMixFrameContext(
                     renderTime: renderTime,
                     outputFrame: outputFrame,
@@ -211,28 +216,31 @@ extension OfflineAudioMixer {
     }
 
     static func mixClipFrame(
-        _ clip: Clip,
-        track: Track,
-        source: AudioSourceBuffer,
+        state: OfflineClipMixState,
         frame: OfflineMixFrameContext,
         output: inout [Float]
     ) throws {
+        let clip = state.clip
+        let source = state.source
         let renderTime = frame.renderTime
         let format = frame.format
         let localTime = try subtract(renderTime, clip.timelineRange.start)
-        let sourceTime = try clipSourceTime(clip, at: renderTime)
-        let sourceFrame = try sourceFramePosition(
-            clip: clip,
-            source: source,
-            sourceTime: sourceTime
-        )
+        // ADR-0015 §7 confirmed EOF (`nil`): the mapped tail passed the declared media end, so
+        // it silence-pads deterministically regardless of how many frames the provider had.
+        guard let sourceFrame = try resolvedSourceFramePosition(
+            state: state,
+            renderTime: renderTime
+        ) else {
+            return
+        }
+        let crossfadeGain = try crossfadeGainMultiplier(clip: clip, renderTime: renderTime)
         let gain = gainMultiplier(
             clip: clip,
-            track: track,
+            track: state.track,
             renderTime: renderTime,
             localTime: localTime
-        ) * frame.duckingMultiplier
-        let pan = panValue(clip: clip, track: track, renderTime: renderTime)
+        ) * frame.duckingMultiplier * crossfadeGain
+        let pan = panValue(clip: clip, track: state.track, renderTime: renderTime)
 
         for outputChannel in 0..<format.channelCount {
             let sourceSample = mappedSourceSample(
@@ -257,7 +265,9 @@ extension OfflineAudioMixer {
         frameCount: Int,
         sampleRate: Int
     ) throws -> Range<Int> {
-        let clipEnd = try end(of: clip.timelineRange)
+        // ADR-0015 §3: a trailing crossfade keeps the outgoing source audible past the clip's
+        // out-point, so the mix window extends by the transition duration (FR-AUD-002).
+        let clipEnd = try mixWindowEnd(of: clip)
         let rangeEnd = try end(of: range)
         let intersectionStart = max(clip.timelineRange.start, range.start)
         let intersectionEnd = min(clipEnd, rangeEnd)

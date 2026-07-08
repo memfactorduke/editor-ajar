@@ -94,6 +94,10 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
         mediaID: UUID
     )
 
+    /// The provider delivered fewer source frames than the declared media bounds require
+    /// (ADR-0015 §7) — a decoder fault must never render as silent zeros.
+    case sourceUnderDelivered(clipID: UUID, missingRange: TimeRange)
+
     /// A human-readable description.
     public var description: String {
         switch self {
@@ -137,6 +141,9 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
             "\(edge.rawValue) crossfade on \(clipID) cannot combine with a time-remap curve"
         case .crossfadeExceedsSourceHandle(let edge, let clipID, let mediaID):
             "\(edge.rawValue) crossfade on \(clipID) reads past the bounds of media \(mediaID)"
+        case .sourceUnderDelivered(let clipID, let missingRange):
+            "audio source for clip \(clipID) under-delivered source time "
+                + "[\(missingRange.start), +\(missingRange.duration)) inside declared bounds"
         }
     }
 }

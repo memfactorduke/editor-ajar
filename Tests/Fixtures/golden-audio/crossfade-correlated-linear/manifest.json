@@ -1,0 +1,43 @@
+{
+  "id": "crossfade-correlated-linear",
+  "comment": "FR-AUD-002 / ADR-0015 correlated crossfade: a blade-style split of one ascending staircase source [1..8] (clip A reads source [0,1/2), clip B reads source [1/2,1), same mapping) joined by a linear crossfade of D=1/2. Under the fade-tail model clip A's source keeps playing past its out-point across [1/2,1), so at each region frame out(t) == in(t) and out*(1-x) + in*x == source(t): the output must be exactly the uncut staircase [1,2,3,4,5,6,7,8] - constant amplitude across the cut, proving the #101 notch is gone. Discrimination: the reverted sequential-fades rendering (fadeOut on A over its last 1/2 plus fadeIn on B over its first 1/2, ramps never simultaneous) produces [1,1.5,1.5,1,0,1.5,3.5,6] - it dips to 0 at the boundary frame where the correct sum is 5, failing with maxAbsError=5.0 against the 1e-5 tolerance; a rendering that sums both clips without tail ramps would bump to ~2x mid-region and also fail. Audio golden math is pure CPU rational/float arithmetic, machine-independent, so the tolerance stays at the suite-wide 1e-5.",
+  "sampleRate": 8,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 8,
+      "channelCount": 1,
+      "samples": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    }
+  ],
+  "clips": [
+    {
+      "sourceIndex": 0,
+      "timelineStart": "0",
+      "sourceStart": "0",
+      "duration": "1/2",
+      "crossfadeToNext": {
+        "duration": "1/2",
+        "curve": "linear"
+      }
+    },
+    {
+      "sourceIndex": 0,
+      "timelineStart": "1/2",
+      "sourceStart": "1/2",
+      "duration": "1/2"
+    }
+  ],
+  "referenceSamples": [
+    1.0, 1.0,
+    2.0, 2.0,
+    3.0, 3.0,
+    4.0, 4.0,
+    5.0, 5.0,
+    6.0, 6.0,
+    7.0, 7.0,
+    8.0, 8.0
+  ]
+}

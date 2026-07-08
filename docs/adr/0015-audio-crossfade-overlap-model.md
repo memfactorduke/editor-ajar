@@ -133,6 +133,24 @@ stays abut-only; a crossfade is derived render-time behavior keyed off the exist
     video-transition ADR must either adopt the same handle / effective-read-window vocabulary or
     supersede this ADR — it must not silently introduce a second, incompatible overlap model.
 
+### Clarifications (from slice-1 implementation)
+
+Four ambiguities surfaced while implementing the §5/§6/§7 validation slice (PR #163) and were
+resolved on issue #102; they are recorded here as naming, not as changes to any decision above:
+
+1. **No leading-side read window.** Under the fade-tail model only the outgoing clip's trailing
+   edge extends its read window (§3); a leading record never needs media beyond its own
+   `sourceRange`, so no leading-side handle check exists — mirror validity is transitive via §5
+   pair agreement.
+2. **Taxonomy home.** The §5 taxonomy lives in `AjarCore` as `AudioCrossfadeValidationError`
+   (produced by `ClipAudioCrossfadeValidator`), with a total mapping onto `AudioRenderError` so
+   the model and render paths share one vocabulary.
+3. **Error names.** The §2 time-remap rejection is named `crossfadeUnsupportedWithTimeRemap`;
+   the §3/§7 validation-time handle rejection is named `crossfadeExceedsSourceHandle`.
+4. **Explicit-gap-item semantics.** `crossfadeSeparatedByGap` fires only when an explicit gap
+   item sits between the partners; non-touching partners without a gap item stay
+   `crossfadePartnerNotAdjacent`.
+
 ## Consequences
 
 - The abut-only invariant survives intact: no changes to `ProjectValidation`, the trim commands'

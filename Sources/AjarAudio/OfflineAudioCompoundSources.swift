@@ -3,6 +3,9 @@
 import AjarCore
 import Foundation
 
+/// Cache key for rendered nested-sequence audio. `sourceRange` is the clip's ADR-0015 §3
+/// **effective read window** — `sourceRange` extended by the trailing crossfade tail — so
+/// adding, removing, or resizing a crossfade can never return a stale, tail-less buffer.
 struct CompoundAudioSourceKey: Hashable {
     let sequenceID: UUID
     let sourceRange: TimeRange
@@ -174,7 +177,7 @@ extension OfflineAudioMixer {
         }
 
         let sourceWindow = try alignedSourceWindow(
-            for: clip.sourceRange,
+            for: effectiveSourceWindow(for: clip),
             sampleRate: context.format.sampleRate
         )
         let key = CompoundAudioSourceKey(

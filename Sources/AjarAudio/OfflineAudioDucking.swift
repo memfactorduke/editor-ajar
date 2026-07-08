@@ -94,9 +94,12 @@ extension OfflineAudioMixer {
                 nestingDepth: nestingDepth
             )
             try peakClipLevels(
-                clip,
-                track: track,
-                source: source,
+                state: clipMixState(
+                    clip: clip,
+                    track: track,
+                    source: source,
+                    environment: environment
+                ),
                 levels: &levels,
                 context: context
             )
@@ -105,14 +108,12 @@ extension OfflineAudioMixer {
     }
 
     static func peakClipLevels(
-        _ clip: Clip,
-        track: Track,
-        source: AudioSourceBuffer,
+        state: OfflineClipMixState,
         levels: inout [Double],
         context: OfflineMixContext
     ) throws {
         let intersection = try intersectionFrames(
-            clip: clip,
+            clip: state.clip,
             range: context.range,
             frameCount: context.frameCount,
             sampleRate: context.format.sampleRate
@@ -123,9 +124,7 @@ extension OfflineAudioMixer {
 
         for outputFrame in intersection {
             try peakClipFrame(
-                clip,
-                track: track,
-                source: source,
+                state: state,
                 levels: &levels,
                 frame: OfflinePeakFrameContext(mix: context, outputFrame: outputFrame)
             )
@@ -133,32 +132,41 @@ extension OfflineAudioMixer {
     }
 
     static func peakClipFrame(
-        _ clip: Clip,
-        track: Track,
-        source: AudioSourceBuffer,
+        state: OfflineClipMixState,
         levels: inout [Double],
         frame: OfflinePeakFrameContext
     ) throws {
+        let clip = state.clip
         let renderTime = try renderTime(
             rangeStart: frame.mix.range.start,
             outputFrame: frame.outputFrame,
             sampleRate: frame.mix.format.sampleRate
         )
         let localTime = try subtract(renderTime, clip.timelineRange.start)
-        let sourceTime = try clipSourceTime(clip, at: renderTime)
-        let sourceFrame = sourceTime.seconds * Double(source.format.sampleRate)
+        // The trigger detector samples through the exact tail-aware, EOF-clamped mapping the
+        // mixer plays (ADR-0015 §2/§7): reverse tails read backward past `sourceRange.start`,
+        // and a tail past the declared media end is silence — so ducking can never fire on
+        // audio the mix does not play (FR-AUD-002, FR-AUD-004).
+        guard let sourceFrame = try resolvedSourceFramePosition(
+            state: state,
+            renderTime: renderTime
+        ) else {
+            return
+        }
+        // Crossfade tails stay in the trigger envelope at their ADR-0015 §4 ramped level.
+        let crossfadeGain = try crossfadeGainMultiplier(clip: clip, renderTime: renderTime)
         let gain = gainMultiplier(
             clip: clip,
-            track: track,
+            track: state.track,
             renderTime: renderTime,
             localTime: localTime
-        )
-        let pan = panValue(clip: clip, track: track, renderTime: renderTime)
+        ) * crossfadeGain
+        let pan = panValue(clip: clip, track: state.track, renderTime: renderTime)
 
         var peak = Double(0)
         for outputChannel in 0..<frame.mix.format.channelCount {
             let sourceSample = mappedSourceSample(
-                source: source,
+                source: state.source,
                 framePosition: sourceFrame,
                 outputChannel: outputChannel,
                 outputChannelCount: frame.mix.format.channelCount

@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Landed slice 2 of the FR-AUD-002 audio crossfade work per ADR-0015: `OfflineAudioMixer` now
+  renders true fade-tail crossfades — for a taxonomy-valid pair the outgoing clip's source
+  keeps playing past its timeline out-point for the transition duration, mapped through its
+  retime (constant speed extends linearly, reverse continues backward past
+  `sourceRange.start`, freeze frames hold their frame, compound sources read the nested
+  sequence past the window), summed with the incoming clip under the §4 curve contract
+  (`equalPower`: `sin(πx/2)`/`cos(πx/2)`; `linear`: `x`/`1−x`) with exact rational
+  positioning. The §3 effective read window is now the audio acquisition unit:
+  `CompoundAudioSourceKey` hashes the tail-extended window so adding, removing, or resizing a
+  crossfade invalidates the compound source cache, and crossfade tails flow into ducking
+  triggers and — via the delegating plan builder — realtime playback with exact offline
+  parity; ducking detection samples through the same tail-aware, EOF-clamped source mapping
+  the mixer plays, so reverse or past-EOF tails can never duck a target on audio the mix
+  does not render. §7 render-time shortfalls are distinguished: a tail past the declared
+  media duration silence-pads deterministically (clamped at the declared end regardless of
+  provider over-delivery), while provider under-delivery within declared bounds surfaces the
+  new typed `AudioRenderError.sourceUnderDelivered` (clip ID plus missing source range)
+  instead of silent zeros — checked only for renders whose window actually mixes tail frames,
+  so chunked renders of unrelated timeline regions never fail for a clip they do not play. Added golden-audio fixtures `crossfade-correlated-linear` (a blade-split pair
+  holds exactly the uncut source — the reverted #101 sequential-fades rendering measures
+  maxAbsError 5.0 with a hard 0 at the boundary frame) and
+  `crossfade-uncorrelated-equal-power` (constant-power curve application), a
+  `crossfadeToNext` golden-audio manifest spec that wires valid pairs, and the ADR-0015
+  slice-1 clarification subsection. The §8 edit-command matrix and meter coverage remain
+  later slices of #102.
 - Landed slice 1 of the FR-AUD-002 audio crossfade work per ADR-0015: the additive
   `equalPower` fade curve (`sin(πx/2)`, round-tripped through the full project codec with a
   nested-legacy decode test), the §5 pair-agreement taxonomy as validation in `AjarCore`

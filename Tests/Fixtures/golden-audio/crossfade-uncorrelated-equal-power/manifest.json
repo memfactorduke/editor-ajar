@@ -1,0 +1,48 @@
+{
+  "id": "crossfade-uncorrelated-equal-power",
+  "comment": "FR-AUD-002 / ADR-0015 uncorrelated crossfade: two different constant sources (A=0.8, B=0.6) joined by an equalPower crossfade of D=1/2 at t=1/2. Per ADR-0015 section 4 the region applies g_out(x)=cos(pi*x/2) to A's tail and g_in(x)=sin(pi*x/2) to B, with g_out^2+g_in^2=1 at every frame - constant power for uncorrelated program. Region x per frame = 0, 1/4, 1/2, 3/4 giving (g_out, g_in) = (1,0), (0.92387953,0.38268343), (0.70710678,0.70710678), (0.38268343,0.92387953) and reference 0.8*g_out+0.6*g_in = 0.8, 0.96871369, 0.98994949, 0.86047447. Discrimination: a linear rendering of the same pair yields 0.8, 0.75, 0.7, 0.65 (fails by 0.29 at midpoint); a sequential-fades notch rendering yields 0.6*g_in alone after the cut (0 at the boundary frame, fails by 0.8). Audio golden math is pure CPU rational/float arithmetic, machine-independent, so the tolerance stays at the suite-wide 1e-5.",
+  "sampleRate": 8,
+  "channelCount": 2,
+  "duration": "1",
+  "tolerance": 0.00001,
+  "sources": [
+    {
+      "sampleRate": 8,
+      "channelCount": 1,
+      "samples": [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
+    },
+    {
+      "sampleRate": 8,
+      "channelCount": 1,
+      "samples": [0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6]
+    }
+  ],
+  "clips": [
+    {
+      "sourceIndex": 0,
+      "timelineStart": "0",
+      "sourceStart": "0",
+      "duration": "1/2",
+      "crossfadeToNext": {
+        "duration": "1/2",
+        "curve": "equalPower"
+      }
+    },
+    {
+      "sourceIndex": 1,
+      "timelineStart": "1/2",
+      "sourceStart": "0",
+      "duration": "1/2"
+    }
+  ],
+  "referenceSamples": [
+    0.8, 0.8,
+    0.8, 0.8,
+    0.8, 0.8,
+    0.8, 0.8,
+    0.8, 0.8,
+    0.9687136854280833, 0.9687136854280833,
+    0.9899494936611666, 0.9899494936611666,
+    0.8604744653988438, 0.8604744653988438
+  ]
+}
