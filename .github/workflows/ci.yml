@@ -163,6 +163,23 @@ jobs:
             sleep 5
           done
 
+  soak:
+    name: Soak (short, NFR-STAB-005)
+    runs-on: macos-14
+    needs: [build-test, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      # Short per-PR leak/allocations soak (TESTING §8): a seeded, deterministic edit+render
+      # loop whose post-warmup memory footprint must stay inside the growth band. The full
+      # 1-hour acceptance run (`ajar soak --duration-seconds 3600`) is executed before
+      # releases, not per PR.
+      - name: Short leak/allocations soak (NFR-STAB-005)
+        run: swift run ajar soak --duration-seconds 150
+
   benchmarks-report:
     name: Benchmarks (report)
     runs-on: macos-14
