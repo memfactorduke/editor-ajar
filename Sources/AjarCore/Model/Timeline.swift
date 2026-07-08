@@ -256,6 +256,10 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Optional FR-SPD-002 keyframed time-remap curve. Absent means constant-rate playback.
     public let timeRemap: ClipTimeRemap?
 
+    /// FR-SPD-004 source frame sampling mode. `nearest` preserves single-frame decoding;
+    /// `frameBlend` opts a media-backed clip into fractional-position frame blending.
+    public let frameSampling: ClipFrameSamplingMode
+
     /// Creates a timeline clip.
     public init(
         id: UUID,
@@ -273,7 +277,8 @@ public struct Clip: Codable, Equatable, Sendable {
         speed: RationalValue = .one,
         reverse: Bool = false,
         freezeFrame: Bool = false,
-        timeRemap: ClipTimeRemap? = nil
+        timeRemap: ClipTimeRemap? = nil,
+        frameSampling: ClipFrameSamplingMode = .nearest
     ) {
         self.id = id
         self.source = source
@@ -291,6 +296,7 @@ public struct Clip: Codable, Equatable, Sendable {
         self.reverse = reverse
         self.freezeFrame = freezeFrame
         self.timeRemap = timeRemap
+        self.frameSampling = frameSampling
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -310,6 +316,7 @@ public struct Clip: Codable, Equatable, Sendable {
         case reverse
         case freezeFrame
         case timeRemap
+        case frameSampling
     }
 
     /// Decodes clips from current and legacy project schemas.
@@ -339,6 +346,10 @@ public struct Clip: Codable, Equatable, Sendable {
         reverse = try container.decodeIfPresent(Bool.self, forKey: .reverse) ?? false
         freezeFrame = try container.decodeIfPresent(Bool.self, forKey: .freezeFrame) ?? false
         timeRemap = try container.decodeIfPresent(ClipTimeRemap.self, forKey: .timeRemap)
+        frameSampling = try container.decodeIfPresent(
+            ClipFrameSamplingMode.self,
+            forKey: .frameSampling
+        ) ?? .nearest
     }
 
     /// Encodes the complete clip payload.
@@ -360,6 +371,7 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(reverse, forKey: .reverse)
         try container.encode(freezeFrame, forKey: .freezeFrame)
         try container.encodeIfPresent(timeRemap, forKey: .timeRemap)
+        try container.encode(frameSampling, forKey: .frameSampling)
     }
 }
 

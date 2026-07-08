@@ -208,9 +208,18 @@ public enum RenderGraphBuilder {
                 reverse: clip.reverse,
                 freezeFrame: clip.freezeFrame,
                 timeRemap: clip.timeRemap,
+                frameSampling: renderFrameSampling(for: clip),
                 colorSpace: media.metadata.colorSpace
             )
         )
+    }
+
+    /// Maps the clip's FR-SPD-004 sampling mode onto the optional source node field.
+    ///
+    /// `nearest` maps to `nil` so pre-FR-SPD-004 projects and clips left on the default keep
+    /// byte-identical source node content hashes.
+    private static func renderFrameSampling(for clip: Clip) -> ClipFrameSamplingMode? {
+        clip.frameSampling == .nearest ? nil : clip.frameSampling
     }
 
     private static func compoundSourceNode(

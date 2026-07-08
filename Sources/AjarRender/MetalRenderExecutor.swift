@@ -224,6 +224,28 @@ struct AjarCompositeUniformLayout: Equatable, Sendable {
     let mask3: Int
 }
 
+/// Two adjacent decoded source frames plus the blend weight for FR-SPD-004 frame blending.
+public struct RenderSourceFrameBlendTextures {
+    /// Decoded frame at the earlier adjacent source frame time.
+    public let earlierTexture: MTLTexture
+
+    /// Decoded frame at the later adjacent source frame time.
+    public let laterTexture: MTLTexture
+
+    /// Blend weight of the later frame, expected in the open interval (0, 1).
+    ///
+    /// The weight is measured toward the later frame on the source-time axis regardless of
+    /// playback direction (see `FrameBlendPair.laterWeight`).
+    public let laterWeight: Float
+
+    /// Creates a frame blend texture pair.
+    public init(earlierTexture: MTLTexture, laterTexture: MTLTexture, laterWeight: Float) {
+        self.earlierTexture = earlierTexture
+        self.laterTexture = laterTexture
+        self.laterWeight = laterWeight
+    }
+}
+
 /// Supplies GPU-resident source textures for source render nodes.
 public protocol RenderSourceTextureProvider {
     /// Returns the source texture for a resolved source node.
@@ -234,6 +256,25 @@ public protocol RenderSourceTextureProvider {
     /// the contract with alpha `1`; importers for transparent formats such as PNG or ProRes 4444
     /// must premultiply before exposing textures through this provider.
     func texture(for source: RenderSourceNode) throws -> MTLTexture
+
+    /// Returns the two adjacent decoded frames for an FR-SPD-004 frame-blend source node.
+    ///
+    /// Only consulted when `source.resolvedFrameSampling == .frameBlend`. Return `nil` to fall
+    /// back to single-frame nearest sampling through `texture(for:)`, e.g. when the source time
+    /// lands exactly on a frame boundary or no later frame exists. Returned textures follow the
+    /// same display-encoded premultiplied contract as `texture(for:)`.
+    func frameBlendTextures(
+        for source: RenderSourceNode
+    ) throws -> RenderSourceFrameBlendTextures?
+}
+
+public extension RenderSourceTextureProvider {
+    /// Providers without frame-blend support fall back to nearest sampling.
+    func frameBlendTextures(
+        for source: RenderSourceNode
+    ) throws -> RenderSourceFrameBlendTextures? {
+        nil
+    }
 }
 
 /// Closure-backed source texture provider for tests and simple integrations.
@@ -687,7 +728,8 @@ public final class MetalRenderExecutor {
                     graph: graph,
                     input: input,
                     output: output,
-                    sourceProvider: sourceProvider
+                    sourceProvider: sourceProvider,
+                    commandBuffer: commandBuffer
                 )
             }
             let reusableTextures = try encodeSourceComposite(
@@ -699,7 +741,7 @@ public final class MetalRenderExecutor {
             )
             return RenderSchedule(
                 nestedFrames: sourceInputs.compactMap(\.retainedFrame),
-                reusableTextures: reusableTextures
+                reusableTextures: reusableTextures + sourceInputs.compactMap(\.blendTexture)
             )
         }
     }
@@ -714,6 +756,7 @@ public final class MetalRenderExecutor {
         let sourceColorSpace: MediaColorSpace
         let sourceIsLinearWorking: Bool
         let retainedFrame: RenderedFrame?
+        let blendTexture: MTLTexture?
     }
 
     private static let blendModeValues: [ClipBlendMode: UInt32] = [
@@ -741,7 +784,8 @@ public final class MetalRenderExecutor {
         graph: RenderGraph,
         input: RenderCompositeInput,
         output: RenderOutputDescriptor,
-        sourceProvider: any RenderSourceTextureProvider
+        sourceProvider: any RenderSourceTextureProvider,
+        commandBuffer: MTLCommandBuffer
     ) throws -> SourceCompositeInput {
         guard let inputNode = graph.node(withID: input.sourceNodeID) else {
             throw MetalRenderError.missingInputNode(input.sourceNodeID)
@@ -749,53 +793,179 @@ public final class MetalRenderExecutor {
 
         switch inputNode.kind {
         case .source(let source):
-            do {
-                return SourceCompositeInput(
-                    source: source,
-                    texture: try sourceProvider.texture(for: source),
-                    transform: input.transform,
-                    effects: input.effects,
-                    trackOpacity: input.trackOpacity,
-                    trackBlendMode: input.trackBlendMode,
-                    sourceColorSpace: source.colorSpace,
-                    sourceIsLinearWorking: false,
-                    retainedFrame: nil
-                )
-            } catch {
-                throw MetalRenderError.sourceTextureUnavailable(
-                    input.sourceNodeID,
-                    String(describing: error)
-                )
-            }
-        case .compound(let compound):
-            let frame = try render(
-                graph: compound.graph,
-                output: nestedOutputDescriptor(for: output),
-                sourceProvider: sourceProvider
+            return try mediaSourceInput(
+                source: source,
+                input: input,
+                sourceProvider: sourceProvider,
+                commandBuffer: commandBuffer
             )
-            return SourceCompositeInput(
-                source: RenderSourceNode(
-                    mediaID: compound.sequenceID,
-                    clipID: compound.clipID,
-                    sourceTime: compound.sequenceTime,
-                    sourceRange: compound.sourceRange,
-                    speed: compound.speed,
-                    reverse: compound.reverse,
-                    freezeFrame: compound.freezeFrame,
-                    colorSpace: compound.colorSpace
-                ),
-                texture: frame.texture,
-                transform: input.transform,
-                effects: input.effects,
-                trackOpacity: input.trackOpacity,
-                trackBlendMode: input.trackBlendMode,
-                sourceColorSpace: compound.colorSpace,
-                sourceIsLinearWorking: true,
-                retainedFrame: frame
+        case .compound(let compound):
+            return try compoundSourceInput(
+                compound: compound,
+                input: input,
+                output: output,
+                sourceProvider: sourceProvider
             )
         case .composite:
             throw MetalRenderError.unsupportedInputNode(input.sourceNodeID)
         }
+    }
+
+    private func mediaSourceInput(
+        source: RenderSourceNode,
+        input: RenderCompositeInput,
+        sourceProvider: any RenderSourceTextureProvider,
+        commandBuffer: MTLCommandBuffer
+    ) throws -> SourceCompositeInput {
+        if let blend = try frameBlendTextures(
+            for: source,
+            nodeID: input.sourceNodeID,
+            sourceProvider: sourceProvider
+        ) {
+            // FR-SPD-004: pre-blend both decoded frames into one premultiplied linear
+            // working-space texture, then composite it through the compound (linear) input path.
+            let blendTexture = try encodeFrameBlend(
+                blend,
+                source: source,
+                commandBuffer: commandBuffer
+            )
+            return SourceCompositeInput(
+                source: source,
+                texture: blendTexture,
+                transform: input.transform,
+                effects: input.effects,
+                trackOpacity: input.trackOpacity,
+                trackBlendMode: input.trackBlendMode,
+                sourceColorSpace: source.colorSpace,
+                sourceIsLinearWorking: true,
+                retainedFrame: nil,
+                blendTexture: blendTexture
+            )
+        }
+
+        do {
+            return SourceCompositeInput(
+                source: source,
+                texture: try sourceProvider.texture(for: source),
+                transform: input.transform,
+                effects: input.effects,
+                trackOpacity: input.trackOpacity,
+                trackBlendMode: input.trackBlendMode,
+                sourceColorSpace: source.colorSpace,
+                sourceIsLinearWorking: false,
+                retainedFrame: nil,
+                blendTexture: nil
+            )
+        } catch {
+            throw MetalRenderError.sourceTextureUnavailable(
+                input.sourceNodeID,
+                String(describing: error)
+            )
+        }
+    }
+
+    private func compoundSourceInput(
+        compound: RenderCompoundNode,
+        input: RenderCompositeInput,
+        output: RenderOutputDescriptor,
+        sourceProvider: any RenderSourceTextureProvider
+    ) throws -> SourceCompositeInput {
+        let frame = try render(
+            graph: compound.graph,
+            output: nestedOutputDescriptor(for: output),
+            sourceProvider: sourceProvider
+        )
+        return SourceCompositeInput(
+            source: RenderSourceNode(
+                mediaID: compound.sequenceID,
+                clipID: compound.clipID,
+                sourceTime: compound.sequenceTime,
+                sourceRange: compound.sourceRange,
+                speed: compound.speed,
+                reverse: compound.reverse,
+                freezeFrame: compound.freezeFrame,
+                colorSpace: compound.colorSpace
+            ),
+            texture: frame.texture,
+            transform: input.transform,
+            effects: input.effects,
+            trackOpacity: input.trackOpacity,
+            trackBlendMode: input.trackBlendMode,
+            sourceColorSpace: compound.colorSpace,
+            sourceIsLinearWorking: true,
+            retainedFrame: frame,
+            blendTexture: nil
+        )
+    }
+
+    /// Resolves valid FR-SPD-004 blend textures for a source node, or `nil` for the nearest
+    /// single-frame path. Degenerate weights outside (0, 1) fall back to nearest so the blend
+    /// pass never runs for integer frame positions.
+    private func frameBlendTextures(
+        for source: RenderSourceNode,
+        nodeID: RenderNodeID,
+        sourceProvider: any RenderSourceTextureProvider
+    ) throws -> RenderSourceFrameBlendTextures? {
+        guard source.resolvedFrameSampling == .frameBlend else {
+            return nil
+        }
+
+        let blend: RenderSourceFrameBlendTextures?
+        do {
+            blend = try sourceProvider.frameBlendTextures(for: source)
+        } catch {
+            throw MetalRenderError.sourceTextureUnavailable(
+                nodeID,
+                String(describing: error)
+            )
+        }
+        guard let blend, blend.laterWeight > 0, blend.laterWeight < 1 else {
+            return nil
+        }
+        return blend
+    }
+
+    /// Encodes the FR-SPD-004 blend pass: both frames are unpremultiplied, decoded to linear
+    /// light with the source transfer function, mixed by the later-frame weight, and written
+    /// premultiplied to a half-float linear texture in the source primaries. The composite pass
+    /// then treats the result exactly like a nested linear-working input (ADR-0010: blending
+    /// happens in linear light, never on display-encoded values).
+    private func encodeFrameBlend(
+        _ blend: RenderSourceFrameBlendTextures,
+        source: RenderSourceNode,
+        commandBuffer: MTLCommandBuffer
+    ) throws -> MTLTexture {
+        let blendTexture = try makeReusableTexture(
+            pixelFormat: Self.linearWorkingPixelFormat,
+            width: blend.earlierTexture.width,
+            height: blend.earlierTexture.height
+        )
+        let pipelineState = try pipelineState(
+            fragmentFunctionName: "ajar_frame_blend_fragment",
+            pixelFormat: blendTexture.pixelFormat
+        )
+        let descriptor = renderPassDescriptor(for: blendTexture)
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
+            throw MetalRenderError.renderEncoderCreationFailed
+        }
+
+        encoder.setRenderPipelineState(pipelineState)
+        var uniforms = AjarFrameBlendUniforms(
+            sourceTransfer: colorTransferValue(source.colorSpace),
+            laterWeight: blend.laterWeight,
+            padding0: 0,
+            padding1: 0
+        )
+        encoder.setFragmentTexture(blend.earlierTexture, index: 0)
+        encoder.setFragmentTexture(blend.laterTexture, index: 1)
+        encoder.setFragmentBytes(
+            &uniforms,
+            length: MemoryLayout<AjarFrameBlendUniforms>.stride,
+            index: 0
+        )
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        encoder.endEncoding()
+        return blendTexture
     }
 
     private func encodeTransparentComposite(
@@ -1651,6 +1821,13 @@ public final class MetalRenderExecutor {
         var padding: UInt32
     }
 
+    private struct AjarFrameBlendUniforms {
+        var sourceTransfer: UInt32
+        var laterWeight: Float
+        var padding0: UInt32
+        var padding1: UInt32
+    }
+
     private static let shaderSource = """
         #include <metal_stdlib>
         using namespace metal;
@@ -1745,6 +1922,13 @@ public final class MetalRenderExecutor {
             uint outputTransfer;
             uint outputPrimaries;
             uint padding;
+        };
+
+        struct AjarFrameBlendUniforms {
+            uint sourceTransfer;
+            float laterWeight;
+            uint padding0;
+            uint padding1;
         };
 
         static float3 ajar_decode_srgb(float3 value) {
@@ -2461,6 +2645,44 @@ public final class MetalRenderExecutor {
             );
             float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
             return ajar_composite(source, destination, uniforms.blendMode);
+        }
+
+        // FR-SPD-004 frame blend: mixes two display-encoded premultiplied frames in linear
+        // light. Output is premultiplied linear in the source primaries; the composite pass
+        // finishes the primaries conversion through its linear-working input path.
+        fragment float4 ajar_frame_blend_fragment(
+            AjarVertexOut in [[stage_in]],
+            texture2d<float> earlierTexture [[texture(0)]],
+            texture2d<float> laterTexture [[texture(1)]],
+            constant AjarFrameBlendUniforms &uniforms [[buffer(0)]]
+        ) {
+            constexpr sampler frameSampler(address::clamp_to_edge, filter::nearest);
+            float4 earlier = earlierTexture.sample(frameSampler, in.uv);
+            float4 later = laterTexture.sample(frameSampler, in.uv);
+            float earlierAlpha = saturate(earlier.a);
+            float laterAlpha = saturate(later.a);
+            float3 earlierStraight = earlierAlpha > 0.00001
+                ? earlier.rgb / earlierAlpha
+                : float3(0.0);
+            float3 laterStraight = laterAlpha > 0.00001
+                ? later.rgb / laterAlpha
+                : float3(0.0);
+            float3 earlierLinear = ajar_decode_transfer(
+                saturate(earlierStraight),
+                uniforms.sourceTransfer
+            );
+            float3 laterLinear = ajar_decode_transfer(
+                saturate(laterStraight),
+                uniforms.sourceTransfer
+            );
+            float weight = saturate(uniforms.laterWeight);
+            float alpha = mix(earlierAlpha, laterAlpha, weight);
+            float3 premultiplied = mix(
+                earlierLinear * earlierAlpha,
+                laterLinear * laterAlpha,
+                weight
+            );
+            return float4(premultiplied, alpha);
         }
 
         fragment float4 ajar_present_fragment(

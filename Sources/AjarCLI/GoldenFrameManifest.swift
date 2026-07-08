@@ -52,6 +52,7 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
                     reverse: nil,
                     freezeFrame: nil,
                     timeRemap: nil,
+                    frameSampling: nil,
                     transform: nil,
                     transformAnimation: nil,
                     effects: nil,
@@ -72,6 +73,7 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let reverse: Bool?
     let freezeFrame: Bool?
     let timeRemap: [GoldenTimeRemapKeyframeSpec]?
+    let frameSampling: ClipFrameSamplingMode?
     let transform: ClipTransform?
     let transformAnimation: AnimatableClipTransform?
     let effects: ClipEffects?

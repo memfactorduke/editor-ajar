@@ -1,0 +1,41 @@
+{
+  "comment": "FR-SPD-004 frame-blend slow motion: a 1/2x clip over 64 fps frame-index-coded media (green = frameIndex mod 256) sampled at timeline frame 511, which maps to source frame 255.5 - exactly between frame 255 (green 255) and frame 256 (green 0, the mod-256 wrap chosen so the two adjacent frames differ maximally). The correct blend mixes the two frames at weight 1/2 in LINEAR working light (ADR-0010) and re-encodes with the Rec.709 OETF, giving green byte ~180; a display-encoded blend would give ~128 and is rejected by the executor unit test. Wrong-variant calibration measured against this reference: dropping frameSampling (nearest, current single-frame decode) fails with maxDeltaE=41.4; blending with the wrong weight (sampling source frame 255.25, weight 1/4 instead of 1/2) fails with maxDeltaE=23.0. Tolerance 10 is ~2x the measured cross-machine ProRes/color-conversion noise floor (maxDeltaE 4.614 on the CI runner vs 0.000 locally) and the weakest wrong-variant signal (23.0) is >= 2x the tolerance, matching the FR-SPD-002 fixture calibration convention.",
+  "schemaVersion": 1,
+  "id": "frame-blend-half-speed",
+  "requirements": [
+    "FR-SPD-004",
+    "ADR-0009",
+    "ADR-0010",
+    "TESTING-2",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "frame": "511",
+  "referencePNG": "reference.png",
+  "clips": [
+    {
+      "syntheticMedia": {
+        "width": 16,
+        "height": 16,
+        "frameCount": 512,
+        "frameRate": 64,
+        "bgra": [
+          0,
+          0,
+          255,
+          255
+        ]
+      },
+      "speed": {
+        "numerator": 1,
+        "denominator": 2
+      },
+      "frameSampling": "frameBlend"
+    }
+  ],
+  "tolerance": {
+    "maximumDeltaE": 10,
+    "minimumSSIM": 0.9,
+    "maximumAlphaDelta": 0
+  }
+}
