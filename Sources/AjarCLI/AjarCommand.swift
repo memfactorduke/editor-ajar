@@ -60,6 +60,8 @@ public enum AjarCommand {
                 )
             case "bench":
                 return try await runBench(arguments: arguments, standardOutput: standardOutput)
+            case "soak":
+                return try await runSoak(arguments: arguments, standardOutput: standardOutput)
             default:
                 standardError.writeLine("error: unknown command '\(command)'")
                 standardError.writeLine(usage)
@@ -142,6 +144,15 @@ public enum AjarCommand {
         return 0
     }
 
+    private static func runSoak(
+        arguments: [String],
+        standardOutput: any AjarTextOutput
+    ) async throws -> Int32 {
+        let options = try SoakOptions.parse(Array(arguments.dropFirst()))
+        _ = try await SoakCommand.run(options: options, standardOutput: standardOutput)
+        return 0
+    }
+
     private static func goldenExitCode(
         label: String,
         passCount: Int,
@@ -168,5 +179,7 @@ public enum AjarCommand {
           ajar golden [Tests/Fixtures/golden | manifest.json]
           ajar golden-audio [Tests/Fixtures/golden-audio | manifest.json]
           ajar bench <all|metric> [project.ajar]
+          ajar soak [--iterations <n>] [--duration-seconds <s>] [--seed <n|0xN>]
+              [--warmup-iterations <n>] [--growth-band-mb <MiB>]
         """
 }

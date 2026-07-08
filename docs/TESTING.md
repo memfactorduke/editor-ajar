@@ -17,7 +17,7 @@ watching every diff. If it's not tested, it's not done.
 | **Integration** | import → edit → render → export round-trips; relink; proxy on/off equivalence | runner, every PR | seconds–min |
 | **Benchmark** | the SPEC §5 NFRs on the reference machine | reference runner, every PR | min |
 | **Fuzz** | importers + project loader against malformed/truncated input (NFR-STAB-006) | nightly + corpus on PR | min |
-| **Soak** | 1-hour edit+playback for leaks/stability (NFR-STAB-005) | nightly | long |
+| **Soak** | seeded edit+render loop for leaks/stability, §8 (NFR-STAB-005) | short: every PR · full 1-hour: pre-release | ~3 min / 1 h |
 | **Sanitizers** | Thread + Address Sanitizer on unit/integration (NFR-STAB-004) | every PR | min |
 | **UI smoke** | app launches, opens a project, plays, exports (XCUITest, minimal) | every PR | min |
 
@@ -65,7 +65,8 @@ build (all modules, warnings-as-errors in AjarCore)
                      └─ UI smoke
 ```
 
-Nightly adds: fuzz corpus, 1-hour soak, expanded benchmark matrix (secondary HW tier).
+A short soak (§8) runs per PR in parallel with the gates above. Nightly adds: fuzz corpus,
+expanded benchmark matrix (secondary HW tier).
 
 ## 6. Coverage & traceability
 
@@ -80,3 +81,47 @@ Nightly adds: fuzz corpus, 1-hour soak, expanded benchmark matrix (secondary HW 
   (e.g. `gen-fixtures.sh`) or fetched to a local cache, never committed (see `.gitignore`).
 - Synthetic media (color bars, gradients, moving shapes, tone) gives exact, license-free,
   deterministic inputs for most visual/audio goldens.
+
+## 8. Soak testing (NFR-STAB-005)
+
+`ajar soak` is the headless leak/allocations harness. Each iteration runs a deterministic,
+seeded scripted loop (SplitMix64; the seed is printed in the run header and settable with
+`--seed`, so failures replay exactly): edits through `EditReducer`/`EditHistory` with full
+undo/redo replay (blade, trim, constant-speed retime, time-remap, compound make + decompose,
+crossfade add + remove), render-graph builds, offline renders (audio always, incl. compound
+audio source caching; video via the CLI decode/texture path when a GPU is present), realtime
+plan publish/consume handoff cycles (`ownedPointer` slot reclamation), and disk-frame-cache
+persist/lookup/quarantine/reset churn across cycled synthetic project variants. Iterations run
+inside autoreleasepool boundaries so measured growth is real, not pool noise.
+
+After a warmup (default 3 iterations, excluded while caches and driver pools fill), the
+process footprint (mach `task_info` `phys_footprint`; raw resident size is reported alongside)
+is sampled every iteration. The run fails with a typed error and the growth curve when:
+
+1. **Band** — any post-warmup sample rises more than the growth band above the baseline-window
+   median (default 64 MiB — roughly 10x the observed benign malloc/driver-pool jitter, far
+   below what a real per-iteration leak accumulates); or
+2. **Quartile monotonic** — the four post-warmup quartile means increase strictly monotonically
+   by more than 8 MiB; or
+3. **Fitted slope** — with 2,000+ post-warmup samples, the least-squares fitted growth across
+   the window exceeds 8 MiB. This catches the slow linear leak the first two checks provably
+   cannot: linear growth just under ~10.7 MiB/hour keeps the quartile-mean rise at the 8 MiB
+   tolerance and stays inside the band for hours. The 2,000-sample floor exists because the
+   fitted-growth noise is ~`jitter * sqrt(12 / n)`: at ~15 MiB worst-case per-sample jitter
+   that is ~1.2 MiB at n = 2,000 (threshold ~6.5 sigma above noise — cannot flake) but several
+   MiB at short-run counts, where a slope verdict would be jitter, not signal.
+
+**Detection floor** (what NFR-STAB-005 sign-off does and does not attest):
+
+- **150 s PR gate** (~150–500 iterations, below the slope floor): catches any-shape growth
+  over 64 MiB within the window and strictly-monotonic trends over 8 MiB within the window.
+  Slower leaks are invisible per-PR *by design* — short runs are jitter-dominated.
+- **3600 s acceptance run** (~12,000 iterations at ~0.3 s/iteration): the slope check binds —
+  fitted linear growth above **8 MiB/hour (~0.7 KiB/iteration)** fails (fit noise ~0.5 MiB at
+  that sample count). Leaks below ~8 MiB/hour, or growth confined to the warmup, remain below
+  the gate's detection floor and are out of scope of the sign-off.
+
+Cadence: CI runs `ajar soak --duration-seconds 150` on every PR (~3 minutes,
+`timeout-minutes: 10` so a hang fails fast). The **NFR-STAB-005 acceptance run** is the full
+1-hour soak — `ajar soak --duration-seconds 3600` — executed before releases (nightly wiring
+may adopt it later).
