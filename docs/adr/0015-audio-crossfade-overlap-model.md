@@ -121,6 +121,9 @@ stays abut-only; a crossfade is derived render-time behavior keyed off the exist
    | Slide | **Preserve** the pairs at both moving cuts; **clamp** each; mirror-update neighbors. |
    | Lift | **Remove** both of the lifted clip's pairs and clear the mirrors on its neighbors — the gap breaks adjacency. |
    | Ripple delete | **Remove** the deleted clip's pairs and mirrors; the newly abutting neighbors get **no** automatic crossfade. |
+   | Trim (in place) | **Preserve** while the partners still abut; **clamp** as above; an edge pulled off its partner **removes** the pair and clears the mirror — the gap breaks adjacency. |
+   | Move | **Remove** any pair whose cut the move breaks (mirrors cleared on both affected tracks); a move that keeps the partners abutting **preserves** the pair. No automatic crossfade at the destination. |
+   | Set speed | **Preserve** the pair (the track ripples like a ripple trim); **clamp** against the retimed clip duration and the speed-scaled tail handle; clamp-to-zero **removes** the pair. |
 
 9. **Render paths and hashing.** `OfflineAudioMixer` applies §3's extended window and §4's curve
    contract; the realtime plan prepares tail frames ahead of time like any other source material —
@@ -150,6 +153,18 @@ resolved on issue #102; they are recorded here as naming, not as changes to any 
 4. **Explicit-gap-item semantics.** `crossfadeSeparatedByGap` fires only when an explicit gap
    item sits between the partners; non-touching partners without a gap item stay
    `crossfadePartnerNotAdjacent`.
+
+Two more were resolved while implementing the §8 matrix (slice 3, PR #165), again recorded as
+naming rather than changed decisions:
+
+5. **§8 rows for trim/move/speed.** The in-place trim, move, and constant-speed commands also
+   mutate cut geometry, so they carry the same §8 contract; their rows were added to the table
+   above with the matching preserve/clamp/remove rationale.
+6. **Blade limits.** Blading *inside* an active transition region `[T, T + D)` is not defined by
+   this ADR and is rejected with the typed `bladeInsideCrossfadeRegion` error; blading reversed
+   or time-remapped clips is rejected with `bladeUnsupportedForRetimedClip` until
+   direction-aware source-split math exists (FR-SPD-003 follow-up), and a bladed freeze frame
+   keeps the same held frame on both halves.
 
 ## Consequences
 

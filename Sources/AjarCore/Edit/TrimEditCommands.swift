@@ -78,45 +78,98 @@ extension EditReducer {
                     .bladeTimeOutsideClip(clipID: edit.clipID, atTime: edit.atTime)
                 )
             }
+            try rejectBladeInsideCrossfadeRegion(clip: clip, atTime: edit.atTime)
 
-            let leftDuration = try subtractTimes(edit.atTime, clip.timelineRange.start)
-            let rightDuration = try subtractTimes(clipEnd, edit.atTime)
-            let leftSourceDuration = try speedSourceDuration(
-                clipID: clip.id,
-                timelineDuration: leftDuration,
-                speed: clip.speed
+            let halves = try bladeHalves(of: clip, edit: edit, clipEnd: clipEnd)
+            items[index] = .clip(halves.left)
+            items.insert(.clip(halves.right), at: index + 1)
+            repointBladeMirror(
+                &items,
+                record: clip.audioMix.trailingCrossfade,
+                from: clip.id,
+                to: edit.rightClipID
             )
-            let rightSourceDuration = try speedSourceDuration(
-                clipID: clip.id,
-                timelineDuration: rightDuration,
-                speed: clip.speed
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
             )
-            let rightSourceStart = try addTimes(clip.sourceRange.start, leftSourceDuration)
-            let leftClip = copying(
-                clip,
-                sourceRange: try makeRange(
-                    start: clip.sourceRange.start,
-                    duration: leftSourceDuration
-                ),
-                timelineRange: try makeRange(
-                    start: clip.timelineRange.start,
-                    duration: leftDuration
-                )
-            )
-            let rightClip = Clip(
-                id: edit.rightClipID,
-                source: clip.source,
-                sourceRange: try makeRange(start: rightSourceStart, duration: rightSourceDuration),
-                timelineRange: try makeRange(start: edit.atTime, duration: rightDuration),
-                kind: clip.kind,
-                name: "\(clip.name) 2",
-                speed: clip.speed
-            )
-
-            items[index] = .clip(leftClip)
-            items.insert(.clip(rightClip), at: index + 1)
-            return copying(track, items: sortedItems(items))
         }
+    }
+
+    /// Splits `clip` at the blade point. Per the ADR-0015 §8 blade row the leading
+    /// crossfade record stays on the left half and the trailing record moves to the right
+    /// half; the new cut itself gets no automatic crossfade.
+    static func bladeHalves(
+        of clip: Clip,
+        edit: BladeClipEdit,
+        clipEnd: RationalTime
+    ) throws -> (left: Clip, right: Clip) {
+        // The forward source-split math below is wrong for reversed playback (the left
+        // half would need the *tail* source range) and undefined for keyframed remaps;
+        // reject rather than silently produce wrong source ranges (FR-SPD-003).
+        guard !clip.reverse, clip.timeRemap == nil else {
+            throw EditReducerError.invalidEdit(
+                .bladeUnsupportedForRetimedClip(clipID: clip.id)
+            )
+        }
+        let leftDuration = try subtractTimes(edit.atTime, clip.timelineRange.start)
+        let rightDuration = try subtractTimes(clipEnd, edit.atTime)
+        let leftSourceDuration = try speedSourceDuration(
+            clipID: clip.id,
+            timelineDuration: leftDuration,
+            speed: clip.speed
+        )
+        let rightSourceDuration = try speedSourceDuration(
+            clipID: clip.id,
+            timelineDuration: rightDuration,
+            speed: clip.speed
+        )
+        // A freeze frame holds `sourceRange.start` for every rendered time, so the right
+        // half keeps the same source start and both halves hold the same frame.
+        let rightSourceStart = clip.freezeFrame
+            ? clip.sourceRange.start
+            : try addTimes(clip.sourceRange.start, leftSourceDuration)
+        let leftClip = copying(
+            clip,
+            sourceRange: try makeRange(
+                start: clip.sourceRange.start,
+                duration: leftSourceDuration
+            ),
+            timelineRange: try makeRange(
+                start: clip.timelineRange.start,
+                duration: leftDuration
+            ),
+            audioMix: bladeLeftAudioMix(clip.audioMix)
+        )
+        // Keyframed transform/effects animations stay on the left half only (their
+        // timeline-absolute keyframes cannot be carried into the right half's range
+        // without curve splitting); the evaluated base values are preserved on both.
+        let rightClip = Clip(
+            id: edit.rightClipID,
+            source: clip.source,
+            sourceRange: try makeRange(start: rightSourceStart, duration: rightSourceDuration),
+            timelineRange: try makeRange(start: edit.atTime, duration: rightDuration),
+            kind: clip.kind,
+            name: "\(clip.name) 2",
+            transform: clip.transform,
+            effects: clip.effects,
+            audioMix: bladeRightAudioMix(clip.audioMix),
+            speed: clip.speed,
+            freezeFrame: clip.freezeFrame
+        )
+        return (left: leftClip, right: rightClip)
+    }
+
+    /// The left half keeps the start-edge audio metadata: gain/pan automation, `fadeIn`,
+    /// and the leading crossfade record (ADR-0015 §8 blade row).
+    static func bladeLeftAudioMix(_ mix: ClipAudioMix) -> ClipAudioMix {
+        copying(mix, fadeOut: ClipAudioFade.none, trailingCrossfade: .some(nil))
+    }
+
+    /// The right half keeps the end-edge audio metadata: gain/pan automation, `fadeOut`,
+    /// and the trailing crossfade record (ADR-0015 §8 blade row).
+    static func bladeRightAudioMix(_ mix: ClipAudioMix) -> ClipAudioMix {
+        copying(mix, fadeIn: ClipAudioFade.none, leadingCrossfade: .some(nil))
     }
 
     static func rippleTrimClipWithoutLinkedPartners(
@@ -165,7 +218,10 @@ extension EditReducer {
                 }
             }
 
-            return copying(track, items: sortedItems(items))
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 
@@ -188,7 +244,10 @@ extension EditReducer {
                     timelineRange: ranges.rightTimelineRange
                 )
             )
-            return copying(track, items: sortedItems(items))
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 
@@ -249,7 +308,10 @@ extension EditReducer {
                 speed: clip.speed
             )
             items[index] = .clip(copying(clip, sourceRange: edit.sourceRange))
-            return copying(track, items: sortedItems(items))
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 
@@ -297,7 +359,10 @@ extension EditReducer {
             items[previousIndex] = try adjustingItemEnd(previous, end: edit.timelineRange.start)
             items[index] = .clip(copying(clip, timelineRange: edit.timelineRange))
             items[nextIndex] = try adjustingItemStart(next, start: newEnd)
-            return copying(track, items: sortedItems(items))
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 
@@ -333,7 +398,12 @@ extension EditReducer {
                     items.append(item)
                 }
             }
-            return copying(track, items: sortedItems(items))
+            // ADR-0015 §8: the deleted clip's pairs and mirrors are removed; the newly
+            // abutting neighbors get no automatic crossfade.
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 
@@ -357,7 +427,12 @@ extension EditReducer {
             }
 
             items[index] = .gap(clip.timelineRange)
-            return copying(track, items: sortedItems(items))
+            // ADR-0015 §8: the gap breaks adjacency, so the lifted clip's pairs vanish
+            // with it and the neighbors' mirrors are cleared.
+            return try maintainingCrossfades(
+                copying(track, items: sortedItems(items)),
+                in: project
+            )
         }
     }
 }

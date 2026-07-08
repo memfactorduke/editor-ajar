@@ -139,6 +139,28 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// A clip audio mix failed semantic validation.
     case invalidClipAudioMix(clipID: UUID, error: AudioMixValidationError)
 
+    /// A crossfade edit failed the ADR-0015 pair taxonomy, curve, retime, or
+    /// source-handle rules (FR-AUD-002).
+    case invalidClipAudioCrossfade(clipID: UUID, error: AudioCrossfadeValidationError)
+
+    /// Creating a crossfade requires an abutting next clip on the same track (ADR-0015 §5).
+    case crossfadeRequiresAdjacentClips(clipID: UUID)
+
+    /// Crossfades are audio-track metadata; the addressed track is not an audio track.
+    case crossfadeRequiresAudioTrack(clipID: UUID)
+
+    /// Removing a crossfade requires an existing trailing record on the addressed clip.
+    case crossfadeNotFound(clipID: UUID)
+
+    /// The blade point falls inside an active ADR-0015 crossfade transition region, which
+    /// the ADR does not define; the edit is rejected rather than guessed at.
+    case bladeInsideCrossfadeRegion(clipID: UUID, atTime: RationalTime)
+
+    /// Blading a reversed or time-remapped clip needs direction-aware source-split math
+    /// that does not exist yet; the edit is rejected rather than silently producing wrong
+    /// source ranges (FR-SPD-003).
+    case bladeUnsupportedForRetimedClip(clipID: UUID)
+
     /// A clip speed failed semantic validation.
     case invalidClipSpeed(clipID: UUID, error: ClipSpeedValidationError)
 

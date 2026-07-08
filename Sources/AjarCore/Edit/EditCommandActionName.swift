@@ -82,6 +82,10 @@ public extension EditCommand {
             return "Set Clip Audio Mix"
         case .clearClipAudioMix:
             return "Clear Clip Audio Mix"
+        case .setClipAudioCrossfade:
+            return "Add Crossfade"
+        case .removeClipAudioCrossfade:
+            return "Remove Crossfade"
         case .detachClipAudio:
             return "Detach Audio"
         case .replaceClipAudioSource:
