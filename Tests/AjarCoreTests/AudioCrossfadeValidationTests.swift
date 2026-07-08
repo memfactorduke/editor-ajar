@@ -377,6 +377,38 @@ final class AudioCrossfadeHandleValidationTests: XCTestCase {
 
         XCTAssertEqual(project.validate(), .valid)
     }
+
+    func testFRAUD002HandleArithmeticOverflowIsTimeArithmeticNotHandleShortfall() throws {
+        // Computing sourceRange.end() at the 24-timescale overflows Int64 here; the
+        // failure must surface as timeArithmetic, never as a misdiagnosed handle shortfall.
+        let outgoingID = try CrossfadeFixtureID.outgoingClip()
+        let incomingID = try CrossfadeFixtureID.incomingClip()
+        let overflowingDuration = try RationalTime(value: Int64.max, timescale: 1)
+        let outgoingClip = Clip(
+            id: outgoingID,
+            source: .media(id: try CrossfadeFixtureID.media()),
+            sourceRange: try TimeRange(start: editTime(0), duration: overflowingDuration),
+            timelineRange: try editRange(startFrame: 0, durationFrames: 10),
+            kind: .audio,
+            name: "Overflowing tail",
+            audioMix: try outgoingCrossfadeMix(partner: incomingID)
+        )
+        var incomingSpec = CrossfadeClipSpec()
+        incomingSpec.timelineStartFrame = 10
+        incomingSpec.audioMix = try incomingCrossfadeMix(partner: outgoingID)
+        let project = try makeCrossfadeProject(items: [
+            .clip(outgoingClip),
+            .clip(try makeCrossfadeClip(id: incomingID, spec: incomingSpec))
+        ])
+
+        let errors = projectCrossfadeErrors(in: project)
+        XCTAssertEqual(errors.count, 1)
+        guard case .timeArithmetic(let clipID, _) = errors.first else {
+            XCTFail("Expected timeArithmetic, got \(errors)")
+            return
+        }
+        XCTAssertEqual(clipID, outgoingID)
+    }
 }
 
 // MARK: - Private helpers

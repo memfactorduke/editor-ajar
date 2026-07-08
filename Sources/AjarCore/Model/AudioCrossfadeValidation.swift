@@ -342,7 +342,7 @@ private extension ClipAudioCrossfadeValidator {
                 forTimelineDuration: record.duration,
                 speed: clip.speed
             )
-            if tailWindowLeavesMedia(
+            if try tailWindowLeavesMedia(
                 clip: clip,
                 tailSourceDuration: tailSourceDuration,
                 mediaDuration: mediaDuration
@@ -358,21 +358,19 @@ private extension ClipAudioCrossfadeValidator {
         }
     }
 
+    /// Throws on rational-time arithmetic failure so the caller reports it as
+    /// `timeArithmetic` rather than misdiagnosing a handle shortfall.
     static func tailWindowLeavesMedia(
         clip: Clip,
         tailSourceDuration: RationalTime,
         mediaDuration: RationalTime
-    ) -> Bool {
+    ) throws -> Bool {
         if clip.reverse {
             // The reversed tail keeps reading backward past `sourceRange.start`.
             return clip.sourceRange.start < tailSourceDuration
         }
-        guard
-            let sourceEnd = try? clip.sourceRange.end(),
-            let requiredEnd = try? sourceEnd.adding(tailSourceDuration)
-        else {
-            return true
-        }
+        let sourceEnd = try clip.sourceRange.end()
+        let requiredEnd = try sourceEnd.adding(tailSourceDuration)
         return requiredEnd > mediaDuration
     }
 
