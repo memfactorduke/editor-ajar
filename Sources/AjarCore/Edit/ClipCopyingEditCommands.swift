@@ -18,7 +18,8 @@ extension EditReducer {
         speed: RationalValue? = nil,
         reverse: Bool? = nil,
         freezeFrame: Bool? = nil,
-        timeRemap: ClipTimeRemap?? = nil
+        timeRemap: ClipTimeRemap?? = nil,
+        frameSampling: ClipFrameSamplingMode? = nil
     ) -> Clip {
         let replacementTransform = transform ?? clip.transform
         let replacementAnimation = transformAnimation
@@ -47,7 +48,8 @@ extension EditReducer {
             speed: speed ?? clip.speed,
             reverse: reverse ?? clip.reverse,
             freezeFrame: freezeFrame ?? clip.freezeFrame,
-            timeRemap: timeRemap ?? clip.timeRemap
+            timeRemap: timeRemap ?? clip.timeRemap,
+            frameSampling: frameSampling ?? clip.frameSampling
         )
     }
 }

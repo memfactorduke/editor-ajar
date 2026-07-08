@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Frame-blend slow-motion smoothing (FR-SPD-004 v1), closing #170: a per-clip
+  `frameSampling` mode (`nearest` default, `frameBlend` opt-in) that blends the two source
+  frames adjacent to a fractional source frame position, weighted by the fractional part, in
+  LINEAR working light (ADR-0010) via a dedicated pre-composite Metal pass. The blend fraction
+  is always measured toward the later source frame on the resolved decode-time axis, so
+  reverse playback blends the same frame pairs with the same weights as forward playback;
+  freeze frames hold a single decoded frame and explicitly degenerate to nearest, as do
+  integer frame positions and the last decodable frame of a span. The mode is additive in the
+  project schema (absent key decodes to `nearest`) and folds into the render-graph content
+  hash as an optional field, so pre-FR-SPD-004 projects and nearest-mode clips keep
+  byte-identical cache identities and the feature is zero-cost when off. Optical-flow
+  interpolation stays out of scope (v1.x). New `frame-blend-half-speed` golden fixture with
+  calibrated wrong-variant signals (nearest maxDeltaE 41.4, wrong-weight 23.0 vs tolerance 10
+  and the ~4.6 cross-machine noise floor).
 - `ajar soak`: headless leak/allocations soak harness plus a per-PR CI soak gate
   (NFR-STAB-005, TESTING §8), closing #169. Each iteration runs a deterministic seeded
   (SplitMix64, `--seed`) scripted loop inside autoreleasepool boundaries: `EditReducer`/

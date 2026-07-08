@@ -87,6 +87,7 @@ struct RenderSourceNodeSpec {
     let reverse: Bool
     let freezeFrame: Bool
     let timeRemap: ClipTimeRemap?
+    let frameSampling: ClipFrameSamplingMode?
     let colorSpace: MediaColorSpace
 }
 
@@ -116,6 +117,12 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// FR-SPD-002 time-remap curve that mapped sequence time to source time, when present.
     public let timeRemap: ClipTimeRemap?
 
+    /// FR-SPD-004 frame sampling mode, when the clip opted out of nearest sampling.
+    ///
+    /// `nil` means nearest sampling. The field stays optional so pre-FR-SPD-004 source nodes
+    /// keep byte-identical content-hash payloads: synthesized Codable omits absent optionals.
+    public let frameSampling: ClipFrameSamplingMode?
+
     /// Tagged source color space used by the render pipeline.
     public let colorSpace: MediaColorSpace
 
@@ -129,6 +136,7 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         reverse: Bool = false,
         freezeFrame: Bool = false,
         timeRemap: ClipTimeRemap? = nil,
+        frameSampling: ClipFrameSamplingMode? = nil,
         colorSpace: MediaColorSpace = .rec709
     ) {
         self.mediaID = mediaID
@@ -139,7 +147,21 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         self.reverse = reverse
         self.freezeFrame = freezeFrame
         self.timeRemap = timeRemap
+        self.frameSampling = frameSampling
         self.colorSpace = colorSpace
+    }
+}
+
+public extension RenderSourceNode {
+    /// The frame sampling mode that applies at render time (FR-SPD-004).
+    ///
+    /// Freeze-frame sources hold a single decoded frame for the whole clip, so frame blending
+    /// explicitly degenerates to nearest sampling here.
+    var resolvedFrameSampling: ClipFrameSamplingMode {
+        if freezeFrame {
+            return .nearest
+        }
+        return frameSampling ?? .nearest
     }
 }
 
@@ -308,6 +330,7 @@ enum RenderNodeFactory {
                 reverse: spec.reverse,
                 freezeFrame: spec.freezeFrame,
                 timeRemap: spec.timeRemap,
+                frameSampling: spec.frameSampling,
                 colorSpace: spec.colorSpace
             )
         )

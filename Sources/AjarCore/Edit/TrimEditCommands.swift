@@ -146,7 +146,8 @@ extension EditReducer {
             speed: clip.speed,
             reverse: clip.reverse,
             freezeFrame: clip.freezeFrame,
-            timeRemap: remapHalves?.right
+            timeRemap: remapHalves?.right,
+            frameSampling: clip.frameSampling
         )
         return (left: leftClip, right: rightClip)
     }

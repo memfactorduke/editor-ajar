@@ -354,7 +354,8 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             speed: speed,
             reverse: clipSpec.reverse ?? false,
             freezeFrame: clipSpec.freezeFrame ?? false,
-            timeRemap: timeRemap
+            timeRemap: timeRemap,
+            frameSampling: clipSpec.frameSampling ?? .nearest
         )
     }
 
@@ -382,7 +383,8 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             effectsAnimation: clipSpec.effectsAnimation,
             speed: speed,
             reverse: clipSpec.reverse ?? false,
-            freezeFrame: clipSpec.freezeFrame ?? false
+            freezeFrame: clipSpec.freezeFrame ?? false,
+            frameSampling: clipSpec.frameSampling ?? .nearest
         )
     }
 
