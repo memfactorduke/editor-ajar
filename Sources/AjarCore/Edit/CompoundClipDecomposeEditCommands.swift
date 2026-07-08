@@ -105,12 +105,18 @@ extension EditReducer {
                 expandedReferences: Set(expandedReferences),
                 parentMarkerIDs: Set(parentSequence.markers.map(\.id))
             )
+            let restoredDucking = try restoredCompoundAudioDucking(
+                from: targetSequence,
+                expandedReferences: Set(expandedReferences),
+                parentRules: parentSequence.audioDucking
+            )
 
             return copying(
                 parentSequence,
                 videoTracks: videoTracks,
                 audioTracks: audioTracks,
-                markers: sortedMarkers(parentSequence.markers + restoredMarkers)
+                markers: sortedMarkers(parentSequence.markers + restoredMarkers),
+                audioDucking: parentSequence.audioDucking + restoredDucking
             )
         }
     }

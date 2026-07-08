@@ -171,17 +171,23 @@ public enum AudioMixerMeterAnalyzer {
             channelCount: format.channelCount
         )
         let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
-        let audioTracks = OfflineAudioMixer.selectedAudioTracks(sequence.audioTracks)
+        // FR-CMP-001: meter the same contributor tracks the offline mixer renders — including
+        // video tracks carrying audible compound clips — so meters agree with the render.
+        let contributorTracks = OfflineAudioMixer.audioContributorTracks(
+            in: sequence,
+            project: environment.project,
+            nestingDepth: nestingDepth
+        )
         let duckingMultipliers = try OfflineAudioMixer.duckingMultipliersByTrackID(
             rules: sequence.audioDucking,
-            tracks: audioTracks,
+            tracks: contributorTracks.filter { $0.kind == .audio },
             context: context,
             environment: &environment,
             nestingDepth: nestingDepth
         )
         let measured = try measuredTracks(
             request: TrackMeasurementRequest(
-                tracks: audioTracks,
+                tracks: contributorTracks,
                 sampleCount: sampleCount,
                 context: context,
                 duckingMultipliers: duckingMultipliers

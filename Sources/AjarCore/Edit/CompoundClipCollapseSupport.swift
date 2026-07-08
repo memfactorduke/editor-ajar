@@ -20,9 +20,9 @@ extension EditReducer {
         in sequence: Sequence,
         selectedReferences: Set<ClipReference>
     ) throws -> CompoundAudioDuckingSplit {
-        let participation = audioTrackCollapseParticipation(
+        let participation = audioTrackParticipation(
             in: sequence,
-            selectedReferences: selectedReferences
+            references: selectedReferences
         )
 
         var outer: [AudioDuckingRule] = []
@@ -34,7 +34,7 @@ extension EditReducer {
             }) {
                 outer.append(rule)
             } else if referencedTrackIDs.allSatisfy({
-                participation.fullyCollapsed.contains($0)
+                participation.fullyIncluded.contains($0)
             }) {
                 nested.append(rule)
             } else {
@@ -49,34 +49,82 @@ extension EditReducer {
         return CompoundAudioDuckingSplit(outer: outer, nested: nested)
     }
 
-    private struct AudioTrackCollapseParticipation {
-        var participating: Set<UUID> = []
-        var fullyCollapsed: Set<UUID> = []
+    /// Restores nested FR-AUD-004 ducking rules onto the parent during an FR-CMP-004
+    /// decompose, inverting the collapse-time transplant.
+    ///
+    /// A nested rule is restored when every referenced audio track is fully expanded (all of
+    /// its clips landed on the parent), skipping rules the parent already contains verbatim so
+    /// decomposing sibling instances of the same nested sequence never duplicates them. A rule
+    /// referencing no expanded track stays with the retained nested sequence untouched — like
+    /// clips and markers outside the window, it still serves other compound instances. Any
+    /// other rule spans the expansion boundary, so the decompose is rejected with a typed
+    /// error instead of silently severing the sidechain.
+    static func restoredCompoundAudioDucking(
+        from targetSequence: Sequence,
+        expandedReferences: Set<ClipReference>,
+        parentRules: [AudioDuckingRule]
+    ) throws -> [AudioDuckingRule] {
+        let participation = audioTrackParticipation(
+            in: targetSequence,
+            references: expandedReferences
+        )
+
+        var restored: [AudioDuckingRule] = []
+        for (ruleIndex, rule) in targetSequence.audioDucking.enumerated() {
+            let referencedTrackIDs = [rule.triggerTrackID] + rule.targetTrackIDs
+            if referencedTrackIDs.allSatisfy({
+                !participation.participating.contains($0)
+            }) {
+                continue
+            }
+            guard referencedTrackIDs.allSatisfy({
+                participation.fullyIncluded.contains($0)
+            }) else {
+                throw EditReducerError.invalidEdit(
+                    .compoundDecomposeSeversAudioDucking(
+                        sequenceID: targetSequence.id,
+                        ruleIndex: ruleIndex
+                    )
+                )
+            }
+            if !parentRules.contains(rule), !restored.contains(rule) {
+                restored.append(rule)
+            }
+        }
+        return restored
     }
 
-    private static func audioTrackCollapseParticipation(
+    private struct AudioTrackParticipation {
+        var participating: Set<UUID> = []
+        var fullyIncluded: Set<UUID> = []
+    }
+
+    /// How each audio track of `sequence` participates in a clip-reference set: `participating`
+    /// tracks contribute at least one referenced clip; `fullyIncluded` tracks contribute every
+    /// clip they hold.
+    private static func audioTrackParticipation(
         in sequence: Sequence,
-        selectedReferences: Set<ClipReference>
-    ) -> AudioTrackCollapseParticipation {
-        var participation = AudioTrackCollapseParticipation()
+        references: Set<ClipReference>
+    ) -> AudioTrackParticipation {
+        var participation = AudioTrackParticipation()
         for track in sequence.audioTracks {
             var clipCount = 0
-            var selectedCount = 0
+            var referencedCount = 0
             for item in track.items {
                 guard case .clip(let clip) = item else {
                     continue
                 }
                 clipCount += 1
-                if selectedReferences.contains(
+                if references.contains(
                     ClipReference(trackID: track.id, clipID: clip.id)
                 ) {
-                    selectedCount += 1
+                    referencedCount += 1
                 }
             }
-            if selectedCount > 0 {
+            if referencedCount > 0 {
                 participation.participating.insert(track.id)
-                if selectedCount == clipCount {
-                    participation.fullyCollapsed.insert(track.id)
+                if referencedCount == clipCount {
+                    participation.fullyIncluded.insert(track.id)
                 }
             }
         }

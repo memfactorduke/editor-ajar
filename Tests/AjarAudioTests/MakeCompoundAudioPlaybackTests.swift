@@ -37,7 +37,9 @@ final class MakeCompoundAudioPlaybackTests: XCTestCase {
     }
 
     func testFRCMP001MutedVideoTrackSilencesCompoundAudio() throws {
-        let fixture = try makeManualCompoundFixture(seed: 87_300, videoTrackMuted: true)
+        var options = ManualCompoundOptions()
+        options.videoTrackMuted = true
+        let fixture = try makeManualCompoundFixture(seed: 87_300, options: options)
 
         let buffer = try renderMix(project: fixture.project, sequenceID: fixture.sequenceID)
 
@@ -45,15 +47,61 @@ final class MakeCompoundAudioPlaybackTests: XCTestCase {
     }
 
     func testFRCMP001SoloedAudioTrackSilencesVideoTrackCompoundAudio() throws {
-        let fixture = try makeManualCompoundFixture(
-            seed: 87_400,
-            includeBed: true,
-            bedSolo: true
-        )
+        var options = ManualCompoundOptions()
+        options.includeBed = true
+        options.bedSolo = true
+        let fixture = try makeManualCompoundFixture(seed: 87_400, options: options)
 
         let buffer = try renderMix(project: fixture.project, sequenceID: fixture.sequenceID)
 
         assertSamples(buffer.samples, equal: [1, 1, 1, 1, 1, 1, 1, 1])
+    }
+
+    func testFRCMP001SoloedVisualOnlyCompoundVideoTrackDoesNotMuteAudioTracks() throws {
+        // A soloed video track whose compound has no audio content must not join the solo
+        // pool: the audio bed keeps playing instead of the whole mix going silent.
+        var options = ManualCompoundOptions()
+        options.videoTrackSolo = true
+        options.nestedAudible = false
+        options.includeBed = true
+        let fixture = try makeManualCompoundFixture(seed: 87_600, options: options)
+
+        let buffer = try renderMix(project: fixture.project, sequenceID: fixture.sequenceID)
+
+        assertSamples(buffer.samples, equal: [1, 1, 1, 1, 1, 1, 1, 1])
+    }
+
+    func testFRCMP001SoloedAudibleCompoundVideoTrackSolosTheMix() throws {
+        var options = ManualCompoundOptions()
+        options.videoTrackSolo = true
+        options.includeBed = true
+        let fixture = try makeManualCompoundFixture(seed: 87_700, options: options)
+
+        let buffer = try renderMix(project: fixture.project, sequenceID: fixture.sequenceID)
+
+        assertSamples(buffer.samples, equal: [2, 2, 2, 2, 2, 2, 2, 2])
+    }
+
+    func testFRCMP001FRAUD003MeterAgreesWithRenderForCompoundVideoAudio() throws {
+        let fixture = try makePlaybackFixture(seed: 87_500)
+        let edited = try apply(fixture.collapseAllCommand, to: fixture.project)
+        let sequence = try XCTUnwrap(
+            edited.sequences.first { $0.id == fixture.sequenceID }
+        )
+
+        let rendered = try renderMix(project: edited, sequenceID: fixture.sequenceID)
+        let report = try AudioMixerMeterAnalyzer.measure(
+            project: edited,
+            sequence: sequence,
+            range: TimeRange(start: .zero, duration: try time(1, 1)),
+            sourceProvider: InMemoryAudioSourceProvider(sources: playbackSources)
+        )
+
+        XCTAssertEqual(report.mixLevels, AudioMixerMeterAnalyzer.measure(buffer: rendered))
+        let compoundReading = try XCTUnwrap(
+            report.trackLevels.first { $0.trackID == fixture.videoTrackID }
+        )
+        XCTAssertEqual(compoundReading.levels.map(\.peak), [4, 4])
     }
 
     private func renderMix(project: Project, sequenceID: UUID) throws -> RenderedAudioBuffer {
@@ -87,6 +135,7 @@ final class MakeCompoundAudioPlaybackTests: XCTestCase {
 private struct PlaybackFixture {
     let project: Project
     let sequenceID: UUID
+    let videoTrackID: UUID
     let compoundSequenceID: UUID
     let compoundClipID: UUID
     let selectedClips: [ClipReference]
@@ -162,6 +211,7 @@ private func makePlaybackFixture(
     return PlaybackFixture(
         project: try playbackProject(sequences: [sequence]),
         sequenceID: sequenceID,
+        videoTrackID: videoTrackID,
         compoundSequenceID: playbackUUID(seed + 8),
         compoundClipID: playbackUUID(seed + 9),
         selectedClips: [ClipReference(trackID: videoTrackID, clipID: videoClipID)]
@@ -219,29 +269,23 @@ private func makePlaybackAudioLayout(
     )
 }
 
+private struct ManualCompoundOptions {
+    var videoTrackMuted = false
+    var videoTrackSolo = false
+    var nestedAudible = true
+    var includeBed = false
+    var bedSolo = false
+}
+
 private func makeManualCompoundFixture(
     seed: Int,
-    videoTrackMuted: Bool = false,
-    includeBed: Bool = false,
-    bedSolo: Bool = false
+    options: ManualCompoundOptions = ManualCompoundOptions()
 ) throws -> PlaybackFixture {
     let sequenceID = playbackUUID(seed + 1)
     let nestedSequenceID = playbackUUID(seed + 2)
-    let nestedTrackID = playbackUUID(seed + 3)
-    let nestedClipID = playbackUUID(seed + 4)
     let videoTrackID = playbackUUID(seed + 5)
     let compoundClipID = playbackUUID(seed + 6)
 
-    let nestedSequence = Sequence(
-        id: nestedSequenceID,
-        name: "Nested",
-        videoTracks: [],
-        audioTracks: [
-            try playbackAudioTrack(id: nestedTrackID, clipID: nestedClipID, mediaID: bedMediaID)
-        ],
-        markers: [],
-        timebase: try FrameRate(frames: 4)
-    )
     let compoundClip = Clip(
         id: compoundClipID,
         source: .sequence(id: nestedSequenceID),
@@ -251,13 +295,13 @@ private func makeManualCompoundFixture(
         name: "Manual Compound"
     )
     var audioTracks: [Track] = []
-    if includeBed {
+    if options.includeBed {
         audioTracks = [
             try playbackAudioTrack(
                 id: playbackUUID(seed + 7),
                 clipID: playbackUUID(seed + 8),
                 mediaID: onesMediaID,
-                solo: bedSolo
+                solo: options.bedSolo
             )
         ]
     }
@@ -269,19 +313,70 @@ private func makeManualCompoundFixture(
                 id: videoTrackID,
                 kind: .video,
                 items: [.clip(compoundClip)],
-                muted: videoTrackMuted
+                muted: options.videoTrackMuted,
+                solo: options.videoTrackSolo
             )
         ],
         audioTracks: audioTracks,
         markers: [],
         timebase: try FrameRate(frames: 4)
     )
+    let nestedSequence = try makeManualNestedSequence(
+        id: nestedSequenceID,
+        seed: seed,
+        audible: options.nestedAudible
+    )
     return PlaybackFixture(
         project: try playbackProject(sequences: [parent, nestedSequence]),
         sequenceID: sequenceID,
+        videoTrackID: videoTrackID,
         compoundSequenceID: nestedSequenceID,
         compoundClipID: compoundClipID,
         selectedClips: []
+    )
+}
+
+/// Builds the compound's nested sequence: an audio track over the [2,2,2,2] bed source when
+/// audible, or a visual-only video track when not.
+private func makeManualNestedSequence(
+    id: UUID,
+    seed: Int,
+    audible: Bool
+) throws -> Sequence {
+    let nestedTrackID = playbackUUID(seed + 3)
+    let nestedClipID = playbackUUID(seed + 4)
+    let videoTracks: [Track]
+    let audioTracks: [Track]
+    if audible {
+        videoTracks = []
+        audioTracks = [
+            try playbackAudioTrack(id: nestedTrackID, clipID: nestedClipID, mediaID: bedMediaID)
+        ]
+    } else {
+        videoTracks = [
+            Track(
+                id: nestedTrackID,
+                kind: .video,
+                items: [
+                    .clip(
+                        try playbackClip(
+                            id: nestedClipID,
+                            mediaID: videoMediaID,
+                            kind: .video
+                        )
+                    )
+                ]
+            )
+        ]
+        audioTracks = []
+    }
+    return Sequence(
+        id: id,
+        name: "Nested",
+        videoTracks: videoTracks,
+        audioTracks: audioTracks,
+        markers: [],
+        timebase: try FrameRate(frames: 4)
     )
 }
 
@@ -329,7 +424,8 @@ private func playbackMediaPool() throws -> [MediaRef] {
         try playbackMediaRef(id: stairMediaID, hasVideo: false),
         try playbackMediaRef(id: triggerMediaID, hasVideo: false),
         try playbackMediaRef(id: bedMediaID, hasVideo: false),
-        try playbackMediaRef(id: videoMediaID, hasVideo: true)
+        try playbackMediaRef(id: videoMediaID, hasVideo: true),
+        try playbackMediaRef(id: onesMediaID, hasVideo: false)
     ]
 }
 

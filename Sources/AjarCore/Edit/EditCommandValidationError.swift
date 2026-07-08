@@ -63,6 +63,10 @@ public enum EditCommandValidationError: Equatable, Sendable {
         attribute: CompoundClipDecomposeAttribute
     )
 
+    /// Decomposing would sever a nested sidechain ducking rule across the expansion boundary,
+    /// silently changing audible behavior. Remove or retarget the nested rule first.
+    case compoundDecomposeSeversAudioDucking(sequenceID: UUID, ruleIndex: Int)
+
     /// Decomposing would overlap an existing parent timeline item.
     case compoundDecomposeWouldOverlap(
         sequenceID: UUID,

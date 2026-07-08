@@ -76,6 +76,34 @@ final class MakeCompoundClipDuckingTests: XCTestCase {
         }
     }
 
+    func testFRCMP001FRCMP004CollapseDecomposeRoundTripRestoresDuckingRules() throws {
+        let fixture = try makeDuckingFixture(seed: 175, ruleFrom: .trigger, to: .target)
+        let collapsed = try apply(fixture.collapseAllCommand, to: fixture.project)
+
+        let decomposed = try apply(
+            .decomposeCompoundClip(
+                sequenceID: fixture.ids.sequenceID,
+                trackID: fixture.ids.videoTrackID,
+                clipID: fixture.ids.compoundClipID
+            ),
+            to: collapsed
+        )
+
+        // Command-level inverse: the parent sequence — including its ducking configuration —
+        // is restored exactly, not merely via history undo.
+        let parentSequence = try XCTUnwrap(
+            decomposed.sequences.first { $0.id == fixture.ids.sequenceID }
+        )
+        XCTAssertEqual(parentSequence, fixture.project.sequences[0])
+        // The retained nested sequence keeps its transplanted rule for other instances, like
+        // it keeps its clips and markers.
+        let nestedSequence = try XCTUnwrap(
+            decomposed.sequences.first { $0.id == fixture.ids.compoundSequenceID }
+        )
+        XCTAssertEqual(nestedSequence.audioDucking, [fixture.rule])
+        XCTAssertEqual(decomposed.validate(), .valid)
+    }
+
     func testFRCMP001MakeCompoundRejectsPartiallyCollapsedDuckingTrack() throws {
         let fixture = try makeDuckingFixture(seed: 174, ruleFrom: .outer, to: .secondOuter)
         // Selecting only the first of the outer trigger track's two clips leaves the rule's
