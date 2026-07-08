@@ -25,7 +25,7 @@ silently editing code against an Accepted ADR.
 | [0012](0012-concurrency-and-threading.md) | Concurrency & threading model | Accepted |
 | [0013](0013-plugin-architecture.md) | Plugin architecture (Metal + manifest) | Accepted (target v1.x) |
 | [0014](0014-autonomous-build-loop.md) | Autonomous build-loop readiness | Accepted |
-| [0015](0015-audio-crossfade-overlap-model.md) | Audio crossfade overlap model: fade tail past the cut | Proposed |
+| [0015](0015-audio-crossfade-overlap-model.md) | Audio crossfade overlap model: fade tail past the cut | Accepted |
 
 To add one: copy `0000-adr-template.md` to the next number, fill it in, set status, and add a row
 here.
