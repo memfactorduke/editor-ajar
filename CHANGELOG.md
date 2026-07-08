@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hardened the NFR-QUAL-001 nested-compound render contract: linear-working output is now an
+  explicit `RenderOutputDescriptor.colorMode` (`.presented` by default) instead of being
+  inferred from the rgba16Float pixel format, so a future HDR-presented half-float output can
+  never silently skip the display-transfer present pass; the content-hash frame cache keys on
+  the mode so presented and linear-working frames of identical dimensions/format never
+  collide, with pinning tests for both behaviors. Added a mid-tone compound golden fixture
+  (`compound-clip-mid-tone`, bgra [32,64,128,255]) because the existing pure-red compound
+  fixture sits on a transfer-function fixed point and measures deltaE 0.000 under a
+  linear-passthrough regression; the new fixture discriminates the two wrong implementations
+  at measured maxDeltaE 24.795 (dropped `sourceIsLinearWorking` double-decode) and 23.864
+  (per-level present with skipped decode) against a tolerance of 10, calibrated at least 2x
+  above the ~4.6 cross-machine decode noise floor.
 - Completed the FR-CMP-001 make-compound follow-ups: collapsing now transplants FR-AUD-004
   sidechain ducking rules whose referenced audio tracks are all fully collapsed into the nested
   sequence (rules referencing no collapsed track stay outer; rules spanning the collapse
