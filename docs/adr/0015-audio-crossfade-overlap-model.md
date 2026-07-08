@@ -162,9 +162,11 @@ naming rather than changed decisions:
    above with the matching preserve/clamp/remove rationale.
 6. **Blade limits.** Blading *inside* an active transition region `[T, T + D)` is not defined by
    this ADR and is rejected with the typed `bladeInsideCrossfadeRegion` error; blading reversed
-   or time-remapped clips is rejected with `bladeUnsupportedForRetimedClip` until
-   direction-aware source-split math exists (FR-SPD-003 follow-up), and a bladed freeze frame
-   keeps the same held frame on both halves.
+   or time-remapped clips was initially rejected with `bladeUnsupportedForRetimedClip` until
+   direction-aware source-split math existed — that FR-SPD-003 follow-up landed (#166): the
+   left half of a reversed blade receives the source TAIL, the redistributed pair still clamps
+   against the reversed tail handle past `sourceRange.start`, the rejection is removed, and a
+   bladed freeze frame keeps the same held frame on both halves.
 
 ## Consequences
 

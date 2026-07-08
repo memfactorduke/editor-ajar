@@ -99,63 +99,54 @@ extension EditReducer {
     /// Splits `clip` at the blade point. Per the ADR-0015 §8 blade row the leading
     /// crossfade record stays on the left half and the trailing record moves to the right
     /// half; the new cut itself gets no automatic crossfade.
+    ///
+    /// The split is retime-aware (FR-SPD-002/003) and animation-aware (FR-XFORM-008): the
+    /// source range splits direction-aware for reverse and freeze, a time-remap curve is
+    /// split at the blade offset with the right half re-anchored to local time zero, and
+    /// keyframed transform/effects animations split at the cut with shared boundary
+    /// keyframes so the rendered output is unchanged by the blade.
     static func bladeHalves(
         of clip: Clip,
         edit: BladeClipEdit,
         clipEnd: RationalTime
     ) throws -> (left: Clip, right: Clip) {
-        // The forward source-split math below is wrong for reversed playback (the left
-        // half would need the *tail* source range) and undefined for keyframed remaps;
-        // reject rather than silently produce wrong source ranges (FR-SPD-003).
-        guard !clip.reverse, clip.timeRemap == nil else {
-            throw EditReducerError.invalidEdit(
-                .bladeUnsupportedForRetimedClip(clipID: clip.id)
-            )
-        }
         let leftDuration = try subtractTimes(edit.atTime, clip.timelineRange.start)
         let rightDuration = try subtractTimes(clipEnd, edit.atTime)
-        let leftSourceDuration = try speedSourceDuration(
-            clipID: clip.id,
-            timelineDuration: leftDuration,
-            speed: clip.speed
+        let sourceRanges = try bladeSourceRanges(
+            of: clip,
+            leftDuration: leftDuration,
+            rightDuration: rightDuration
         )
-        let rightSourceDuration = try speedSourceDuration(
-            clipID: clip.id,
-            timelineDuration: rightDuration,
-            speed: clip.speed
-        )
-        // A freeze frame holds `sourceRange.start` for every rendered time, so the right
-        // half keeps the same source start and both halves hold the same frame.
-        let rightSourceStart = clip.freezeFrame
-            ? clip.sourceRange.start
-            : try addTimes(clip.sourceRange.start, leftSourceDuration)
+        let remapHalves = try bladeTimeRemapHalves(of: clip, leftDuration: leftDuration)
+        let animation = try bladeAnimationHalves(of: clip, at: edit.atTime)
         let leftClip = copying(
             clip,
-            sourceRange: try makeRange(
-                start: clip.sourceRange.start,
-                duration: leftSourceDuration
-            ),
+            sourceRange: sourceRanges.left,
             timelineRange: try makeRange(
                 start: clip.timelineRange.start,
                 duration: leftDuration
             ),
-            audioMix: bladeLeftAudioMix(clip.audioMix)
+            transformAnimation: animation.leftTransform,
+            effectsAnimation: animation.leftEffects,
+            audioMix: bladeLeftAudioMix(clip.audioMix),
+            timeRemap: .some(remapHalves?.left)
         )
-        // Keyframed transform/effects animations stay on the left half only (their
-        // timeline-absolute keyframes cannot be carried into the right half's range
-        // without curve splitting); the evaluated base values are preserved on both.
         let rightClip = Clip(
             id: edit.rightClipID,
             source: clip.source,
-            sourceRange: try makeRange(start: rightSourceStart, duration: rightSourceDuration),
+            sourceRange: sourceRanges.right,
             timelineRange: try makeRange(start: edit.atTime, duration: rightDuration),
             kind: clip.kind,
             name: "\(clip.name) 2",
             transform: clip.transform,
+            transformAnimation: animation.rightTransform,
             effects: clip.effects,
+            effectsAnimation: animation.rightEffects,
             audioMix: bladeRightAudioMix(clip.audioMix),
             speed: clip.speed,
-            freezeFrame: clip.freezeFrame
+            reverse: clip.reverse,
+            freezeFrame: clip.freezeFrame,
+            timeRemap: remapHalves?.right
         )
         return (left: leftClip, right: rightClip)
     }

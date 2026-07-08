@@ -182,13 +182,17 @@ extension EditReducer {
         parameter: ClipTransformParameter,
         clip: Clip
     ) throws {
-        let contains: Bool
+        // Keyframes may sit anywhere in the closed range [start, end]: the timeline end is
+        // exclusive and never sampled, but an end keyframe shapes the approach into the cut
+        // (blade boundary keyframes land there, FR-XFORM-008).
+        let inRange: Bool
         do {
-            contains = try clip.timelineRange.contains(time)
+            let clipEnd = try clip.timelineRange.end()
+            inRange = time >= clip.timelineRange.start && time <= clipEnd
         } catch let error as RationalTimeError {
             throw EditReducerError.timeArithmeticFailed(error)
         }
-        guard contains else {
+        guard inRange else {
             throw EditReducerError.invalidEdit(
                 .transformKeyframeTimeOutsideClip(
                     clipID: clip.id,
