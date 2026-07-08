@@ -46,6 +46,54 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
         partnerClipID: UUID
     )
 
+    /// Crossfade partners are separated by a gap item (ADR-0015 §5).
+    case crossfadeSeparatedByGap(
+        edge: ClipAudioFadeEdge,
+        clipID: UUID,
+        partnerClipID: UUID
+    )
+
+    /// A crossfade record sits on the wrong edge for its partner's position (ADR-0015 §5).
+    case crossfadeDirectionInvalid(
+        edge: ClipAudioFadeEdge,
+        clipID: UUID,
+        partnerClipID: UUID
+    )
+
+    /// The partner clip is missing the mirroring crossfade record (ADR-0015 §5).
+    case crossfadeMirrorMissing(
+        edge: ClipAudioFadeEdge,
+        clipID: UUID,
+        partnerClipID: UUID
+    )
+
+    /// The two crossfade records disagree on duration or curve (ADR-0015 §5).
+    case crossfadePairMismatched(
+        edge: ClipAudioFadeEdge,
+        clipID: UUID,
+        partnerClipID: UUID
+    )
+
+    /// A same-edge fade and crossfade were both stored (ADR-0015 §6).
+    case crossfadeConflictsWithFade(edge: ClipAudioFadeEdge, clipID: UUID)
+
+    /// A crossfade edge uses a fade-to-silence-only curve (ADR-0015 §4).
+    case crossfadeCurveUnsupported(
+        edge: ClipAudioFadeEdge,
+        clipID: UUID,
+        curve: ClipAudioFadeCurve
+    )
+
+    /// A clip with a time-remap curve carries a crossfade edge (ADR-0015 §2).
+    case crossfadeUnsupportedWithTimeRemap(edge: ClipAudioFadeEdge, clipID: UUID)
+
+    /// The outgoing tail's effective read window leaves the declared media bounds.
+    case crossfadeExceedsSourceHandle(
+        edge: ClipAudioFadeEdge,
+        clipID: UUID,
+        mediaID: UUID
+    )
+
     /// A human-readable description.
     public var description: String {
         switch self {
@@ -72,6 +120,23 @@ public enum AudioRenderError: Error, Equatable, Sendable, CustomStringConvertibl
             "\(edge.rawValue) crossfade on \(clipID) points at missing clip \(partnerClipID)"
         case .crossfadePartnerNotAdjacent(let edge, let clipID, let partnerClipID):
             "\(edge.rawValue) crossfade on \(clipID) points at non-adjacent clip \(partnerClipID)"
+        case .crossfadeSeparatedByGap(let edge, let clipID, let partnerClipID):
+            "\(edge.rawValue) crossfade on \(clipID) is separated from \(partnerClipID) by a gap"
+        case .crossfadeDirectionInvalid(let edge, let clipID, let partnerClipID):
+            "\(edge.rawValue) crossfade on \(clipID) points the wrong way at \(partnerClipID)"
+        case .crossfadeMirrorMissing(let edge, let clipID, let partnerClipID):
+            "\(edge.rawValue) crossfade on \(clipID) has no mirror record on \(partnerClipID)"
+        case .crossfadePairMismatched(let edge, let clipID, let partnerClipID):
+            "\(edge.rawValue) crossfade on \(clipID) disagrees with \(partnerClipID) "
+                + "on duration or curve"
+        case .crossfadeConflictsWithFade(let edge, let clipID):
+            "\(edge.rawValue) crossfade on \(clipID) conflicts with a same-edge fade"
+        case .crossfadeCurveUnsupported(let edge, let clipID, let curve):
+            "\(edge.rawValue) crossfade on \(clipID) uses unsupported curve \(curve.rawValue)"
+        case .crossfadeUnsupportedWithTimeRemap(let edge, let clipID):
+            "\(edge.rawValue) crossfade on \(clipID) cannot combine with a time-remap curve"
+        case .crossfadeExceedsSourceHandle(let edge, let clipID, let mediaID):
+            "\(edge.rawValue) crossfade on \(clipID) reads past the bounds of media \(mediaID)"
         }
     }
 }

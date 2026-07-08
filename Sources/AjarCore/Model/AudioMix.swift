@@ -31,6 +31,11 @@ public enum ClipAudioFadeCurve: String, Codable, Equatable, Sendable {
     /// Smooth start and finish.
     case easeInOut
 
+    /// Equal-power crossfade half (`sin(πx/2)`), so a mirrored pair holds
+    /// `g_in² + g_out² = 1` for constant perceived loudness on uncorrelated
+    /// program (ADR-0015 §4, FR-AUD-002).
+    case equalPower
+
     func value(at fraction: Double) -> Double {
         let clampedFraction = max(0, min(1, fraction))
         switch self {
@@ -42,6 +47,8 @@ public enum ClipAudioFadeCurve: String, Codable, Equatable, Sendable {
             return InterpolationMode.easeOut.timingFraction(for: clampedFraction)
         case .easeInOut:
             return InterpolationMode.easeInOut.timingFraction(for: clampedFraction)
+        case .equalPower:
+            return sin(clampedFraction * Double.pi / 2)
         }
     }
 }
