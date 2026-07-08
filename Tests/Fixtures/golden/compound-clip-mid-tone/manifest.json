@@ -1,0 +1,29 @@
+{
+  "comment": "NFR-QUAL-001 mid-tone compound regression guard. The compound-clip-inner-transform fixture uses pure red bgra [0,0,255,255], a fixed point of the sRGB/Rec.709 transfer functions, so a transfer-space confusion in the compound linear-passthrough branch is invisible there (measured: that fixture still passes with maxDeltaE=0.000 when sourceIsLinearWorking is dropped). This fixture routes mid-tone bgra [32,64,128,255] (display red ~0.502 -> linear ~0.214, double-decoded ~0.038) through one compound level so the nested render's linear-working texture actually discriminates. Measured wrong-implementation deltas against this reference: maxDeltaE=24.795 when sourceIsLinearWorking is dropped (outer composite re-decodes the already-linear nested texture) and maxDeltaE=23.864 when the nested level presents display-encoded color while the outer pass still skips the decode. Tolerance 10 is >=2x the measured cross-machine decode-path noise floor (maxDeltaE ~4.6 on CI runners vs 0.000 locally) and the weakest wrong-variant signal (23.864) is >=2x the tolerance.",
+  "schemaVersion": 1,
+  "id": "compound-clip-mid-tone",
+  "requirements": ["FR-TL-013", "FR-CMP-006", "ADR-0009", "ADR-0011", "NFR-QUAL-001"],
+  "frame": "0/24",
+  "referencePNG": "reference.png",
+  "outputDimensions": {
+    "width": 8,
+    "height": 8
+  },
+  "clips": [
+    {
+      "compound": {},
+      "syntheticMedia": {
+        "width": 8,
+        "height": 8,
+        "frameCount": 1,
+        "frameRate": 24,
+        "bgra": [32, 64, 128, 255]
+      }
+    }
+  ],
+  "tolerance": {
+    "maximumDeltaE": 10,
+    "minimumSSIM": 0.9,
+    "maximumAlphaDelta": 1
+  }
+}

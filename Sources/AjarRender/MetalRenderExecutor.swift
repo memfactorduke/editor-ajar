@@ -95,6 +95,18 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     }
 }
 
+/// Color encoding written to an executor output texture (NFR-QUAL-001).
+public enum RenderOutputColorMode: Hashable, Sendable {
+    /// Display-encoded output: the render finishes with the present pass that applies the
+    /// composite's output transfer function.
+    case presented
+
+    /// Premultiplied linear working-space output: the present pass is skipped and the texture
+    /// holds linear working-space color. The executor requests this mode for nested compound
+    /// renders so each nesting level stays linear until the single outermost present pass.
+    case linearWorking
+}
+
 /// Output texture settings for one render graph execution.
 public struct RenderOutputDescriptor: Equatable, Sendable {
     /// Output dimensions in pixels.
@@ -103,13 +115,24 @@ public struct RenderOutputDescriptor: Equatable, Sendable {
     /// Metal pixel format for the output texture.
     public let pixelFormat: MTLPixelFormat
 
+    /// Color encoding written to the output texture.
+    ///
+    /// This is deliberately independent of `pixelFormat`: requesting an
+    /// `MetalRenderExecutor.linearWorkingPixelFormat` (rgba16Float) output with the default
+    /// `.presented` mode still applies the display-transfer present pass, so a future
+    /// HDR-presented half-float output never silently receives linear working-space color.
+    /// Only callers that explicitly pass `.linearWorking` opt out of the present pass.
+    public let colorMode: RenderOutputColorMode
+
     /// Creates output texture settings.
     public init(
         pixelDimensions: PixelDimensions,
-        pixelFormat: MTLPixelFormat = .bgra8Unorm
+        pixelFormat: MTLPixelFormat = .bgra8Unorm,
+        colorMode: RenderOutputColorMode = .presented
     ) {
         self.pixelDimensions = pixelDimensions
         self.pixelFormat = pixelFormat
+        self.colorMode = colorMode
     }
 }
 
@@ -137,10 +160,12 @@ private struct TextureDescriptorKey: Hashable {
 private struct FrameCacheKey: Hashable {
     let contentHash: ContentHash
     let textureDescriptor: TextureDescriptorKey
+    let colorMode: RenderOutputColorMode
 
     init(contentHash: ContentHash, output: RenderOutputDescriptor) {
         self.contentHash = contentHash
         self.textureDescriptor = TextureDescriptorKey(output: output)
+        self.colorMode = output.colorMode
     }
 }
 
@@ -256,11 +281,6 @@ public struct RenderedFrame {
 private struct RenderSchedule {
     var nestedFrames: [RenderedFrame] = []
     var reusableTextures: [MTLTexture] = []
-}
-
-private enum CompositeOutputMode {
-    case presented
-    case linearWorking
 }
 
 // swiftlint:disable type_body_length
@@ -512,12 +532,9 @@ public final class MetalRenderExecutor {
     ) -> RenderOutputDescriptor {
         RenderOutputDescriptor(
             pixelDimensions: output.pixelDimensions,
-            pixelFormat: Self.linearWorkingPixelFormat
+            pixelFormat: Self.linearWorkingPixelFormat,
+            colorMode: .linearWorking
         )
-    }
-
-    private func outputMode(for output: RenderOutputDescriptor) -> CompositeOutputMode {
-        output.pixelFormat == Self.linearWorkingPixelFormat ? .linearWorking : .presented
     }
 
     private func encode(
@@ -557,7 +574,7 @@ public final class MetalRenderExecutor {
                 sourceInputs: sourceInputs,
                 outputTexture: outputTexture,
                 commandBuffer: commandBuffer,
-                outputMode: outputMode(for: output)
+                outputMode: output.colorMode
             )
             return RenderSchedule(
                 nestedFrames: sourceInputs.compactMap(\.retainedFrame),
@@ -677,7 +694,7 @@ public final class MetalRenderExecutor {
         sourceInputs: [SourceCompositeInput],
         outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer,
-        outputMode: CompositeOutputMode
+        outputMode: RenderOutputColorMode
     ) throws -> [MTLTexture] {
         switch outputMode {
         case .presented:
