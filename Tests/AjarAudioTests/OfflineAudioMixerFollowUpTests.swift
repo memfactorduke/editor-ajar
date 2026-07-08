@@ -114,6 +114,9 @@ final class OfflineAudioMixerFollowUpTests: XCTestCase {
     }
 
     func testFRAUD002ValidExactAbutCrossfadeDoesNotIntroduceDropout() throws {
+        // Slice 2 of #102: the linear pair renders the ADR-0015 fade-tail sum
+        // out·(1-x) + in·x across [1, 3/2). With both programs at constant 1 and tail media
+        // available (6-frame source), the output holds exactly 1 — no dropout at the cut.
         let firstID = try uuid("00000000-0000-0000-0000-000000085011")
         let secondID = try uuid("00000000-0000-0000-0000-000000085012")
         let firstClipID = try uuid("00000000-0000-0000-0000-000000085013")
@@ -125,7 +128,7 @@ final class OfflineAudioMixerFollowUpTests: XCTestCase {
         let buffer = try render(
             sequence: sequence,
             sources: [
-                firstID: try audioSource(samples: [1, 1, 1, 1]),
+                firstID: try audioSource(samples: [1, 1, 1, 1, 1, 1]),
                 secondID: try audioSource(samples: [1, 1, 1, 1])
             ],
             duration: time(2, 1)

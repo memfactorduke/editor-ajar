@@ -153,7 +153,11 @@ final class AudioCrossfadeValidatorTests: XCTestCase {
         )
     }
 
-    func testFRAUD002RenderAcceptsValidEqualPowerPairWithoutRenderingChange() throws {
+    func testFRAUD002RenderAcceptsValidEqualPowerPairAndSumsPerCurve() throws {
+        // Slice 2 of #102: the pair renders the ADR-0015 fade-tail sum. Both programs sit at
+        // constant 1 with tail media available, so the region holds cos(pi*x/2) + sin(pi*x/2):
+        // unity at the edges, +3 dB at the midpoint - the documented equal-power behavior on
+        // fully correlated content.
         let firstID = try uuid("00000000-0000-0000-0000-000000086113")
         let secondID = try uuid("00000000-0000-0000-0000-000000086114")
         let firstClipID = try uuid("00000000-0000-0000-0000-000000086115")
@@ -186,15 +190,16 @@ final class AudioCrossfadeValidatorTests: XCTestCase {
         let buffer = try render(
             sequence: makeSequence(items: [.clip(firstClip), .clip(secondClip)]),
             sources: [
-                firstID: try audioSource(samples: [1, 1, 1, 1]),
+                firstID: try audioSource(samples: [1, 1, 1, 1, 1, 1]),
                 secondID: try audioSource(samples: [1, 1, 1, 1])
             ],
             duration: time(2, 1)
         )
 
+        let midpoint = Float(2.0.squareRoot())
         assertSamples(
             buffer.samples,
-            equal: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            equal: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, midpoint, midpoint, 1, 1, 1, 1]
         )
     }
 }

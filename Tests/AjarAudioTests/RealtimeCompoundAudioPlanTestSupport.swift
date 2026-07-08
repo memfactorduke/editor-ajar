@@ -152,6 +152,51 @@ func makeNestedCompoundDepthTwoFixture() throws -> CompoundPlanFixture {
     )
 }
 
+/// A blade-style crossfaded pair per ADR-0015 (FR-AUD-002): one staircase source split at
+/// 1/2 and rejoined by a linear crossfade, so the correct mix reproduces the uncut source.
+func makeCrossfadedPairFixture() throws -> CompoundPlanFixture {
+    let mediaID = try uuid("00000000-0000-0000-0000-000000157041")
+    let outgoingID = try uuid("00000000-0000-0000-0000-000000157042")
+    let incomingID = try uuid("00000000-0000-0000-0000-000000157043")
+    let crossfadeDuration = try time(1, 2)
+    let outgoing = try makeClip(
+        id: outgoingID,
+        mediaID: mediaID,
+        duration: time(1, 2),
+        audioMix: ClipAudioMix(
+            trailingCrossfade: ClipAudioCrossfade(
+                partnerClipID: incomingID,
+                duration: crossfadeDuration,
+                curve: .linear
+            )
+        )
+    )
+    let incoming = try makeClip(
+        id: incomingID,
+        mediaID: mediaID,
+        sourceStart: time(1, 2),
+        timelineStart: time(1, 2),
+        duration: time(1, 2),
+        audioMix: ClipAudioMix(
+            leadingCrossfade: ClipAudioCrossfade(
+                partnerClipID: outgoingID,
+                duration: crossfadeDuration,
+                curve: .linear
+            )
+        )
+    )
+    let parent = try compoundFixtureSequence(
+        id: try uuid("00000000-0000-0000-0000-000000157044"),
+        audioTracks: [try makeTrack(items: [.clip(outgoing), .clip(incoming)])]
+    )
+    return try CompoundPlanFixture(
+        project: compoundFixtureProject(sequences: [parent]),
+        sequence: parent,
+        sources: [mediaID: try audioSource(samples: [1, 2, 3, 4])],
+        range: TimeRange(start: .zero, duration: time(1, 1))
+    )
+}
+
 func makeStressCompoundFixture(sentinel: Float) throws -> CompoundPlanFixture {
     let sampleRate = 4_000
     let seed = 157_100 + Int(sentinel) * 10

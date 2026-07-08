@@ -219,6 +219,33 @@ struct GoldenAudioSourceSpec: Decodable, Equatable {
     }
 }
 
+/// Declares an ADR-0015 crossfade from one manifest clip into the next clip on the same track
+/// (FR-AUD-002). The harness stores the trailing record on the declaring clip and the mirroring
+/// leading record on the next clip, satisfying the pair taxonomy.
+struct GoldenAudioCrossfadeSpec: Decodable, Equatable {
+    let duration: String
+    let curve: ClipAudioFadeCurve
+
+    private enum CodingKeys: String, CodingKey {
+        case duration
+        case curve
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        duration = try container.decode(String.self, forKey: .duration)
+        curve = try container.decodeIfPresent(ClipAudioFadeCurve.self, forKey: .curve) ?? .linear
+    }
+
+    func record(partnerClipID: UUID) throws -> ClipAudioCrossfade {
+        ClipAudioCrossfade(
+            partnerClipID: partnerClipID,
+            duration: try GoldenAudioManifest.rationalTime(duration),
+            curve: curve
+        )
+    }
+}
+
 struct GoldenAudioClipSpec: Decodable, Equatable {
     let sourceIndex: Int?
     let compound: GoldenAudioCompoundSpec?
@@ -233,6 +260,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
     let pan: Double
     let fadeIn: String?
     let fadeOut: String?
+    let crossfadeToNext: GoldenAudioCrossfadeSpec?
 
     private enum CodingKeys: String, CodingKey {
         case sourceIndex
@@ -248,6 +276,7 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         case pan
         case fadeIn
         case fadeOut
+        case crossfadeToNext
     }
 
     init(from decoder: Decoder) throws {
@@ -268,9 +297,19 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         pan = try container.decodeIfPresent(Double.self, forKey: .pan) ?? 0
         fadeIn = try container.decodeIfPresent(String.self, forKey: .fadeIn)
         fadeOut = try container.decodeIfPresent(String.self, forKey: .fadeOut)
+        crossfadeToNext = try container.decodeIfPresent(
+            GoldenAudioCrossfadeSpec.self,
+            forKey: .crossfadeToNext
+        )
     }
 
-    func clip(id: UUID, source: ClipSource, kind: TrackKind) throws -> Clip {
+    func clip(
+        id: UUID,
+        source: ClipSource,
+        kind: TrackKind,
+        leadingCrossfade: ClipAudioCrossfade? = nil,
+        trailingCrossfade: ClipAudioCrossfade? = nil
+    ) throws -> Clip {
         let clipDuration = try GoldenAudioManifest.rationalTime(duration)
         let clipSpeed = speed ?? .one
         let clipTimeRemap = try timeRemap.map { try $0.clipTimeRemap() }
@@ -296,7 +335,10 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
             ),
             kind: kind,
             name: "Golden Audio Clip",
-            audioMix: try audioMix(),
+            audioMix: try audioMix(
+                leadingCrossfade: leadingCrossfade,
+                trailingCrossfade: trailingCrossfade
+            ),
             speed: clipSpeed,
             reverse: reverse,
             freezeFrame: freezeFrame,
@@ -304,12 +346,17 @@ struct GoldenAudioClipSpec: Decodable, Equatable {
         )
     }
 
-    private func audioMix() throws -> ClipAudioMix {
+    private func audioMix(
+        leadingCrossfade: ClipAudioCrossfade?,
+        trailingCrossfade: ClipAudioCrossfade?
+    ) throws -> ClipAudioMix {
         ClipAudioMix(
             gain: .constant(RationalValue.approximating(gain)),
             pan: .constant(RationalValue.approximating(pan)),
             fadeIn: try fade(edgeDuration: fadeIn),
-            fadeOut: try fade(edgeDuration: fadeOut)
+            fadeOut: try fade(edgeDuration: fadeOut),
+            leadingCrossfade: leadingCrossfade,
+            trailingCrossfade: trailingCrossfade
         )
     }
 

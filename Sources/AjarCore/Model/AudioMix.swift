@@ -36,7 +36,12 @@ public enum ClipAudioFadeCurve: String, Codable, Equatable, Sendable {
     /// program (ADR-0015 §4, FR-AUD-002).
     case equalPower
 
-    func value(at fraction: Double) -> Double {
+    /// Evaluates the curve's gain multiplier at a clamped `0...1` fraction.
+    ///
+    /// This is the single source of truth for fade and ADR-0015 §4 crossfade gain math:
+    /// a crossfade pair applies `g_in(x) = value(at: x)` on the incoming clip and
+    /// `g_out(x) = value(at: 1 - x)` on the outgoing tail (FR-AUD-002).
+    public func value(at fraction: Double) -> Double {
         let clampedFraction = max(0, min(1, fraction))
         switch self {
         case .linear:

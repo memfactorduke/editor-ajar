@@ -6,7 +6,8 @@ extension OfflineAudioMixer {
     static func sourceFramePosition(
         clip: Clip,
         source: AudioSourceBuffer,
-        sourceTime: RationalTime
+        sourceTime: RationalTime,
+        allowsTailBeforeSourceStart: Bool = false
     ) throws -> Double {
         let framePosition = sourceTime.seconds * Double(source.format.sampleRate)
         guard clip.reverse && !clip.freezeFrame else {
@@ -26,6 +27,9 @@ extension OfflineAudioMixer {
             rounding: .nearestOrAwayFromZero
         )
         let offsetFrames = sourceOffsetFromEnd.seconds * Double(source.format.sampleRate)
-        return max(Double(startFrame), Double(max(0, endFrame - 1)) - offsetFrames)
+        // ADR-0015 §2: a reversed crossfade tail keeps reading backward past
+        // `sourceRange.start`, so the tail lower bound is media time zero instead.
+        let lowerBound = allowsTailBeforeSourceStart ? 0 : Double(startFrame)
+        return max(lowerBound, Double(max(0, endFrame - 1)) - offsetFrames)
     }
 }

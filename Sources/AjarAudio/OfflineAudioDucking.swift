@@ -147,12 +147,15 @@ extension OfflineAudioMixer {
         let localTime = try subtract(renderTime, clip.timelineRange.start)
         let sourceTime = try clipSourceTime(clip, at: renderTime)
         let sourceFrame = sourceTime.seconds * Double(source.format.sampleRate)
+        // Crossfade tails stay in the trigger envelope at their ADR-0015 §4 ramped level, so
+        // ducking detection matches what the mix actually plays (FR-AUD-002, FR-AUD-004).
+        let crossfadeGain = try crossfadeGainMultiplier(clip: clip, renderTime: renderTime)
         let gain = gainMultiplier(
             clip: clip,
             track: track,
             renderTime: renderTime,
             localTime: localTime
-        )
+        ) * crossfadeGain
         let pan = panValue(clip: clip, track: track, renderTime: renderTime)
 
         var peak = Double(0)

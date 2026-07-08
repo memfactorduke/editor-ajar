@@ -54,6 +54,20 @@ final class RealtimeCompoundAudioPlanTests: XCTestCase {
         XCTAssertEqual(realtime, offline.samples)
     }
 
+    func testFRAUD002RealtimePlanMatchesOfflineMixForCrossfadedPair() throws {
+        // ADR-0015 §9: the realtime plan builder delegates to OfflineAudioMixer.render, so
+        // crossfade fade-tail rendering flows into realtime with zero tolerance. The offline
+        // expectation is the uncut staircase — a correlated pair under `linear` holds exactly
+        // constant amplitude, so the #101 notch cannot reach playback either.
+        let fixture = try makeCrossfadedPairFixture()
+        let offline = try offlineMix(fixture)
+
+        let realtime = try realtimeSamples(for: fixture, chunkFrames: 3)
+
+        XCTAssertEqual(offline.samples, [1, 1, 2, 2, 3, 3, 4, 4])
+        XCTAssertEqual(realtime, offline.samples)
+    }
+
     func testFRAUD007FRCMP001CompoundPlanKeepsCallbackContractLockAndAllocationFree() throws {
         let fixture = try makeVideoTrackCompoundFixture()
         let offline = try offlineMix(fixture)

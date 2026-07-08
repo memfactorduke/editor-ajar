@@ -250,16 +250,32 @@ private extension GoldenAudioHarness {
         buildState: inout GoldenAudioProjectBuildState,
         clipIDBase: Int
     ) throws -> [Clip] {
-        try trackSpec.clips.enumerated().map { clipIndex, clipSpec in
+        let specs = trackSpec.clips
+        return try specs.enumerated().map { clipIndex, clipSpec in
             let source = try clipSource(
                 clipSpec,
                 media: media,
                 buildState: &buildState
             )
+            let clipNumber = clipIDBase + (trackIndex * 100) + clipIndex
+            // `crossfadeToNext` stores the ADR-0015 pair: the trailing record on this clip
+            // and the mirroring leading record on the next clip (FR-AUD-002).
+            if clipSpec.crossfadeToNext != nil, clipIndex == specs.count - 1 {
+                throw AjarCLIError.invalidGoldenManifest(
+                    "crossfadeToNext on the last clip of a track has no partner"
+                )
+            }
+            let leadingSpec = clipIndex > 0 ? specs[clipIndex - 1].crossfadeToNext : nil
             return try clipSpec.clip(
-                id: numberedUUID(clipIDBase + (trackIndex * 100) + clipIndex),
+                id: numberedUUID(clipNumber),
                 source: source,
-                kind: trackSpec.kind
+                kind: trackSpec.kind,
+                leadingCrossfade: leadingSpec?.record(
+                    partnerClipID: try numberedUUID(clipNumber - 1)
+                ),
+                trailingCrossfade: clipSpec.crossfadeToNext?.record(
+                    partnerClipID: try numberedUUID(clipNumber + 1)
+                )
             )
         }
     }
