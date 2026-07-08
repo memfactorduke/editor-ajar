@@ -11,8 +11,6 @@ import XCTest
 /// clip with the pair's curve, so both sources are audible across the region and the #101
 /// silence notch cannot occur.
 final class OfflineAudioCrossfadeMixerTests: XCTestCase {
-    private let format = AudioRenderFormat(sampleRate: 8, channelCount: 2)
-
     // MARK: - §1/§4 region rendering
 
     func testFRAUD002CorrelatedLinearCrossfadeReproducesTheUncutSource() throws {
@@ -28,7 +26,7 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
                         duration: time(1, 1)
                     ))
             ],
-            sources: [mediaID: try staircaseSource()]
+            sources: [mediaID: try crossfadeStaircaseSource()]
         )
 
         var shape = CrossfadePairShape(crossfadeDuration: try time(1, 2), curve: .linear)
@@ -36,10 +34,10 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
         let pair = try makeCrossfadedPair(mediaA: mediaID, mediaB: mediaID, shape: shape)
         let crossfaded = try renderEightFrames(
             items: pair,
-            sources: [mediaID: try staircaseSource()]
+            sources: [mediaID: try crossfadeStaircaseSource()]
         )
 
-        XCTAssertEqual(uncut.samples, stereo([1, 2, 3, 4, 5, 6, 7, 8]))
+        XCTAssertEqual(uncut.samples, stereoFrames([1, 2, 3, 4, 5, 6, 7, 8]))
         assertSamples(crossfaded.samples, equal: uncut.samples)
     }
 
@@ -57,8 +55,8 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
         let output = try renderEightFrames(
             items: pair,
             sources: [
-                mediaA: try constantSource(0.8),
-                mediaB: try constantSource(0.6)
+                mediaA: try crossfadeConstantSource(0.8),
+                mediaB: try crossfadeConstantSource(0.6)
             ]
         )
 
@@ -69,7 +67,7 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
             XCTAssertEqual((gainOut * gainOut) + (gainIn * gainIn), 1, accuracy: 1e-12)
             expected.append(Float((0.8 * gainOut) + (0.6 * gainIn)))
         }
-        assertSamples(output.samples, equal: stereo(expected))
+        assertSamples(output.samples, equal: stereoFrames(expected))
     }
 
     // MARK: - §2 tail sampling through retimes
@@ -87,12 +85,12 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
         let output = try renderEightFrames(
             items: pair,
             sources: [
-                mediaA: try staircaseSource(),
-                mediaB: try constantSource(0)
+                mediaA: try crossfadeStaircaseSource(),
+                mediaB: try crossfadeConstantSource(0)
             ]
         )
 
-        assertSamples(output.samples, equal: stereo([8, 7, 6, 5, 4, 2.25, 1, 0.25]))
+        assertSamples(output.samples, equal: stereoFrames([8, 7, 6, 5, 4, 2.25, 1, 0.25]))
     }
 
     func testFRAUD002FreezeFrameTailKeepsHoldingItsFrame() throws {
@@ -106,13 +104,13 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
         let output = try renderEightFrames(
             items: pair,
             sources: [
-                mediaA: try staircaseSource(),
-                mediaB: try constantSource(0)
+                mediaA: try crossfadeStaircaseSource(),
+                mediaB: try crossfadeConstantSource(0)
             ]
         )
 
         // The frozen frame is source sample 3 (source time 1/4); the tail ramps it out.
-        assertSamples(output.samples, equal: stereo([3, 3, 3, 3, 3, 2.25, 1.5, 0.75]))
+        assertSamples(output.samples, equal: stereoFrames([3, 3, 3, 3, 3, 2.25, 1.5, 0.75]))
     }
 
     func testFRAUD002ConstantSpeedTailExtendsTheMappingLinearly() throws {
@@ -128,14 +126,14 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
         let output = try OfflineAudioMixer.render(
             sequence: makeSequence(items: pair),
             range: TimeRange(start: .zero, duration: time(1, 2)),
-            format: format,
+            format: crossfadeRenderFormat,
             sourceProvider: InMemoryAudioSourceProvider(sources: [
-                mediaA: try staircaseSource(),
-                mediaB: try constantSource(0)
+                mediaA: try crossfadeStaircaseSource(),
+                mediaB: try crossfadeConstantSource(0)
             ])
         )
 
-        assertSamples(output.samples, equal: stereo([1, 3, 5, 3.5]))
+        assertSamples(output.samples, equal: stereoFrames([1, 3, 5, 3.5]))
     }
 
     // MARK: - §3 effective read window as the cache key
@@ -152,12 +150,12 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
             )
             let window = try OfflineAudioMixer.alignedSourceWindow(
                 for: OfflineAudioMixer.effectiveSourceWindow(for: clip),
-                sampleRate: format.sampleRate
+                sampleRate: crossfadeRenderFormat.sampleRate
             )
             return CompoundAudioSourceKey(
                 sequenceID: sequenceID,
                 sourceRange: window.range,
-                format: format
+                format: crossfadeRenderFormat
             )
         }
 
@@ -200,19 +198,19 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
             markers: [],
             timebase: try FrameRate(frames: 8)
         )
-        let project = try makeProject(sequences: [parent, nested], media: [])
+        let project = try makeCrossfadeProject(sequences: [parent, nested], media: [])
 
         let output = try OfflineAudioMixer.render(
             project: project,
             sequence: parent,
             range: try TimeRange(start: .zero, duration: time(1, 1)),
             sourceProvider: InMemoryAudioSourceProvider(sources: [
-                mediaID: try staircaseSource(),
-                silentMediaID: try constantSource(0)
+                mediaID: try crossfadeStaircaseSource(),
+                silentMediaID: try crossfadeConstantSource(0)
             ])
         )
 
-        assertSamples(output.samples, equal: stereo([1, 2, 3, 4, 5, 4.5, 3.5, 2]))
+        assertSamples(output.samples, equal: stereoFrames([1, 2, 3, 4, 5, 4.5, 3.5, 2]))
     }
 
     // MARK: - §7 EOF silence-padding vs provider under-delivery
@@ -229,14 +227,14 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
             shape: CrossfadePairShape(crossfadeDuration: try time(1, 2), curve: .linear)
         )
         let sequence = try makeSequence(items: pair)
-        let project = try makeProject(
+        let project = try makeCrossfadeProject(
             sequences: [sequence],
             media: [
-                makeMediaRef(id: mediaA, declaredDuration: try time(5, 8)),
-                makeMediaRef(id: mediaB, declaredDuration: try time(1, 1))
+                makeCrossfadeMediaRef(id: mediaA, declaredDuration: try time(5, 8)),
+                makeCrossfadeMediaRef(id: mediaB, declaredDuration: try time(1, 1))
             ]
         )
-        let expected = stereo([1, 2, 3, 4, 5, 0, 0, 0])
+        let expected = stereoFrames([1, 2, 3, 4, 5, 0, 0, 0])
 
         for providedFrames in [5, 8] {
             let provided = Array([Float]([1, 2, 3, 4, 5, 6, 7, 8]).prefix(providedFrames))
@@ -245,8 +243,8 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
                 sequence: sequence,
                 range: try TimeRange(start: .zero, duration: time(1, 1)),
                 sourceProvider: InMemoryAudioSourceProvider(sources: [
-                    mediaA: try monoSource(provided),
-                    mediaB: try constantSource(0)
+                    mediaA: try crossfadeMonoSource(provided),
+                    mediaB: try crossfadeConstantSource(0)
                 ])
             )
             assertSamples(output.samples, equal: expected)
@@ -265,11 +263,11 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
             shape: CrossfadePairShape(crossfadeDuration: try time(1, 2), curve: .linear)
         )
         let sequence = try makeSequence(items: pair)
-        let project = try makeProject(
+        let project = try makeCrossfadeProject(
             sequences: [sequence],
             media: [
-                makeMediaRef(id: mediaA, declaredDuration: try time(1, 1)),
-                makeMediaRef(id: mediaB, declaredDuration: try time(1, 1))
+                makeCrossfadeMediaRef(id: mediaA, declaredDuration: try time(1, 1)),
+                makeCrossfadeMediaRef(id: mediaB, declaredDuration: try time(1, 1))
             ]
         )
         let expectedMissing = try TimeRange(start: time(5, 8), duration: time(3, 8))
@@ -280,124 +278,25 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
                 sequence: sequence,
                 range: try TimeRange(start: .zero, duration: time(1, 1)),
                 sourceProvider: InMemoryAudioSourceProvider(sources: [
-                    mediaA: try monoSource([1, 2, 3, 4, 5]),
-                    mediaB: try constantSource(0)
+                    mediaA: try crossfadeMonoSource([1, 2, 3, 4, 5]),
+                    mediaB: try crossfadeConstantSource(0)
                 ])
             )
         ) { error in
             XCTAssertEqual(
                 error as? AudioRenderError,
                 .sourceUnderDelivered(
-                    clipID: Self.outgoingClipID,
+                    clipID: crossfadeOutgoingClipID,
                     missingRange: expectedMissing
                 )
             )
         }
     }
-
-    func testFRAUD002RenderNotReachingTheRegionSkipsTailDeliveryCheck() throws {
-        // A render window that ends at the cut mixes no tail frames, so a short provider
-        // buffer is not a fault yet.
-        let mediaA = try uuid("00000000-0000-0000-0000-000000164091")
-        let mediaB = try uuid("00000000-0000-0000-0000-000000164092")
-        let pair = try makeCrossfadedPair(
-            mediaA: mediaA,
-            mediaB: mediaB,
-            shape: CrossfadePairShape(crossfadeDuration: try time(1, 2), curve: .linear)
-        )
-        let sequence = try makeSequence(items: pair)
-        let project = try makeProject(
-            sequences: [sequence],
-            media: [
-                makeMediaRef(id: mediaA, declaredDuration: try time(1, 1)),
-                makeMediaRef(id: mediaB, declaredDuration: try time(1, 1))
-            ]
-        )
-
-        let output = try OfflineAudioMixer.render(
-            project: project,
-            sequence: sequence,
-            range: try TimeRange(start: .zero, duration: time(1, 2)),
-            sourceProvider: InMemoryAudioSourceProvider(sources: [
-                mediaA: try monoSource([1, 2, 3, 4]),
-                mediaB: try constantSource(0)
-            ])
-        )
-
-        assertSamples(output.samples, equal: stereo([1, 2, 3, 4]))
-    }
 }
 
 // MARK: - Fixture helpers
 
-/// Retime and source options for the outgoing half of a crossfaded pair.
-struct CrossfadePairShape {
-    var crossfadeDuration: RationalTime
-    var curve: ClipAudioFadeCurve
-    var outgoingSource: ClipSource?
-    var outgoingSourceStart: RationalTime = .zero
-    var outgoingSpeed: RationalValue = .one
-    var outgoingReverse = false
-    var outgoingFreezeFrame = false
-    var outgoingTimelineDuration: RationalTime?
-    var incomingSourceStart: RationalTime = .zero
-}
-
 extension OfflineAudioCrossfadeMixerTests {
-    static let outgoingClipID = UUID(
-        uuidString: "00000000-0000-0000-0000-000000164101"
-    ) ?? UUID()
-    static let incomingClipID = UUID(
-        uuidString: "00000000-0000-0000-0000-000000164102"
-    ) ?? UUID()
-
-    /// Builds a valid ADR-0015 §5 pair: the outgoing clip owns the trailing record, the
-    /// incoming clip mirrors it, both clips abut at the cut.
-    private func makeCrossfadedPair(
-        mediaA: UUID,
-        mediaB: UUID,
-        shape: CrossfadePairShape
-    ) throws -> [TimelineItem] {
-        let timelineDuration = try shape.outgoingTimelineDuration ?? time(1, 2)
-        let sourceDuration = try Clip.sourceDuration(
-            forTimelineDuration: timelineDuration,
-            speed: shape.outgoingSpeed
-        )
-        let outgoing = Clip(
-            id: Self.outgoingClipID,
-            source: shape.outgoingSource ?? .media(id: mediaA),
-            sourceRange: try TimeRange(start: shape.outgoingSourceStart, duration: sourceDuration),
-            timelineRange: try TimeRange(start: .zero, duration: timelineDuration),
-            kind: .audio,
-            name: "Outgoing",
-            audioMix: ClipAudioMix(
-                trailingCrossfade: ClipAudioCrossfade(
-                    partnerClipID: Self.incomingClipID,
-                    duration: shape.crossfadeDuration,
-                    curve: shape.curve
-                )
-            ),
-            speed: shape.outgoingSpeed,
-            reverse: shape.outgoingReverse,
-            freezeFrame: shape.outgoingFreezeFrame
-        )
-        let incoming = try makeClip(
-            id: Self.incomingClipID,
-            mediaID: mediaB,
-            sourceStart: shape.incomingSourceStart,
-            timelineStart: timelineDuration,
-            duration: try time(1, 2),
-            audioMix: ClipAudioMix(
-                leadingCrossfade: ClipAudioCrossfade(
-                    partnerClipID: Self.outgoingClipID,
-                    duration: shape.crossfadeDuration,
-                    curve: shape.curve
-                )
-            )
-        )
-        return [.clip(outgoing), .clip(incoming)]
-    }
-
     private func makeCompoundOutgoingClip(
         sequenceID: UUID,
         crossfadeDuration: RationalTime?
@@ -406,52 +305,20 @@ extension OfflineAudioCrossfadeMixerTests {
         if let crossfadeDuration {
             audioMix = ClipAudioMix(
                 trailingCrossfade: ClipAudioCrossfade(
-                    partnerClipID: Self.incomingClipID,
+                    partnerClipID: crossfadeIncomingClipID,
                     duration: crossfadeDuration,
                     curve: .linear
                 )
             )
         }
         return Clip(
-            id: Self.outgoingClipID,
+            id: crossfadeOutgoingClipID,
             source: .sequence(id: sequenceID),
             sourceRange: try TimeRange(start: .zero, duration: time(1, 2)),
             timelineRange: try TimeRange(start: .zero, duration: time(1, 2)),
             kind: .audio,
             name: "Compound",
             audioMix: audioMix
-        )
-    }
-
-    private func makeProject(sequences: [Sequence], media: [MediaRef]) throws -> Project {
-        Project(
-            schemaVersion: AjarProjectCodec.currentSchemaVersion,
-            settings: ProjectSettings(
-                frameRate: try FrameRate(frames: 8),
-                resolution: PixelDimensions(width: 16, height: 16),
-                colorSpace: .rec709,
-                audioSampleRate: format.sampleRate
-            ),
-            mediaPool: media,
-            sequences: sequences
-        )
-    }
-
-    private func makeMediaRef(id: UUID, declaredDuration: RationalTime) -> MediaRef {
-        MediaRef(
-            id: id,
-            sourceURL: nil,
-            contentHash: nil,
-            metadata: MediaMetadata(
-                codecID: "pcm_f32le",
-                pixelDimensions: nil,
-                frameRate: nil,
-                duration: declaredDuration,
-                colorSpace: .unspecified,
-                audioChannelLayout: AudioChannelLayout(channelCount: 1),
-                isVariableFrameRate: false,
-                conformedFrameRate: nil
-            )
         )
     }
 
@@ -462,28 +329,8 @@ extension OfflineAudioCrossfadeMixerTests {
         try OfflineAudioMixer.render(
             sequence: makeSequence(items: items),
             range: TimeRange(start: .zero, duration: time(1, 1)),
-            format: format,
+            format: crossfadeRenderFormat,
             sourceProvider: InMemoryAudioSourceProvider(sources: sources)
         )
-    }
-
-    private func staircaseSource() throws -> AudioSourceBuffer {
-        try monoSource([1, 2, 3, 4, 5, 6, 7, 8])
-    }
-
-    private func constantSource(_ value: Float) throws -> AudioSourceBuffer {
-        try monoSource([Float](repeating: value, count: 8))
-    }
-
-    private func monoSource(_ samples: [Float]) throws -> AudioSourceBuffer {
-        try AudioSourceBuffer(
-            format: AudioRenderFormat(sampleRate: format.sampleRate, channelCount: 1),
-            frameCount: samples.count,
-            samples: samples
-        )
-    }
-
-    private func stereo(_ frames: [Float]) -> [Float] {
-        frames.flatMap { [$0, $0] }
     }
 }

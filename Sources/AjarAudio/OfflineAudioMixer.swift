@@ -169,15 +169,11 @@ extension OfflineAudioMixer {
                 environment: environment
             )
             try mixClip(
-                state: OfflineClipMixState(
+                state: clipMixState(
                     clip: clip,
                     track: track,
                     source: source,
-                    declaredTailSourceEndFrame: declaredTailSourceEndFrame(
-                        clip: clip,
-                        source: source,
-                        environment: environment
-                    )
+                    environment: environment
                 ),
                 into: &output,
                 context: context
@@ -229,18 +225,12 @@ extension OfflineAudioMixer {
         let renderTime = frame.renderTime
         let format = frame.format
         let localTime = try subtract(renderTime, clip.timelineRange.start)
-        let sourceTime = try clipSourceTime(clip, at: renderTime)
-        let isTailFrame = try renderTime >= end(of: clip.timelineRange)
-        let sourceFrame = try sourceFramePosition(
-            clip: clip,
-            source: source,
-            sourceTime: sourceTime,
-            allowsTailBeforeSourceStart: isTailFrame
-        )
-        if isTailFrame, let declaredEnd = state.declaredTailSourceEndFrame,
-            sourceFrame >= declaredEnd {
-            // ADR-0015 §7 confirmed EOF: the mapped tail passed the declared media end, so it
-            // silence-pads deterministically regardless of how many frames the provider had.
+        // ADR-0015 §7 confirmed EOF (`nil`): the mapped tail passed the declared media end, so
+        // it silence-pads deterministically regardless of how many frames the provider had.
+        guard let sourceFrame = try resolvedSourceFramePosition(
+            state: state,
+            renderTime: renderTime
+        ) else {
             return
         }
         let crossfadeGain = try crossfadeGainMultiplier(clip: clip, renderTime: renderTime)

@@ -19,11 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CompoundAudioSourceKey` hashes the tail-extended window so adding, removing, or resizing a
   crossfade invalidates the compound source cache, and crossfade tails flow into ducking
   triggers and — via the delegating plan builder — realtime playback with exact offline
-  parity. §7 render-time shortfalls are distinguished: a tail past the declared media duration
-  silence-pads deterministically (clamped at the declared end regardless of provider
-  over-delivery), while provider under-delivery within declared bounds surfaces the new typed
-  `AudioRenderError.sourceUnderDelivered` (clip ID plus missing source range) instead of
-  silent zeros. Added golden-audio fixtures `crossfade-correlated-linear` (a blade-split pair
+  parity; ducking detection samples through the same tail-aware, EOF-clamped source mapping
+  the mixer plays, so reverse or past-EOF tails can never duck a target on audio the mix
+  does not render. §7 render-time shortfalls are distinguished: a tail past the declared
+  media duration silence-pads deterministically (clamped at the declared end regardless of
+  provider over-delivery), while provider under-delivery within declared bounds surfaces the
+  new typed `AudioRenderError.sourceUnderDelivered` (clip ID plus missing source range)
+  instead of silent zeros — checked only for renders whose window actually mixes tail frames,
+  so chunked renders of unrelated timeline regions never fail for a clip they do not play. Added golden-audio fixtures `crossfade-correlated-linear` (a blade-split pair
   holds exactly the uncut source — the reverted #101 sequential-fades rendering measures
   maxAbsError 5.0 with a hard 0 at the boundary frame) and
   `crossfade-uncorrelated-equal-power` (constant-power curve application), a

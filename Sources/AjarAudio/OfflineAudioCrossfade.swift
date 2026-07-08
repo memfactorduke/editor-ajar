@@ -81,6 +81,51 @@ extension OfflineAudioMixer {
         return 1
     }
 
+    /// Tail-aware source frame position for one output frame, or `nil` when the frame is
+    /// ADR-0015 §7 EOF silence (the mapped tail passed the declared media end).
+    ///
+    /// Both the mix path and the ducking trigger detector resolve samples through this single
+    /// mapping, so detection can never hear audio the mix does not play — reverse tails read
+    /// backward past `sourceRange.start` and EOF-clamped tails stay silent in both.
+    static func resolvedSourceFramePosition(
+        state: OfflineClipMixState,
+        renderTime: RationalTime
+    ) throws -> Double? {
+        let clip = state.clip
+        let sourceTime = try clipSourceTime(clip, at: renderTime)
+        let isTailFrame = try renderTime >= end(of: clip.timelineRange)
+        let framePosition = try sourceFramePosition(
+            clip: clip,
+            source: state.source,
+            sourceTime: sourceTime,
+            allowsTailBeforeSourceStart: isTailFrame
+        )
+        if isTailFrame, let declaredEnd = state.declaredTailSourceEndFrame,
+            framePosition >= declaredEnd {
+            return nil
+        }
+        return framePosition
+    }
+
+    /// Per-clip mixing state shared by the mix and ducking-detection paths.
+    static func clipMixState(
+        clip: Clip,
+        track: Track,
+        source: AudioSourceBuffer,
+        environment: OfflineAudioRenderEnvironment
+    ) -> OfflineClipMixState {
+        OfflineClipMixState(
+            clip: clip,
+            track: track,
+            source: source,
+            declaredTailSourceEndFrame: declaredTailSourceEndFrame(
+                clip: clip,
+                source: source,
+                environment: environment
+            )
+        )
+    }
+
     /// Exact rational position of `elapsed` inside `duration`, clamped to `0...1`.
     static func crossfadeFraction(
         elapsed: RationalTime,
@@ -116,8 +161,12 @@ extension OfflineAudioMixer {
         else {
             return
         }
+        // Only when this render actually mixes tail frames: the render range must intersect
+        // the tail region `[clipEnd, clipEnd + D)` — a window wholly before or after the
+        // clip's extended mix window plays none of the tail and must not fail for it.
         let clipEnd = try end(of: clip.timelineRange)
-        guard try end(of: context.range) > clipEnd else {
+        let tailEnd = try mixWindowEnd(of: clip)
+        guard try end(of: context.range) > clipEnd, context.range.start < tailEnd else {
             return
         }
         guard let tailWindow = try tailSourceWindow(for: clip, trailing: trailing) else {
