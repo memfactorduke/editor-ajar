@@ -40,8 +40,52 @@ extension EditReducer {
                 ),
                 in: project
             )
+        case .setClipAudioRetimeMode(let sequenceID, let trackID, let clipID, let mode):
+            return try setClipAudioRetimeMode(
+                ClipAudioMixEditTarget(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID
+                ),
+                mode: mode,
+                in: project
+            )
         default:
             throw EditReducerError.validationFailed([])
+        }
+    }
+
+    /// Selects the FR-SPD-001 audio retime mode for a clip, keeping every other audio-mix
+    /// field intact. `pitchCorrected` is rejected with a typed error when the clip carries a
+    /// freeze frame or an FR-SPD-002 time-remap curve (the composition policy in
+    /// `Clip.validateAudioRetime()`); `reverse` and constant speed compose.
+    static func setClipAudioRetimeMode(
+        _ edit: ClipAudioMixEditTarget,
+        mode: ClipAudioRetimeMode,
+        in project: Project
+    ) throws -> Project {
+        try updateClipAudioMix(
+            sequenceID: edit.sequenceID,
+            trackID: edit.trackID,
+            clipID: edit.clipID,
+            in: project
+        ) { clip in
+            let mix = clip.audioMix
+            let updated = ClipAudioMix(
+                gain: mix.gain,
+                pan: mix.pan,
+                fadeIn: mix.fadeIn,
+                fadeOut: mix.fadeOut,
+                leadingCrossfade: mix.leadingCrossfade,
+                trailingCrossfade: mix.trailingCrossfade,
+                retimeMode: mode
+            )
+            if let error = copying(clip, audioMix: updated).validateAudioRetime() {
+                throw EditReducerError.invalidEdit(
+                    .invalidClipAudioRetime(clipID: clip.id, error: error)
+                )
+            }
+            return updated
         }
     }
 

@@ -14,7 +14,7 @@ extension EditReducer {
             .clearClipLumaKey,
             .setClipColorCorrection, .clearClipColorCorrection,
             .addClipMask, .removeClipMask, .moveClipMask, .setClipMask,
-            .setClipAudioMix, .clearClipAudioMix,
+            .setClipAudioMix, .clearClipAudioMix, .setClipAudioRetimeMode,
             .setClipAudioCrossfade, .removeClipAudioCrossfade,
             .detachClipAudio, .replaceClipAudioSource:
             return try applyClipCommand(command, to: project)

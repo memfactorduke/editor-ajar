@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Pitch-corrected audio for constant clip speed via deterministic WSOLA (FR-SPD-001), closing
+  #160 and completing the "pitch-corrected or pitch-shifted" requirement: a new
+  `ClipAudioRetimeMode` (`pitchShifted` default | `pitchCorrected`) on `ClipAudioMix`, additive
+  in the project schema — an absent key decodes to `pitchShifted`, the exact legacy varispeed
+  behavior — with a `setClipAudioRetimeMode` edit command (typed validation, exact undo).
+  `WSOLATimeStretcher` in `AjarAudio` is bit-deterministic with fixed documented parameters
+  (20 ms analysis window — 960 frames @ 48 kHz, scaled by sample rate — 50% periodic-Hann
+  synthesis hop, normalized cross-correlation search over ±hop/2 with ties breaking to the
+  lowest lag, window-sum normalization); unit speed returns the input bit-identically.
+  Composition policy mirrors `conflictingRetime`: `pitchCorrected` with `freezeFrame` or an
+  FR-SPD-002 time-remap curve is a typed validation error (variable-rate stretching is out of
+  scope v1), while `reverse` composes — WSOLA stretches the reversed source stream. The
+  offline mixer plays pitch-corrected clips from a per-clip stretched timeline-domain buffer
+  covering the ADR-0015 §3 effective source window, so the trailing-crossfade tail reads the
+  same stretched stream 1:1 past the out-point and is exact in the stretched domain; the
+  ducking trigger detector resolves samples through the same buffer. The realtime path keeps
+  varispeed; pitch-corrected clips reach playback through the existing
+  `RealtimeAudioRenderPlan.preparingCompoundMix` delegation to `OfflineAudioMixer`, so the
+  render callback stays lock- and allocation-free. New golden fixture
+  `clip-speed-2x-pitch-corrected`: a 50 Hz tone at 2x keeps its DFT peak at 50 Hz
+  (mag ratio ≈ 73x over 100 Hz) where varispeed moves it to 100 Hz.
 - Frame-blend slow-motion smoothing (FR-SPD-004 v1), closing #170: a per-clip
   `frameSampling` mode (`nearest` default, `frameBlend` opt-in) that blends the two source
   frames adjacent to a fractional source frame position, weighted by the fractional part, in

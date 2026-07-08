@@ -59,7 +59,8 @@ extension EditReducer {
             fadeIn: fadeIn ?? mix.fadeIn,
             fadeOut: fadeOut ?? mix.fadeOut,
             leadingCrossfade: leadingCrossfade ?? mix.leadingCrossfade,
-            trailingCrossfade: trailingCrossfade ?? mix.trailingCrossfade
+            trailingCrossfade: trailingCrossfade ?? mix.trailingCrossfade,
+            retimeMode: mix.retimeMode
         )
     }
 

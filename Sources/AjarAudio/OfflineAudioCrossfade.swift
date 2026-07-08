@@ -12,6 +12,11 @@ struct OfflineClipMixState {
     /// Declared media end in source frames for ADR-0015 §7 tail EOF clamping, or `nil` when
     /// the clip has no trailing crossfade, is not media-backed, or no project is available.
     let declaredTailSourceEndFrame: Double?
+
+    /// FR-SPD-001 pitch-corrected clips read a pre-stretched buffer in the timeline domain:
+    /// frame 0 of `source` is the clip's timeline start and positions advance 1:1 with
+    /// timeline time. Reverse, crossfade-tail, and EOF handling were baked in at stretch time.
+    let readsStretchedTimelineDomain: Bool
 }
 
 extension OfflineAudioMixer {
@@ -92,6 +97,13 @@ extension OfflineAudioMixer {
         renderTime: RationalTime
     ) throws -> Double? {
         let clip = state.clip
+        if state.readsStretchedTimelineDomain {
+            // FR-SPD-001 pitch-corrected: the stretched buffer already lives in the timeline
+            // domain, so playback is a 1:1 read at the clip-local timeline offset. Tail EOF
+            // and reverse mapping were resolved when the buffer was stretched.
+            let timelineOffset = try subtract(renderTime, clip.timelineRange.start)
+            return timelineOffset.seconds * Double(state.source.format.sampleRate)
+        }
         let sourceTime = try clipSourceTime(clip, at: renderTime)
         let isTailFrame = try renderTime >= end(of: clip.timelineRange)
         let framePosition = try sourceFramePosition(
@@ -122,7 +134,8 @@ extension OfflineAudioMixer {
                 clip: clip,
                 source: source,
                 environment: environment
-            )
+            ),
+            readsStretchedTimelineDomain: false
         )
     }
 

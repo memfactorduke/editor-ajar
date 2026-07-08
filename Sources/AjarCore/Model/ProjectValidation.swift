@@ -138,6 +138,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         error: ClipTimeRemapValidationError
     )
 
+    /// A clip audio retime mode violates the FR-SPD-001 composition policy.
+    case invalidClipAudioRetime(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: ClipAudioRetimeValidationError
+    )
+
     /// A sequence ducking rule is outside the supported range or references invalid tracks.
     case invalidAudioDucking(sequenceID: UUID, ruleIndex: Int, error: AudioDuckingValidationError)
 }

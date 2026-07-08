@@ -149,7 +149,11 @@ public struct ClipAudioMix: Codable, Equatable, Sendable {
     /// Crossfade from this clip into the next adjacent clip.
     public let trailingCrossfade: ClipAudioCrossfade?
 
-    /// Unity gain, centered pan, and no fades.
+    /// How retimed audio treats pitch (FR-SPD-001). `pitchShifted` (varispeed) is the legacy
+    /// behavior and the decode default for projects that predate the key.
+    public let retimeMode: ClipAudioRetimeMode
+
+    /// Unity gain, centered pan, no fades, and pitch-shifted (varispeed) retiming.
     public static let identity = ClipAudioMix()
 
     /// Creates a per-clip audio mix.
@@ -159,7 +163,8 @@ public struct ClipAudioMix: Codable, Equatable, Sendable {
         fadeIn: ClipAudioFade = .none,
         fadeOut: ClipAudioFade = .none,
         leadingCrossfade: ClipAudioCrossfade? = nil,
-        trailingCrossfade: ClipAudioCrossfade? = nil
+        trailingCrossfade: ClipAudioCrossfade? = nil,
+        retimeMode: ClipAudioRetimeMode = .pitchShifted
     ) {
         self.gain = gain
         self.pan = pan
@@ -167,6 +172,7 @@ public struct ClipAudioMix: Codable, Equatable, Sendable {
         self.fadeOut = fadeOut
         self.leadingCrossfade = leadingCrossfade
         self.trailingCrossfade = trailingCrossfade
+        self.retimeMode = retimeMode
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -176,6 +182,7 @@ public struct ClipAudioMix: Codable, Equatable, Sendable {
         case fadeOut
         case leadingCrossfade
         case trailingCrossfade
+        case retimeMode
     }
 
     /// Decodes sparse and legacy audio-mix payloads with identity defaults.
@@ -199,6 +206,11 @@ public struct ClipAudioMix: Codable, Equatable, Sendable {
             ClipAudioCrossfade.self,
             forKey: .trailingCrossfade
         )
+        // Absent key = pitch-shifted varispeed: the exact legacy behavior (FR-SPD-001).
+        retimeMode = try container.decodeIfPresent(
+            ClipAudioRetimeMode.self,
+            forKey: .retimeMode
+        ) ?? .pitchShifted
     }
 
     /// Encodes the full audio mix payload.
@@ -210,6 +222,7 @@ public struct ClipAudioMix: Codable, Equatable, Sendable {
         try container.encode(fadeOut, forKey: .fadeOut)
         try container.encodeIfPresent(leadingCrossfade, forKey: .leadingCrossfade)
         try container.encodeIfPresent(trailingCrossfade, forKey: .trailingCrossfade)
+        try container.encode(retimeMode, forKey: .retimeMode)
     }
 
     /// Evaluates keyframable gain and pan at an exact timeline time.

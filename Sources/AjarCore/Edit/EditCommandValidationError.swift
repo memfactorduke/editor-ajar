@@ -162,6 +162,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// A clip time-remap curve failed FR-SPD-002 semantic validation.
     case invalidClipTimeRemap(clipID: UUID, error: ClipTimeRemapValidationError)
 
+    /// A clip audio retime mode failed the FR-SPD-001 composition policy.
+    case invalidClipAudioRetime(clipID: UUID, error: ClipAudioRetimeValidationError)
+
     /// A track audio mix failed semantic validation.
     case invalidTrackAudioMix(trackID: UUID, error: AudioMixValidationError)
 

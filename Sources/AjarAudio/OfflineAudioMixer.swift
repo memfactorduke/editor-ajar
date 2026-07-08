@@ -169,11 +169,11 @@ extension OfflineAudioMixer {
                 environment: environment
             )
             try mixClip(
-                state: clipMixState(
+                state: retimedClipMixState(
                     clip: clip,
                     track: track,
                     source: source,
-                    environment: environment
+                    environment: &environment
                 ),
                 into: &output,
                 context: context

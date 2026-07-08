@@ -82,6 +82,8 @@ public extension EditCommand {
             return "Set Clip Audio Mix"
         case .clearClipAudioMix:
             return "Clear Clip Audio Mix"
+        case .setClipAudioRetimeMode:
+            return "Set Audio Retime Mode"
         case .setClipAudioCrossfade:
             return "Add Crossfade"
         case .removeClipAudioCrossfade:
