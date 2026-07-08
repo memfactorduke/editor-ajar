@@ -51,6 +51,11 @@ public enum FrameBlendSampling {
     /// - the later adjacent frame would start at or past the exclusive `sourceEnd` bound, so
     ///   only one decodable frame exists at the position.
     ///
+    /// When this declines, frame providers must decode the **nearest-earlier** frame
+    /// (`nearestEarlierFrameTime(forSourceTime:frameRate:)`) rather than the fractional source
+    /// time itself, so the source-end degeneracy deterministically renders the last frame
+    /// instead of handing decoders a time past the final sample start.
+    ///
     /// Freeze-frame clips hold a single decoded frame; callers resolve that degeneracy through
     /// `RenderSourceNode.resolvedFrameSampling` before asking for a pair.
     public static func blendPair(
@@ -84,5 +89,19 @@ public enum FrameBlendSampling {
                 denominator: fraction.right
             )
         )
+    }
+
+    /// Returns the start time of the frame containing `sourceTime` (the nearest-earlier frame).
+    ///
+    /// This is the deterministic single-frame decode position frame-blend providers fall back
+    /// to when `blendPair(forSourceTime:frameRate:sourceEnd:)` declines: for integer positions
+    /// it is the position itself, and at the source-end degeneracy it is the last decodable
+    /// frame start rather than a fractional time past it.
+    public static func nearestEarlierFrameTime(
+        forSourceTime sourceTime: RationalTime,
+        frameRate: FrameRate
+    ) throws -> RationalTime {
+        let frameIndex = try sourceTime.frameIndex(at: frameRate, rounding: .down)
+        return try RationalTime.atFrame(frameIndex, frameRate: frameRate)
     }
 }

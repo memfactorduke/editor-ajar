@@ -180,6 +180,27 @@ final class ClipFrameBlendSamplingTests: XCTestCase {
         )
     }
 
+    func testFRSPD004NearestEarlierFrameTimeFloorsFractionalPositions() throws {
+        // The declined-pair fallback decode position: the containing frame's exact start, so
+        // the source-end degeneracy renders the last frame deterministically instead of asking
+        // the decoder for a fractional time past the final sample start.
+        XCTAssertEqual(
+            try FrameBlendSampling.nearestEarlierFrameTime(
+                forSourceTime: try RationalTime(value: 19, timescale: 48),
+                frameRate: try frameRate()
+            ),
+            try editTime(9)
+        )
+        // Integer positions are their own nearest-earlier frame.
+        XCTAssertEqual(
+            try FrameBlendSampling.nearestEarlierFrameTime(
+                forSourceTime: try editTime(7),
+                frameRate: try frameRate()
+            ),
+            try editTime(7)
+        )
+    }
+
     private func frameRate() throws -> FrameRate {
         try XCTUnwrap(frameRate24)
     }

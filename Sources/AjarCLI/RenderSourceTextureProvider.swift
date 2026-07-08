@@ -71,7 +71,14 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
                 // Keep the earlier frame available for the nearest fallback path.
                 textures[key] = earlierTexture
             } else {
-                textures[key] = try await decodeTexture(from: media, at: decodeTime)
+                textures[key] = try await decodeTexture(
+                    from: media,
+                    at: try Self.singleFrameDecodeTime(
+                        for: source,
+                        media: media,
+                        decodeTime: decodeTime
+                    )
+                )
             }
         }
 
@@ -138,6 +145,38 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
             frameRate: frameRate,
             sourceEnd: sourceEnd
         )
+    }
+
+    /// Single-frame decode position used when `blendPair` declines for a frame-blend source.
+    ///
+    /// The FR-SPD-004 source-end degeneracy renders **nearest-earlier**: the fallback decodes
+    /// at the start of the frame containing the fractional position (clamped to the source
+    /// range start and the media's last frame start), never at the fractional time itself,
+    /// which is not a deterministic decoder input near the final sample. Nearest-mode sources
+    /// keep their original decode time so the pre-FR-SPD-004 single-frame path is untouched.
+    private static func singleFrameDecodeTime(
+        for source: RenderSourceNode,
+        media: MediaRef,
+        decodeTime: RationalTime
+    ) throws -> RationalTime {
+        guard
+            source.resolvedFrameSampling == .frameBlend,
+            let frameRate = media.metadata.conformedFrameRate ?? media.metadata.frameRate
+        else {
+            return decodeTime
+        }
+
+        let earlierFrameTime = try FrameBlendSampling.nearestEarlierFrameTime(
+            forSourceTime: decodeTime,
+            frameRate: frameRate
+        )
+        let frameDuration = try frameRate.duration(ofFrames: 1)
+        let lowerBound = source.sourceRange?.start ?? .zero
+        let lastFrameStart = max(
+            lowerBound,
+            try media.metadata.duration.subtracting(frameDuration)
+        )
+        return min(max(lowerBound, earlierFrameTime), lastFrameStart)
     }
 
     private static func decodeTime(
