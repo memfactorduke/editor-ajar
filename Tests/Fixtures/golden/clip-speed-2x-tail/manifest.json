@@ -1,0 +1,25 @@
+{
+  "comment": "FR-SPD-001 constant-speed frame that discriminates correct 2x mapping from a speed-ignored regression, complementing clip-speed-2x whose midpoint sample measured only maxDeltaE~8 (under its 25 tolerance) against the 1x failure mode. The ramp is steepened (240 frames at 96 fps, green channel encodes the source frame index) and the sample sits near the clip tail: at t=9/8 of the 5/4s retimed clip the correct 2x map decodes source frame 216 while dropping the speed (1x) decodes frame 108 and inverting it (1/2x) decodes frame 54 - measured failures maxDeltaE=70.878 and 93.568 against this reference. Tolerance 10 is ~2x the measured cross-machine ProRes/color-conversion noise floor (maxDeltaE 4.614 on the CI runner vs 0.000 locally) and the weakest wrong-variant signal is ~7x the tolerance.",
+  "schemaVersion": 1,
+  "id": "clip-speed-2x-tail",
+  "requirements": ["FR-SPD-001", "ADR-0009", "TESTING-2", "ADR-0011", "NFR-QUAL-001"],
+  "frame": "9/8",
+  "referencePNG": "reference.png",
+  "clips": [
+    {
+      "speed": { "numerator": 2, "denominator": 1 },
+      "syntheticMedia": {
+        "width": 16,
+        "height": 16,
+        "frameCount": 240,
+        "frameRate": 96,
+        "bgra": [0, 0, 255, 255]
+      }
+    }
+  ],
+  "tolerance": {
+    "maximumDeltaE": 10,
+    "minimumSSIM": 0.9,
+    "maximumAlphaDelta": 0
+  }
+}
