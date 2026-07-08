@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at measured maxDeltaE 24.795 (dropped `sourceIsLinearWorking` double-decode) and 23.864
   (per-level present with skipped decode) against a tolerance of 10, calibrated at least 2x
   above the ~4.6 cross-machine decode noise floor.
+- Completed FR-SPD-001 clip-speed follow-ups: `setClipSpeed` now propagates the retime through
+  FR-TL-009 linked A/V groups (linked partners take the same constant rate and resize
+  identically, keeping A/V sync sample-exact; a linked partner carrying an FR-SPD-002 time-remap
+  curve rejects the whole edit with the existing typed `conflictingRetime` validation error
+  instead of silently desyncing) and ripples every affected track by the duration delta using
+  the ripple-trim convention (slow-downs push later items right, speed-ups pull them left with
+  no gap), replacing the previous `itemsOverlap` rejection when a slow-down grew into the next
+  item. Added the `clip-speed-2x-tail` golden frame fixture sampling near the retimed clip's
+  tail over a steepened synthetic ramp so a speed-ignored regression measures maxDeltaE 70.9
+  (inverted speed 93.6) against tolerance 10 — the existing `clip-speed-2x` midpoint sample
+  measured only ~8 under its 25 tolerance. The FR-SPD-001 pitch-corrected (pitch-preserving)
+  audio option is split into a follow-up issue with a deterministic WSOLA proposal.
 - Completed the FR-CMP-001 make-compound follow-ups: collapsing now transplants FR-AUD-004
   sidechain ducking rules whose referenced audio tracks are all fully collapsed into the nested
   sequence (rules referencing no collapsed track stay outer; rules spanning the collapse
