@@ -4,6 +4,39 @@ import AVFoundation
 import CoreVideo
 import Foundation
 
+/// Compact deterministic checkerboard fill for golden-frame synthetic media (NFR-QUAL-001).
+///
+/// Optional on `SyntheticMovieSpec` so large canvases stay small in JSON while still carrying
+/// high-frequency content where spatial kernels (blur/sharpen) are discriminable.
+public struct SyntheticCheckerboardPattern: Codable, Equatable, Sendable {
+    /// Checker cell size in pixels (must be ≥ 1).
+    public let cellSize: Int
+
+    /// BGRA color of cells where `((x/cell) + (y/cell))` is even.
+    public let colorABGRA: [UInt8]
+
+    /// BGRA color of cells where `((x/cell) + (y/cell))` is odd.
+    public let colorBBGRA: [UInt8]
+
+    private enum CodingKeys: String, CodingKey {
+        case cellSize
+        case colorABGRA
+        case colorBBGRA
+    }
+
+    /// Creates a checkerboard pattern.
+    public init(cellSize: Int, colorABGRA: [UInt8], colorBBGRA: [UInt8]) {
+        self.cellSize = cellSize
+        self.colorABGRA = colorABGRA
+        self.colorBBGRA = colorBBGRA
+    }
+
+    /// Whether the pattern has valid cell size and 4-byte BGRA colors.
+    public var isValid: Bool {
+        cellSize >= 1 && colorABGRA.count == 4 && colorBBGRA.count == 4
+    }
+}
+
 struct SyntheticMovieSpec: Codable, Equatable, Sendable {
     let width: Int
     let height: Int
@@ -11,6 +44,8 @@ struct SyntheticMovieSpec: Codable, Equatable, Sendable {
     let frameRate: Int32
     let bgra: [UInt8]
     let pixelsBGRA: [UInt8]?
+    /// Optional compact checkerboard; used when `pixelsBGRA` is absent (additive schema).
+    let checkerboard: SyntheticCheckerboardPattern?
 
     init(
         width: Int,
@@ -18,7 +53,8 @@ struct SyntheticMovieSpec: Codable, Equatable, Sendable {
         frameCount: Int,
         frameRate: Int32,
         bgra: [UInt8],
-        pixelsBGRA: [UInt8]? = nil
+        pixelsBGRA: [UInt8]? = nil,
+        checkerboard: SyntheticCheckerboardPattern? = nil
     ) {
         self.width = width
         self.height = height
@@ -26,6 +62,67 @@ struct SyntheticMovieSpec: Codable, Equatable, Sendable {
         self.frameRate = frameRate
         self.bgra = bgra
         self.pixelsBGRA = pixelsBGRA
+        self.checkerboard = checkerboard
+    }
+
+    /// Resolves tight-packed BGRA pixels for one frame (pixelsBGRA → checkerboard → solid).
+    ///
+    /// Pure and Metal-free so unit tests can validate pattern generation without AVFoundation.
+    func resolvedBGRAPixels(frameIndex: Int = 0) throws -> [UInt8] {
+        guard width > 0, height > 0, frameCount > 0 else {
+            throw SyntheticMovieWriterError.invalidSpec
+        }
+        if let pixelsBGRA {
+            guard pixelsBGRA.count == width * height * 4 else {
+                throw SyntheticMovieWriterError.invalidSpec
+            }
+            return pixelsBGRA
+        }
+        if let checkerboard {
+            guard checkerboard.isValid else {
+                throw SyntheticMovieWriterError.invalidSpec
+            }
+            return Self.checkerboardPixels(
+                width: width,
+                height: height,
+                pattern: checkerboard
+            )
+        }
+        guard bgra.count == 4 else {
+            throw SyntheticMovieWriterError.invalidSpec
+        }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        for index in 0..<(width * height) {
+            let offset = index * 4
+            pixels[offset] = bgra[0]
+            pixels[offset + 1] = UInt8((Int(bgra[1]) + frameIndex) % 256)
+            pixels[offset + 2] = bgra[2]
+            pixels[offset + 3] = bgra[3]
+        }
+        return pixels
+    }
+
+    static func checkerboardPixels(
+        width: Int,
+        height: Int,
+        pattern: SyntheticCheckerboardPattern
+    ) -> [UInt8] {
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let cell = pattern.cellSize
+        for yPosition in 0..<height {
+            for xPosition in 0..<width {
+                let cellX = xPosition / cell
+                let cellY = yPosition / cell
+                let useA = (cellX + cellY).isMultiple(of: 2)
+                let color = useA ? pattern.colorABGRA : pattern.colorBBGRA
+                let offset = ((yPosition * width) + xPosition) * 4
+                pixels[offset] = color[0]
+                pixels[offset + 1] = color[1]
+                pixels[offset + 2] = color[2]
+                pixels[offset + 3] = color[3]
+            }
+        }
+        return pixels
     }
 }
 
@@ -130,16 +227,8 @@ enum SyntheticMovieWriter {
         spec: SyntheticMovieSpec,
         frameIndex: Int
     ) throws -> CVPixelBuffer {
-        guard spec.width > 0, spec.height > 0, spec.frameCount > 0 else {
-            throw SyntheticMovieWriterError.invalidSpec
-        }
-        if let pixelsBGRA = spec.pixelsBGRA {
-            guard pixelsBGRA.count == spec.width * spec.height * 4 else {
-                throw SyntheticMovieWriterError.invalidSpec
-            }
-        } else if spec.bgra.count != 4 {
-            throw SyntheticMovieWriterError.invalidSpec
-        }
+        // Validate fill sources before allocating the buffer.
+        _ = try spec.resolvedBGRAPixels(frameIndex: frameIndex)
 
         var pixelBuffer: CVPixelBuffer?
         var attributes: [String: Any] = [:]
@@ -177,29 +266,19 @@ enum SyntheticMovieWriter {
             throw SyntheticMovieWriterError.missingBaseAddress
         }
 
+        let tight = try spec.resolvedBGRAPixels(frameIndex: frameIndex)
         let rowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
         let bytes = baseAddress.bindMemory(to: UInt8.self, capacity: rowBytes * spec.height)
         for yPosition in 0..<spec.height {
             for xPosition in 0..<spec.width {
-                let offset = yPosition * rowBytes + xPosition * 4
-                if let pixelsBGRA = spec.pixelsBGRA {
-                    let source = offsetInTightBGRA(width: spec.width, x: xPosition, y: yPosition)
-                    bytes[offset] = pixelsBGRA[source]
-                    bytes[offset + 1] = pixelsBGRA[source + 1]
-                    bytes[offset + 2] = pixelsBGRA[source + 2]
-                    bytes[offset + 3] = pixelsBGRA[source + 3]
-                } else {
-                    bytes[offset] = spec.bgra[0]
-                    bytes[offset + 1] = UInt8((Int(spec.bgra[1]) + frameIndex) % 256)
-                    bytes[offset + 2] = spec.bgra[2]
-                    bytes[offset + 3] = spec.bgra[3]
-                }
+                let dest = yPosition * rowBytes + xPosition * 4
+                let source = ((yPosition * spec.width) + xPosition) * 4
+                bytes[dest] = tight[source]
+                bytes[dest + 1] = tight[source + 1]
+                bytes[dest + 2] = tight[source + 2]
+                bytes[dest + 3] = tight[source + 3]
             }
         }
-    }
-
-    private static func offsetInTightBGRA(width: Int, x: Int, y: Int) -> Int {
-        ((y * width) + x) * 4
     }
 }
 

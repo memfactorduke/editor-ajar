@@ -13,23 +13,55 @@ public struct BenchmarkOptions: Equatable, Sendable {
     /// Optional `.ajar` package. If nil, a synthetic fixture is generated.
     public let projectURL: URL?
 
+    /// When true, exit nonzero if any result with a budget has `withinBudget == false`.
+    /// Default off so CI stays report-only until the reference runner is gated (ADR-0016 §4).
+    public let enforceBudgets: Bool
+
     /// Creates benchmark options.
-    public init(metric: BenchmarkMetricSelection, projectURL: URL?) {
+    public init(
+        metric: BenchmarkMetricSelection,
+        projectURL: URL?,
+        enforceBudgets: Bool = false
+    ) {
         self.metric = metric
         self.projectURL = projectURL
+        self.enforceBudgets = enforceBudgets
     }
 
     static func parse(_ arguments: [String]) throws -> BenchmarkOptions {
-        guard let rawMetric = arguments.first else {
-            throw AjarCLIError.invalidUsage("bench requires a metric")
+        var metricRaw: String?
+        var projectPath: String?
+        var enforceBudgets = false
+
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            if argument == "--enforce-budgets" {
+                enforceBudgets = true
+                index += 1
+                continue
+            }
+            if argument.hasPrefix("-") {
+                throw AjarCLIError.invalidUsage("unknown bench option '\(argument)'")
+            }
+            if metricRaw == nil {
+                metricRaw = argument
+            } else if projectPath == nil {
+                projectPath = argument
+            } else {
+                throw AjarCLIError.invalidUsage("bench accepts at most one project.ajar path")
+            }
+            index += 1
         }
-        guard arguments.count <= 2 else {
-            throw AjarCLIError.invalidUsage("bench accepts at most one project.ajar path")
+
+        guard let rawMetric = metricRaw else {
+            throw AjarCLIError.invalidUsage("bench requires a metric")
         }
 
         return BenchmarkOptions(
             metric: try BenchmarkMetricSelection.parse(rawMetric),
-            projectURL: arguments.dropFirst().first.map(URL.init(fileURLWithPath:))
+            projectURL: projectPath.map(URL.init(fileURLWithPath:)),
+            enforceBudgets: enforceBudgets
         )
     }
 }
@@ -57,15 +89,28 @@ public enum BenchmarkMetricSelection: Equatable, Sendable {
 public enum BenchmarkCommand {
     /// Runs the selected report-only benchmark metrics.
     public static func run(options: BenchmarkOptions) async throws -> [BenchmarkResult] {
-        let fixture = try BenchmarkProjectFixture(projectURL: options.projectURL)
+        let metrics = options.metric.metrics
+        // FR-FX-002 per-node metrics synthesize their own 1080p textures and never need the
+        // shared synthetic `.ajar` package (avoids AVFoundation pixel-buffer setup for pure GPU
+        // node timing).
+        let needsProjectFixture = metrics.contains { metric in
+            !metric.isSelfContainedEffectNodeMetric
+        }
+        let fixture = needsProjectFixture
+            ? try BenchmarkProjectFixture(projectURL: options.projectURL)
+            : nil
         defer {
-            fixture.removeGeneratedFiles()
+            fixture?.removeGeneratedFiles()
         }
 
-        let metrics = options.metric.metrics
         var results: [BenchmarkResult] = []
         for metric in metrics {
-            results.append(try await run(metric: metric, projectURL: fixture.projectURL))
+            // Self-contained effect-node metrics ignore the project URL; pass a dummy path.
+            let projectURL =
+                fixture?.projectURL
+                ?? options.projectURL
+                ?? URL(fileURLWithPath: "/dev/null")
+            results.append(try await run(metric: metric, projectURL: projectURL))
         }
         return results
     }
@@ -126,9 +171,16 @@ public enum BenchmarkCommand {
             try await measureScopeAnalyzerCompute()
         case .diskCacheWarmStartPlayback:
             try await measureDiskCacheWarmStartPlayback(projectURL: projectURL)
+        case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
+            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p:
+            try await measureEffectNodeMetric(metric)
         default:
             try await measureRetimeMetric(metric)
         }
+    }
+
+    private static func measureEffectNodeMetric(_ metric: BenchmarkMetric) async throws -> Double {
+        try await BenchmarkEffectNodeFixture.measure(metric: metric)
     }
 
     private static func measureSingleFrameRenderSeek(projectURL: URL) async throws -> Double {
