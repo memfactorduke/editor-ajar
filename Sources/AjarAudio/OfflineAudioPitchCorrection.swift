@@ -133,6 +133,10 @@ extension OfflineAudioMixer {
         case .sequence(let sequenceID):
             sourceID = sequenceID
             sourceIsSequence = true
+        case .title:
+            // Title generators have no audio source; key still needs a stable UUID.
+            sourceID = clip.id
+            sourceIsSequence = false
         }
         return PitchCorrectedSourceKey(
             clipID: clip.id,

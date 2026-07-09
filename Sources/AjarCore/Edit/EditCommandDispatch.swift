@@ -19,7 +19,8 @@ extension EditReducer {
             .resetClipEffectNode, .resetClipEffectStack,
             .setClipAudioMix, .clearClipAudioMix, .setClipAudioRetimeMode,
             .setClipAudioCrossfade, .removeClipAudioCrossfade,
-            .detachClipAudio, .replaceClipAudioSource:
+            .detachClipAudio, .replaceClipAudioSource,
+            .insertTitleClip, .setClipTitleSource, .setTitleTextBox, .removeTitleTextBox:
             return try applyClipCommand(command, to: project)
         case .setTrackState, .setTrackCompositing, .setTrackAudioMix, .clearTrackAudioMix:
             return try applyTrackCommand(command, to: project)

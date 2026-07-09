@@ -34,7 +34,7 @@ public struct GoldenFrameSummary: Equatable, Sendable {
 }
 
 /// Manifest-driven golden-frame harness for TESTING Section 2 and ADR-0011.
-public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
+public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
     /// Runs all manifests found under the suite path.
     public static func run(
         options: GoldenFrameOptions,
@@ -94,10 +94,12 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             return [url]
         }
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: nil
-        ) else {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: nil
+            )
+        else {
             throw AjarCLIError.invalidGoldenManifest("could not enumerate \(url.path)")
         }
 
@@ -123,13 +125,18 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
         }
 
         let clipSpecs = try manifest.resolvedClipSpecs()
-        let mediaURLs = clipSpecs.indices.map { index in
-            workingDirectory.appendingPathComponent("source-\(index).mov")
+        let mediaURLs: [URL?] = clipSpecs.indices.map { index in
+            clipSpecs[index].isTitleClip
+                ? nil
+                : workingDirectory.appendingPathComponent("source-\(index).mov")
         }
         let projectURL = workingDirectory.appendingPathComponent("project.ajar")
         let actualURL = workingDirectory.appendingPathComponent("actual.png")
         for (clipSpec, mediaURL) in zip(clipSpecs, mediaURLs) {
-            try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: clipSpec.syntheticMedia)
+            guard let mediaURL, let syntheticMedia = clipSpec.syntheticMedia else {
+                continue
+            }
+            try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: syntheticMedia)
         }
         let project = try makeSyntheticProject(
             manifest: manifest,
@@ -146,7 +153,8 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             )
         )
 
-        let referenceURL = manifestURL
+        let referenceURL =
+            manifestURL
             .deletingLastPathComponent()
             .appendingPathComponent(manifest.referencePNG)
         let actualImage = try PNGCodec.read(from: actualURL)
@@ -169,10 +177,12 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
         manifestURL: URL
     ) throws {
         let artifactRoot = manifestURL.deletingLastPathComponent()
-        let actualURL = artifactRoot
+        let actualURL =
+            artifactRoot
             .appendingPathComponent("_actual")
             .appendingPathComponent("\(manifest.id).png")
-        let diffURL = artifactRoot
+        let diffURL =
+            artifactRoot
             .appendingPathComponent("_diff")
             .appendingPathComponent("\(manifest.id).png")
 
@@ -183,30 +193,33 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
     private static func makeSyntheticProject(
         manifest: GoldenFrameManifest,
         clipSpecs: [GoldenFrameClipSpec],
-        mediaURLs: [URL]
+        mediaURLs: [URL?]
     ) throws -> Project {
-        guard let firstClipSpec = clipSpecs.first, clipSpecs.count == mediaURLs.count else {
+        guard !clipSpecs.isEmpty, clipSpecs.count == mediaURLs.count else {
             throw AjarCLIError.invalidGoldenManifest("\(manifest.id) has no synthetic clips")
         }
 
-        let frameRate = try FrameRate(frames: Int64(firstClipSpec.syntheticMedia.frameRate))
-        let duration = try frameRate.duration(
-            ofFrames: Int64(firstClipSpec.syntheticMedia.frameCount)
-        )
+        let timing = try timingAndSize(from: clipSpecs, manifest: manifest)
         let context = GoldenFrameBuildContext(
             manifestID: manifest.id,
-            frameRate: frameRate,
-            duration: duration
+            frameRate: timing.frameRate,
+            duration: timing.duration
         )
-        let resolution = manifest.outputDimensions ?? PixelDimensions(
-            width: firstClipSpec.syntheticMedia.width,
-            height: firstClipSpec.syntheticMedia.height
-        )
-        let media = try zip(clipSpecs, mediaURLs).enumerated().map { index, pair in
-            try makeMediaRef(
+        let resolution =
+            manifest.outputDimensions
+            ?? PixelDimensions(
+                width: timing.defaultWidth,
+                height: timing.defaultHeight
+            )
+        var media: [MediaRef?] = Array(repeating: nil, count: clipSpecs.count)
+        for index in clipSpecs.indices {
+            guard let mediaURL = mediaURLs[index], clipSpecs[index].title == nil else {
+                continue
+            }
+            media[index] = try makeMediaRef(
                 context: context,
-                clipSpec: pair.0,
-                mediaURL: pair.1,
+                clipSpec: clipSpecs[index],
+                mediaURL: mediaURL,
                 index: index
             )
         }
@@ -222,26 +235,58 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
             videoTracks: tracks,
             audioTracks: [],
             markers: [],
-            timebase: frameRate
+            timebase: timing.frameRate
         )
 
         return Project(
             schemaVersion: AjarProjectCodec.currentSchemaVersion,
             settings: ProjectSettings(
-                frameRate: frameRate,
+                frameRate: timing.frameRate,
                 resolution: resolution,
                 colorSpace: .rec709,
                 audioSampleRate: 48_000
             ),
-            mediaPool: media,
+            mediaPool: media.compactMap { $0 },
             sequences: [sequence] + compoundSequences
+        )
+    }
+
+    private struct GoldenTimingAndSize {
+        let frameRate: FrameRate
+        let duration: RationalTime
+        let defaultWidth: Int
+        let defaultHeight: Int
+    }
+
+    private static func timingAndSize(
+        from clipSpecs: [GoldenFrameClipSpec],
+        manifest: GoldenFrameManifest
+    ) throws -> GoldenTimingAndSize {
+        if let mediaSpec = clipSpecs.compactMap(\.syntheticMedia).first {
+            let frameRate = try FrameRate(frames: Int64(mediaSpec.frameRate))
+            let duration = try frameRate.duration(ofFrames: Int64(mediaSpec.frameCount))
+            return GoldenTimingAndSize(
+                frameRate: frameRate,
+                duration: duration,
+                defaultWidth: mediaSpec.width,
+                defaultHeight: mediaSpec.height
+            )
+        }
+        // Title-only fixtures must declare output dimensions and use a fixed 24 fps / 1 frame.
+        let frameRate = try FrameRate(frames: 24)
+        let duration = try frameRate.duration(ofFrames: 1)
+        return GoldenTimingAndSize(
+            frameRate: frameRate,
+            duration: duration,
+            defaultWidth: manifest.outputDimensions?.width ?? 64,
+            defaultHeight: manifest.outputDimensions?.height ?? 64
         )
     }
 
     private static func makeTracks(
         context: GoldenFrameBuildContext,
         clipSpecs: [GoldenFrameClipSpec],
-        media: [MediaRef]
+        media: [MediaRef?]
     ) throws -> [Track] {
         try clipSpecs.indices.map { index in
             Track(
@@ -252,7 +297,7 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
                         try makeClip(
                             context: context,
                             clipSpec: clipSpecs[index],
-                            mediaID: media[index].id,
+                            mediaID: media[index]?.id,
                             index: index
                         )
                     )
@@ -266,17 +311,22 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
     private static func makeCompoundSequences(
         context: GoldenFrameBuildContext,
         clipSpecs: [GoldenFrameClipSpec],
-        media: [MediaRef]
+        media: [MediaRef?]
     ) throws -> [Sequence] {
         try clipSpecs.indices.compactMap { index in
             guard let compound = clipSpecs[index].compound else {
                 return nil
             }
+            guard let mediaID = media[index]?.id else {
+                throw AjarCLIError.invalidGoldenManifest(
+                    "\(context.manifestID) compound clip \(index) needs syntheticMedia"
+                )
+            }
 
             let clip = try makeMediaClip(
                 context: context,
                 clipSpec: clipSpecs[index],
-                mediaID: media[index].id,
+                mediaID: mediaID,
                 index: index,
                 compound: compound
             )
@@ -309,15 +359,20 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
         mediaURL: URL,
         index: Int
     ) throws -> MediaRef {
-        MediaRef(
+        guard let syntheticMedia = clipSpec.syntheticMedia else {
+            throw AjarCLIError.invalidGoldenManifest(
+                "\(context.manifestID) media clip \(index) missing syntheticMedia"
+            )
+        }
+        return MediaRef(
             id: try numberedUUID(18 + index),
             sourceURL: mediaURL,
             contentHash: ContentHash.sha256(data: Data("\(context.manifestID)-\(index)".utf8)),
             metadata: MediaMetadata(
                 codecID: "prores4444",
                 pixelDimensions: PixelDimensions(
-                    width: clipSpec.syntheticMedia.width,
-                    height: clipSpec.syntheticMedia.height
+                    width: syntheticMedia.width,
+                    height: syntheticMedia.height
                 ),
                 frameRate: context.frameRate,
                 duration: context.duration,
@@ -332,7 +387,7 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
     private static func makeClip(
         context: GoldenFrameBuildContext,
         clipSpec: GoldenFrameClipSpec,
-        mediaID: UUID,
+        mediaID: UUID?,
         index: Int
     ) throws -> Clip {
         let speed = clipSpec.speed ?? .one
@@ -401,11 +456,19 @@ public enum GoldenFrameHarness { // swiftlint:disable:this type_body_length
 
     private static func source(
         for clipSpec: GoldenFrameClipSpec,
-        mediaID: UUID,
+        mediaID: UUID?,
         index: Int
     ) throws -> ClipSource {
+        if let title = clipSpec.title {
+            return .title(title)
+        }
         if clipSpec.compound != nil {
             return .sequence(id: try compoundSequenceID(index: index))
+        }
+        guard let mediaID else {
+            throw AjarCLIError.invalidGoldenManifest(
+                "media clip \(index) missing media reference"
+            )
         }
         return .media(id: mediaID)
     }

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import Foundation
 
@@ -156,6 +157,22 @@ public enum ProjectValidationError: Equatable, Sendable {
 
     /// A sequence ducking rule is outside the supported range or references invalid tracks.
     case invalidAudioDucking(sequenceID: UUID, ruleIndex: Int, error: AudioDuckingValidationError)
+
+    /// A title generator source failed FR-TXT-001 semantic validation.
+    case invalidTitleSource(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: TitleSourceValidationError
+    )
+
+    /// A title generator was placed on a non-video track.
+    case titleRequiresVideoTrack(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        trackKind: TrackKind
+    )
 }
 
 enum ProjectValidator {
@@ -353,6 +370,36 @@ enum ProjectValidator {
                     )
                 )
             }
+        case .title(let title):
+            appendTitleSourceErrors(title, clip: clip, context: context, state: &state)
+        }
+    }
+
+    private static func appendTitleSourceErrors(
+        _ title: TitleSource,
+        clip: Clip,
+        context: TrackContext,
+        state: inout ValidationState
+    ) {
+        if context.trackKind != .video || clip.kind != .video {
+            state.errors.append(
+                .titleRequiresVideoTrack(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    trackKind: context.trackKind
+                )
+            )
+        }
+        if let error = title.validate() {
+            state.errors.append(
+                .invalidTitleSource(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    error: error
+                )
+            )
         }
     }
 

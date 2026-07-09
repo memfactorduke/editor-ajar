@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Rich text title generator clips (FR-TXT-001) and emoji/complex-script rendering via the system
+  text stack (FR-TXT-007), opening M8's text track (#184). ADR-0017 records the split: the pure
+  Codable title model (`TitleSource` / multi-box styled text) lives in `AjarCore` with typed
+  validation and undoable edit commands (`insertTitleClip`, `setClipTitleSource`,
+  `setTitleTextBox`, `removeTitleTextBox`); CoreText rasterization lives in `AjarRender` and
+  draws to a Metal texture at output resolution, cached by content hash like other render nodes.
+  Empty text is allowed; missing fonts fall back deterministically to Helvetica (golden pin) with
+  a typed diagnostic and never crash. Legacy media/sequence projects — including clips nested
+  inside compound sequences — keep decoding. New goldens: `title-multibox-styled`, `title-emoji`,
+  `title-rtl-arabic`.
 - ADR-0018 (schema minor versioning and forward-compatible opens), closing the FR-PROJ-005 gap
   called out on #180’s review (#193): project/media JSON carry `schemaVersion` (major) plus
   additive `schemaMinor` (default `0` when absent so legacy v2 files stay editable). This build

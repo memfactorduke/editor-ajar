@@ -41,12 +41,16 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
 
     func resolvedClipSpecs() throws -> [GoldenFrameClipSpec] {
         if let clips, !clips.isEmpty {
+            for clip in clips {
+                try clip.validateSourcePayload(manifestID: id)
+            }
             return clips
         }
         if let syntheticMedia {
             return [
                 GoldenFrameClipSpec(
                     syntheticMedia: syntheticMedia,
+                    title: nil,
                     compound: nil,
                     speed: nil,
                     reverse: nil,
@@ -67,7 +71,10 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
 }
 
 struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
-    let syntheticMedia: SyntheticMovieSpec
+    /// Synthetic movie for media-backed clips. Optional when `title` is present (ADR-0017).
+    let syntheticMedia: SyntheticMovieSpec?
+    /// Title generator payload (FR-TXT-001). When set, the clip source is `.title`.
+    let title: TitleSource?
     let compound: GoldenFrameCompoundSpec?
     let speed: RationalValue?
     let reverse: Bool?
@@ -80,6 +87,26 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let effectsAnimation: AnimatableClipEffects?
     let trackOpacity: Animatable<RationalValue>?
     let trackBlendMode: ClipBlendMode?
+
+    var isTitleClip: Bool {
+        title != nil
+    }
+
+    func validateSourcePayload(manifestID: String) throws {
+        if title != nil {
+            if let error = title?.validate() {
+                throw AjarCLIError.invalidGoldenManifest(
+                    "\(manifestID) title invalid: \(error)"
+                )
+            }
+            return
+        }
+        if syntheticMedia == nil {
+            throw AjarCLIError.invalidGoldenManifest(
+                "\(manifestID) clip needs syntheticMedia or title"
+            )
+        }
+    }
 }
 
 struct GoldenFrameCompoundSpec: Codable, Equatable, Sendable {

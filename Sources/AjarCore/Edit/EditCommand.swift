@@ -392,6 +392,40 @@ public enum EditCommand: Codable, Equatable, Sendable {
         mediaID: UUID
     )
 
+    /// Inserts a title generator clip on a video track (FR-TXT-001).
+    case insertTitleClip(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        title: TitleSource,
+        timelineRange: TimeRange,
+        name: String
+    )
+
+    /// Replaces the title source on an existing title clip (FR-TXT-001).
+    case setClipTitleSource(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        title: TitleSource
+    )
+
+    /// Creates or replaces one text box on a title clip (FR-TXT-001).
+    case setTitleTextBox(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        box: TitleTextBox
+    )
+
+    /// Removes one text box from a title clip by stable box ID (FR-TXT-001).
+    case removeTitleTextBox(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        boxID: UUID
+    )
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 

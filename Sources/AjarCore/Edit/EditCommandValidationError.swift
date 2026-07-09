@@ -207,4 +207,16 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// Adding an effects-stack node would duplicate a stable node ID (FR-FX-003).
     case duplicateClipEffectNodeID(clipID: UUID, nodeID: UUID)
+
+    /// A title generator source failed FR-TXT-001 semantic validation.
+    case invalidTitleSource(clipID: UUID, error: TitleSourceValidationError)
+
+    /// Title edits require a title-generator clip source.
+    case titleRequiresTitleClip(clipID: UUID)
+
+    /// Title generators may only live on video tracks.
+    case titleRequiresVideoTrack(clipID: UUID, trackKind: TrackKind)
+
+    /// A title text box edit referenced a missing box ID.
+    case titleTextBoxNotFound(clipID: UUID, boxID: UUID)
 }

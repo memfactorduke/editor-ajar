@@ -73,6 +73,18 @@ jobs:
       - name: Golden-frame gate (TESTING §2, ADR-0011)
         run: swift run ajar golden Tests/Fixtures/golden
 
+      # On failure, upload harness actual/diff PNGs so new-fixture references can be
+      # established from this macos-14 gate (ADR-0017 reference establishment).
+      - name: Upload golden-frame actuals
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-frame-actuals
+          path: |
+            Tests/Fixtures/golden/**/_actual/**
+            Tests/Fixtures/golden/**/_diff/**
+          if-no-files-found: ignore
+
   golden-audio:
     name: Golden-audio
     runs-on: macos-14
