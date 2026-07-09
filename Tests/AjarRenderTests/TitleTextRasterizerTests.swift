@@ -7,18 +7,43 @@ import XCTest
 
 @testable import AjarCore
 
+// TEMP #184 diagnostics — unbuffered stderr so phase lines survive XCTest worker death on CI.
+private func titleTrace(_ message: String) {
+    fputs("TITLETRACE: " + message + "\n", stderr)
+    fflush(stderr)
+}
+
 final class TitleTextRasterizerTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        // TEMP #184 diagnostics — enable production-side TITLETRACE-R: lines in AjarRender.
+        setenv("AJAR_TITLE_TRACE", "1", 1)
+    }
+
     func testFRTXT001FRTXT007RasterizesTitleAndReusesContentHashCache() throws {
+        titleTrace("cacheReuse: begin")
+        titleTrace("cacheReuse: before device acquire")
         let device = try titleMetalDeviceOrSkip()
+        titleTrace("cacheReuse: after device acquire name=\(device.name)")
+
+        titleTrace("cacheReuse: before fixture build")
         let title = try makeTitleFixture(
             text: "Hello",
             color: ClipRGBColor(red: .one, green: .one, blue: .zero)
         )
+        titleTrace("cacheReuse: after fixture build boxes=\(title.boxes.count)")
+
+        titleTrace("cacheReuse: before graph build")
         let graph = try makeTitleGraph(
             title: title,
             clipID: try titleUUID("00000000-0000-0000-0000-000000009001")
         )
+        titleTrace("cacheReuse: after graph build nodes=\(graph.nodes.count)")
+
+        titleTrace("cacheReuse: before executor init")
         let executor = try MetalRenderExecutor(device: device)
+        titleTrace("cacheReuse: after executor init")
+
         let output = RenderOutputDescriptor(
             pixelDimensions: PixelDimensions(width: 64, height: 32)
         )
@@ -26,23 +51,37 @@ final class TitleTextRasterizerTests: XCTestCase {
             throw TitleTestError.unexpectedSourceRequest
         }
 
+        titleTrace("cacheReuse: before render#1")
         let first = try executor.render(graph: graph, output: output, sourceProvider: provider)
-        try waitForTitleRender(first)
-        let second = try executor.render(graph: graph, output: output, sourceProvider: provider)
+        titleTrace("cacheReuse: after render#1 cacheHit=\(first.cacheHit)")
 
+        titleTrace("cacheReuse: before waitForTitleRender#1")
+        try waitForTitleRender(first)
+        titleTrace("cacheReuse: after waitForTitleRender#1")
+
+        titleTrace("cacheReuse: before render#2")
+        let second = try executor.render(graph: graph, output: output, sourceProvider: provider)
+        titleTrace("cacheReuse: after render#2 cacheHit=\(second.cacheHit)")
+
+        titleTrace("cacheReuse: before cache-hit asserts")
         XCTAssertFalse(first.cacheHit)
         XCTAssertTrue(second.cacheHit)
         XCTAssertEqual(first.contentHash, second.contentHash)
         XCTAssertTrue(first.texture === second.texture)
+        titleTrace("cacheReuse: after cache-hit asserts")
 
+        titleTrace("cacheReuse: before readTitleBGRA8")
         let pixels = try readTitleBGRA8(texture: first.texture, device: device)
+        titleTrace("cacheReuse: after readTitleBGRA8 count=\(pixels.count)")
         XCTAssertTrue(
             pixels.contains(where: { $0 > 0 }),
             "expected rasterized title to write non-zero pixels"
         )
+        titleTrace("cacheReuse: complete")
     }
 
     func testFRTXT001StyleChangeInvalidatesTitleCacheIdentity() throws {
+        titleTrace("styleChange: begin")
         let device = try titleMetalDeviceOrSkip()
         let clipID = try titleUUID("00000000-0000-0000-0000-000000009002")
         let base = try makeTitleFixture(
@@ -91,9 +130,11 @@ final class TitleTextRasterizerTests: XCTestCase {
         try waitForTitleRender(editedFrame)
         XCTAssertNotEqual(baseFrame.contentHash, editedFrame.contentHash)
         XCTAssertFalse(baseFrame.texture === editedFrame.texture)
+        titleTrace("styleChange: complete")
     }
 
     func testFRTXT007EmojiAndRTLRasterizeWithoutCrash() throws {
+        titleTrace("emojiRTL: begin")
         let device = try titleMetalDeviceOrSkip()
         let emoji = try makeTitleFixture(text: "Hello 🎬✨", color: .titleWhite)
         let rtl = try makeTitleFixture(text: "مرحبا بالعالم", color: .titleWhite)
@@ -107,9 +148,11 @@ final class TitleTextRasterizerTests: XCTestCase {
         XCTAssertEqual(rtlResult.texture.height, 64)
         XCTAssertTrue(emojiResult.diagnostics.isEmpty)
         XCTAssertTrue(rtlResult.diagnostics.isEmpty)
+        titleTrace("emojiRTL: complete")
     }
 
     func testFRTXT001MissingFontFallsBackDeterministically() throws {
+        titleTrace("fontFallback: begin")
         let device = try titleMetalDeviceOrSkip()
         let title = TitleSource(boxes: [
             TitleTextBox(
@@ -134,6 +177,7 @@ final class TitleTextRasterizerTests: XCTestCase {
             ]
         )
         XCTAssertEqual(result.texture.width, 64)
+        titleTrace("fontFallback: complete")
     }
 
     private func makeTitleFixture(text: String, color: ClipRGBColor) throws -> TitleSource {
@@ -211,6 +255,7 @@ private func titleUUID(_ string: String) throws -> UUID {
 }
 
 private func readTitleBGRA8(texture: MTLTexture, device: MTLDevice) throws -> [UInt8] {
+    titleTrace("readTitleBGRA8: entry w=\(texture.width) h=\(texture.height)")
     let bytesPerRow = texture.width * 4
     var pixels = [UInt8](repeating: 0, count: bytesPerRow * texture.height)
     guard let queue = device.makeCommandQueue() else {
@@ -226,11 +271,14 @@ private func readTitleBGRA8(texture: MTLTexture, device: MTLDevice) throws -> [U
     blit.endEncoding()
     commandBuffer.commit()
     commandBuffer.waitUntilCompleted()
+    titleTrace("readTitleBGRA8: before texture.getBytes")
     texture.getBytes(
         &pixels,
         bytesPerRow: bytesPerRow,
         from: MTLRegionMake2D(0, 0, texture.width, texture.height),
         mipmapLevel: 0
     )
+    titleTrace("readTitleBGRA8: after texture.getBytes")
+    titleTrace("readTitleBGRA8: complete")
     return pixels
 }

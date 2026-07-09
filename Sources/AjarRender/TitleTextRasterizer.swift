@@ -6,6 +6,15 @@ import CoreText
 import Foundation
 import Metal
 
+// TEMP #184 diagnostics — unbuffered stderr; enabled when AJAR_TITLE_TRACE=1.
+private func titleRenderTrace(_ message: String) {
+    guard ProcessInfo.processInfo.environment["AJAR_TITLE_TRACE"] == "1" else {
+        return
+    }
+    fputs("TITLETRACE-R: " + message + "\n", stderr)
+    fflush(stderr)
+}
+
 /// Typed failures while rasterizing a title generator (FR-TXT-001, FR-TXT-007, ADR-0017).
 public enum TitleRenderError: Error, Equatable, Sendable, CustomStringConvertible {
     /// Output dimensions are not positive.
@@ -65,6 +74,8 @@ public enum TitleTextRasterizer {
         width: Int,
         height: Int
     ) throws -> (pixels: [UInt8], diagnostics: [TitleRenderError]) {
+        // TEMP #184 diagnostics
+        titleRenderTrace("rasterizePixels: entry w=\(width) h=\(height) boxes=\(title.boxes.count)")
         guard width > 0, height > 0 else {
             throw TitleRenderError.invalidDimensions(width: width, height: height)
         }
@@ -76,10 +87,14 @@ public enum TitleTextRasterizer {
         // Pin the pixel buffer for the full CGContext lifetime. `CGContext(data: &array, …)`
         // only guarantees the temporary pointer for the initializer call; the context retains
         // that pointer for later draws — use-after-scope UB that segfaults on macos-14.
+        // TEMP #184 diagnostics
+        titleRenderTrace("rasterizePixels: before withUnsafeMutableBytes")
         try pixels.withUnsafeMutableBytes { buffer in
             guard let baseAddress = buffer.baseAddress else {
                 throw TitleRenderError.bitmapContextCreationFailed(width: width, height: height)
             }
+            // TEMP #184 diagnostics
+            titleRenderTrace("rasterizePixels: buffer pinned count=\(buffer.count)")
             let colorSpace = CGColorSpaceCreateDeviceRGB()
             let bitmapInfo =
                 CGBitmapInfo.byteOrder32Little.rawValue
@@ -97,22 +112,34 @@ public enum TitleTextRasterizer {
             else {
                 throw TitleRenderError.bitmapContextCreationFailed(width: width, height: height)
             }
+            // TEMP #184 diagnostics
+            titleRenderTrace("rasterizePixels: CGContext created")
 
             // CoreGraphics origin is bottom-left; title model origin is top-left (canvas space).
             context.clear(CGRect(x: 0, y: 0, width: width, height: height))
             context.textMatrix = .identity
 
-            for box in title.boxes {
+            for (index, box) in title.boxes.enumerated() {
+                // TEMP #184 diagnostics
+                titleRenderTrace(
+                    "rasterizePixels: before draw box[\(index)] textLen=\(box.text.count)"
+                )
                 draw(
                     box: box,
                     canvasHeight: CGFloat(height),
                     context: context,
                     diagnostics: &diagnostics
                 )
+                // TEMP #184 diagnostics
+                titleRenderTrace("rasterizePixels: after draw box[\(index)]")
             }
             // Drop the context before the buffer unpins so no deferred draw retains the pointer.
             context.flush()
+            // TEMP #184 diagnostics
+            titleRenderTrace("rasterizePixels: after context.flush")
         }
+        // TEMP #184 diagnostics
+        titleRenderTrace("rasterizePixels: after withUnsafeMutableBytes exit")
         return (pixels, diagnostics)
     }
 
@@ -123,11 +150,15 @@ public enum TitleTextRasterizer {
         height: Int,
         device: MTLDevice
     ) throws -> TitleRasterizationResult {
+        // TEMP #184 diagnostics
+        titleRenderTrace("rasterize: entry w=\(width) h=\(height)")
         let (pixels, diagnostics) = try rasterizePixels(
             title: title,
             width: width,
             height: height
         )
+        // TEMP #184 diagnostics
+        titleRenderTrace("rasterize: after rasterizePixels pixelBytes=\(pixels.count)")
         let texture = try makeTexture(
             device: device,
             width: width,
@@ -135,6 +166,8 @@ public enum TitleTextRasterizer {
             pixels: pixels,
             bytesPerRow: width * 4
         )
+        // TEMP #184 diagnostics
+        titleRenderTrace("rasterize: exit texture=\(texture.width)x\(texture.height)")
         return TitleRasterizationResult(texture: texture, diagnostics: diagnostics)
     }
 
@@ -299,6 +332,8 @@ public enum TitleTextRasterizer {
         pixels: [UInt8],
         bytesPerRow: Int
     ) throws -> MTLTexture {
+        // TEMP #184 diagnostics
+        titleRenderTrace("makeTexture: entry w=\(width) h=\(height) pixels=\(pixels.count)")
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm,
             width: width,
@@ -310,6 +345,8 @@ public enum TitleTextRasterizer {
         guard let texture = device.makeTexture(descriptor: descriptor) else {
             throw TitleRenderError.textureCreationFailed(width: width, height: height)
         }
+        // TEMP #184 diagnostics
+        titleRenderTrace("makeTexture: before replace")
         pixels.withUnsafeBytes { buffer in
             guard let base = buffer.baseAddress else {
                 return
@@ -321,6 +358,8 @@ public enum TitleTextRasterizer {
                 bytesPerRow: bytesPerRow
             )
         }
+        // TEMP #184 diagnostics
+        titleRenderTrace("makeTexture: exit")
         return texture
     }
 }
