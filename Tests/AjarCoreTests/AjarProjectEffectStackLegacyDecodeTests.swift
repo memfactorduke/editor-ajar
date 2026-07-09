@@ -47,7 +47,8 @@ final class AjarProjectEffectStackLegacyDecodeTests: XCTestCase {
         // Legacy fixture: parent → compound clip → nested sequence → track → item → clip.
         // Strip effectStack keys everywhere; absent keys must default to empty — nesting has
         // dropped new fields before when only top-level clip decode was tested.
-        let package = try AjarProjectCodec.encodeNewDocument(try makeNestedCompoundEffectStackProject())
+        let nestedProject = try makeNestedCompoundEffectStackProject()
+        let package = try AjarProjectCodec.encodeNewDocument(nestedProject)
         let legacyProjectJSON = try projectJSONWithoutKeys(
             ["effectStack", "effectStackAnimation"],
             in: package.projectJSON

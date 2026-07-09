@@ -451,8 +451,9 @@ final class AjarProjectCodecVersioningTests: XCTestCase {
                 mediaJSON: try testEncoder().encode(manifest)
             )
         ) { error in
-            guard case .unsupportedNewerMajorSchemaVersion(let found, let supported) =
-                error as? AjarProjectCodecError
+            guard
+                case .unsupportedNewerMajorSchemaVersion(let found, let supported) =
+                    error as? AjarProjectCodecError
             else {
                 XCTFail("Expected unsupportedNewerMajorSchemaVersion, got \(error)")
                 return
