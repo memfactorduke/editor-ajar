@@ -14,7 +14,7 @@ final class AjarProjectFrameSamplingCodecTests: XCTestCase {
         let blendProject = try replacingVideoItems([.clip(blendClip)], in: fixture)
         XCTAssertTrue(blendProject.validate().isValid)
 
-        let package = try AjarProjectCodec.encode(blendProject)
+        let package = try AjarProjectCodec.encodeNewDocument(blendProject)
         let loaded = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -31,7 +31,7 @@ final class AjarProjectFrameSamplingCodecTests: XCTestCase {
         // The legacy fixture nests the clip inside sequence -> track -> item JSON, so this
         // exercises the full project codec path rather than a bare `Clip` decode.
         let fixture = try makeEditFixture(seed: 4_611)
-        let package = try AjarProjectCodec.encode(fixture.project)
+        let package = try AjarProjectCodec.encodeNewDocument(fixture.project)
         let legacyProjectJSON = try projectJSONWithoutKey("frameSampling", in: package.projectJSON)
         let legacyLoaded = try editableProject(
             from: AjarProjectCodec.decode(

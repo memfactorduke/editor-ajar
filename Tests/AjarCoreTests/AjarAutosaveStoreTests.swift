@@ -14,6 +14,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
         try AjarAutosaveStore.writeSnapshot(
             fixture.project,
             appliedCommandCount: 0,
+            openMode: .editable,
             to: packageURL
         )
         let projectURL = AjarAutosaveStore.projectURL(in: packageURL)
@@ -38,7 +39,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
         }
 
         let snapshot = AjarAutosaveSnapshot(
-            package: try AjarProjectCodec.encode(fixture.project),
+            package: try AjarProjectCodec.encodeNewDocument(fixture.project),
             appliedCommandCount: 0
         )
         let journalData = try AjarAutosaveJournalCodec.encode(
@@ -53,9 +54,101 @@ final class AjarAutosaveStoreTests: XCTestCase {
         )
 
         XCTAssertTrue(recovered.isComplete)
+        XCTAssertEqual(recovered.openMode, .editable)
         XCTAssertEqual(recovered.appliedJournalEntryCount, commands.count)
         XCTAssertEqual(recovered.latestCommandCount, commands.count)
         XCTAssertEqual(recovered.project, history.currentProject)
+    }
+
+    /// Higher-minor snapshot must not replay the journal (FR-PROJ-005 / #193 / ADR-0018).
+    func testFRPROJ005Issue193HigherMinorSnapshotRecoverySkipsJournalAndStaysReadOnly() throws {
+        let fixture = try makeEditFixture(seed: 3_515)
+        let higherMinor = AjarProjectCodec.currentSchemaMinor + 5
+        let document = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor,
+            settings: fixture.project.settings,
+            mediaPool: [],
+            sequences: fixture.project.sequences
+        )
+        let manifest = AjarMediaManifest(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor,
+            media: fixture.project.mediaPool
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let snapshot = AjarAutosaveSnapshot(
+            package: AjarProjectPackageData(
+                projectJSON: try encoder.encode(document),
+                mediaJSON: try encoder.encode(manifest)
+            ),
+            appliedCommandCount: 0
+        )
+        let commands = try recoveryCommands(fixture: fixture)
+        let journalData = try AjarAutosaveJournalCodec.encode(
+            commands.enumerated().map { offset, command in
+                AjarAutosaveJournalEntry(sequenceNumber: offset + 1, command: command)
+            }
+        )
+
+        let recovered = try AjarAutosaveStore.recover(
+            snapshot: snapshot,
+            journalData: journalData
+        )
+
+        XCTAssertEqual(recovered.appliedJournalEntryCount, 0)
+        XCTAssertEqual(recovered.latestCommandCount, 0)
+        XCTAssertTrue(recovered.issues.isEmpty)
+        guard case .readOnly(let reason) = recovered.openMode else {
+            return XCTFail("Expected read-only recovery, got \(recovered.openMode)")
+        }
+        guard case .newerSchemaMinor(let found, let supported) = reason else {
+            return XCTFail("Expected newerSchemaMinor, got \(reason)")
+        }
+        XCTAssertEqual(found, higherMinor)
+        XCTAssertEqual(supported, AjarProjectCodec.currentSchemaMinor)
+        // Snapshot project is returned unchanged — no journal rename applied.
+        XCTAssertEqual(
+            recovered.project.sequences.first?.name,
+            fixture.project.sequences.first?.name
+        )
+        XCTAssertEqual(recovered.project.schemaMinor, higherMinor)
+        XCTAssertEqual(
+            recovered.loadResult,
+            .readOnly(recovered.project, reason: reason)
+        )
+    }
+
+    /// Editable snapshot still replays the journal after the open-mode gate (FR-PROJ-005 / #193).
+    func testFRPROJ005Issue193EditableSnapshotRecoveryStillReplaysJournal() throws {
+        let fixture = try makeEditFixture(seed: 3_516)
+        let commands = try recoveryCommands(fixture: fixture)
+        var history = EditHistory(project: fixture.project, openMode: .editable)
+        for command in commands {
+            try history.apply(command)
+        }
+
+        let snapshot = AjarAutosaveSnapshot(
+            package: try AjarProjectCodec.encodeNewDocument(fixture.project),
+            appliedCommandCount: 0
+        )
+        let journalData = try AjarAutosaveJournalCodec.encode(
+            commands.enumerated().map { offset, command in
+                AjarAutosaveJournalEntry(sequenceNumber: offset + 1, command: command)
+            }
+        )
+
+        let recovered = try AjarAutosaveStore.recover(
+            snapshot: snapshot,
+            journalData: journalData
+        )
+
+        XCTAssertEqual(recovered.openMode, .editable)
+        XCTAssertEqual(recovered.appliedJournalEntryCount, commands.count)
+        XCTAssertEqual(recovered.latestCommandCount, commands.count)
+        XCTAssertEqual(recovered.project, history.currentProject)
+        XCTAssertEqual(recovered.loadResult, .editable(history.currentProject))
     }
 
     func testNFRSTAB002CorruptJournalReturnsTypedBestEffortRecoveryWithoutCrashing() throws {
@@ -65,7 +158,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
         let afterFirstCommand = try apply(firstCommand, to: fixture.project)
 
         let snapshot = AjarAutosaveSnapshot(
-            package: try AjarProjectCodec.encode(fixture.project),
+            package: try AjarProjectCodec.encodeNewDocument(fixture.project),
             appliedCommandCount: 0
         )
         var journalData = try AjarAutosaveJournalCodec.encode([
@@ -79,6 +172,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
         )
 
         XCTAssertFalse(recovered.isComplete)
+        XCTAssertEqual(recovered.openMode, .editable)
         XCTAssertEqual(recovered.project, afterFirstCommand)
         XCTAssertEqual(recovered.latestCommandCount, 1)
         XCTAssertEqual(recovered.appliedJournalEntryCount, 1)
@@ -98,6 +192,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
         try AjarAutosaveStore.writeSnapshot(
             fixture.project,
             appliedCommandCount: 0,
+            openMode: .editable,
             to: packageURL
         )
         try AjarAutosaveStore.appendJournalEntry(
@@ -109,6 +204,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
         try AjarAutosaveStore.writeSnapshot(
             afterFirstCommand,
             appliedCommandCount: 1,
+            openMode: .editable,
             to: packageURL
         )
 
@@ -154,6 +250,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
         try AjarAutosaveStore.writeSnapshot(
             fixture.project,
             appliedCommandCount: 0,
+            openMode: .editable,
             to: packageURL
         )
         try AjarAutosaveStore.appendJournalEntry(
@@ -162,7 +259,7 @@ final class AjarAutosaveStoreTests: XCTestCase {
             to: packageURL
         )
 
-        let partialPackage = try AjarProjectCodec.encode(afterAppend)
+        let partialPackage = try AjarProjectCodec.encodeNewDocument(afterAppend)
         try AjarAtomicFileWriter.write(
             partialPackage.projectJSON,
             to: AjarAutosaveStore.projectURL(in: packageURL)

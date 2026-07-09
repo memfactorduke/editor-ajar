@@ -2,8 +2,14 @@
 
 /// Top-level project document model for `.ajar` packages.
 public struct Project: Codable, Equatable, Sendable {
-    /// Project schema version used by future migrations.
+    /// Project schema **major** version (breaking shape changes; ADR-0018).
     public let schemaVersion: Int
+
+    /// Project schema **minor** version (additive fields / kinds; ADR-0018).
+    ///
+    /// Absent in legacy files; decodes as `0`. Builds write `AjarProjectCodec.currentSchemaMinor`
+    /// on save.
+    public let schemaMinor: Int
 
     /// Project-wide timeline and output settings.
     public let settings: ProjectSettings
@@ -14,17 +20,55 @@ public struct Project: Codable, Equatable, Sendable {
     /// Editable sequences contained in the project.
     public let sequences: [Sequence]
 
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case schemaMinor
+        case settings
+        case mediaPool
+        case sequences
+    }
+
     /// Creates a project document.
+    ///
+    /// - Parameters:
+    ///   - schemaVersion: Major schema version.
+    ///   - schemaMinor: Minor schema version. Defaults to this build’s current minor so in-memory
+    ///     projects match what `AjarProjectCodec.encode` writes (ADR-0018).
+    ///   - settings: Project-wide settings.
+    ///   - mediaPool: Media references.
+    ///   - sequences: Sequences.
     public init(
         schemaVersion: Int,
+        schemaMinor: Int = AjarProjectCodec.currentSchemaMinor,
         settings: ProjectSettings,
         mediaPool: [MediaRef],
         sequences: [Sequence]
     ) {
         self.schemaVersion = schemaVersion
+        self.schemaMinor = schemaMinor
         self.settings = settings
         self.mediaPool = mediaPool
         self.sequences = sequences
+    }
+
+    /// Decodes a project, defaulting absent `schemaMinor` to `0` (legacy v2 files; ADR-0018).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        schemaMinor = try container.decodeIfPresent(Int.self, forKey: .schemaMinor) ?? 0
+        settings = try container.decode(ProjectSettings.self, forKey: .settings)
+        mediaPool = try container.decode([MediaRef].self, forKey: .mediaPool)
+        sequences = try container.decode([Sequence].self, forKey: .sequences)
+    }
+
+    /// Encodes the project document, always including `schemaMinor`.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(schemaMinor, forKey: .schemaMinor)
+        try container.encode(settings, forKey: .settings)
+        try container.encode(mediaPool, forKey: .mediaPool)
+        try container.encode(sequences, forKey: .sequences)
     }
 
     /// Validates timeline invariants without trapping on malformed input.

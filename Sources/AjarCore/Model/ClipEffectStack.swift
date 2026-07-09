@@ -2,15 +2,6 @@
 
 import Foundation
 
-/// Stable registry / codec identity for a built-in video effect kind (ADR-0016, FR-FX-003).
-public enum ClipEffectKind: String, Codable, Equatable, Sendable, CaseIterable {
-    /// Minimal bootstrap kind so the stack schema has one concrete case.
-    ///
-    /// Real library kinds (blur, sharpen, …) land under FR-FX-002 as additional cases without
-    /// reshaping the stack.
-    case placeholder
-}
-
 /// Static parameters for the placeholder effect kind.
 ///
 /// `amount` is a normalized 0...1 control; zero is a documented no-op identity for the kind.

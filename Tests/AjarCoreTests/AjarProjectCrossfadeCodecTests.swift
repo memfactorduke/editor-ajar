@@ -9,7 +9,7 @@ import XCTest
 final class AjarProjectCrossfadeCodecTests: XCTestCase {
     func testFRAUD002EqualPowerCrossfadePairRoundTripsThroughProjectCodec() throws {
         let project = try makeCrossfadePairProject(curve: .equalPower)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableCrossfadeProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -32,7 +32,7 @@ final class AjarProjectCrossfadeCodecTests: XCTestCase {
 
     func testFRPROJ005FRAUD002LegacyProjectWithoutCrossfadeKeysDecodesUnchanged() throws {
         let project = try makeCrossfadePairProject(curve: .equalPower)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try crossfadeProjectJSONWithoutCrossfadeKeys(package.projectJSON)
         let loadedProject = try editableCrossfadeProject(
             from: AjarProjectCodec.decode(

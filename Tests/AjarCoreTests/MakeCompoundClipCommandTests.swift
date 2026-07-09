@@ -99,7 +99,7 @@ final class MakeCompoundClipCommandTests: XCTestCase {
             makeCompoundCommand(fixture: fixture, selectedClips: fixture.selectedClips),
             to: fixture.project
         )
-        let package = try AjarProjectCodec.encode(edited)
+        let package = try AjarProjectCodec.encodeNewDocument(edited)
         let loaded = try compoundEditableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,

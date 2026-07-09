@@ -31,7 +31,7 @@ final class FrameBlendRenderGraphTests: XCTestCase {
         // Round-trip the project through the codec, strip every `frameSampling` key to fake a
         // pre-FR-SPD-004 file, and prove the rebuilt graph carries the same content hashes.
         let project = try makeBlendProject(seed: 4_602, frameSampling: .nearest)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyJSON = try projectJSONWithoutFrameSamplingKey(package.projectJSON)
         let legacyProject = try editableProject(
             from: AjarProjectCodec.decode(

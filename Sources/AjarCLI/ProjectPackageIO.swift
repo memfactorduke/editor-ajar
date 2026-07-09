@@ -27,6 +27,12 @@ enum ProjectPackageIO {
     }
 
     static func writeProject(_ project: Project, to packageURL: URL) throws {
-        try AjarAutosaveStore.writeSnapshot(project, appliedCommandCount: 0, to: packageURL)
+        // CLI package writes are for newly produced / editable documents only.
+        try AjarAutosaveStore.writeSnapshot(
+            project,
+            appliedCommandCount: 0,
+            openMode: .editable,
+            to: packageURL
+        )
     }
 }

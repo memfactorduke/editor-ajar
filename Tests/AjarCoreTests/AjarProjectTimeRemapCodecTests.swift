@@ -20,7 +20,7 @@ final class AjarProjectTimeRemapCodecTests: XCTestCase {
         let remapProject = try replacingVideoItems([.clip(remapClip)], in: fixture)
         XCTAssertTrue(remapProject.validate().isValid)
 
-        let package = try AjarProjectCodec.encode(remapProject)
+        let package = try AjarProjectCodec.encodeNewDocument(remapProject)
         let loaded = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -41,7 +41,7 @@ final class AjarProjectTimeRemapCodecTests: XCTestCase {
         // The legacy fixture nests the clip inside sequence -> track -> item JSON, so this
         // exercises the full project codec path rather than a bare `Clip` decode.
         let fixture = try makeEditFixture(seed: 4_361)
-        let package = try AjarProjectCodec.encode(fixture.project)
+        let package = try AjarProjectCodec.encodeNewDocument(fixture.project)
         let legacyProjectJSON = try projectJSONWithoutTimeRemapKey(package.projectJSON)
         let legacyLoaded = try editableProject(
             from: AjarProjectCodec.decode(

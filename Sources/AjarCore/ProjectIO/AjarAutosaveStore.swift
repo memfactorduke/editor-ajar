@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import Foundation
 
@@ -46,8 +47,13 @@ public enum AjarRecoveryIssue: Error, Equatable, Sendable {
 
 /// Result of pure snapshot + journal recovery.
 public struct AjarRecoveryResult: Equatable, Sendable {
-    /// Latest project reconstructed from the snapshot and all valid journal entries.
+    /// Latest project reconstructed from the snapshot and (when editable) journal entries.
     public let project: Project
+
+    /// Open mode from the snapshot decode (ADR-0018 / FR-PROJ-005).
+    ///
+    /// When `.readOnly`, journal replay was skipped so newer schema data cannot be mutated.
+    public let openMode: AjarProjectOpenMode
 
     /// Number of journal entries replayed after the snapshot.
     public let appliedJournalEntryCount: Int
@@ -63,14 +69,26 @@ public struct AjarRecoveryResult: Equatable, Sendable {
         issues.isEmpty
     }
 
+    /// Snapshot/project as a codec load result (mode preserved).
+    public var loadResult: AjarProjectLoadResult {
+        switch openMode {
+        case .editable:
+            return .editable(project)
+        case .readOnly(let reason):
+            return .readOnly(project, reason: reason)
+        }
+    }
+
     /// Creates a recovery result.
     public init(
         project: Project,
+        openMode: AjarProjectOpenMode,
         appliedJournalEntryCount: Int,
         latestCommandCount: Int,
         issues: [AjarRecoveryIssue]
     ) {
         self.project = project
+        self.openMode = openMode
         self.appliedJournalEntryCount = appliedJournalEntryCount
         self.latestCommandCount = latestCommandCount
         self.issues = issues
@@ -100,13 +118,17 @@ public enum AjarAutosaveStore {
     }
 
     /// Writes the canonical project snapshot and recovery manifest with atomic file replacement.
+    ///
+    /// `openMode` has **no default** — every write must state editable vs read-only. Read-only
+    /// refuses the write so newer schema data cannot be stripped (FR-PROJ-005 / ADR-0018).
     public static func writeSnapshot(
         _ project: Project,
         appliedCommandCount: Int,
+        openMode: AjarProjectOpenMode,
         to packageURL: URL,
         fileManager: FileManager = .default
     ) throws {
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encode(project, openMode: openMode)
         try createPackageDirectories(at: packageURL, fileManager: fileManager)
         try AjarAtomicFileWriter.write(
             package.projectJSON,
@@ -235,76 +257,31 @@ public enum AjarAutosaveStore {
     }
 
     /// Pure recovery: snapshot + journal bytes to latest project, with typed best-effort issues.
+    ///
+    /// Decodes the full load result first. **Read-only** snapshots (higher schema minor) skip
+    /// journal replay entirely and return the snapshot project with its read-only mode so callers
+    /// cannot mutate newer schema data during recovery (FR-PROJ-005 / ADR-0018).
     public static func recover(
         snapshot: AjarAutosaveSnapshot,
         journalData: Data
     ) throws -> AjarRecoveryResult {
-        var currentProject = try decodeProject(from: snapshot)
-        var latestCommandCount = snapshot.appliedCommandCount
-        var appliedJournalEntryCount = 0
-
-        let lines = journalData.split(separator: 0x0A, omittingEmptySubsequences: false)
-        for indexedLine in lines.enumerated() {
-            guard !indexedLine.element.isEmpty else {
-                continue
-            }
-
-            let entry: AjarAutosaveJournalEntry
-            switch decodeJournalEntry(
-                lineData: Data(indexedLine.element),
-                lineNumber: indexedLine.offset + 1
-            ) {
-            case .success(let journalEntry):
-                entry = journalEntry
-            case .failure(let issue):
-                return recoveryResult(
-                    project: currentProject,
-                    appliedJournalEntryCount: appliedJournalEntryCount,
-                    latestCommandCount: latestCommandCount,
-                    issues: [issue]
-                )
-            }
-
-            if entry.sequenceNumber <= snapshot.appliedCommandCount {
-                continue
-            }
-
-            let expectedSequenceNumber = latestCommandCount + 1
-            guard entry.sequenceNumber == expectedSequenceNumber else {
-                return recoveryResult(
-                    project: currentProject,
-                    appliedJournalEntryCount: appliedJournalEntryCount,
-                    latestCommandCount: latestCommandCount,
-                    issues: [
-                        .nonContiguousJournalEntry(
-                            expected: expectedSequenceNumber,
-                            found: entry.sequenceNumber
-                        )
-                    ]
-                )
-            }
-
-            switch replay(entry, to: currentProject) {
-            case .success(let replayedProject):
-                currentProject = replayedProject
-                latestCommandCount = entry.sequenceNumber
-                appliedJournalEntryCount += 1
-            case .failure(let issue):
-                return recoveryResult(
-                    project: currentProject,
-                    appliedJournalEntryCount: appliedJournalEntryCount,
-                    latestCommandCount: latestCommandCount,
-                    issues: [issue]
-                )
-            }
+        let loadResult = try decodeLoadResult(from: snapshot)
+        switch loadResult {
+        case .readOnly(let project, let reason):
+            return recoveryResult(
+                project: project,
+                openMode: .readOnly(reason: reason),
+                appliedJournalEntryCount: 0,
+                latestCommandCount: snapshot.appliedCommandCount,
+                issues: []
+            )
+        case .editable(let project):
+            return try recoverEditable(
+                project: project,
+                snapshot: snapshot,
+                journalData: journalData
+            )
         }
-
-        return recoveryResult(
-            project: currentProject,
-            appliedJournalEntryCount: appliedJournalEntryCount,
-            latestCommandCount: latestCommandCount,
-            issues: []
-        )
     }
 
     static func projectURL(in packageURL: URL) -> URL {
@@ -441,14 +418,91 @@ private extension AjarAutosaveStore {
         }
     }
 
-    static func decodeProject(from snapshot: AjarAutosaveSnapshot) throws -> Project {
-        switch try AjarProjectCodec.decode(
+    static func decodeLoadResult(
+        from snapshot: AjarAutosaveSnapshot
+    ) throws -> AjarProjectLoadResult {
+        try AjarProjectCodec.decode(
             projectJSON: snapshot.package.projectJSON,
             mediaJSON: snapshot.package.mediaJSON
-        ) {
-        case .editable(let editableProject), .readOnly(let editableProject, _):
-            return editableProject
+        )
+    }
+
+    // swiftlint:disable:next function_body_length
+    static func recoverEditable(
+        project: Project,
+        snapshot: AjarAutosaveSnapshot,
+        journalData: Data
+    ) throws -> AjarRecoveryResult {
+        var currentProject = project
+        var latestCommandCount = snapshot.appliedCommandCount
+        var appliedJournalEntryCount = 0
+
+        let lines = journalData.split(separator: 0x0A, omittingEmptySubsequences: false)
+        for indexedLine in lines.enumerated() {
+            guard !indexedLine.element.isEmpty else {
+                continue
+            }
+
+            let entry: AjarAutosaveJournalEntry
+            switch decodeJournalEntry(
+                lineData: Data(indexedLine.element),
+                lineNumber: indexedLine.offset + 1
+            ) {
+            case .success(let journalEntry):
+                entry = journalEntry
+            case .failure(let issue):
+                return recoveryResult(
+                    project: currentProject,
+                    openMode: .editable,
+                    appliedJournalEntryCount: appliedJournalEntryCount,
+                    latestCommandCount: latestCommandCount,
+                    issues: [issue]
+                )
+            }
+
+            if entry.sequenceNumber <= snapshot.appliedCommandCount {
+                continue
+            }
+
+            let expectedSequenceNumber = latestCommandCount + 1
+            guard entry.sequenceNumber == expectedSequenceNumber else {
+                return recoveryResult(
+                    project: currentProject,
+                    openMode: .editable,
+                    appliedJournalEntryCount: appliedJournalEntryCount,
+                    latestCommandCount: latestCommandCount,
+                    issues: [
+                        .nonContiguousJournalEntry(
+                            expected: expectedSequenceNumber,
+                            found: entry.sequenceNumber
+                        )
+                    ]
+                )
+            }
+
+            switch replay(entry, to: currentProject) {
+            case .success(let replayedProject):
+                currentProject = replayedProject
+                latestCommandCount = entry.sequenceNumber
+                appliedJournalEntryCount += 1
+            case .failure(let issue):
+                return recoveryResult(
+                    project: currentProject,
+                    openMode: .editable,
+                    appliedJournalEntryCount: appliedJournalEntryCount,
+                    latestCommandCount: latestCommandCount,
+                    issues: [issue]
+                )
+            }
         }
+
+        return recoveryResult(
+            project: currentProject,
+            openMode: .editable,
+            appliedJournalEntryCount: appliedJournalEntryCount,
+            latestCommandCount: latestCommandCount,
+            issues: []
+        )
     }
 
     static func decodeJournalEntry(
@@ -482,12 +536,14 @@ private extension AjarAutosaveStore {
 
     static func recoveryResult(
         project: Project,
+        openMode: AjarProjectOpenMode,
         appliedJournalEntryCount: Int,
         latestCommandCount: Int,
         issues: [AjarRecoveryIssue]
     ) -> AjarRecoveryResult {
         AjarRecoveryResult(
             project: project,
+            openMode: openMode,
             appliedJournalEntryCount: appliedJournalEntryCount,
             latestCommandCount: latestCommandCount,
             issues: issues

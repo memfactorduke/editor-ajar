@@ -1551,6 +1551,7 @@ private actor EditorAjarAutosaveCoordinator {
             try AjarAutosaveStore.writeSnapshot(
                 project,
                 appliedCommandCount: sequenceNumber,
+                openMode: .editable,
                 to: packageURL
             )
             return nil
@@ -1564,6 +1565,7 @@ private actor EditorAjarAutosaveCoordinator {
             try AjarAutosaveStore.writeSnapshot(
                 project,
                 appliedCommandCount: appliedCommandCount,
+                openMode: .editable,
                 to: packageURL
             )
             return nil

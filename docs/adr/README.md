@@ -27,6 +27,7 @@ silently editing code against an Accepted ADR.
 | [0014](0014-autonomous-build-loop.md) | Autonomous build-loop readiness | Accepted |
 | [0015](0015-audio-crossfade-overlap-model.md) | Audio crossfade overlap model: fade tail past the cut | Accepted |
 | [0016](0016-effects-and-transitions.md) | Effects and transitions architecture | Accepted |
+| [0018](0018-schema-minor-versioning.md) | Schema minor versioning and forward-compatible opens | Accepted |
 
 To add one: copy `0000-adr-template.md` to the next number, fill it in, set status, and add a row
 here.

@@ -171,7 +171,7 @@ final class CompoundClipModelTests: XCTestCase {
 
     func testFRTL013CompoundClipRoundTripsThroughAjarProjectCodec() throws {
         let fixture = try makeCompoundClipFixture(seed: 133)
-        let package = try AjarProjectCodec.encode(fixture.project)
+        let package = try AjarProjectCodec.encodeNewDocument(fixture.project)
         let loaded = try compoundEditableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,

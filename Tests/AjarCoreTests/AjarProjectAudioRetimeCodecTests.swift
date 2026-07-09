@@ -13,7 +13,7 @@ final class AjarProjectAudioRetimeCodecTests: XCTestCase {
         let project = try pitchCorrectedProject(fixture: fixture)
         XCTAssertTrue(project.validate().isValid)
 
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loaded = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -36,7 +36,7 @@ final class AjarProjectAudioRetimeCodecTests: XCTestCase {
         // so this exercises the full project codec path rather than a bare `ClipAudioMix`
         // decode. Absent key = pitchShifted: the exact legacy varispeed behavior.
         let fixture = try makeLinkedEditFixture(seed: 4_371)
-        let package = try AjarProjectCodec.encode(fixture.project)
+        let package = try AjarProjectCodec.encodeNewDocument(fixture.project)
         let legacyProjectJSON = try projectJSONWithoutRetimeModeKey(package.projectJSON)
         let legacyLoaded = try editableProject(
             from: AjarProjectCodec.decode(

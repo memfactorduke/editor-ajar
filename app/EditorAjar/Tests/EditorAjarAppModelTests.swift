@@ -825,6 +825,7 @@ final class EditorAjarAppModelTests: XCTestCase {
         try AjarAutosaveStore.writeSnapshot(
             sampleProject,
             appliedCommandCount: 0,
+            openMode: .editable,
             to: packageURL
         )
         try AjarAutosaveStore.appendJournalEntry(

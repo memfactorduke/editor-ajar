@@ -23,12 +23,18 @@ public struct EditLogEntry: Equatable, Sendable {
 public enum EditHistoryError: Error, Equatable, Sendable {
     /// Replaying a redo command did not reproduce the recorded post-command project.
     case redoDiverged(command: EditCommand)
+
+    /// The session was opened read-only (newer schema minor); edits are refused (FR-PROJ-005).
+    case projectOpenedReadOnly(reason: AjarProjectReadOnlyReason)
 }
 
 /// Unbounded per-session undo/redo history for immutable project values.
 public struct EditHistory: Equatable, Sendable {
     /// Current project snapshot.
     public private(set) var currentProject: Project
+
+    /// Whether this session may apply edits (ADR-0018 / FR-PROJ-005).
+    public let openMode: AjarProjectOpenMode
 
     /// Commands that can be undone, oldest to newest.
     public private(set) var undoEntries: [EditLogEntry]
@@ -57,8 +63,22 @@ public struct EditHistory: Equatable, Sendable {
     }
 
     /// Creates an empty edit history at `project`.
-    public init(project: Project) {
+    ///
+    /// - Parameters:
+    ///   - project: Initial project snapshot.
+    ///   - openMode: From `AjarProjectLoadResult.openMode`. Read-only sessions refuse `apply` so
+    ///     newer schema data cannot be stripped by edits (ADR-0018).
+    public init(project: Project, openMode: AjarProjectOpenMode = .editable) {
         currentProject = project
+        self.openMode = openMode
+        undoEntries = []
+        redoEntries = []
+    }
+
+    /// Creates history from a codec load result, preserving editable vs read-only mode.
+    public init(loadResult: AjarProjectLoadResult) {
+        currentProject = loadResult.project
+        openMode = loadResult.openMode
         undoEntries = []
         redoEntries = []
     }
@@ -66,6 +86,10 @@ public struct EditHistory: Equatable, Sendable {
     /// Applies a command, appending one unbounded undo entry and clearing redo history.
     @discardableResult
     public mutating func apply(_ command: EditCommand) throws -> Project {
+        if case .readOnly(let reason) = openMode {
+            throw EditHistoryError.projectOpenedReadOnly(reason: reason)
+        }
+
         let before = currentProject
         let after = try EditReducer.apply(command, to: before)
         undoEntries.append(EditLogEntry(command: command, before: before, after: after))

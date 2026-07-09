@@ -7,7 +7,7 @@ import XCTest
 
 final class AjarProjectClipEffectLegacyDecodeTests: XCTestCase {
     func testFRPROJ005FRCOMP001LegacyEffectsWithoutChromaKeyDefaultToDisabled() throws {
-        let package = try AjarProjectCodec.encode(try makeLegacyClipEffectProject())
+        let package = try AjarProjectCodec.encodeNewDocument(try makeLegacyClipEffectProject())
         let legacyProjectJSON = try legacyEffectsProjectJSONWithoutClipEffectKey(
             "chromaKey",
             package.projectJSON
@@ -27,7 +27,7 @@ final class AjarProjectClipEffectLegacyDecodeTests: XCTestCase {
     }
 
     func testFRPROJ005FRCOMP003LegacyEffectsWithoutMasksDefaultToEmpty() throws {
-        let package = try AjarProjectCodec.encode(try makeLegacyClipEffectProject())
+        let package = try AjarProjectCodec.encodeNewDocument(try makeLegacyClipEffectProject())
         let legacyProjectJSON = try legacyEffectsProjectJSONWithoutClipEffectKey(
             "masks",
             package.projectJSON
@@ -47,7 +47,7 @@ final class AjarProjectClipEffectLegacyDecodeTests: XCTestCase {
     }
 
     func testFRPROJ005FRCOL001LegacyEffectsWithoutColorCorrectionDefaultToIdentity() throws {
-        let package = try AjarProjectCodec.encode(try makeLegacyClipEffectProject())
+        let package = try AjarProjectCodec.encodeNewDocument(try makeLegacyClipEffectProject())
         let legacyProjectJSON = try legacyEffectsProjectJSONWithoutClipEffectKey(
             "colorCorrection",
             package.projectJSON
