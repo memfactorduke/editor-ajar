@@ -392,6 +392,21 @@ public enum EditCommand: Codable, Equatable, Sendable {
         mediaID: UUID
     )
 
+    /// Inserts a title generator clip on a video track (FR-TXT-001).
+    case insertTitleClip(
+        sequenceID: UUID, trackID: UUID, clipID: UUID, title: TitleSource,
+        timelineRange: TimeRange, name: String
+    )
+
+    /// Replaces the title source on an existing title clip (FR-TXT-001).
+    case setClipTitleSource(sequenceID: UUID, trackID: UUID, clipID: UUID, title: TitleSource)
+
+    /// Creates or replaces one text box on a title clip (FR-TXT-001).
+    case setTitleTextBox(sequenceID: UUID, trackID: UUID, clipID: UUID, box: TitleTextBox)
+
+    /// Removes one text box from a title clip by stable box ID (FR-TXT-001).
+    case removeTitleTextBox(sequenceID: UUID, trackID: UUID, clipID: UUID, boxID: UUID)
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 
@@ -433,56 +448,4 @@ public enum EditCommand: Codable, Equatable, Sendable {
 
     /// Replaces project-wide settings.
     case setProjectSettings(ProjectSettings)
-}
-
-/// Typed failures from the edit reducer.
-public enum EditReducerError: Error, Equatable, Sendable {
-    /// The command references a missing sequence.
-    case sequenceNotFound(UUID)
-
-    /// The command references a missing track.
-    case trackNotFound(sequenceID: UUID, trackID: UUID)
-
-    /// The command references a missing clip.
-    case clipNotFound(sequenceID: UUID, trackID: UUID, clipID: UUID)
-
-    /// The command references a missing marker.
-    case markerNotFound(sequenceID: UUID, markerID: UUID)
-
-    /// The command would create duplicate sequence IDs inside the project.
-    case duplicateSequenceID(UUID)
-
-    /// The command would leave the project without any editable sequence.
-    case cannotRemoveLastSequence(UUID)
-
-    /// The command would create duplicate track IDs inside a sequence.
-    case duplicateTrackID(sequenceID: UUID, trackID: UUID)
-
-    /// The command would create duplicate marker IDs inside a sequence.
-    case duplicateMarkerID(sequenceID: UUID, markerID: UUID)
-
-    /// The command references a missing link group.
-    case linkGroupNotFound(sequenceID: UUID, linkGroupID: UUID)
-
-    /// The command's requested edit is not valid for the current timeline state.
-    case invalidEdit(EditCommandValidationError)
-
-    /// Exact timeline arithmetic failed while applying the command.
-    case timeArithmeticFailed(RationalTimeError)
-
-    /// The command produced a project that failed central validation.
-    case validationFailed([ProjectValidationError])
-}
-
-/// Pure reducer entry point required by ADR-0008.
-public func apply(_ command: EditCommand, to project: Project) throws -> Project {
-    try EditReducer.apply(command, to: project)
-}
-
-/// Pure project edit reducer.
-public enum EditReducer {
-    /// Applies `command` to `project`, returning a new validated project.
-    public static func apply(_ command: EditCommand, to project: Project) throws -> Project {
-        try validated(try applyUnchecked(command, to: project))
-    }
 }

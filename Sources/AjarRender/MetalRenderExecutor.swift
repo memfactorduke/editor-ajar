@@ -56,6 +56,9 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     /// A render command encoder could not be created.
     case renderEncoderCreationFailed
 
+    /// Title generator rasterization failed (FR-TXT-001, ADR-0017).
+    case titleRasterizationFailed(RenderNodeID, String)
+
     /// A human-readable description of the render failure.
     public var description: String {
         switch self {
@@ -91,6 +94,8 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
             "Metal blit encoder creation failed"
         case .renderEncoderCreationFailed:
             "Metal render command encoder creation failed"
+        case .titleRasterizationFailed(let nodeID, let message):
+            "title rasterization failed for node \(nodeID): \(message)"
         }
     }
 }
@@ -364,6 +369,9 @@ public final class MetalRenderExecutor {
     private var pipelineStates: [PipelineStateKey: MTLRenderPipelineState] = [:]
     private var frameCache: [FrameCacheKey: MTLTexture] = [:]
     private var frameCacheAccessOrder: [FrameCacheKey] = []
+    /// Content-hash + dimension cache for rasterized title generator textures (ADR-0017).
+    private var titleTextureCache: [FrameCacheKey: MTLTexture] = [:]
+    private var titleTextureCacheAccessOrder: [FrameCacheKey] = []
     private var cacheHitCountValue = 0
     private var cacheMissCountValue = 0
     private var outputPassCountValue = 0
@@ -553,7 +561,8 @@ public final class MetalRenderExecutor {
         let cacheKey = FrameCacheKey(contentHash: contentHash, output: output)
         executorStateLock.lock()
         let generation = diskCacheGenerationValue
-        let shouldSchedule = frameCache[cacheKey] == nil
+        let shouldSchedule =
+            frameCache[cacheKey] == nil
             && diskCache != nil
             && !diskLookupAttemptedKeys.contains(cacheKey)
         if shouldSchedule {
@@ -619,8 +628,9 @@ public final class MetalRenderExecutor {
         // populated the key meanwhile (the rendered texture is render-target-usable and must not
         // be replaced by the shader-read-only disk texture).
         guard generation == diskCacheGenerationValue,
-              frameCache[cacheKey] == nil,
-              let texture else {
+            frameCache[cacheKey] == nil,
+            let texture
+        else {
             return
         }
         frameCache[cacheKey] = texture
@@ -637,6 +647,8 @@ public final class MetalRenderExecutor {
         defer { executorStateLock.unlock() }
         frameCache.removeAll()
         frameCacheAccessOrder.removeAll()
+        titleTextureCache.removeAll()
+        titleTextureCacheAccessOrder.removeAll()
         cacheHitCountValue = 0
         cacheMissCountValue = 0
         diskLookupAttemptedKeys.removeAll()
@@ -825,9 +837,97 @@ public final class MetalRenderExecutor {
                 output: output,
                 sourceProvider: sourceProvider
             )
+        case .title(let title):
+            return try titleSourceInput(
+                title: title,
+                node: inputNode,
+                input: input,
+                output: output
+            )
         case .composite:
             throw MetalRenderError.unsupportedInputNode(input.sourceNodeID)
         }
+    }
+
+    private func titleSourceInput(
+        title: RenderTitleNode,
+        node: RenderNode,
+        input: RenderCompositeInput,
+        output: RenderOutputDescriptor
+    ) throws -> SourceCompositeInput {
+        let texture = try titleTexture(
+            for: title,
+            node: node,
+            width: output.pixelDimensions.width,
+            height: output.pixelDimensions.height
+        )
+        return SourceCompositeInput(
+            source: RenderSourceNode(
+                mediaID: title.clipID,
+                clipID: title.clipID,
+                sourceTime: .zero,
+                colorSpace: title.colorSpace
+            ),
+            texture: texture,
+            transform: input.transform,
+            effects: input.effects,
+            trackOpacity: input.trackOpacity,
+            trackBlendMode: input.trackBlendMode,
+            sourceColorSpace: title.colorSpace,
+            sourceIsLinearWorking: false,
+            retainedFrame: nil,
+            blendTexture: nil
+        )
+    }
+
+    /// Rasterizes a title on content change only; reuses textures by content hash + dimensions.
+    private func titleTexture(
+        for title: RenderTitleNode,
+        node: RenderNode,
+        width: Int,
+        height: Int
+    ) throws -> MTLTexture {
+        let cacheKey = FrameCacheKey(
+            contentHash: node.contentHash,
+            output: RenderOutputDescriptor(
+                pixelDimensions: PixelDimensions(width: width, height: height),
+                pixelFormat: .bgra8Unorm
+            )
+        )
+        executorStateLock.lock()
+        if let cached = titleTextureCache[cacheKey] {
+            titleTextureCacheAccessOrder.removeAll { $0 == cacheKey }
+            titleTextureCacheAccessOrder.append(cacheKey)
+            executorStateLock.unlock()
+            return cached
+        }
+        executorStateLock.unlock()
+
+        let result: TitleRasterizationResult
+        do {
+            result = try TitleTextRasterizer.rasterize(
+                title: title.title,
+                width: width,
+                height: height,
+                device: device
+            )
+        } catch {
+            throw MetalRenderError.titleRasterizationFailed(
+                node.id,
+                String(describing: error)
+            )
+        }
+
+        executorStateLock.lock()
+        titleTextureCache[cacheKey] = result.texture
+        titleTextureCacheAccessOrder.removeAll { $0 == cacheKey }
+        titleTextureCacheAccessOrder.append(cacheKey)
+        while titleTextureCacheAccessOrder.count > maximumCacheEntryCount {
+            let expired = titleTextureCacheAccessOrder.removeFirst()
+            titleTextureCache.removeValue(forKey: expired)
+        }
+        executorStateLock.unlock()
+        return result.texture
     }
 
     private func mediaSourceInput(
@@ -1242,8 +1342,10 @@ public final class MetalRenderExecutor {
     }
 
     private func evictExpiredReusableTextures() {
-        while texturePoolStoredCount > maximumPooledTextureCount,
-              let expiredKey = texturePoolAccessOrder.first {
+        while texturePoolStoredCount > maximumPooledTextureCount {
+            guard let expiredKey = texturePoolAccessOrder.first else {
+                break
+            }
             texturePoolAccessOrder.removeFirst()
             guard var bucket = texturePool[expiredKey], !bucket.isEmpty else {
                 continue
@@ -1369,7 +1471,8 @@ public final class MetalRenderExecutor {
         let lumaKey = effects.lumaKey
         let colorCorrection = colorCorrectionUniforms(effects.colorCorrection)
         let masks = maskUniforms(effects.masks)
-        let effectiveOpacity = clamp01(floatValue(transform.opacity))
+        let effectiveOpacity =
+            clamp01(floatValue(transform.opacity))
             * clamp01(floatValue(input.trackOpacity))
         return AjarCompositeUniforms(
             outputSize: SIMD2<Float>(Float(outputTexture.width), Float(outputTexture.height)),

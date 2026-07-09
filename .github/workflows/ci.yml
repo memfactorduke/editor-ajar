@@ -40,6 +40,29 @@ jobs:
       - name: Test
         run: swift test
 
+      # AjarCommandTests runs the golden harness; placeholder title refs fail here and block the
+      # dedicated golden-frame job (needs: build-test). Upload actuals so ADR-0017 reference
+      # establishment still works when the gate is hit through the test suite.
+      - name: Upload build-test golden actuals
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-test-golden-actuals
+          path: |
+            Tests/Fixtures/golden/**/_actual/**
+            Tests/Fixtures/golden/**/_diff/**
+          if-no-files-found: ignore
+
+      - name: Upload crash reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crash-reports
+          path: |
+            ~/Library/Logs/DiagnosticReports/*.ips
+            ~/Library/Logs/DiagnosticReports/*.crash
+          if-no-files-found: ignore
+
   lint:
     name: Lint & format
     runs-on: macos-14
@@ -72,6 +95,18 @@ jobs:
 
       - name: Golden-frame gate (TESTING §2, ADR-0011)
         run: swift run ajar golden Tests/Fixtures/golden
+
+      # On failure, upload harness actual/diff PNGs so new-fixture references can be
+      # established from this macos-14 gate (ADR-0017 reference establishment).
+      - name: Upload golden-frame actuals
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-frame-actuals
+          path: |
+            Tests/Fixtures/golden/**/_actual/**
+            Tests/Fixtures/golden/**/_diff/**
+          if-no-files-found: ignore
 
   golden-audio:
     name: Golden-audio

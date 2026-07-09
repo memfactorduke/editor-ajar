@@ -161,6 +161,8 @@ extension OfflineAudioMixer {
                 environment: &environment,
                 nestingDepth: nestingDepth
             )
+        case .title:
+            throw AudioRenderError.unsupportedClipSource(clipID: clip.id)
         }
     }
 

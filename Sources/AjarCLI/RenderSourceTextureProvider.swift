@@ -109,9 +109,11 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
     }
 
     private static func media(for mediaID: UUID, in project: Project) throws -> MediaRef {
-        guard let media = project.mediaPool.first(where: { candidate in
-            candidate.id == mediaID
-        }) else {
+        guard
+            let media = project.mediaPool.first(where: { candidate in
+                candidate.id == mediaID
+            })
+        else {
             throw AjarCLIError.missingMediaReference(mediaID)
         }
         return media
@@ -216,7 +218,7 @@ private extension RenderGraph {
                 sources.append(source)
             case .compound(let compound):
                 compound.graph.appendRenderSourceNodes(to: &sources)
-            case .composite:
+            case .title, .composite:
                 continue
             }
         }

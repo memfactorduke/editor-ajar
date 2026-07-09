@@ -56,6 +56,9 @@ public extension Clip {
                 throw ClipSourceResolutionError.missingSequenceReference(sequenceID)
             }
             return try sequence.timelineDuration()
+        case .title:
+            // Generators have no external media length; the placed sourceRange is the duration.
+            return sourceRange.duration
         }
     }
 
@@ -74,6 +77,9 @@ public extension Clip {
                 throw ClipSourceResolutionError.missingSequenceReference(sequenceID)
             }
             return sequence.timebase
+        case .title:
+            // Title generators inherit the sequence timebase at placement; no intrinsic rate.
+            return nil
         }
     }
 }

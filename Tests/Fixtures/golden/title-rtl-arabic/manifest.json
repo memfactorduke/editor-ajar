@@ -1,0 +1,99 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          20,
+          50,
+          20,
+          255
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 48,
+        "width" : 160
+      }
+    },
+    {
+      "title" : {
+        "boxes" : [
+          {
+            "height" : {
+              "denominator" : 1,
+              "numerator" : 32
+            },
+            "id" : "00000000-0000-0000-0000-00000000A001",
+            "origin" : {
+              "x" : {
+                "denominator" : 1,
+                "numerator" : 8
+              },
+              "y" : {
+                "denominator" : 1,
+                "numerator" : 8
+              }
+            },
+            "style" : {
+              "alignment" : "right",
+              "color" : {
+                "blue" : {
+                  "denominator" : 10,
+                  "numerator" : 9
+                },
+                "green" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                },
+                "red" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                }
+              },
+              "fontFamily" : "Helvetica",
+              "fontSize" : {
+                "denominator" : 1,
+                "numerator" : 18
+              },
+              "fontWeight" : "regular",
+              "leading" : {
+                "denominator" : 1,
+                "numerator" : 0
+              },
+              "tracking" : {
+                "denominator" : 1,
+                "numerator" : 0
+              }
+            },
+            "text" : "مرحباً بِالعالم",
+            "width" : {
+              "denominator" : 1,
+              "numerator" : 144
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "title-rtl-arabic",
+  "outputDimensions" : {
+    "height" : 48,
+    "width" : 160
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-TXT-007",
+    "FR-TXT-001",
+    "ADR-0017",
+    "ADR-0009",
+    "TESTING-2",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

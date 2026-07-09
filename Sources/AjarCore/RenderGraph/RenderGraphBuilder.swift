@@ -184,6 +184,12 @@ public enum RenderGraphBuilder {
                 in: project,
                 nestingDepth: nestingDepth
             )
+        case .title(let title):
+            return try RenderNodeFactory.makeTitleNode(
+                clipID: clip.id,
+                title: title,
+                colorSpace: project.settings.colorSpace
+            )
         }
     }
 
@@ -235,9 +241,11 @@ public enum RenderGraphBuilder {
                 depth: nestingDepth
             )
         }
-        guard let sequence = project.sequences.first(where: { sequence in
-            sequence.id == sequenceID
-        }) else {
+        guard
+            let sequence = project.sequences.first(where: { sequence in
+                sequence.id == sequenceID
+            })
+        else {
             throw RenderGraphBuildError.missingSequenceReference(
                 clipID: clip.id,
                 sequenceID: sequenceID

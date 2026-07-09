@@ -106,6 +106,14 @@ public extension EditCommand {
             return "Detach Audio"
         case .replaceClipAudioSource:
             return "Replace Clip Audio"
+        case .insertTitleClip:
+            return "Insert Title"
+        case .setClipTitleSource:
+            return "Set Title"
+        case .setTitleTextBox:
+            return "Set Title Text Box"
+        case .removeTitleTextBox:
+            return "Remove Title Text Box"
         case .addTrack:
             return "Add Track"
         case .removeTrack:

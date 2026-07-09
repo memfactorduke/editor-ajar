@@ -1,0 +1,151 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          80,
+          40,
+          10,
+          255
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 64,
+        "width" : 128
+      }
+    },
+    {
+      "title" : {
+        "boxes" : [
+          {
+            "height" : {
+              "denominator" : 1,
+              "numerator" : 28
+            },
+            "id" : "00000000-0000-0000-0000-00000000B001",
+            "origin" : {
+              "x" : {
+                "denominator" : 1,
+                "numerator" : 8
+              },
+              "y" : {
+                "denominator" : 1,
+                "numerator" : 8
+              }
+            },
+            "style" : {
+              "alignment" : "center",
+              "color" : {
+                "blue" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                },
+                "green" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                },
+                "red" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                }
+              },
+              "fontFamily" : "Helvetica",
+              "fontSize" : {
+                "denominator" : 1,
+                "numerator" : 18
+              },
+              "fontWeight" : "bold",
+              "leading" : {
+                "denominator" : 1,
+                "numerator" : 0
+              },
+              "tracking" : {
+                "denominator" : 1,
+                "numerator" : 0
+              }
+            },
+            "text" : "MAIN TITLE",
+            "width" : {
+              "denominator" : 1,
+              "numerator" : 112
+            }
+          },
+          {
+            "height" : {
+              "denominator" : 1,
+              "numerator" : 20
+            },
+            "id" : "00000000-0000-0000-0000-00000000B002",
+            "origin" : {
+              "x" : {
+                "denominator" : 1,
+                "numerator" : 8
+              },
+              "y" : {
+                "denominator" : 1,
+                "numerator" : 36
+              }
+            },
+            "style" : {
+              "alignment" : "center",
+              "color" : {
+                "blue" : {
+                  "denominator" : 5,
+                  "numerator" : 1
+                },
+                "green" : {
+                  "denominator" : 100,
+                  "numerator" : 85
+                },
+                "red" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                }
+              },
+              "fontFamily" : "Helvetica",
+              "fontSize" : {
+                "denominator" : 1,
+                "numerator" : 12
+              },
+              "fontWeight" : "regular",
+              "leading" : {
+                "denominator" : 1,
+                "numerator" : 0
+              },
+              "tracking" : {
+                "denominator" : 1,
+                "numerator" : 0
+              }
+            },
+            "text" : "subtitle",
+            "width" : {
+              "denominator" : 1,
+              "numerator" : 112
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "title-multibox-styled",
+  "outputDimensions" : {
+    "height" : 64,
+    "width" : 128
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-TXT-001",
+    "ADR-0017",
+    "ADR-0009",
+    "TESTING-2",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

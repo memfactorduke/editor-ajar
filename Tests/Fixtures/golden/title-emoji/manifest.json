@@ -1,0 +1,99 @@
+{
+  "clips" : [
+    {
+      "syntheticMedia" : {
+        "bgra" : [
+          30,
+          30,
+          30,
+          255
+        ],
+        "frameCount" : 1,
+        "frameRate" : 24,
+        "height" : 48,
+        "width" : 128
+      }
+    },
+    {
+      "title" : {
+        "boxes" : [
+          {
+            "height" : {
+              "denominator" : 1,
+              "numerator" : 32
+            },
+            "id" : "00000000-0000-0000-0000-00000000E001",
+            "origin" : {
+              "x" : {
+                "denominator" : 1,
+                "numerator" : 4
+              },
+              "y" : {
+                "denominator" : 1,
+                "numerator" : 8
+              }
+            },
+            "style" : {
+              "alignment" : "left",
+              "color" : {
+                "blue" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                },
+                "green" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                },
+                "red" : {
+                  "denominator" : 1,
+                  "numerator" : 1
+                }
+              },
+              "fontFamily" : "Helvetica",
+              "fontSize" : {
+                "denominator" : 1,
+                "numerator" : 20
+              },
+              "fontWeight" : "regular",
+              "leading" : {
+                "denominator" : 1,
+                "numerator" : 0
+              },
+              "tracking" : {
+                "denominator" : 1,
+                "numerator" : 0
+              }
+            },
+            "text" : "Hi 🎬✨👍",
+            "width" : {
+              "denominator" : 1,
+              "numerator" : 120
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "frame" : "0/24",
+  "id" : "title-emoji",
+  "outputDimensions" : {
+    "height" : 48,
+    "width" : 128
+  },
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-TXT-007",
+    "FR-TXT-001",
+    "ADR-0017",
+    "ADR-0009",
+    "TESTING-2",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "tolerance" : {
+    "maximumAlphaDelta" : 1,
+    "maximumDeltaE" : 1,
+    "minimumSSIM" : 0.99
+  }
+}

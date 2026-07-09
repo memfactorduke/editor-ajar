@@ -21,6 +21,8 @@ extension EditReducer {
             .setClipAudioCrossfade, .removeClipAudioCrossfade,
             .detachClipAudio, .replaceClipAudioSource:
             return try applyClipCommand(command, to: project)
+        case .insertTitleClip, .setClipTitleSource, .setTitleTextBox, .removeTitleTextBox:
+            return try applyTitleClipCommand(command, to: project)
         case .setTrackState, .setTrackCompositing, .setTrackAudioMix, .clearTrackAudioMix:
             return try applyTrackCommand(command, to: project)
         case .addTrack(let sequenceID, let track):

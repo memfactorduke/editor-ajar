@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import Foundation
 
@@ -251,6 +252,29 @@ public struct RenderCompositeNode: Codable, Equatable, Sendable {
     }
 }
 
+/// Resolved title generator parameters for a title render node (FR-TXT-001, ADR-0017).
+public struct RenderTitleNode: Codable, Equatable, Sendable {
+    /// Stable clip ID that requested this title rasterization.
+    public let clipID: UUID
+
+    /// Title model to rasterize.
+    public let title: TitleSource
+
+    /// Tagged color space of the rasterized title texture (display-encoded Rec.709 for v1).
+    public let colorSpace: MediaColorSpace
+
+    /// Creates resolved title node parameters.
+    public init(
+        clipID: UUID,
+        title: TitleSource,
+        colorSpace: MediaColorSpace = .rec709
+    ) {
+        self.clipID = clipID
+        self.title = title
+        self.colorSpace = colorSpace
+    }
+}
+
 /// Typed render node payloads emitted by `AjarCore`.
 public enum RenderNodeKind: Codable, Equatable, Sendable {
     /// A decoded media frame request.
@@ -258,6 +282,9 @@ public enum RenderNodeKind: Codable, Equatable, Sendable {
 
     /// A nested sequence rendered as a compound clip source.
     case compound(RenderCompoundNode)
+
+    /// A title generator rasterization request (FR-TXT-001, ADR-0017).
+    case title(RenderTitleNode)
 
     /// The output composite node.
     case composite(RenderCompositeNode)
@@ -396,6 +423,22 @@ enum RenderNodeFactory {
         )
     }
 
+    static func makeTitleNode(
+        clipID: UUID,
+        title: TitleSource,
+        colorSpace: MediaColorSpace
+    ) throws -> RenderNode {
+        let kind = RenderNodeKind.title(
+            RenderTitleNode(clipID: clipID, title: title, colorSpace: colorSpace)
+        )
+        return try makeNode(
+            id: RenderNodeID(rawValue: "title:\(clipID.uuidString)"),
+            kind: kind,
+            inputIDs: [],
+            inputHashes: []
+        )
+    }
+
     private static func makeNode(
         id: RenderNodeID,
         kind: RenderNodeKind,
@@ -440,6 +483,7 @@ enum RenderNodeFactory {
 private enum RenderNodeHashKind: Codable {
     case source(RenderSourceNode)
     case compound(RenderCompoundHashNode)
+    case title(RenderTitleNode)
     case composite(RenderCompositeNode)
 
     init(_ kind: RenderNodeKind) {
@@ -448,6 +492,8 @@ private enum RenderNodeHashKind: Codable {
             self = .source(source)
         case .compound(let compound):
             self = .compound(RenderCompoundHashNode(compound))
+        case .title(let title):
+            self = .title(title)
         case .composite(let composite):
             self = .composite(composite)
         }

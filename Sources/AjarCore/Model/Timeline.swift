@@ -112,20 +112,24 @@ public struct Track: Codable, Equatable, Sendable {
         muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         solo = try container.decodeIfPresent(Bool.self, forKey: .solo) ?? false
         hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
-        opacity = try container.decodeIfPresent(
-            Animatable<RationalValue>.self,
-            forKey: .opacity
-        ) ?? .constant(.one)
-        blendMode = try container.decodeIfPresent(ClipBlendMode.self, forKey: .blendMode)
+        opacity =
+            try container.decodeIfPresent(
+                Animatable<RationalValue>.self,
+                forKey: .opacity
+            ) ?? .constant(.one)
+        blendMode =
+            try container.decodeIfPresent(ClipBlendMode.self, forKey: .blendMode)
             ?? .normal
-        audioGain = try container.decodeIfPresent(
-            Animatable<RationalValue>.self,
-            forKey: .audioGain
-        ) ?? .constant(.one)
-        audioPan = try container.decodeIfPresent(
-            Animatable<RationalValue>.self,
-            forKey: .audioPan
-        ) ?? .constant(.zero)
+        audioGain =
+            try container.decodeIfPresent(
+                Animatable<RationalValue>.self,
+                forKey: .audioGain
+            ) ?? .constant(.one)
+        audioPan =
+            try container.decodeIfPresent(
+                Animatable<RationalValue>.self,
+                forKey: .audioPan
+            ) ?? .constant(.zero)
     }
 
     /// Encodes the complete track payload.
@@ -189,6 +193,9 @@ public enum ClipSource: Codable, Equatable, Sendable {
 
     /// A compound clip backed by another sequence in the same project.
     case sequence(id: UUID)
+
+    /// A title generator clip (FR-TXT-001, ADR-0017). No media-pool entry is required.
+    case title(TitleSource)
 }
 
 /// Stable reference to a clip on a specific timeline track.
@@ -341,12 +348,14 @@ public struct Clip: Codable, Equatable, Sendable {
         kind = try container.decode(TrackKind.self, forKey: .kind)
         name = try container.decode(String.self, forKey: .name)
         linkGroupID = try container.decodeIfPresent(UUID.self, forKey: .linkGroupID)
-        transform = try container.decodeIfPresent(ClipTransform.self, forKey: .transform)
+        transform =
+            try container.decodeIfPresent(ClipTransform.self, forKey: .transform)
             ?? .identity
-        transformAnimation = try container.decodeIfPresent(
-            AnimatableClipTransform.self,
-            forKey: .transformAnimation
-        ) ?? .constant(transform)
+        transformAnimation =
+            try container.decodeIfPresent(
+                AnimatableClipTransform.self,
+                forKey: .transformAnimation
+            ) ?? .constant(transform)
         effects = try container.decodeIfPresent(ClipEffects.self, forKey: .effects) ?? .none
         effectsAnimation = try container.decodeIfPresent(
             AnimatableClipEffects.self,
@@ -366,10 +375,11 @@ public struct Clip: Codable, Equatable, Sendable {
         reverse = try container.decodeIfPresent(Bool.self, forKey: .reverse) ?? false
         freezeFrame = try container.decodeIfPresent(Bool.self, forKey: .freezeFrame) ?? false
         timeRemap = try container.decodeIfPresent(ClipTimeRemap.self, forKey: .timeRemap)
-        frameSampling = try container.decodeIfPresent(
-            ClipFrameSamplingMode.self,
-            forKey: .frameSampling
-        ) ?? .nearest
+        frameSampling =
+            try container.decodeIfPresent(
+                ClipFrameSamplingMode.self,
+                forKey: .frameSampling
+            ) ?? .nearest
     }
 
     /// Encodes the complete clip payload.
