@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Offline audio mix plan-build performance for FR-AUD-007 (#178): `OfflineAudioMixer` now
+  hoists constant gain/pan envelopes and steps linear source-frame mappings in the sample
+  domain on the off-realtime `preparingCompoundMix` path, with a unit-rate integer bulk path
+  for the common flat-timeline case. Output samples stay bit-identical to the per-sample
+  rational path (validated against the exact resolver at run endpoints; golden audio fixtures
+  unchanged). On M4 Pro release builds, `rt-audio-plan-build-wide-timeline-fr-aud-007` drops
+  from ~1.6 s to ~3.5 ms and `rt-audio-plan-build-nested-compound-fr-aud-007` from ~0.9 s to
+  ~2 ms — both well under the 1000 ms look-ahead refill budget with real headroom for the
+  reference M1 Pro tier.
+
 ### Added
 - FR-SPD-005 M7-exit verification benchmarks in `ajar bench` (report-only CI job, #175). Seven
   retimed-playback metrics render one cold frame over synthetic retimed timelines — constant
