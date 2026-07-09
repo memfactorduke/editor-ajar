@@ -16,14 +16,21 @@ struct SoakVideoCycleStats {
 
 /// Offline video render cycle for `ajar soak` (NFR-STAB-005).
 ///
-/// Every iteration creates a fresh executor and disk-cache handle so their whole lifetimes are
-/// inside the loop, then drives the known-risky cache paths: RAM-tier eviction (more distinct
-/// frames than `maximumCacheEntryCount`), disk persist (write-behind readback route), disk
-/// lookup warm-up via `prefetchCachedFrame`, read-time quarantine of a deliberately corrupted
-/// entry, and a periodic full cache-directory reset.
+/// Drives the known-risky cache paths each iteration: RAM-tier eviction (more distinct frames
+/// than `maximumCacheEntryCount`), disk persist (write-behind readback route), disk lookup
+/// warm-up via `prefetchCachedFrame`, read-time quarantine of a deliberately corrupted entry,
+/// and a periodic full cache-directory reset.
+///
+/// The Metal device, command queue, and compiled shader library are held for the soak run so
+/// iterations do not recompile pipelines/libraries (driver metadata retained per compile was
+/// surfacing as ~40 KiB/iteration phys_footprint growth once audio plan-build sped up and the
+/// loop completed enough samples to cross the quartile gate — NFR-STAB-005 / #178). Disk cache
+/// handles are still recreated after each directory wipe so restore/index churn stays covered.
 final class SoakVideoRenderer {
     private let device: MTLDevice
     private let cacheDirectoryURL: URL
+    private var diskCache: MetalDiskFrameCache?
+    private var executor: MetalRenderExecutor?
     private static let frameIndices: [Int64] = [0, 3, 6, 9, 12, 15]
 
     /// Fails (returns nil) when no Metal device is available; the soak then runs audio-only.
@@ -43,18 +50,17 @@ final class SoakVideoRenderer {
     ) async throws -> SoakVideoCycleStats {
         if iteration % 3 == 0 {
             try? FileManager.default.removeItem(at: cacheDirectoryURL)
+            // Directory gone: drop the disk tier (and its executor binding) so the next open
+            // re-indexes an empty/restored cache tree.
+            diskCache = nil
+            executor = nil
         }
-        let diskCache = try MetalDiskFrameCache(
-            device: device,
-            directoryURL: cacheDirectoryURL,
-            byteBudget: 64 * 1_024
-        )
-        let executor = try MetalRenderExecutor(
-            device: device,
-            maximumCacheEntryCount: 4,
-            maximumPooledTextureCount: 4,
-            diskCache: diskCache
-        )
+        let diskCache = try resolvedDiskCache()
+        let executor = try resolvedExecutor(diskCache: diskCache)
+        // Clear RAM/disk-lookup state so each iteration still exercises cold-ish cache paths
+        // without paying for a full Metal library/pipeline recompile.
+        executor.removeAllCachedFrames()
+
         let output = RenderOutputDescriptor(pixelDimensions: project.settings.resolution)
         let contentHashes = try await renderAndPersistFrames(
             project: project,
@@ -84,6 +90,33 @@ final class SoakVideoRenderer {
             quarantinedEntryCount: diskCache.quarantinedEntryCount,
             diskPopulatedFrameCount: executor.diskPopulatedFrameCount
         )
+    }
+
+    private func resolvedDiskCache() throws -> MetalDiskFrameCache {
+        if let diskCache {
+            return diskCache
+        }
+        let created = try MetalDiskFrameCache(
+            device: device,
+            directoryURL: cacheDirectoryURL,
+            byteBudget: 64 * 1_024
+        )
+        diskCache = created
+        return created
+    }
+
+    private func resolvedExecutor(diskCache: MetalDiskFrameCache) throws -> MetalRenderExecutor {
+        if let executor {
+            return executor
+        }
+        let created = try MetalRenderExecutor(
+            device: device,
+            maximumCacheEntryCount: 4,
+            maximumPooledTextureCount: 4,
+            diskCache: diskCache
+        )
+        executor = created
+        return created
     }
 
     private func renderAndPersistFrames(
