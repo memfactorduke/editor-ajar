@@ -87,7 +87,7 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let transformAnimation: AnimatableClipTransform?
     let effects: ClipEffects?
     let effectsAnimation: AnimatableClipEffects?
-    /// FR-FX library stack (FR-FX-002/003); absent means empty.
+    /// FR-FX library stack (FR-FX-002/003, FR-COL-004 LUT); absent means empty.
     let effectStack: ClipEffectStack?
     /// Keyframable FR-FX stack; absent means constant of `effectStack` / empty.
     let effectStackAnimation: AnimatableClipEffectStack?

@@ -169,11 +169,11 @@ public enum AjarProjectCodec {
 
     /// Current `AjarCore` project schema **minor** version (additive fields / kinds).
     ///
-    /// Bump whenever a persisted field or enum kind is added (ADR-0018). This change introduces
-    /// `schemaMinor` itself, so the value starts at `1`.
-    /// Bumped for FR-FX-002 library kinds (gaussian/box/zoom blur, sharpen, glow) — additive
-    /// `ClipEffectKind` cases (ADR-0018).
-    public static let currentSchemaMinor = 2
+    /// Bump whenever a persisted field or enum kind is added (ADR-0018).
+    /// - `1`: introduces `schemaMinor` itself (ADR-0018 / #193).
+    /// - `2`: FR-FX-002 library kinds (gaussian/box/zoom blur, sharpen, glow) (#181).
+    /// - `3`: `ClipEffectKind.lut` (FR-COL-004 / #188).
+    public static let currentSchemaMinor = 3
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

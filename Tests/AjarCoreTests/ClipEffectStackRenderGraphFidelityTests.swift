@@ -116,6 +116,16 @@ private func nonIdentityDefinitionsByKind() throws -> [KindDefinition] {
                     amount: try RationalValue(numerator: 1, denominator: 2)
                 )
             )
+        ),
+        KindDefinition(
+            kind: .lut,
+            definition: .lut(
+                ClipLUTEffectParameters(
+                    table: .identityOneD,
+                    strength: try RationalValue(numerator: 1, denominator: 2),
+                    placement: .look
+                )
+            )
         )
     ]
 }

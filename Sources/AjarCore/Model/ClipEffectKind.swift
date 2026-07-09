@@ -23,6 +23,11 @@ public enum ClipEffectKind: String, Codable, Equatable, Sendable, CaseIterable {
     /// Soft glow via blurred highlight lift (FR-FX-002).
     case glow
 
+    /// Imported `.cube` 1D/3D LUT with keyframable strength (FR-COL-004).
+    ///
+    /// Introduced at `schemaMinor` **3** (ADR-0018): minor 2 is FR-FX-002 five kinds (#181).
+    case lut
+
     /// Decodes a kind string; unknown raw values become `ClipEffectDecodingError.unknownKind`
     /// (not a bare `DecodingError`) so callers can surface the newer-project situation (ADR-0018).
     public init(from decoder: Decoder) throws {

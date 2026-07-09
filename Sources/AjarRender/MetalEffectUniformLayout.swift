@@ -17,12 +17,16 @@ public struct MetalEffectUniformField: Equatable, Sendable {
     }
 }
 
-/// MSL scalar/vector kinds used by FR-FX-002 uniform blocks.
+/// MSL scalar/vector kinds used by FR-FX-002 / FR-COL-004 uniform blocks.
 public enum MetalEffectUniformFieldKind: Equatable, Sendable {
     /// `float` (4 bytes, 4-byte align).
     case float
     /// `float2` (8 bytes, 8-byte align).
     case float2
+    /// `float3` (12 bytes, 16-byte align in MSL).
+    case float3
+    /// `float4` (16 bytes, 16-byte align).
+    case float4
 
     fileprivate var mslTypeName: String {
         switch self {
@@ -30,6 +34,10 @@ public enum MetalEffectUniformFieldKind: Equatable, Sendable {
             "float"
         case .float2:
             "float2"
+        case .float3:
+            "float3"
+        case .float4:
+            "float4"
         }
     }
 
@@ -39,11 +47,22 @@ public enum MetalEffectUniformFieldKind: Equatable, Sendable {
             4
         case .float2:
             8
+        case .float3:
+            12
+        case .float4:
+            16
         }
     }
 
     fileprivate var alignment: Int {
-        byteSize
+        switch self {
+        case .float:
+            4
+        case .float2:
+            8
+        case .float3, .float4:
+            16
+        }
     }
 }
 
@@ -134,6 +153,18 @@ public struct MetalEffectUniformLayout: Equatable, Sendable {
                         bytes[offset + byteIndex] = raw[byteIndex]
                     }
                 }
+            case .float3(let vector):
+                withUnsafeBytes(of: vector) { raw in
+                    for byteIndex in 0..<12 {
+                        bytes[offset + byteIndex] = raw[byteIndex]
+                    }
+                }
+            case .float4(let vector):
+                withUnsafeBytes(of: vector) { raw in
+                    for byteIndex in 0..<16 {
+                        bytes[offset + byteIndex] = raw[byteIndex]
+                    }
+                }
             }
         }
         return bytes
@@ -144,6 +175,8 @@ public struct MetalEffectUniformLayout: Equatable, Sendable {
 public enum MetalEffectUniformValue: Equatable, Sendable {
     case float(Float)
     case float2(SIMD2<Float>)
+    case float3(SIMD3<Float>)
+    case float4(SIMD4<Float>)
 
     fileprivate var kind: MetalEffectUniformFieldKind {
         switch self {
@@ -151,6 +184,10 @@ public enum MetalEffectUniformValue: Equatable, Sendable {
             .float
         case .float2:
             .float2
+        case .float3:
+            .float3
+        case .float4:
+            .float4
         }
     }
 }
@@ -201,12 +238,26 @@ extension MetalEffectUniformLayout {
         ]
     )
 
-    /// Every distinct FR-FX-002 uniform block (covers all five library kinds).
+    /// FR-COL-004 LUT apply (strength + size + domain; texture bound separately).
+    public static let lut = MetalEffectUniformLayout(
+        mslTypeName: "AjarLUTUniforms",
+        fields: [
+            MetalEffectUniformField(name: "strength", kind: .float),
+            MetalEffectUniformField(name: "size", kind: .float),
+            MetalEffectUniformField(name: "padding0", kind: .float),
+            MetalEffectUniformField(name: "padding1", kind: .float),
+            MetalEffectUniformField(name: "domainMin", kind: .float3),
+            MetalEffectUniformField(name: "domainMax", kind: .float3)
+        ]
+    )
+
+    /// Every distinct FR-FX-002 / FR-COL-004 uniform block.
     public static let all: [MetalEffectUniformLayout] = [
         .separableBlur,
         .zoomBlur,
         .sharpen,
-        .glowCombine
+        .glowCombine,
+        .lut
     ]
 
     /// Concatenated MSL struct declarations for injection into the effect shader source.
@@ -262,6 +313,23 @@ extension MetalEffectUniformLayout {
             .float(0),
             .float(0),
             .float(0)
+        ])
+    }
+
+    /// Packs FR-COL-004 LUT uniforms in layout order.
+    public static func packLUT(
+        strength: Float,
+        size: Float,
+        domainMin: SIMD3<Float>,
+        domainMax: SIMD3<Float>
+    ) -> [UInt8] {
+        lut.pack(valuesInOrder: [
+            .float(strength),
+            .float(size),
+            .float(0),
+            .float(0),
+            .float3(domainMin),
+            .float3(domainMax)
         ])
     }
 }

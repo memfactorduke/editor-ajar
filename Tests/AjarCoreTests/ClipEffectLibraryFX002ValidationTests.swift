@@ -71,13 +71,15 @@ final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
     }
 
     func testFRFX002SchemaMinorIsTwoAfterLibraryKinds() {
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 2)
+        // Bumped again for FR-COL-004 lut (#188); FR-FX-002 claimed minor 2.
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 3)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.gaussianBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.boxBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.zoomBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.sharpen))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.glow))
-        XCTAssertEqual(ClipEffectKind.allCases.count, 6)
+        XCTAssertEqual(ClipEffectKind.allCases.count, 7)
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.lut))
     }
 
     func testFRFX002StaticAnimationParityCoversLibraryKinds() throws {

@@ -12,6 +12,8 @@ final class MetalClipEffectStackRegistry {
     private let device: MTLDevice
     private let library: MTLLibrary
     private var pipelineStates: [String: MTLRenderPipelineState] = [:]
+    /// GPU LUT textures keyed by ``CubeLUTTable/contentDigest``.
+    private var lutTextureCache: [String: MTLTexture] = [:]
     private let lock = NSLock()
 
     init(device: MTLDevice, library: MTLLibrary) {
@@ -143,7 +145,137 @@ final class MetalClipEffectStackRegistry {
             return "ajar_sharpen_fragment"
         case .glow:
             return "ajar_glow_combine_fragment"
+        case .lut:
+            // 1D vs 3D selected at encode time via fragmentFunctionName(forLUT:).
+            return "ajar_lut_3d_fragment"
         }
+    }
+
+    /// Fragment function for a concrete LUT table dimensionality.
+    func fragmentFunctionName(forLUT dimensions: CubeLUTDimensions) -> String {
+        switch dimensions {
+        case .oneD:
+            "ajar_lut_1d_fragment"
+        case .threeD:
+            "ajar_lut_3d_fragment"
+        }
+    }
+
+    /// GPU-resident LUT texture, uploaded once per table digest.
+    func lutTexture(for table: CubeLUTTable) throws -> MTLTexture {
+        let key = table.contentDigest.digest
+        lock.lock()
+        if let cached = lutTextureCache[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        let texture = try Self.makeLUTTexture(table: table, device: device)
+        lock.lock()
+        lutTextureCache[key] = texture
+        lock.unlock()
+        return texture
+    }
+
+    private static func makeLUTTexture(
+        table: CubeLUTTable,
+        device: MTLDevice
+    ) throws -> MTLTexture {
+        switch table.dimensions {
+        case .threeD:
+            return try makeLUT3DTexture(table: table, device: device)
+        case .oneD:
+            return try makeLUT1DTexture(table: table, device: device)
+        }
+    }
+
+    private static func makeLUT3DTexture(
+        table: CubeLUTTable,
+        device: MTLDevice
+    ) throws -> MTLTexture {
+        let size = max(table.size, 2)
+        let descriptor = MTLTextureDescriptor()
+        descriptor.textureType = .type3D
+        descriptor.pixelFormat = .rgba16Float
+        descriptor.width = size
+        descriptor.height = size
+        descriptor.depth = size
+        descriptor.usage = [.shaderRead]
+        descriptor.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            throw MetalRenderError.outputTextureCreationFailed(width: size, height: size)
+        }
+        var pixels = [SIMD4<Float16>](
+            repeating: SIMD4<Float16>(0, 0, 0, 1),
+            count: size * size * size
+        )
+        if table.entries.count == size * size * size {
+            for blue in 0..<size {
+                for green in 0..<size {
+                    for red in 0..<size {
+                        let index = red + (green * size) + (blue * size * size)
+                        let color = table.entries[index]
+                        pixels[index] = SIMD4<Float16>(
+                            Float16(color.r),
+                            Float16(color.g),
+                            Float16(color.b),
+                            1
+                        )
+                    }
+                }
+            }
+        }
+        let bytesPerRow = size * MemoryLayout<SIMD4<Float16>>.stride
+        texture.replace(
+            region: MTLRegion(
+                origin: MTLOrigin(x: 0, y: 0, z: 0),
+                size: MTLSize(width: size, height: size, depth: size)
+            ),
+            mipmapLevel: 0,
+            slice: 0,
+            withBytes: pixels,
+            bytesPerRow: bytesPerRow,
+            bytesPerImage: bytesPerRow * size
+        )
+        return texture
+    }
+
+    private static func makeLUT1DTexture(
+        table: CubeLUTTable,
+        device: MTLDevice
+    ) throws -> MTLTexture {
+        let size = max(table.size, 2)
+        let descriptor = MTLTextureDescriptor()
+        descriptor.textureType = .type1D
+        descriptor.pixelFormat = .rgba16Float
+        descriptor.width = size
+        descriptor.usage = [.shaderRead]
+        descriptor.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            throw MetalRenderError.outputTextureCreationFailed(width: size, height: 1)
+        }
+        var pixels = [SIMD4<Float16>](repeating: SIMD4<Float16>(0, 0, 0, 1), count: size)
+        if table.entries.count == size {
+            for index in 0..<size {
+                let color = table.entries[index]
+                pixels[index] = SIMD4<Float16>(
+                    Float16(color.r),
+                    Float16(color.g),
+                    Float16(color.b),
+                    1
+                )
+            }
+        }
+        texture.replace(
+            region: MTLRegion(
+                origin: MTLOrigin(x: 0, y: 0, z: 0),
+                size: MTLSize(width: size, height: 1, depth: 1)
+            ),
+            mipmapLevel: 0,
+            withBytes: pixels,
+            bytesPerRow: size * MemoryLayout<SIMD4<Float16>>.stride
+        )
+        return texture
     }
 }
 
@@ -206,7 +338,29 @@ enum MetalClipEffectStackEncoder {
             return try applySharpen(parameters, to: sourceTexture, context: context)
         case .glow(let parameters):
             return try applyGlow(parameters, to: sourceTexture, context: context)
+        case .lut(let parameters):
+            return try applyLUT(parameters, to: sourceTexture, context: context)
         }
+    }
+
+    private static func applyLUT(
+        _ parameters: ClipLUTEffectParameters,
+        to sourceTexture: MTLTexture,
+        context: MetalEffectEncodeContext
+    ) throws -> (texture: MTLTexture, intermediates: [MTLTexture]) {
+        let strength = clamp01(Float(parameters.strength.doubleValue))
+        guard strength > 0.001 else {
+            return (sourceTexture, [])
+        }
+        guard case .success(let table) = parameters.table.validated() else {
+            return (sourceTexture, [])
+        }
+        return try encodeLUT(
+            table: table,
+            strength: strength,
+            to: sourceTexture,
+            context: context
+        )
     }
 
     private static func applyGaussian(

@@ -70,6 +70,10 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Per-node GPU cost of one 1080p glow stack node (FR-FX-002, PERFORMANCE §3).
     case effectNodeGlow1080p = "effect-node-glow-1080p-fr-fx-002"
 
+    /// Per-node GPU cost for one FR-COL-004 `lut` effect stack node at 1080p30
+    /// (PERFORMANCE §3 / ADR-0016 §4). Metric slug includes the kind raw value `lut`.
+    case effectNodeLUTGPU = "effect-node-lut-gpu-fr-col-004"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -96,6 +100,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
             .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p:
             "FR-FX-002"
+        case .effectNodeLUTGPU:
+            "FR-COL-004"
         }
     }
 
@@ -129,6 +135,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .effectNodeGlow1080p:
             // Gaussian two-pass + combine; heaviest of the FR-FX-002 batch-1 set.
             .effectNodeGPU(targetMilliseconds: 6)
+        case .effectNodeLUTGPU:
+            // Differential cost of one 33³ LUT node at 1080p30 (see BenchmarkBudget.effectNodeLUT).
+            .effectNodeLUT
         default:
             nil
         }
@@ -175,6 +184,15 @@ public struct BenchmarkBudget: Equatable, Sendable {
     static func effectNodeGPU(targetMilliseconds: Double) -> BenchmarkBudget {
         BenchmarkBudget(targetMilliseconds: targetMilliseconds, noiseBandPercent: 5)
     }
+
+    /// Per-node GPU budget for the FR-COL-004 `lut` stack kind (PERFORMANCE §3).
+    ///
+    /// Differential cost: median 1080p with one 33³ LUT minus no-LUT baseline (graphs
+    /// prebuilt, texture cache warm). 1.5 ms M1 Pro ceiling with 5% noise.
+    static let effectNodeLUT = BenchmarkBudget(
+        targetMilliseconds: 1.5,
+        noiseBandPercent: 5
+    )
 }
 
 extension BenchmarkMetric {
@@ -182,7 +200,8 @@ extension BenchmarkMetric {
     var isSelfContainedEffectNodeMetric: Bool {
         switch self {
         case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
-            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p:
+            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p,
+            .effectNodeLUTGPU:
             true
         default:
             false

@@ -153,6 +153,39 @@ extension MetalClipEffectStackEncoder {
         return (output, blurred.intermediates + [output])
     }
 
+    /// FR-COL-004: apply one LUT node via registry fragment + digest-cached LUT texture.
+    static func encodeLUT(
+        table: CubeLUTTable,
+        strength: Float,
+        to sourceTexture: MTLTexture,
+        context: MetalEffectEncodeContext
+    ) throws -> (texture: MTLTexture, intermediates: [MTLTexture]) {
+        let output = try context.makeTexture(
+            sourceTexture.pixelFormat,
+            sourceTexture.width,
+            sourceTexture.height
+        )
+        let fragmentName = context.registry.fragmentFunctionName(forLUT: table.dimensions)
+        let pipeline = try context.registry.pipelineState(
+            fragmentFunctionName: fragmentName,
+            pixelFormat: output.pixelFormat
+        )
+        let lutTexture = try context.registry.lutTexture(for: table)
+        try encodeFullscreen(
+            pipeline: pipeline,
+            destination: output,
+            textures: [sourceTexture, lutTexture],
+            uniformBytes: MetalEffectUniformLayout.packLUT(
+                strength: strength,
+                size: Float(table.size),
+                domainMin: SIMD3<Float>(table.domainMin.r, table.domainMin.g, table.domainMin.b),
+                domainMax: SIMD3<Float>(table.domainMax.r, table.domainMax.g, table.domainMax.b)
+            ),
+            context: context
+        )
+        return (output, [output])
+    }
+
     /// Fullscreen triangle with fragment textures + layout-packed uniform bytes at buffer(0).
     static func encodeFullscreen(
         pipeline: MTLRenderPipelineState,

@@ -359,6 +359,12 @@ public enum ClipEffectStackValidationError: Equatable, Sendable {
     /// A glow amount is outside the normalized 0...1 range.
     case glowAmountOutOfRange(RationalValue)
 
+    /// A LUT strength is outside the normalized 0...1 range (FR-COL-004).
+    case lutStrengthOutOfRange(RationalValue)
+
+    /// The inline LUT table failed size/entry validation (FR-COL-004 payload ceiling).
+    case lutTableInvalid(CubeLUTValidationError)
+
     /// A set-parameter edit changed the node's kind.
     case effectNodeKindMismatch(
         nodeID: UUID,
