@@ -29,7 +29,7 @@ final class AjarProjectEffectStackLegacyDecodeTests: XCTestCase {
         let project = try replacingVideoItems([.clip(clip)], in: fixture)
         XCTAssertTrue(project.validate().isValid)
 
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loaded = try effectStackEditableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -47,7 +47,7 @@ final class AjarProjectEffectStackLegacyDecodeTests: XCTestCase {
         // Legacy fixture: parent → compound clip → nested sequence → track → item → clip.
         // Strip effectStack keys everywhere; absent keys must default to empty — nesting has
         // dropped new fields before when only top-level clip decode was tested.
-        let package = try AjarProjectCodec.encode(try makeNestedCompoundEffectStackProject())
+        let package = try AjarProjectCodec.encodeNewDocument(try makeNestedCompoundEffectStackProject())
         let legacyProjectJSON = try projectJSONWithoutKeys(
             ["effectStack", "effectStackAnimation"],
             in: package.projectJSON
@@ -79,7 +79,7 @@ final class AjarProjectEffectStackLegacyDecodeTests: XCTestCase {
         let project = try makeNestedCompoundEffectStackProject(withInnerStack: true)
         XCTAssertTrue(project.validate().isValid)
 
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loaded = try effectStackEditableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,

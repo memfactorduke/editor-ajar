@@ -230,7 +230,7 @@ private func audioSourceAudioClip(in project: Project, fixture: LinkedEditFixtur
 }
 
 private func roundTrippedClipAudioSourceProject(_ project: Project) throws -> Project {
-    let package = try AjarProjectCodec.encode(project)
+    let package = try AjarProjectCodec.encodeNewDocument(project)
     let loadResult = try AjarProjectCodec.decode(
         projectJSON: package.projectJSON,
         mediaJSON: package.mediaJSON

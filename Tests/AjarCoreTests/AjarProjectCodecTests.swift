@@ -11,7 +11,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
     func testFRPROJ001FRPROJ003RoundTripPropertyOverGeneratedProjects() throws {
         for seed in 0..<16 {
             let project = try makeCodecProject(seed: seed)
-            let package = try AjarProjectCodec.encode(project)
+            let package = try AjarProjectCodec.encodeNewDocument(project)
             let loaded = try AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
                 mediaJSON: package.mediaJSON
@@ -23,14 +23,14 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
     func testFRPROJ001CanonicalOrderReencodingUnchangedProjectIsByteIdentical() throws {
         let project = try makeCodecProject(seed: 100)
-        let firstPackage = try AjarProjectCodec.encode(project)
+        let firstPackage = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: firstPackage.projectJSON,
                 mediaJSON: firstPackage.mediaJSON
             )
         )
-        let secondPackage = try AjarProjectCodec.encode(loadedProject)
+        let secondPackage = try AjarProjectCodec.encodeNewDocument(loadedProject)
 
         XCTAssertEqual(secondPackage.projectJSON, firstPackage.projectJSON)
         XCTAssertEqual(secondPackage.mediaJSON, firstPackage.mediaJSON)
@@ -38,7 +38,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
     func testFRPROJ001MediaManifestCarriesMediaReferencesOutsideProjectJSON() throws {
         let project = try makeCodecProject(seed: 110)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let projectDocument = try JSONDecoder().decode(Project.self, from: package.projectJSON)
         let mediaManifest = try JSONDecoder().decode(
             AjarMediaManifest.self,
@@ -48,11 +48,13 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
         XCTAssertEqual(projectDocument.mediaPool, [])
         XCTAssertEqual(mediaManifest.media, project.mediaPool)
         XCTAssertEqual(mediaManifest.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(mediaManifest.schemaMinor, AjarProjectCodec.currentSchemaMinor)
+        XCTAssertEqual(projectDocument.schemaMinor, AjarProjectCodec.currentSchemaMinor)
     }
 
     func testFRTL008MarkerFieldsRoundTripThroughProjectCodec() throws {
         let project = try makeCodecProject(seed: 120)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -74,7 +76,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
     func testFRTL008LegacyMarkerFieldsDefaultWhenMissingFromProjectCodec() throws {
         let project = try makeCodecProject(seed: 130)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try projectJSONWithoutMarkerDetailFields(package.projectJSON)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
@@ -91,7 +93,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
     func testFRTL009ClipLinkGroupRoundTripsThroughProjectCodec() throws {
         let project = try makeCodecProject(seed: 140)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -123,7 +125,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
             sequences: project.sequences + [secondSequence]
         )
 
-        let package = try AjarProjectCodec.encode(twoSequenceProject)
+        let package = try AjarProjectCodec.encodeNewDocument(twoSequenceProject)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -148,7 +150,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
             with: transform
         )
 
-        let package = try AjarProjectCodec.encode(transformedProject)
+        let package = try AjarProjectCodec.encodeNewDocument(transformedProject)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -170,7 +172,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
             with: animation
         )
 
-        let package = try AjarProjectCodec.encode(transformedProject)
+        let package = try AjarProjectCodec.encodeNewDocument(transformedProject)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -190,7 +192,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
     func testFRXFORM001To005LegacyClipWithoutTransformDefaultsToIdentity() throws {
         let project = try makeCodecProject(seed: 170)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try projectJSONWithoutClipTransformFields(package.projectJSON)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
@@ -214,7 +216,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
             with: effects
         )
 
-        let package = try AjarProjectCodec.encode(effectsProject)
+        let package = try AjarProjectCodec.encodeNewDocument(effectsProject)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -230,7 +232,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
 
     func testFRCOMP001LegacyClipWithoutEffectsDefaultsToNone() throws {
         let project = try makeCodecProject(seed: 190)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try projectJSONWithoutClipEffectsField(package.projectJSON)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
@@ -252,7 +254,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
             in: project,
             with: effects
         )
-        let package = try AjarProjectCodec.encode(effectsProject)
+        let package = try AjarProjectCodec.encodeNewDocument(effectsProject)
         let legacyProjectJSON = try projectJSONWithoutChromaKeyChokeAndViewMatte(
             package.projectJSON
         )
@@ -279,7 +281,7 @@ final class AjarProjectCodecRoundTripTests: XCTestCase {
             with: effects
         )
 
-        let package = try AjarProjectCodec.encode(effectsProject)
+        let package = try AjarProjectCodec.encodeNewDocument(effectsProject)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -329,7 +331,7 @@ final class AjarProjectTrackCompositingCodecTests: XCTestCase {
             )
         }
 
-        let package = try AjarProjectCodec.encode(compositedProject)
+        let package = try AjarProjectCodec.encodeNewDocument(compositedProject)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -345,7 +347,7 @@ final class AjarProjectTrackCompositingCodecTests: XCTestCase {
 
     func testFRPROJ005FRCOMP006LegacyTrackCompositingDefaultsToOpaqueNormal() throws {
         let project = try makeCodecProject(seed: 156)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try projectJSONWithoutTrackCompositingFields(package.projectJSON)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
@@ -362,7 +364,7 @@ final class AjarProjectTrackCompositingCodecTests: XCTestCase {
 
     func testFRPROJ005FRCOMP006UnknownTrackBlendModeDefaultsToNormal() throws {
         let project = try makeCodecProject(seed: 157)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let futureProjectJSON = try projectJSONWithUnknownTrackBlendMode(package.projectJSON)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
@@ -377,7 +379,7 @@ final class AjarProjectTrackCompositingCodecTests: XCTestCase {
 
     func testFRPROJ005FRCOMP006UnknownClipBlendModeDefaultsToNormal() throws {
         let project = try makeCodecProject(seed: 158)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let futureProjectJSON = try projectJSONWithUnknownClipBlendMode(package.projectJSON)
         let loadedProject = try editableProject(
             from: AjarProjectCodec.decode(
@@ -394,20 +396,26 @@ final class AjarProjectTrackCompositingCodecTests: XCTestCase {
 
 final class AjarProjectCodecVersioningTests: XCTestCase {
     func testFRPROJ005OlderFixtureMigratesForwardToCurrentSchema() throws {
-        let legacyProject = try makeCodecProject(seed: 200, schemaVersion: 0)
+        let legacyProject = try makeCodecProject(seed: 200, schemaVersion: 0, schemaMinor: 0)
         let legacyProjectDocument = Project(
             schemaVersion: 0,
+            schemaMinor: 0,
             settings: legacyProject.settings,
             mediaPool: [],
             sequences: legacyProject.sequences
         )
-        let legacyManifest = AjarMediaManifest(schemaVersion: 0, media: legacyProject.mediaPool)
+        let legacyManifest = AjarMediaManifest(
+            schemaVersion: 0,
+            schemaMinor: 0,
+            media: legacyProject.mediaPool
+        )
         let loaded = try AjarProjectCodec.decode(
             projectJSON: try testEncoder().encode(legacyProjectDocument),
             mediaJSON: try testEncoder().encode(legacyManifest)
         )
         let expected = Project(
             schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: 0,
             settings: legacyProject.settings,
             mediaPool: legacyProject.mediaPool,
             sequences: legacyProject.sequences
@@ -416,37 +424,274 @@ final class AjarProjectCodecVersioningTests: XCTestCase {
         XCTAssertEqual(loaded, .editable(expected))
     }
 
-    func testFRPROJ005NewerVersionLoadsReadOnlyWithClearMessage() throws {
-        let newerVersion = AjarProjectCodec.currentSchemaVersion + 1
-        let newerProject = try makeCodecProject(seed: 210, schemaVersion: newerVersion)
+    /// Higher **major** refuses open (ADR-0018 supersedes single-int read-only for majors).
+    func testFRPROJ005Issue193HigherMajorSchemaRefusesOpenWithTypedError() throws {
+        let newerMajor = AjarProjectCodec.currentSchemaVersion + 1
+        let newerProject = try makeCodecProject(
+            seed: 210,
+            schemaVersion: newerMajor,
+            schemaMinor: 0
+        )
         let newerDocument = Project(
-            schemaVersion: newerVersion,
+            schemaVersion: newerMajor,
+            schemaMinor: 0,
             settings: newerProject.settings,
             mediaPool: [],
             sequences: newerProject.sequences
         )
         let manifest = AjarMediaManifest(
             schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: AjarProjectCodec.currentSchemaMinor,
             media: newerProject.mediaPool
         )
+
+        XCTAssertThrowsError(
+            try AjarProjectCodec.decode(
+                projectJSON: try testEncoder().encode(newerDocument),
+                mediaJSON: try testEncoder().encode(manifest)
+            )
+        ) { error in
+            guard case .unsupportedNewerMajorSchemaVersion(let found, let supported) =
+                error as? AjarProjectCodecError
+            else {
+                XCTFail("Expected unsupportedNewerMajorSchemaVersion, got \(error)")
+                return
+            }
+            XCTAssertEqual(found, newerMajor)
+            XCTAssertEqual(supported, AjarProjectCodec.currentSchemaVersion)
+        }
+    }
+
+    /// Same major + higher minor → read-only; resave blocked (FR-PROJ-005 / #193 / ADR-0018).
+    func testFRPROJ005Issue193SameMajorHigherMinorOpensReadOnlyAndBlocksResave() throws {
+        let higherMinor = AjarProjectCodec.currentSchemaMinor + 3
+        let base = try makeCodecProject(
+            seed: 211,
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor
+        )
+        let document = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor,
+            settings: base.settings,
+            mediaPool: [],
+            sequences: base.sequences
+        )
+        let manifest = AjarMediaManifest(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor,
+            media: base.mediaPool
+        )
         let loaded = try AjarProjectCodec.decode(
-            projectJSON: try testEncoder().encode(newerDocument),
+            projectJSON: try testEncoder().encode(document),
             mediaJSON: try testEncoder().encode(manifest)
         )
-        let reason = AjarProjectReadOnlyReason.newerSchemaVersion(
-            found: newerVersion,
-            supported: AjarProjectCodec.currentSchemaVersion
+        let reason = AjarProjectReadOnlyReason.newerSchemaMinor(
+            found: higherMinor,
+            supported: AjarProjectCodec.currentSchemaMinor
+        )
+        let expected = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor,
+            settings: base.settings,
+            mediaPool: base.mediaPool,
+            sequences: base.sequences
         )
 
-        XCTAssertEqual(loaded, .readOnly(newerProject, reason: reason))
+        XCTAssertEqual(loaded, .readOnly(expected, reason: reason))
+        XCTAssertEqual(loaded.openMode, .readOnly(reason: reason))
         XCTAssertTrue(reason.message.contains("read-only"))
-        XCTAssertTrue(reason.message.contains("\(newerVersion)"))
+        XCTAssertTrue(reason.message.contains("\(higherMinor)"))
+
+        XCTAssertThrowsError(
+            try AjarProjectCodec.encode(expected, openMode: loaded.openMode)
+        ) { error in
+            guard case .resaveBlockedReadOnly(let blockedReason) = error as? AjarProjectCodecError
+            else {
+                XCTFail("Expected resaveBlockedReadOnly, got \(error)")
+                return
+            }
+            XCTAssertEqual(blockedReason, reason)
+        }
+    }
+
+    /// Editing a read-only open is refused with a typed history error (FR-PROJ-005 / #193).
+    func testFRPROJ005Issue193EditingCommandAgainstReadOnlyOpenIsRefused() throws {
+        let higherMinor = AjarProjectCodec.currentSchemaMinor + 1
+        let base = try makeCodecProject(
+            seed: 212,
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor
+        )
+        let document = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor,
+            settings: base.settings,
+            mediaPool: [],
+            sequences: base.sequences
+        )
+        let manifest = AjarMediaManifest(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinor,
+            media: base.mediaPool
+        )
+        let loaded = try AjarProjectCodec.decode(
+            projectJSON: try testEncoder().encode(document),
+            mediaJSON: try testEncoder().encode(manifest)
+        )
+        var history = EditHistory(loadResult: loaded)
+        let sequence = try XCTUnwrap(base.sequences.first)
+
+        XCTAssertThrowsError(
+            try history.apply(
+                .renameSequence(sequenceID: sequence.id, name: "Should Not Stick")
+            )
+        ) { error in
+            guard case .projectOpenedReadOnly(let reason) = error as? EditHistoryError else {
+                XCTFail("Expected projectOpenedReadOnly, got \(error)")
+                return
+            }
+            guard case .newerSchemaMinor(let found, _) = reason else {
+                XCTFail("Expected newerSchemaMinor reason, got \(reason)")
+                return
+            }
+            XCTAssertEqual(found, higherMinor)
+        }
+        XCTAssertEqual(history.currentProject, loaded.project)
+        XCTAssertEqual(history.undoCount, 0)
+    }
+
+    /// Legacy v2 JSON without `schemaMinor` opens editable (defaults minor to 0; #193).
+    func testFRPROJ005Issue193LegacyV2WithoutSchemaMinorOpensEditable() throws {
+        let project = try makeCodecProject(seed: 213)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
+        let legacyProjectJSON = try jsonByRemovingKeys(["schemaMinor"], from: package.projectJSON)
+        let legacyMediaJSON = try jsonByRemovingKeys(["schemaMinor"], from: package.mediaJSON)
+
+        let loaded = try AjarProjectCodec.decode(
+            projectJSON: legacyProjectJSON,
+            mediaJSON: legacyMediaJSON
+        )
+
+        guard case .editable(let loadedProject) = loaded else {
+            XCTFail("Expected editable open for legacy v2, got \(loaded)")
+            return
+        }
+        XCTAssertEqual(loadedProject.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(loadedProject.schemaMinor, 0)
+        XCTAssertEqual(loaded.openMode, .editable)
+        // Resave allowed and writes current major+minor.
+        let resaved = try AjarProjectCodec.encode(loadedProject, openMode: .editable)
+        let resavedDocument = try JSONDecoder().decode(Project.self, from: resaved.projectJSON)
+        XCTAssertEqual(resavedDocument.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(resavedDocument.schemaMinor, AjarProjectCodec.currentSchemaMinor)
+    }
+
+    /// Round-trip preserves / rewrites major+minor at current codec values (#193).
+    func testFRPROJ005Issue193RoundTripPreservesMajorAndMinor() throws {
+        let project = try makeCodecProject(seed: 214)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
+        let projectObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: package.projectJSON) as? [String: Any]
+        )
+        let mediaObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: package.mediaJSON) as? [String: Any]
+        )
+
+        let currentMajor = AjarProjectCodec.currentSchemaVersion
+        let currentMinor = AjarProjectCodec.currentSchemaMinor
+        XCTAssertEqual(projectObject["schemaVersion"] as? Int, currentMajor)
+        XCTAssertEqual(projectObject["schemaMinor"] as? Int, currentMinor)
+        XCTAssertEqual(mediaObject["schemaVersion"] as? Int, currentMajor)
+        XCTAssertEqual(mediaObject["schemaMinor"] as? Int, currentMinor)
+
+        let loaded = try AjarProjectCodec.decode(
+            projectJSON: package.projectJSON,
+            mediaJSON: package.mediaJSON
+        )
+        XCTAssertEqual(loaded, .editable(project))
+        XCTAssertEqual(loaded.project.schemaVersion, AjarProjectCodec.currentSchemaVersion)
+        XCTAssertEqual(loaded.project.schemaMinor, AjarProjectCodec.currentSchemaMinor)
+    }
+
+    /// Mixed package: only current-major minors feed the reported found value (#193 / ADR-0018).
+    func testFRPROJ005Issue193MixedMajorFoundMinorIgnoresLowerMajorDocumentMinor() throws {
+        let higherMinorOnCurrent = AjarProjectCodec.currentSchemaMinor + 2
+        let unrelatedLowerMajorMinor = 99
+        let base = try makeCodecProject(
+            seed: 216,
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinorOnCurrent
+        )
+        let document = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: higherMinorOnCurrent,
+            settings: base.settings,
+            mediaPool: [],
+            sequences: base.sequences
+        )
+        // Media is an older major with a large minor that must not pollute the diagnostic.
+        let mediaManifest = AjarMediaManifest(
+            schemaVersion: 0,
+            schemaMinor: unrelatedLowerMajorMinor,
+            media: base.mediaPool
+        )
+        let loaded = try AjarProjectCodec.decode(
+            projectJSON: try testEncoder().encode(document),
+            mediaJSON: try testEncoder().encode(mediaManifest)
+        )
+
+        guard case .readOnly(_, let reason) = loaded else {
+            return XCTFail("Expected read-only for higher minor on current major, got \(loaded)")
+        }
+        guard case .newerSchemaMinor(let found, let supported) = reason else {
+            return XCTFail("Expected newerSchemaMinor, got \(reason)")
+        }
+        XCTAssertEqual(found, higherMinorOnCurrent)
+        XCTAssertNotEqual(found, unrelatedLowerMajorMinor)
+        XCTAssertEqual(supported, AjarProjectCodec.currentSchemaMinor)
+    }
+
+    /// Unknown `ClipEffectKind` yields a typed codec error mentioning newer-project (#193).
+    func testFRPROJ005Issue193UnknownClipEffectKindDecodeYieldsTypedError() throws {
+        let project = try makeCodecProject(seed: 215)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
+        let withUnknownKind = try projectJSONWithUnknownEffectKind(
+            package.projectJSON,
+            kind: "futureLibraryBlur"
+        )
+
+        XCTAssertThrowsError(
+            try AjarProjectCodec.decode(
+                projectJSON: withUnknownKind,
+                mediaJSON: package.mediaJSON
+            )
+        ) { error in
+            guard case .unknownClipEffectKind(let raw) = error as? AjarProjectCodecError else {
+                XCTFail("Expected unknownClipEffectKind, got \(error)")
+                return
+            }
+            XCTAssertEqual(raw, "futureLibraryBlur")
+        }
+
+        // Direct kind decode also uses the typed effect error (not bare DecodingError).
+        let kindJSON = Data("\"futureLibraryBlur\"".utf8)
+        XCTAssertThrowsError(
+            try JSONDecoder().decode(ClipEffectKind.self, from: kindJSON)
+        ) { error in
+            guard case .unknownKind(let raw) = error as? ClipEffectDecodingError else {
+                XCTFail("Expected ClipEffectDecodingError.unknownKind, got \(error)")
+                return
+            }
+            XCTAssertEqual(raw, "futureLibraryBlur")
+            XCTAssertTrue(ClipEffectDecodingError.unknownKind(raw).message.contains("newer"))
+        }
     }
 }
 
 final class AjarProjectCodecFuzzTests: XCTestCase {
     func testNFRSTAB006MalformedAndTruncatedCorpusReturnsTypedErrorsWithoutCrashing() throws {
-        let package = try AjarProjectCodec.encode(makeCodecProject(seed: 300))
+        let package = try AjarProjectCodec.encodeNewDocument(makeCodecProject(seed: 300))
         let mutatedProject = mutatingOneByte(package.projectJSON)
         let mutatedMedia = mutatingOneByte(package.mediaJSON)
         var cases: [(Data, Data)] = []
@@ -1002,9 +1247,55 @@ private func makeCodecClipMaskEffects() throws -> ClipEffects {
     )
 }
 
+private func jsonByRemovingKeys(_ keys: [String], from json: Data) throws -> Data {
+    var document = try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
+    for key in keys {
+        document.removeValue(forKey: key)
+    }
+    return try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+}
+
+private func projectJSONWithUnknownEffectKind(_ projectJSON: Data, kind: String) throws -> Data {
+    try updatingFirstClipPayload(projectJSON) { clipPayload in
+        let nodeID = UUID(uuidString: "00000000-0000-0000-0000-000000000215")
+            ?? UUID()
+        clipPayload["effectStack"] = [
+            "nodes": [
+                [
+                    "id": nodeID.uuidString,
+                    "enabled": true,
+                    "definition": [
+                        "kind": kind,
+                        "parameters": ["amount": ["numerator": 0, "denominator": 1]]
+                    ]
+                ]
+            ]
+        ]
+        clipPayload["effectStackAnimation"] = [
+            "nodes": [
+                [
+                    "id": nodeID.uuidString,
+                    "enabled": true,
+                    "definition": [
+                        "kind": kind,
+                        "parameters": [
+                            "amount": [
+                                "base": ["numerator": 0, "denominator": 1],
+                                "keyframes": []
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    }
+}
+
+// swiftlint:disable:next function_body_length
 private func makeCodecProject(
     seed: Int,
-    schemaVersion: Int = AjarProjectCodec.currentSchemaVersion
+    schemaVersion: Int = AjarProjectCodec.currentSchemaVersion,
+    schemaMinor: Int = AjarProjectCodec.currentSchemaMinor
 ) throws -> Project {
     let firstMediaID = try codecUUID(seed * 1_000 + 1)
     let secondMediaID = try codecUUID(seed * 1_000 + 2)
@@ -1063,6 +1354,7 @@ private func makeCodecProject(
 
     return Project(
         schemaVersion: schemaVersion,
+        schemaMinor: schemaMinor,
         settings: try makeCodecSettings(),
         mediaPool: mediaPool,
         sequences: [sequence]

@@ -8,7 +8,7 @@ import XCTest
 final class AjarProjectLumaKeyCodecTests: XCTestCase {
     func testFRCOMP005LumaKeyRoundTripThroughProjectCodec() throws {
         let project = try makeLumaKeyCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableLumaKeyProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -24,7 +24,7 @@ final class AjarProjectLumaKeyCodecTests: XCTestCase {
 
     func testFRPROJ005FRCOMP005LegacyEffectsWithoutLumaKeyDefaultToDisabled() throws {
         let project = try makeLumaKeyCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try lumaKeyProjectJSONWithoutLumaKey(package.projectJSON)
         let loadedProject = try editableLumaKeyProject(
             from: AjarProjectCodec.decode(
@@ -41,7 +41,7 @@ final class AjarProjectLumaKeyCodecTests: XCTestCase {
 
     func testFRPROJ005FRCOMP005SparseLumaKeyBlockDefaultsMissingFields() throws {
         let project = try makeLumaKeyCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let sparseProjectJSON = try lumaKeyProjectJSONWithSparseLumaKey(package.projectJSON)
         let loadedProject = try editableLumaKeyProject(
             from: AjarProjectCodec.decode(
@@ -66,7 +66,7 @@ final class AjarProjectLumaKeyCodecTests: XCTestCase {
 
     func testFRPROJ005FRCOMP005SparseAnimatableLumaKeyBlockDefaultsMissingFields() throws {
         let project = try makeLumaKeyCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let sparseProjectJSON = try lumaKeyProjectJSONWithSparseAnimatableLumaKey(
             package.projectJSON
         )

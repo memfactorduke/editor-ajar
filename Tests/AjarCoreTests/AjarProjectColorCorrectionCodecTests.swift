@@ -8,7 +8,7 @@ import XCTest
 final class AjarProjectColorCorrectionCodecTests: XCTestCase {
     func testFRCOL001ColorCorrectionRoundTripThroughProjectCodec() throws {
         let project = try makeColorCorrectionCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableColorCorrectionProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -24,7 +24,7 @@ final class AjarProjectColorCorrectionCodecTests: XCTestCase {
 
     func testFRPROJ005FRCOL001LegacyEffectsWithoutColorCorrectionDefaultToIdentity() throws {
         let project = try makeColorCorrectionCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try colorCorrectionProjectJSONWithoutColorCorrection(
             package.projectJSON
         )

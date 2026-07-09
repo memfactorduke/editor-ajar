@@ -8,7 +8,7 @@ import XCTest
 final class AjarProjectAudioMixCodecTests: XCTestCase {
     func testFRAUD001AudioMixRoundTripsThroughProjectCodec() throws {
         let project = try makeAudioCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableAudioCodecProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -26,7 +26,7 @@ final class AjarProjectAudioMixCodecTests: XCTestCase {
 
     func testFRPROJ005FRAUD001LegacyAudioClipDefaultsToUnityCenterNoFade() throws {
         let project = try makeAudioCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try audioCodecProjectJSONWithoutAudioKeys(package.projectJSON)
         let loadedProject = try editableAudioCodecProject(
             from: AjarProjectCodec.decode(
@@ -45,7 +45,7 @@ final class AjarProjectAudioMixCodecTests: XCTestCase {
 
     func testFRPROJ005FRAUD001PartialClipAudioMixDefaultsMissingFields() throws {
         let project = try makeAudioCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let partialProjectJSON = try audioCodecProjectJSONWithGainOnlyClipMix(package.projectJSON)
         let loadedProject = try editableAudioCodecProject(
             from: AjarProjectCodec.decode(
@@ -65,7 +65,7 @@ final class AjarProjectAudioMixCodecTests: XCTestCase {
 
     func testFRAUD001VideoTrackAndClipAudioFieldsRoundTripThroughProjectCodec() throws {
         let project = try makeVideoAudioCodecProject()
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableAudioCodecProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,

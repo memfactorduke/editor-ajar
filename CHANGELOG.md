@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- ADR-0018 (schema minor versioning and forward-compatible opens), closing the FR-PROJ-005 gap
+  called out on #180’s review (#193): project/media JSON carry `schemaVersion` (major) plus
+  additive `schemaMinor` (default `0` when absent so legacy v2 files stay editable). This build
+  writes major `2` / minor `1`. Same major + higher minor opens **read-only** with a typed reason;
+  `AjarProjectCodec.encode` / `writeSnapshot` require an explicit `openMode` (no default) so
+  `encode(loaded.project)` cannot silently strip newer data; in-memory first saves use
+  `encodeNewDocument`. Autosave `recover` propagates open mode and **skips journal replay** for
+  read-only snapshots. `EditHistory` refuses edit commands on a read-only open. Higher **major**
+  refuses open entirely (typed error) without full document decode. Unknown `ClipEffectKind`
+  values surface as typed `AjarProjectCodecError.unknownClipEffectKind` /
+  `ClipEffectDecodingError` (not a bare `DecodingError`). UI/CLI layers that still discard
+  `AjarProjectLoadResult` open mode remain a small follow-up adoption.
+
 ### Fixed
 - Offline audio mix plan-build performance for FR-AUD-007 (#178): `OfflineAudioMixer` now
   hoists constant gain/pan envelopes and steps linear source-frame mappings in the sample

@@ -194,7 +194,7 @@ final class ClipSpeedModelTests: XCTestCase {
             freezeFrame: true
         )
         let retimedProject = try replacingVideoItems([.clip(retimedClip)], in: fixture)
-        let package = try AjarProjectCodec.encode(retimedProject)
+        let package = try AjarProjectCodec.encodeNewDocument(retimedProject)
         let loaded = try speedEditableProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -208,7 +208,7 @@ final class ClipSpeedModelTests: XCTestCase {
         XCTAssertTrue(loadedClip.freezeFrame)
         XCTAssertEqual(loadedClip.timelineRange.duration, try editTime(8))
 
-        let legacyPackage = try AjarProjectCodec.encode(fixture.project)
+        let legacyPackage = try AjarProjectCodec.encodeNewDocument(fixture.project)
         let legacyProjectJSON = try projectJSONWithoutClipSpeed(legacyPackage.projectJSON)
         let legacyLoaded = try speedEditableProject(
             from: AjarProjectCodec.decode(

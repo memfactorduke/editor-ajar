@@ -13,7 +13,7 @@ final class AudioDuckingModelTests: XCTestCase {
             targetTrackIDs: [fixture.targetTrackID]
         )
         let project = try makeAudioDuckingProject(fixture: fixture, audioDucking: [rule])
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loadedProject = try editableDuckingProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
@@ -33,7 +33,7 @@ final class AudioDuckingModelTests: XCTestCase {
             targetTrackIDs: [fixture.targetTrackID]
         )
         let project = try makeAudioDuckingProject(fixture: fixture, audioDucking: [rule])
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let legacyProjectJSON = try duckingProjectJSONWithoutAudioDucking(package.projectJSON)
         let loadedProject = try editableDuckingProject(
             from: AjarProjectCodec.decode(
