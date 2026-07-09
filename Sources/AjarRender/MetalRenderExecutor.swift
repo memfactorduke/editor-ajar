@@ -391,7 +391,6 @@ public final class MetalRenderExecutor {
     private var texturePoolAccessOrder: [TextureDescriptorKey] = []
     private var texturePoolStoredCount = 0
     private var texturePoolHitCountValue = 0
-
     /// Half-float linear working format used between composite passes.
     public static let linearWorkingPixelFormat: MTLPixelFormat = .rgba16Float
 
@@ -1473,6 +1472,8 @@ public final class MetalRenderExecutor {
             throw MetalRenderError.renderEncoderCreationFailed
         }
 
+        // FR-FX / FR-COL-004 stack nodes (including LUT) are applied earlier via
+        // MetalClipEffectStackEncoder; the composite fragment is grade/transform only.
         encoder.setRenderPipelineState(
             try pipelineState(
                 fragmentFunctionName: "ajar_transform_fragment",
@@ -1483,8 +1484,10 @@ public final class MetalRenderExecutor {
             input: sourceInput,
             sourceTexture: sourceInput.texture,
             outputTexture: outputTexture,
-            workingColorSpace: composite.workingColorSpace,
-            outputColorSpace: composite.outputColorSpace
+            spaces: CompositeColorSpaces(
+                working: composite.workingColorSpace,
+                output: composite.outputColorSpace
+            )
         )
         encoder.setFragmentTexture(sourceInput.texture, index: 0)
         encoder.setFragmentTexture(destinationTexture, index: 1)
@@ -1730,12 +1733,16 @@ public final class MetalRenderExecutor {
         return pipelineState
     }
 
+    private struct CompositeColorSpaces {
+        let working: MediaColorSpace
+        let output: MediaColorSpace
+    }
+
     private func uniforms(
         input: SourceCompositeInput,
         sourceTexture: MTLTexture,
         outputTexture: MTLTexture,
-        workingColorSpace: MediaColorSpace,
-        outputColorSpace: MediaColorSpace
+        spaces: CompositeColorSpaces
     ) -> AjarCompositeUniforms {
         let transform = input.transform
         let effects = input.effects
@@ -1771,8 +1778,8 @@ public final class MetalRenderExecutor {
             sourceTransfer: colorTransferValue(input.sourceColorSpace),
             sourcePrimaries: colorPrimariesValue(input.sourceColorSpace),
             sourceIsLinearWorking: input.sourceIsLinearWorking ? 1 : 0,
-            workingPrimaries: colorPrimariesValue(workingColorSpace),
-            outputTransfer: colorTransferValue(outputColorSpace),
+            workingPrimaries: colorPrimariesValue(spaces.working),
+            outputTransfer: colorTransferValue(spaces.output),
             chromaKeyColorAndTolerance: chromaKeyColorAndTolerance(chromaKey),
             chromaKeyControls: chromaKeyControls(chromaKey),
             chromaKeyMode: chromaKey.viewMatte ? 1 : 0,
@@ -2317,6 +2324,7 @@ public final class MetalRenderExecutor {
             AjarMaskUniform mask2;
             AjarMaskUniform mask3;
         };
+
 
         struct AjarPresentUniforms {
             uint workingPrimaries;
@@ -2974,14 +2982,27 @@ public final class MetalRenderExecutor {
             return saturate(combined);
         }
 
-        fragment float4 ajar_transform_fragment(
-            AjarVertexOut in [[stage_in]],
-            texture2d<float> sourceTexture [[texture(0)]],
-            texture2d<float> destinationTexture [[texture(1)]],
-            constant AjarCompositeUniforms &uniforms [[buffer(0)]]
+        struct AjarLayerSample {
+            float4 destination;
+            float3 sourceLinear;
+            float sourceTextureAlpha;
+            float combinedMatteAlpha;
+            bool finished;
+            float4 finishedColor;
+        };
+
+        // Transform/sample/key through despill — shared by no-LUT and LUT fragments.
+        static AjarLayerSample ajar_prepare_layer(
+            AjarVertexOut in,
+            texture2d<float> sourceTexture,
+            texture2d<float> destinationTexture,
+            constant AjarCompositeUniforms &uniforms
         ) {
+            AjarLayerSample out;
+            out.finished = false;
+            out.finishedColor = float4(0.0);
             constexpr sampler sourceSampler(address::clamp_to_edge, filter::nearest);
-            float4 destination = destinationTexture.sample(sourceSampler, in.uv);
+            out.destination = destinationTexture.sample(sourceSampler, in.uv);
             float2 canvasPoint = in.uv * uniforms.outputSize;
             float2 relative = canvasPoint - uniforms.anchorPoint - uniforms.position;
             float cosine = cos(-uniforms.rotationRadians);
@@ -2992,7 +3013,9 @@ public final class MetalRenderExecutor {
             );
 
             if (abs(uniforms.scale.x) <= 0.00001 || abs(uniforms.scale.y) <= 0.00001) {
-                return destination;
+                out.finished = true;
+                out.finishedColor = out.destination;
+                return out;
             }
 
             float2 localPoint = (rotated / uniforms.scale) + uniforms.anchorPoint;
@@ -3000,12 +3023,16 @@ public final class MetalRenderExecutor {
             float2 cropMax = uniforms.sourceSize - uniforms.crop.zw;
             if (localPoint.x < cropMin.x || localPoint.y < cropMin.y
                 || localPoint.x >= cropMax.x || localPoint.y >= cropMax.y) {
-                return destination;
+                out.finished = true;
+                out.finishedColor = out.destination;
+                return out;
             }
 
             float2 sourceUV = localPoint / uniforms.sourceSize;
             if (sourceUV.x < 0.0 || sourceUV.y < 0.0 || sourceUV.x > 1.0 || sourceUV.y > 1.0) {
-                return destination;
+                out.finished = true;
+                out.finishedColor = out.destination;
+                return out;
             }
             if (uniforms.flipHorizontal != 0) {
                 sourceUV.x = 1.0 - sourceUV.x;
@@ -3015,11 +3042,11 @@ public final class MetalRenderExecutor {
             }
 
             float4 sampledSource = sourceTexture.sample(sourceSampler, sourceUV);
-            float sourceTextureAlpha = saturate(sampledSource.a);
-            float3 straightSource = sourceTextureAlpha > 0.00001
-                ? sampledSource.rgb / sourceTextureAlpha
+            out.sourceTextureAlpha = saturate(sampledSource.a);
+            float3 straightSource = out.sourceTextureAlpha > 0.00001
+                ? sampledSource.rgb / out.sourceTextureAlpha
                 : float3(0.0);
-            float3 sourceLinear = ajar_source_sample_to_working_linear(straightSource, uniforms);
+            out.sourceLinear = ajar_source_sample_to_working_linear(straightSource, uniforms);
             float3 keyColor = float3(0.0);
             if (uniforms.chromaKeyControls.x > 0.0) {
                 keyColor = ajar_chroma_key_color(uniforms);
@@ -3028,32 +3055,61 @@ public final class MetalRenderExecutor {
                 sourceTexture,
                 sourceSampler,
                 sourceUV,
-                sourceLinear,
+                out.sourceLinear,
                 keyColor,
                 uniforms
             )
-                * ajar_luma_matte_alpha(sourceLinear, uniforms);
+                * ajar_luma_matte_alpha(out.sourceLinear, uniforms);
             float maskAlpha = ajar_masks_matte_alpha(localPoint, uniforms);
-            float combinedMatteAlpha = matteAlpha * maskAlpha;
+            out.combinedMatteAlpha = matteAlpha * maskAlpha;
             if (uniforms.chromaKeyMode != 0) {
-                return float4(ajar_matte_preview_linear(combinedMatteAlpha, uniforms), 1.0);
+                out.finished = true;
+                out.finishedColor = float4(
+                    ajar_matte_preview_linear(out.combinedMatteAlpha, uniforms),
+                    1.0
+                );
+                return out;
             }
 
             if (uniforms.chromaKeyControls.x > 0.0) {
-                sourceLinear = ajar_despill(
-                    sourceLinear,
+                out.sourceLinear = ajar_despill(
+                    out.sourceLinear,
                     keyColor,
                     uniforms.chromaKeyControls.z
                 );
             }
-            sourceLinear = ajar_apply_color_correction(sourceLinear, uniforms);
-
-            float sourceAlpha = saturate(
-                sourceTextureAlpha * uniforms.opacity * combinedMatteAlpha
-            );
-            float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
-            return ajar_composite(source, destination, uniforms.blendMode);
+            return out;
         }
+
+        static float4 ajar_finish_layer(
+            AjarLayerSample layer,
+            float3 gradedLinear,
+            constant AjarCompositeUniforms &uniforms
+        ) {
+            float sourceAlpha = saturate(
+                layer.sourceTextureAlpha * uniforms.opacity * layer.combinedMatteAlpha
+            );
+            float4 source = float4(gradedLinear * sourceAlpha, sourceAlpha);
+            return ajar_composite(source, layer.destination, uniforms.blendMode);
+        }
+
+        // No-LUT path: zero extra texture allocations or bindings (FR-COL-004 perf).
+        fragment float4 ajar_transform_fragment(
+            AjarVertexOut in [[stage_in]],
+            texture2d<float> sourceTexture [[texture(0)]],
+            texture2d<float> destinationTexture [[texture(1)]],
+            constant AjarCompositeUniforms &uniforms [[buffer(0)]]
+        ) {
+            AjarLayerSample layer = ajar_prepare_layer(
+                in, sourceTexture, destinationTexture, uniforms
+            );
+            if (layer.finished) {
+                return layer.finishedColor;
+            }
+            float3 graded = ajar_apply_color_correction(layer.sourceLinear, uniforms);
+            return ajar_finish_layer(layer, graded, uniforms);
+        }
+
 
         // ADR-0010 ordinary-media → linear-working: unpremultiply, decode transfer, re-
         // premultiply into half-float (source primaries). Used before FR-FX stack application

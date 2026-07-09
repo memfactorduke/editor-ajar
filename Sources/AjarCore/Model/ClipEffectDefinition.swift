@@ -22,6 +22,9 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
     /// Soft glow (FR-FX-002).
     case glow(ClipGlowParameters)
 
+    /// Imported `.cube` LUT with adjustable strength (FR-COL-004).
+    case lut(ClipLUTEffectParameters)
+
     private enum CodingKeys: String, CodingKey {
         case kind
         case parameters
@@ -42,6 +45,8 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
             return .sharpen
         case .glow:
             return .glow
+        case .lut:
+            return .lut
         }
     }
 
@@ -60,7 +65,17 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
             return .sharpen(.identity)
         case .glow:
             return .glow(.identity)
+        case .lut:
+            return .lut(ClipLUTEffectParameters(table: .identityOneD, strength: .zero))
         }
+    }
+
+    /// LUT identity: same table and placement, zero strength.
+    public static func lutIdentity(
+        table: CubeLUTTable,
+        placement: ClipLUTPlacement = .look
+    ) -> ClipEffectDefinition {
+        .lut(ClipLUTEffectParameters(table: table, strength: .zero, placement: placement))
     }
 
     /// Decodes a kind-tagged parameter payload.
@@ -110,6 +125,9 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
                     forKey: .parameters
                 ) ?? .identity
             self = .glow(parameters)
+        case .lut:
+            let parameters = try container.decode(ClipLUTEffectParameters.self, forKey: .parameters)
+            self = .lut(parameters)
         }
     }
 
@@ -129,6 +147,8 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
         case .sharpen(let parameters):
             try container.encode(parameters, forKey: .parameters)
         case .glow(let parameters):
+            try container.encode(parameters, forKey: .parameters)
+        case .lut(let parameters):
             try container.encode(parameters, forKey: .parameters)
         }
     }
@@ -154,6 +174,9 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
     /// Keyframable glow (FR-FX-002).
     case glow(AnimatableClipGlowSettings)
 
+    /// Keyframable LUT kind (table constant, strength keyframable).
+    case lut(AnimatableClipLUTSettings)
+
     private enum CodingKeys: String, CodingKey {
         case kind
         case parameters
@@ -174,25 +197,14 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             return .sharpen
         case .glow:
             return .glow
+        case .lut:
+            return .lut
         }
     }
 
     /// Identity definition for `kind`.
     public static func identity(for kind: ClipEffectKind) -> AnimatableClipEffectDefinition {
-        switch kind {
-        case .placeholder:
-            return .placeholder(.identity)
-        case .gaussianBlur:
-            return .gaussianBlur(.identity)
-        case .boxBlur:
-            return .boxBlur(.identity)
-        case .zoomBlur:
-            return .zoomBlur(.identity)
-        case .sharpen:
-            return .sharpen(.identity)
-        case .glow:
-            return .glow(.identity)
-        }
+        .constant(ClipEffectDefinition.identity(for: kind))
     }
 
     /// Creates a constant animatable definition from static parameters.
@@ -212,6 +224,8 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             return .sharpen(.constant(parameters))
         case .glow(let parameters):
             return .glow(.constant(parameters))
+        case .lut(let parameters):
+            return .lut(.constant(parameters))
         }
     }
 
@@ -262,6 +276,12 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
                     forKey: .parameters
                 ) ?? .identity
             self = .glow(parameters)
+        case .lut:
+            let parameters = try container.decode(
+                AnimatableClipLUTSettings.self,
+                forKey: .parameters
+            )
+            self = .lut(parameters)
         }
     }
 
@@ -282,6 +302,8 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             try container.encode(parameters, forKey: .parameters)
         case .glow(let parameters):
             try container.encode(parameters, forKey: .parameters)
+        case .lut(let parameters):
+            try container.encode(parameters, forKey: .parameters)
         }
     }
 
@@ -300,6 +322,8 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             return .sharpen(parameters.value(at: time))
         case .glow(let parameters):
             return .glow(parameters.value(at: time))
+        case .lut(let parameters):
+            return .lut(parameters.value(at: time))
         }
     }
 
@@ -318,6 +342,8 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             return .sharpen(parameters.baseParameters)
         case .glow(let parameters):
             return .glow(parameters.baseParameters)
+        case .lut(let parameters):
+            return .lut(parameters.baseParameters)
         }
     }
 }

@@ -272,20 +272,89 @@ extension EditReducer {
         _ edit: ClipEffectNodeIDEdit,
         in project: Project
     ) throws -> Project {
-        try updateClipEffectStack(
+        // Reset must constant-replace animation even when the static base already matches
+        // identity (e.g. strength base 0 with keyframes to 1 would otherwise keep keyframes
+        // via replacingChangedNodes parity — FR-COL-004 / ADR-0016).
+        try replacingTrack(
+            edit.trackID,
             sequenceID: edit.sequenceID,
-            trackID: edit.trackID,
-            clipID: edit.clipID,
             in: project
-        ) { clip in
-            try replacingEffectNode(
+        ) { track in
+            var items = track.items
+            guard
+                let index = clipIndex(edit.clipID, in: items),
+                case .clip(let clip) = items[index]
+            else {
+                throw EditReducerError.clipNotFound(
+                    sequenceID: edit.sequenceID,
+                    trackID: edit.trackID,
+                    clipID: edit.clipID
+                )
+            }
+            let newStack = try replacingEffectNode(
                 id: edit.nodeID,
                 in: clip.effectStack,
                 clipID: edit.clipID
             ) { node in
-                node.replacing(definition: .identity(for: node.kind))
+                node.replacing(definition: identityDefinition(for: node))
             }
+            try validateEffectStack(newStack, clipID: edit.clipID)
+            let newAnimation = constantResetAnimation(
+                from: clip.effectStackAnimation,
+                staticStack: newStack,
+                resetNodeID: edit.nodeID
+            )
+            items[index] = .clip(
+                copying(
+                    clip,
+                    effectStack: newStack,
+                    effectStackAnimation: newAnimation
+                )
+            )
+            return copying(track, items: items)
         }
+    }
+
+    private static func identityDefinition(for node: ClipEffectNode) -> ClipEffectDefinition {
+        switch node.definition {
+        case .placeholder:
+            return .identity(for: .placeholder)
+        case .gaussianBlur, .boxBlur, .zoomBlur, .sharpen, .glow:
+            return .identity(for: node.kind)
+        case .lut(let parameters):
+            return .lutIdentity(table: parameters.table, placement: parameters.placement)
+        }
+    }
+
+    /// Forces the reset node's animation to the constant static definition.
+    private static func constantResetAnimation(
+        from existing: AnimatableClipEffectStack,
+        staticStack: ClipEffectStack,
+        resetNodeID: UUID
+    ) -> AnimatableClipEffectStack {
+        let staticByID = Dictionary(uniqueKeysWithValues: staticStack.nodes.map { ($0.id, $0) })
+        let nodes = existing.nodes.map { animated -> AnimatableClipEffectNode in
+            guard let staticNode = staticByID[animated.id] else {
+                return animated
+            }
+            if animated.id == resetNodeID {
+                return AnimatableClipEffectNode(
+                    id: staticNode.id,
+                    enabled: staticNode.enabled,
+                    definition: .constant(staticNode.definition)
+                )
+            }
+            return animated
+        }
+        // Include any static nodes missing from animation (should not happen after parity).
+        let animatedIDs = Set(nodes.map(\.id))
+        let missing = staticStack.nodes.compactMap { staticNode -> AnimatableClipEffectNode? in
+            guard !animatedIDs.contains(staticNode.id) else {
+                return nil
+            }
+            return .constant(staticNode)
+        }
+        return AnimatableClipEffectStack(nodes: nodes + missing)
     }
 
     static func resetClipEffectStack(

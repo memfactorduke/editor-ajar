@@ -28,10 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   graph carries resolved non-empty stacks on composite inputs (empty omitted for hash
   stability). Golden fixtures (placeholder references — GPU-only; CI establishes real
   references) and per-node 1080p GPU cost benchmarks with declared budgets (PERFORMANCE §3).
+- FR-COL-004 `.cube` LUT import/apply on the FR-FX-003 effect stack (#188): pure
+  `CubeLUTParser` in `AjarCore` (TITLE, LUT_1D_SIZE / LUT_3D_SIZE, DOMAIN_MIN/MAX, comments,
+  size ceilings 2…4096 for 1D and 2…64 for 3D); `ClipEffectKind.lut` with inline Codable table,
+  keyframable strength 0…1, and `ClipLUTPlacement` (input/transform/look); `schemaMinor`
+  bumps to **3** (minor 2 was claimed by FR-FX-002 #181). LUT nodes route through the same
+  kind→pipeline registry as FR-FX-002 with generated MSL uniform layouts, texel-center sampling,
+  multi-node stack composition, and digest-keyed GPU texture / content-hash caching. Per-node
+  differential GPU metric `effect-node-lut-gpu-fr-col-004` (1.5 ms @ 1080p, 5% noise). Golden
+  manifests under `Tests/Fixtures/golden-pending/` until GPU references are established.
 - ADR-0018 (schema minor versioning and forward-compatible opens), closing the FR-PROJ-005 gap
   called out on #180’s review (#193): project/media JSON carry `schemaVersion` (major) plus
   additive `schemaMinor` (default `0` when absent so legacy v2 files stay editable). This build
-  writes major `2` / minor `1` (bumped to minor `2` by FR-FX-002 library kinds above). Same major + higher minor opens **read-only** with a typed reason;
+  writes major `2` / minor `3` (minor 2 = FR-FX-002; minor 3 = FR-COL-004 LUT). Same major + higher minor opens **read-only** with a typed reason;
   `AjarProjectCodec.encode` / `writeSnapshot` require an explicit `openMode` (no default) so
   `encode(loaded.project)` cannot silently strip newer data; in-memory first saves use
   `encodeNewDocument`. Autosave `recover` propagates open mode and **skips journal replay** for

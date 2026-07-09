@@ -51,6 +51,11 @@ enum ClipEffectStackValidator {
             appendSharpenErrors(parameters, to: &errors)
         case .glow(let parameters):
             appendGlowErrors(parameters, to: &errors)
+        case .lut(let parameters):
+            appendLUTTableErrors(parameters.table, to: &errors)
+            appendUnitIntervalError(parameters.strength, to: &errors) { value in
+                .lutStrengthOutOfRange(value)
+            }
         }
     }
 
@@ -71,6 +76,8 @@ enum ClipEffectStackValidator {
             appendAnimatableSharpenErrors(parameters, to: &errors)
         case .glow(let parameters):
             appendAnimatableGlowErrors(parameters, to: &errors)
+        case .lut(let parameters):
+            appendAnimatableLUTErrors(parameters, to: &errors)
         }
     }
 
@@ -215,6 +222,27 @@ enum ClipEffectStackValidator {
             appendUnitIntervalError(keyframe.value, to: &errors) { value in
                 .glowAmountOutOfRange(value)
             }
+        }
+    }
+
+    private static func appendAnimatableLUTErrors(
+        _ parameters: AnimatableClipLUTSettings,
+        to errors: inout [ClipEffectStackValidationError]
+    ) {
+        appendLUTTableErrors(parameters.table, to: &errors)
+        for keyframe in parameters.strength.keyframes {
+            appendUnitIntervalError(keyframe.value, to: &errors) { value in
+                .lutStrengthOutOfRange(value)
+            }
+        }
+    }
+
+    private static func appendLUTTableErrors(
+        _ table: CubeLUTTable,
+        to errors: inout [ClipEffectStackValidationError]
+    ) {
+        if case .failure(let error) = table.validated() {
+            errors.append(.lutTableInvalid(error))
         }
     }
 

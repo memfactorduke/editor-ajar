@@ -100,6 +100,7 @@ extension AnimatableClipEffectNode {
 }
 
 extension AnimatableClipEffectDefinition {
+    // swiftlint:disable:next function_body_length
     func bladed(
         at cut: RationalTime
     ) throws -> (left: AnimatableClipEffectDefinition, right: AnimatableClipEffectDefinition) {
@@ -160,6 +161,25 @@ extension AnimatableClipEffectDefinition {
                 left: .glow(AnimatableClipGlowSettings(radius: radius.left, amount: amount.left)),
                 right: .glow(
                     AnimatableClipGlowSettings(radius: radius.right, amount: amount.right)
+                )
+            )
+        case .lut(let parameters):
+            // Table + placement constant; only strength keyframes blade (FR-COL-004).
+            let strength = try parameters.strength.bladed(at: cut)
+            return (
+                left: .lut(
+                    AnimatableClipLUTSettings(
+                        table: parameters.table,
+                        strength: strength.left,
+                        placement: parameters.placement
+                    )
+                ),
+                right: .lut(
+                    AnimatableClipLUTSettings(
+                        table: parameters.table,
+                        strength: strength.right,
+                        placement: parameters.placement
+                    )
                 )
             )
         }

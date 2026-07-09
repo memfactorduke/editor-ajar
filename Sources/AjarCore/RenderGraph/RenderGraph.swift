@@ -36,10 +36,11 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
     /// Clip effects to apply while compositing the source.
     public let effects: ClipEffects
 
-    /// Ordered FR-FX library stack applied before compositing.
+    /// Ordered FR-FX library stack applied before compositing (includes FR-COL-004 LUT).
     ///
-    /// `nil` means an empty stack so pre-FR-FX-002 content hashes stay byte-identical
-    /// (synthesized Codable omits absent optionals; ADR-0009).
+    /// `nil` means an empty stack so pre-stack content hashes stay byte-identical
+    /// (synthesized Codable omits absent optionals; ADR-0009). Empty stacks are normalized
+    /// to `nil` on init/decode so large LUT tables never enter the hash path accidentally.
     public let effectStack: ClipEffectStack?
 
     /// Evaluated track opacity to apply while compositing the track result.
@@ -47,6 +48,15 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
 
     /// Track blend mode to use when compositing this track onto lower tracks.
     public let trackBlendMode: ClipBlendMode
+
+    private enum CodingKeys: String, CodingKey {
+        case sourceNodeID
+        case transform
+        case effects
+        case effectStack
+        case trackOpacity
+        case trackBlendMode
+    }
 
     /// Creates a composite input.
     public init(
@@ -60,12 +70,49 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
         self.sourceNodeID = sourceNodeID
         self.transform = transform
         self.effects = effects
-        self.effectStack = effectStack
+        // Normalize empty stacks to nil so content hashes stay stable (and so LUT lattices
+        // are never serialized into graph hashes via a vacuous empty stack).
+        if let effectStack, !effectStack.nodes.isEmpty {
+            self.effectStack = effectStack
+        } else {
+            self.effectStack = nil
+        }
         self.trackOpacity = trackOpacity
         self.trackBlendMode = trackBlendMode
     }
 
-    /// Resolved stack, treating `nil` as empty.
+    /// Decodes a composite input, defaulting a missing stack to nil/empty.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sourceNodeID = try container.decode(RenderNodeID.self, forKey: .sourceNodeID)
+        transform = try container.decode(ClipTransform.self, forKey: .transform)
+        effects = try container.decodeIfPresent(ClipEffects.self, forKey: .effects) ?? .none
+        let decodedStack = try container.decodeIfPresent(ClipEffectStack.self, forKey: .effectStack)
+        if let decodedStack, !decodedStack.nodes.isEmpty {
+            effectStack = decodedStack
+        } else {
+            effectStack = nil
+        }
+        trackOpacity = try container.decodeIfPresent(RationalValue.self, forKey: .trackOpacity)
+            ?? .one
+        trackBlendMode =
+            try container.decodeIfPresent(ClipBlendMode.self, forKey: .trackBlendMode) ?? .normal
+    }
+
+    /// Encodes a composite input, omitting an empty/absent effect stack.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sourceNodeID, forKey: .sourceNodeID)
+        try container.encode(transform, forKey: .transform)
+        try container.encode(effects, forKey: .effects)
+        if let effectStack, !effectStack.nodes.isEmpty {
+            try container.encode(effectStack, forKey: .effectStack)
+        }
+        try container.encode(trackOpacity, forKey: .trackOpacity)
+        try container.encode(trackBlendMode, forKey: .trackBlendMode)
+    }
+
+    /// Resolved stack for render (empty when absent).
     public var resolvedEffectStack: ClipEffectStack {
         effectStack ?? .empty
     }
@@ -499,7 +546,9 @@ private enum RenderNodeHashKind: Codable {
     case source(RenderSourceNode)
     case compound(RenderCompoundHashNode)
     case title(RenderTitleNode)
-    case composite(RenderCompositeNode)
+    /// Composite uses a digest-friendly stack payload so LUT tables are not re-encoded
+    /// into every content hash (FR-COL-004 / PERFORMANCE §3).
+    case composite(RenderCompositeHashNode)
 
     init(_ kind: RenderNodeKind) {
         switch kind {
@@ -510,7 +559,7 @@ private enum RenderNodeHashKind: Codable {
         case .title(let title):
             self = .title(title)
         case .composite(let composite):
-            self = .composite(composite)
+            self = .composite(RenderCompositeHashNode(composite))
         }
     }
 }
@@ -537,6 +586,101 @@ private struct RenderCompoundHashNode: Codable {
         self.timeRemap = compound.timeRemap
         self.colorSpace = compound.colorSpace
     }
+}
+
+/// Content-hash form of a composite: effect stacks carry LUT digests, not full lattices.
+private struct RenderCompositeHashNode: Codable {
+    let background: RenderCompositeBackground
+    let inputs: [RenderCompositeInputHash]
+    let workingColorSpace: MediaColorSpace
+    let outputColorSpace: MediaColorSpace
+
+    init(_ composite: RenderCompositeNode) {
+        background = composite.background
+        inputs = composite.inputs.map(RenderCompositeInputHash.init)
+        workingColorSpace = composite.workingColorSpace
+        outputColorSpace = composite.outputColorSpace
+    }
+}
+
+private struct RenderCompositeInputHash: Codable {
+    let sourceNodeID: RenderNodeID
+    let transform: ClipTransform
+    let effects: ClipEffects
+    let effectStack: RenderEffectStackHash?
+    let trackOpacity: RationalValue
+    let trackBlendMode: ClipBlendMode
+
+    init(_ input: RenderCompositeInput) {
+        sourceNodeID = input.sourceNodeID
+        transform = input.transform
+        effects = input.effects
+        if let stack = input.effectStack, !stack.nodes.isEmpty {
+            effectStack = RenderEffectStackHash(stack)
+        } else {
+            effectStack = nil
+        }
+        trackOpacity = input.trackOpacity
+        trackBlendMode = input.trackBlendMode
+    }
+}
+
+private struct RenderEffectStackHash: Codable {
+    let nodes: [RenderEffectNodeHash]
+
+    init(_ stack: ClipEffectStack) {
+        nodes = stack.nodes.map(RenderEffectNodeHash.init)
+    }
+}
+
+private struct RenderEffectNodeHash: Codable {
+    let id: UUID
+    let enabled: Bool
+    let kind: String
+    let parameters: RenderEffectParameterHash
+
+    init(_ node: ClipEffectNode) {
+        id = node.id
+        enabled = node.enabled
+        kind = node.kind.rawValue
+        switch node.definition {
+        case .placeholder(let placeholderParameters):
+            parameters = .placeholder(amount: placeholderParameters.amount)
+        case .gaussianBlur(let blurParameters):
+            parameters = .gaussianBlur(radius: blurParameters.radius)
+        case .boxBlur(let blurParameters):
+            parameters = .boxBlur(radius: blurParameters.radius)
+        case .zoomBlur(let zoomParameters):
+            parameters = .zoomBlur(
+                amount: zoomParameters.amount,
+                centerX: zoomParameters.centerX,
+                centerY: zoomParameters.centerY
+            )
+        case .sharpen(let sharpenParameters):
+            parameters = .sharpen(
+                amount: sharpenParameters.amount,
+                radius: sharpenParameters.radius
+            )
+        case .glow(let glowParameters):
+            parameters = .glow(radius: glowParameters.radius, amount: glowParameters.amount)
+        case .lut(let lutParameters):
+            parameters = .lut(
+                tableDigest: lutParameters.table.contentDigest,
+                strength: lutParameters.strength,
+                placement: lutParameters.placement
+            )
+        }
+    }
+}
+
+private enum RenderEffectParameterHash: Codable {
+    case placeholder(amount: RationalValue)
+    case gaussianBlur(radius: RationalValue)
+    case boxBlur(radius: RationalValue)
+    case zoomBlur(amount: RationalValue, centerX: RationalValue, centerY: RationalValue)
+    case sharpen(amount: RationalValue, radius: RationalValue)
+    case glow(radius: RationalValue, amount: RationalValue)
+    case lut(tableDigest: ContentHash, strength: RationalValue, placement: ClipLUTPlacement)
 }
 
 private struct RenderNodeHashPayload: Codable {

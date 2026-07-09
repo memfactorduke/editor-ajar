@@ -217,5 +217,77 @@ enum MetalClipEffectStackShaders {
             );
             return sourceTexture.sample(linearSampler, in.uv);
         }
+
+        // FR-COL-004: texel-center lattice remap for linear sampling.
+        static float ajar_lut_texel_coord(float logical, float size) {
+            float safeSize = max(size, 2.0);
+            return ((logical * (safeSize - 1.0)) + 0.5) / safeSize;
+        }
+
+        // 3D LUT: source premultiplied linear at texture(0), LUT volume at texture(1).
+        // Domain is authored (min < max validated in core). No pre-domain source clamp;
+        // LUT outputs applied as-authored (Adobe .cube).
+        fragment float4 ajar_lut_3d_fragment(
+            AjarVertexOut in [[stage_in]],
+            texture2d<float> sourceTexture [[texture(0)]],
+            texture3d<float> lutTexture [[texture(1)]],
+            constant AjarLUTUniforms &uniforms [[buffer(0)]]
+        ) {
+            constexpr sampler linearSampler(
+                address::clamp_to_edge,
+                filter::linear
+            );
+            float4 sourcePremult = sourceTexture.sample(linearSampler, in.uv);
+            float alpha = saturate(sourcePremult.a);
+            float3 source = ajar_effect_unpremultiply(sourcePremult);
+            float strength = saturate(uniforms.strength);
+            if (strength <= 0.0) {
+                return sourcePremult;
+            }
+            float3 denom = uniforms.domainMax - uniforms.domainMin;
+            float3 logical = (source - uniforms.domainMin) / denom;
+            float3 sampleCoord = float3(
+                ajar_lut_texel_coord(logical.r, uniforms.size),
+                ajar_lut_texel_coord(logical.g, uniforms.size),
+                ajar_lut_texel_coord(logical.b, uniforms.size)
+            );
+            float3 lutColor = lutTexture.sample(linearSampler, sampleCoord).rgb;
+            float3 mixed = mix(source, lutColor, strength);
+            return float4(mixed * alpha, alpha);
+        }
+
+        // 1D LUT: independent channel ramps (matching RGB components).
+        fragment float4 ajar_lut_1d_fragment(
+            AjarVertexOut in [[stage_in]],
+            texture2d<float> sourceTexture [[texture(0)]],
+            texture1d<float> lutTexture [[texture(1)]],
+            constant AjarLUTUniforms &uniforms [[buffer(0)]]
+        ) {
+            constexpr sampler linearSampler(
+                address::clamp_to_edge,
+                filter::linear
+            );
+            float4 sourcePremult = sourceTexture.sample(linearSampler, in.uv);
+            float alpha = saturate(sourcePremult.a);
+            float3 source = ajar_effect_unpremultiply(sourcePremult);
+            float strength = saturate(uniforms.strength);
+            if (strength <= 0.0) {
+                return sourcePremult;
+            }
+            float3 denom = uniforms.domainMax - uniforms.domainMin;
+            float3 logical = (source - uniforms.domainMin) / denom;
+            float3 sampleCoord = float3(
+                ajar_lut_texel_coord(logical.r, uniforms.size),
+                ajar_lut_texel_coord(logical.g, uniforms.size),
+                ajar_lut_texel_coord(logical.b, uniforms.size)
+            );
+            float3 lutColor = float3(
+                lutTexture.sample(linearSampler, sampleCoord.r).r,
+                lutTexture.sample(linearSampler, sampleCoord.g).g,
+                lutTexture.sample(linearSampler, sampleCoord.b).b
+            );
+            float3 mixed = mix(source, lutColor, strength);
+            return float4(mixed * alpha, alpha);
+        }
         """
 }

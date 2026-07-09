@@ -52,14 +52,14 @@ final class MetalEffectUniformLayoutTests: XCTestCase {
             XCTAssertGreaterThan(layout.byteCount, 0, layout.mslTypeName)
             XCTAssertEqual(layout.fieldByteOffsets.count, layout.fields.count)
         }
-        XCTAssertEqual(MetalEffectUniformLayout.all.count, 4)
+        XCTAssertEqual(MetalEffectUniformLayout.all.count, 5)
     }
 
     // MARK: - Helpers
 
-    /// Parses `float` / `float2` member names from a generated MSL struct body, in order.
+    /// Parses `float` / `float2` / `float3` / `float4` member names from generated MSL, in order.
     private func mslFieldNames(in declaration: String) -> [String] {
-        let pattern = #"\b(?:float2|float)\s+(\w+)\s*;"#
+        let pattern = #"\b(?:float4|float3|float2|float)\s+(\w+)\s*;"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return []
         }
