@@ -36,6 +36,12 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
     /// Clip effects to apply while compositing the source.
     public let effects: ClipEffects
 
+    /// Ordered FR-FX library stack applied before compositing.
+    ///
+    /// `nil` means an empty stack so pre-FR-FX-002 content hashes stay byte-identical
+    /// (synthesized Codable omits absent optionals; ADR-0009).
+    public let effectStack: ClipEffectStack?
+
     /// Evaluated track opacity to apply while compositing the track result.
     public let trackOpacity: RationalValue
 
@@ -47,14 +53,21 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
         sourceNodeID: RenderNodeID,
         transform: ClipTransform,
         effects: ClipEffects = .none,
+        effectStack: ClipEffectStack? = nil,
         trackOpacity: RationalValue = .one,
         trackBlendMode: ClipBlendMode = .normal
     ) {
         self.sourceNodeID = sourceNodeID
         self.transform = transform
         self.effects = effects
+        self.effectStack = effectStack
         self.trackOpacity = trackOpacity
         self.trackBlendMode = trackBlendMode
+    }
+
+    /// Resolved stack, treating `nil` as empty.
+    public var resolvedEffectStack: ClipEffectStack {
+        effectStack ?? .empty
     }
 }
 
@@ -62,6 +75,7 @@ struct RenderCompositeNodeInput {
     let node: RenderNode
     let transform: ClipTransform
     let effects: ClipEffects
+    let effectStack: ClipEffectStack?
     let trackOpacity: RationalValue
     let trackBlendMode: ClipBlendMode
 }
@@ -379,6 +393,7 @@ enum RenderNodeFactory {
                 sourceNodeID: input.node.id,
                 transform: input.transform,
                 effects: input.effects,
+                effectStack: input.effectStack,
                 trackOpacity: input.trackOpacity,
                 trackBlendMode: input.trackBlendMode
             )

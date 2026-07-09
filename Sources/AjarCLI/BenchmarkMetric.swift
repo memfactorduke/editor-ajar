@@ -55,6 +55,21 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Build the realtime audio look-ahead plan for a wide sixteen-track timeline (FR-AUD-007).
     case realtimeAudioPlanBuildWideTimeline = "rt-audio-plan-build-wide-timeline-fr-aud-007"
 
+    /// Per-node GPU cost of one 1080p Gaussian blur stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeGaussianBlur1080p = "effect-node-gaussian-blur-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p box blur stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeBoxBlur1080p = "effect-node-box-blur-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p zoom blur stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeZoomBlur1080p = "effect-node-zoom-blur-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p sharpen stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeSharpen1080p = "effect-node-sharpen-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p glow stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeGlow1080p = "effect-node-glow-1080p-fr-fx-002"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -78,6 +93,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "FR-SPD-005"
         case .realtimeAudioPlanBuildNestedCompound, .realtimeAudioPlanBuildWideTimeline:
             "FR-AUD-007"
+        case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
+            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p:
+            "FR-FX-002"
         }
     }
 
@@ -94,6 +112,23 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .realtimeAudioPlanBuildRetimed, .realtimeAudioPlanBuildNestedCompound,
             .realtimeAudioPlanBuildWideTimeline:
             .realtimeAudioLookAheadRefill
+        case .effectNodeGaussianBlur1080p:
+            // Two-pass separable Gaussian at 1080p. Budget leaves headroom on M1 Pro so a
+            // 4-layer + 2-fx timeline stays inside the ~33 ms 30 fps frame (PERFORMANCE §3).
+            // Representative cost class: ~1–2 ms on M-series; 4 ms target with 5% noise band.
+            .effectNodeGPU(targetMilliseconds: 4)
+        case .effectNodeBoxBlur1080p:
+            // Separable box blur (up to 33 taps/pass) — slightly heavier than Gaussian 9-tap.
+            .effectNodeGPU(targetMilliseconds: 4)
+        case .effectNodeZoomBlur1080p:
+            // Single-pass 12-tap radial sample; cheaper than separable blur on 1080p.
+            .effectNodeGPU(targetMilliseconds: 3)
+        case .effectNodeSharpen1080p:
+            // 5-tap neighborhood; very light at 1080p.
+            .effectNodeGPU(targetMilliseconds: 2)
+        case .effectNodeGlow1080p:
+            // Gaussian two-pass + combine; heaviest of the FR-FX-002 batch-1 set.
+            .effectNodeGPU(targetMilliseconds: 6)
         default:
             nil
         }
@@ -134,6 +169,25 @@ public struct BenchmarkBudget: Equatable, Sendable {
         targetMilliseconds: 1_000,
         noiseBandPercent: 5
     )
+
+    /// Per-node GPU cost budget for one FR-FX library effect at 1080p on the reference machine
+    /// class (PERFORMANCE §3 / ADR-0016 §4). Noise band matches the suite default (5%).
+    static func effectNodeGPU(targetMilliseconds: Double) -> BenchmarkBudget {
+        BenchmarkBudget(targetMilliseconds: targetMilliseconds, noiseBandPercent: 5)
+    }
+}
+
+extension BenchmarkMetric {
+    /// Whether this metric synthesizes its own GPU fixture and needs no `.ajar` package.
+    var isSelfContainedEffectNodeMetric: Bool {
+        switch self {
+        case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
+            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p:
+            true
+        default:
+            false
+        }
+    }
 }
 
 /// Structured JSON benchmark result.

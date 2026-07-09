@@ -73,136 +73,6 @@ public struct AnimatableClipPlaceholderSettings: Codable, Equatable, Sendable {
     }
 }
 
-/// Typed effect definition: kind identity plus that kind's parameter struct (ADR-0016).
-public enum ClipEffectDefinition: Codable, Equatable, Sendable {
-    /// Placeholder bootstrap kind.
-    case placeholder(ClipPlaceholderEffectParameters)
-
-    private enum CodingKeys: String, CodingKey {
-        case kind
-        case parameters
-    }
-
-    /// Kind identity for registry and diagnostics.
-    public var kind: ClipEffectKind {
-        switch self {
-        case .placeholder:
-            return .placeholder
-        }
-    }
-
-    /// Identity definition for `kind`.
-    public static func identity(for kind: ClipEffectKind) -> ClipEffectDefinition {
-        switch kind {
-        case .placeholder:
-            return .placeholder(.identity)
-        }
-    }
-
-    /// Decodes a kind-tagged parameter payload.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(ClipEffectKind.self, forKey: .kind)
-        switch kind {
-        case .placeholder:
-            let parameters =
-                try container.decodeIfPresent(
-                    ClipPlaceholderEffectParameters.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .placeholder(parameters)
-        }
-    }
-
-    /// Encodes kind + parameters.
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(kind, forKey: .kind)
-        switch self {
-        case .placeholder(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        }
-    }
-}
-
-/// Keyframable effect definition.
-public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
-    /// Keyframable placeholder bootstrap kind.
-    case placeholder(AnimatableClipPlaceholderSettings)
-
-    private enum CodingKeys: String, CodingKey {
-        case kind
-        case parameters
-    }
-
-    /// Kind identity for registry and diagnostics.
-    public var kind: ClipEffectKind {
-        switch self {
-        case .placeholder:
-            return .placeholder
-        }
-    }
-
-    /// Identity definition for `kind`.
-    public static func identity(for kind: ClipEffectKind) -> AnimatableClipEffectDefinition {
-        switch kind {
-        case .placeholder:
-            return .placeholder(.identity)
-        }
-    }
-
-    /// Creates a constant animatable definition from static parameters.
-    public static func constant(
-        _ definition: ClipEffectDefinition
-    ) -> AnimatableClipEffectDefinition {
-        switch definition {
-        case .placeholder(let parameters):
-            return .placeholder(.constant(parameters))
-        }
-    }
-
-    /// Decodes a kind-tagged keyframable parameter payload.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(ClipEffectKind.self, forKey: .kind)
-        switch kind {
-        case .placeholder:
-            let parameters =
-                try container.decodeIfPresent(
-                    AnimatableClipPlaceholderSettings.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .placeholder(parameters)
-        }
-    }
-
-    /// Encodes kind + parameters.
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(kind, forKey: .kind)
-        switch self {
-        case .placeholder(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        }
-    }
-
-    /// Evaluates the definition at a sequence time.
-    public func value(at time: RationalTime) -> ClipEffectDefinition {
-        switch self {
-        case .placeholder(let parameters):
-            return .placeholder(parameters.value(at: time))
-        }
-    }
-
-    /// Static definition represented by base keyframe values.
-    public var baseDefinition: ClipEffectDefinition {
-        switch self {
-        case .placeholder(let parameters):
-            return .placeholder(parameters.baseParameters)
-        }
-    }
-}
-
 /// One node in a per-clip ordered video effects stack (FR-FX-003, ADR-0016).
 public struct ClipEffectNode: Codable, Equatable, Sendable {
     /// Stable node ID for edit commands and reorder.
@@ -457,13 +327,37 @@ public struct AnimatableClipEffectStack: Codable, Equatable, Sendable {
     }
 }
 
-/// Typed validation failures for the per-clip effects stack (FR-FX-003).
+/// Typed validation failures for the per-clip effects stack (FR-FX-002, FR-FX-003).
 public enum ClipEffectStackValidationError: Equatable, Sendable {
     /// Two nodes share the same stable ID.
     case duplicateEffectNodeID(UUID)
 
     /// A placeholder amount is outside the normalized 0...1 range.
     case placeholderAmountOutOfRange(RationalValue)
+
+    /// A Gaussian blur radius is outside 0...64.
+    case gaussianBlurRadiusOutOfRange(RationalValue)
+
+    /// A box blur radius is outside 0...16 (single-pass tap budget).
+    case boxBlurRadiusOutOfRange(RationalValue)
+
+    /// A zoom blur amount is outside the normalized 0...1 range.
+    case zoomBlurAmountOutOfRange(RationalValue)
+
+    /// A zoom blur center component is outside the normalized 0...1 range.
+    case zoomBlurCenterOutOfRange(axis: ClipEffectCenterAxis, value: RationalValue)
+
+    /// A sharpen amount is outside the normalized 0...1 range.
+    case sharpenAmountOutOfRange(RationalValue)
+
+    /// A sharpen radius is outside 0...8.
+    case sharpenRadiusOutOfRange(RationalValue)
+
+    /// A glow radius is outside 0...64.
+    case glowRadiusOutOfRange(RationalValue)
+
+    /// A glow amount is outside the normalized 0...1 range.
+    case glowAmountOutOfRange(RationalValue)
 
     /// A set-parameter edit changed the node's kind.
     case effectNodeKindMismatch(
@@ -475,4 +369,13 @@ public enum ClipEffectStackValidationError: Equatable, Sendable {
     /// The static stack snapshot does not match `effectStackAnimation`'s base values
     /// (node IDs, order, kinds, enabled flags, and base parameter values).
     case staticAnimationParityMismatch
+}
+
+/// Axis label for zoom-blur center validation errors.
+public enum ClipEffectCenterAxis: String, Equatable, Sendable {
+    /// Horizontal center (normalized UV x).
+    case x
+
+    /// Vertical center (normalized UV y).
+    case y
 }

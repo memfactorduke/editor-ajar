@@ -188,6 +188,31 @@ final class AjarCommandTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: actualURL.path))
     }
 
+    func testBenchmarkOptionsParseEnforceBudgetsFlag() throws {
+        let defaultOptions = try BenchmarkOptions.parse(["all"])
+        XCTAssertFalse(defaultOptions.enforceBudgets)
+        XCTAssertEqual(defaultOptions.metric, .all)
+        XCTAssertNil(defaultOptions.projectURL)
+
+        let enforced = try BenchmarkOptions.parse([
+            "all",
+            "/tmp/fixture.ajar",
+            "--enforce-budgets"
+        ])
+        XCTAssertTrue(enforced.enforceBudgets)
+        XCTAssertEqual(enforced.projectURL?.path, "/tmp/fixture.ajar")
+
+        let flagFirst = try BenchmarkOptions.parse([
+            "--enforce-budgets",
+            "effect-node-sharpen-1080p-fr-fx-002"
+        ])
+        XCTAssertTrue(flagFirst.enforceBudgets)
+        XCTAssertEqual(
+            flagFirst.metric,
+            .metric(.effectNodeSharpen1080p)
+        )
+    }
+
     func testBenchmarkAllEmitsReportOnlyPerformanceJSON() async throws {
         try requireMetal()
         let output = BufferedTextOutput()
@@ -220,7 +245,12 @@ final class AjarCommandTests: XCTestCase {
             "retimed-nested-compound-playback-fr-spd-005": "FR-SPD-005",
             "rt-audio-plan-build-retimed-fr-spd-005": "FR-SPD-005",
             "rt-audio-plan-build-nested-compound-fr-aud-007": "FR-AUD-007",
-            "rt-audio-plan-build-wide-timeline-fr-aud-007": "FR-AUD-007"
+            "rt-audio-plan-build-wide-timeline-fr-aud-007": "FR-AUD-007",
+            "effect-node-gaussian-blur-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-box-blur-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-zoom-blur-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-sharpen-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-glow-1080p-fr-fx-002": "FR-FX-002"
         ]
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))

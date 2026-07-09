@@ -59,6 +59,9 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
     /// Title generator rasterization failed (FR-TXT-001, ADR-0017).
     case titleRasterizationFailed(RenderNodeID, String)
 
+    /// The ADR-0016 kind → pipeline registry has no entry for a requested effect kind.
+    case effectPipelineUnavailable(ClipEffectKind)
+
     /// A human-readable description of the render failure.
     public var description: String {
         switch self {
@@ -96,6 +99,8 @@ public enum MetalRenderError: Error, Equatable, Sendable, CustomStringConvertibl
             "Metal render command encoder creation failed"
         case .titleRasterizationFailed(let nodeID, let message):
             "title rasterization failed for node \(nodeID): \(message)"
+        case .effectPipelineUnavailable(let kind):
+            "effect pipeline unavailable for kind \(kind.rawValue) (ADR-0016 registry)"
         }
     }
 }
@@ -365,6 +370,8 @@ public final class MetalRenderExecutor {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let library: MTLLibrary
+    /// ADR-0016 kind → pipeline registry for FR-FX-002 stack nodes.
+    private let effectStackRegistry: MetalClipEffectStackRegistry
     private let executorStateLock = NSLock()
     private var pipelineStates: [PipelineStateKey: MTLRenderPipelineState] = [:]
     private var frameCache: [FrameCacheKey: MTLTexture] = [:]
@@ -468,24 +475,163 @@ public final class MetalRenderExecutor {
             // metadata (~tens of KiB per call) that never returns to the OS — fatal under the
             // NFR-STAB-005 soak when iterations run faster than that growth can be masked.
             library = try Self.sharedLibrary(for: device)
+            effectStackRegistry = MetalClipEffectStackRegistry(device: device, library: library)
         } catch {
             throw MetalRenderError.shaderLibraryCreationFailed(String(describing: error))
         }
     }
 
     private static let sharedLibraryLock = NSLock()
-    private static var sharedLibrariesByDevice = [ObjectIdentifier: MTLLibrary]()
+    /// Keyed by device + shader source fingerprint so effect-shader edits recompile.
+    private static var sharedLibrariesByKey = [String: MTLLibrary]()
 
     private static func sharedLibrary(for device: MTLDevice) throws -> MTLLibrary {
-        let key = ObjectIdentifier(device as AnyObject)
+        let combinedSource = shaderSource + MetalClipEffectStackShaders.source
+        let fingerprint = ContentHash.sha256(data: Data(combinedSource.utf8)).digest
+        let key = "\(ObjectIdentifier(device as AnyObject))-\(fingerprint)"
         sharedLibraryLock.lock()
         defer { sharedLibraryLock.unlock() }
-        if let existing = sharedLibrariesByDevice[key] {
+        if let existing = sharedLibrariesByKey[key] {
             return existing
         }
-        let compiled = try device.makeLibrary(source: shaderSource, options: nil)
-        sharedLibrariesByDevice[key] = compiled
+        // Core composite shaders + FR-FX-002 library effect fragments (ADR-0016 registry).
+        let compiled = try device.makeLibrary(source: combinedSource, options: nil)
+        sharedLibrariesByKey[key] = compiled
         return compiled
+    }
+
+    /// Test hook: apply an FR-FX stack to `source` and return BGRA8 readback (no composite).
+    ///
+    /// Bypasses `RenderGraph` so discrimination tests can separate shader bugs from graph carry.
+    func applyEffectStackForTests(
+        _ stack: ClipEffectStack,
+        to source: MTLTexture
+    ) throws -> [UInt8] {
+        try runEffectKernelForTests(source: source) { context in
+            try MetalClipEffectStackEncoder.apply(
+                stack: stack,
+                to: source,
+                registry: context.registry,
+                makeTexture: context.makeTexture,
+                commandBuffer: context.commandBuffer
+            ).texture
+        }
+    }
+
+    /// Kernel-level: `encodeSharpen` with hardcoded floats (skips `applySharpen` / model types).
+    ///
+    /// Also asserts the returned texture is not the source (catches return-seam bugs).
+    func encodeSharpenKernelForTests(
+        amount: Float,
+        radius: Float,
+        source: MTLTexture
+    ) throws -> [UInt8] {
+        try runEffectKernelForTests(source: source) { context in
+            let result = try MetalClipEffectStackEncoder.encodeSharpen(
+                amount: amount,
+                radius: radius,
+                to: source,
+                context: context
+            )
+            if result.texture === source {
+                throw MetalRenderError.pipelineCreationFailed(
+                    "encodeSharpen returned the source texture (draw target seam)"
+                )
+            }
+            return result.texture
+        }
+    }
+
+    /// Reflection helper for fragment-stage argument binding checks (tests).
+    func effectPipelineReflectionForTests(
+        fragmentFunctionName: String,
+        pixelFormat: MTLPixelFormat
+    ) throws -> (pipeline: MTLRenderPipelineState, reflection: MTLRenderPipelineReflection) {
+        try effectStackRegistry.pipelineStateWithReflection(
+            fragmentFunctionName: fragmentFunctionName,
+            pixelFormat: pixelFormat
+        )
+    }
+
+    /// Kernel-level: `encodeZoomBlur` with hardcoded floats.
+    func encodeZoomBlurKernelForTests(
+        amount: Float,
+        centerX: Float,
+        centerY: Float,
+        source: MTLTexture
+    ) throws -> [UInt8] {
+        try runEffectKernelForTests(source: source) { context in
+            try MetalClipEffectStackEncoder.encodeZoomBlur(
+                amount: amount,
+                centerX: centerX,
+                centerY: centerY,
+                to: source,
+                context: context
+            ).texture
+        }
+    }
+
+    /// Kernel-level: full glow (separable blur + combine) with hardcoded floats.
+    func encodeGlowKernelForTests(
+        amount: Float,
+        radius: Float,
+        source: MTLTexture
+    ) throws -> [UInt8] {
+        try runEffectKernelForTests(source: source) { context in
+            try MetalClipEffectStackEncoder.encodeGlow(
+                amount: amount,
+                radius: radius,
+                to: source,
+                context: context
+            ).texture
+        }
+    }
+
+    private func runEffectKernelForTests(
+        source: MTLTexture,
+        encode: (MetalEffectEncodeContext) throws -> MTLTexture
+    ) throws -> [UInt8] {
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            throw MetalRenderError.commandBufferCreationFailed
+        }
+        let context = MetalEffectEncodeContext(
+            registry: effectStackRegistry,
+            makeTexture: { [self] pixelFormat, width, height in
+                try makeReusableTexture(pixelFormat: pixelFormat, width: width, height: height)
+            },
+            commandBuffer: commandBuffer
+        )
+        let output = try encode(context)
+        let rowBytes = output.width * 4
+        let byteCount = rowBytes * output.height
+        guard let buffer = device.makeBuffer(length: byteCount, options: .storageModeShared) else {
+            throw MetalRenderError.outputTextureCreationFailed(
+                width: output.width,
+                height: output.height
+            )
+        }
+        guard let blit = commandBuffer.makeBlitCommandEncoder() else {
+            throw MetalRenderError.blitEncoderCreationFailed
+        }
+        blit.copy(
+            from: output,
+            sourceSlice: 0,
+            sourceLevel: 0,
+            sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+            sourceSize: MTLSize(width: output.width, height: output.height, depth: 1),
+            to: buffer,
+            destinationOffset: 0,
+            destinationBytesPerRow: rowBytes,
+            destinationBytesPerImage: byteCount
+        )
+        blit.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        if let error = commandBuffer.error {
+            throw error
+        }
+        let pointer = buffer.contents().bindMemory(to: UInt8.self, capacity: byteCount)
+        return Array(UnsafeBufferPointer(start: pointer, count: byteCount))
     }
 
     /// Executes a render graph and returns a GPU-resident output texture.
@@ -770,9 +916,12 @@ public final class MetalRenderExecutor {
                 commandBuffer: commandBuffer,
                 outputMode: output.colorMode
             )
+            let effectTextures = sourceInputs.flatMap(\.effectTextures)
             return RenderSchedule(
                 nestedFrames: sourceInputs.compactMap(\.retainedFrame),
-                reusableTextures: reusableTextures + sourceInputs.compactMap(\.blendTexture)
+                reusableTextures: reusableTextures
+                    + sourceInputs.compactMap(\.blendTexture)
+                    + effectTextures
             )
         }
     }
@@ -782,12 +931,15 @@ public final class MetalRenderExecutor {
         let texture: MTLTexture
         let transform: ClipTransform
         let effects: ClipEffects
+        let effectStack: ClipEffectStack
         let trackOpacity: RationalValue
         let trackBlendMode: ClipBlendMode
         let sourceColorSpace: MediaColorSpace
         let sourceIsLinearWorking: Bool
         let retainedFrame: RenderedFrame?
         let blendTexture: MTLTexture?
+        /// Intermediate effect-stack textures kept alive until the command buffer completes.
+        let effectTextures: [MTLTexture]
     }
 
     private static let blendModeValues: [ClipBlendMode: UInt32] = [
@@ -835,14 +987,16 @@ public final class MetalRenderExecutor {
                 compound: compound,
                 input: input,
                 output: output,
-                sourceProvider: sourceProvider
+                sourceProvider: sourceProvider,
+                commandBuffer: commandBuffer
             )
         case .title(let title):
             return try titleSourceInput(
                 title: title,
                 node: inputNode,
                 input: input,
-                output: output
+                output: output,
+                commandBuffer: commandBuffer
             )
         case .composite:
             throw MetalRenderError.unsupportedInputNode(input.sourceNodeID)
@@ -853,7 +1007,8 @@ public final class MetalRenderExecutor {
         title: RenderTitleNode,
         node: RenderNode,
         input: RenderCompositeInput,
-        output: RenderOutputDescriptor
+        output: RenderOutputDescriptor,
+        commandBuffer: MTLCommandBuffer
     ) throws -> SourceCompositeInput {
         let texture = try titleTexture(
             for: title,
@@ -861,22 +1016,18 @@ public final class MetalRenderExecutor {
             width: output.pixelDimensions.width,
             height: output.pixelDimensions.height
         )
-        return SourceCompositeInput(
+        // Title raster is display-encoded BGRA (ADR-0017); reuse the ordinary media FR-FX path
+        // so enabled stacks linearize before the kernel (ADR-0010).
+        return try ordinaryMediaSourceInput(
             source: RenderSourceNode(
                 mediaID: title.clipID,
                 clipID: title.clipID,
                 sourceTime: .zero,
                 colorSpace: title.colorSpace
             ),
-            texture: texture,
-            transform: input.transform,
-            effects: input.effects,
-            trackOpacity: input.trackOpacity,
-            trackBlendMode: input.trackBlendMode,
-            sourceColorSpace: title.colorSpace,
-            sourceIsLinearWorking: false,
-            retainedFrame: nil,
-            blendTexture: nil
+            sourceTexture: texture,
+            input: input,
+            commandBuffer: commandBuffer
         )
     }
 
@@ -948,33 +1099,37 @@ public final class MetalRenderExecutor {
                 source: source,
                 commandBuffer: commandBuffer
             )
+            let effected = try applyEffectStack(
+                input.resolvedEffectStack,
+                to: blendTexture,
+                commandBuffer: commandBuffer
+            )
             return SourceCompositeInput(
                 source: source,
-                texture: blendTexture,
+                texture: effected.texture,
                 transform: input.transform,
                 effects: input.effects,
+                effectStack: input.resolvedEffectStack,
                 trackOpacity: input.trackOpacity,
                 trackBlendMode: input.trackBlendMode,
                 sourceColorSpace: source.colorSpace,
                 sourceIsLinearWorking: true,
                 retainedFrame: nil,
-                blendTexture: blendTexture
+                blendTexture: blendTexture,
+                effectTextures: effected.intermediates
             )
         }
 
         do {
-            return SourceCompositeInput(
+            let sourceTexture = try sourceProvider.texture(for: source)
+            return try ordinaryMediaSourceInput(
                 source: source,
-                texture: try sourceProvider.texture(for: source),
-                transform: input.transform,
-                effects: input.effects,
-                trackOpacity: input.trackOpacity,
-                trackBlendMode: input.trackBlendMode,
-                sourceColorSpace: source.colorSpace,
-                sourceIsLinearWorking: false,
-                retainedFrame: nil,
-                blendTexture: nil
+                sourceTexture: sourceTexture,
+                input: input,
+                commandBuffer: commandBuffer
             )
+        } catch let error as MetalRenderError {
+            throw error
         } catch {
             throw MetalRenderError.sourceTextureUnavailable(
                 input.sourceNodeID,
@@ -983,16 +1138,74 @@ public final class MetalRenderExecutor {
         }
     }
 
+    /// Ordinary (non-blend) media path. Enabled FR-FX stacks decode to linear half-float first
+    /// so effects match compound/frame-blend (ADR-0010).
+    private func ordinaryMediaSourceInput(
+        source: RenderSourceNode,
+        sourceTexture: MTLTexture,
+        input: RenderCompositeInput,
+        commandBuffer: MTLCommandBuffer
+    ) throws -> SourceCompositeInput {
+        let stack = input.resolvedEffectStack
+        if stack.nodes.contains(where: \.enabled) {
+            let linearTexture = try encodeSourceToLinearWorking(
+                sourceTexture,
+                source: source,
+                commandBuffer: commandBuffer
+            )
+            let effected = try applyEffectStack(
+                stack,
+                to: linearTexture,
+                commandBuffer: commandBuffer
+            )
+            return SourceCompositeInput(
+                source: source,
+                texture: effected.texture,
+                transform: input.transform,
+                effects: input.effects,
+                effectStack: stack,
+                trackOpacity: input.trackOpacity,
+                trackBlendMode: input.trackBlendMode,
+                sourceColorSpace: source.colorSpace,
+                sourceIsLinearWorking: true,
+                retainedFrame: nil,
+                blendTexture: nil,
+                effectTextures: [linearTexture] + effected.intermediates
+            )
+        }
+
+        return SourceCompositeInput(
+            source: source,
+            texture: sourceTexture,
+            transform: input.transform,
+            effects: input.effects,
+            effectStack: stack,
+            trackOpacity: input.trackOpacity,
+            trackBlendMode: input.trackBlendMode,
+            sourceColorSpace: source.colorSpace,
+            sourceIsLinearWorking: false,
+            retainedFrame: nil,
+            blendTexture: nil,
+            effectTextures: []
+        )
+    }
+
     private func compoundSourceInput(
         compound: RenderCompoundNode,
         input: RenderCompositeInput,
         output: RenderOutputDescriptor,
-        sourceProvider: any RenderSourceTextureProvider
+        sourceProvider: any RenderSourceTextureProvider,
+        commandBuffer: MTLCommandBuffer
     ) throws -> SourceCompositeInput {
         let frame = try render(
             graph: compound.graph,
             output: nestedOutputDescriptor(for: output),
             sourceProvider: sourceProvider
+        )
+        let effected = try applyEffectStack(
+            input.resolvedEffectStack,
+            to: frame.texture,
+            commandBuffer: commandBuffer
         )
         return SourceCompositeInput(
             source: RenderSourceNode(
@@ -1005,15 +1218,34 @@ public final class MetalRenderExecutor {
                 freezeFrame: compound.freezeFrame,
                 colorSpace: compound.colorSpace
             ),
-            texture: frame.texture,
+            texture: effected.texture,
             transform: input.transform,
             effects: input.effects,
+            effectStack: input.resolvedEffectStack,
             trackOpacity: input.trackOpacity,
             trackBlendMode: input.trackBlendMode,
             sourceColorSpace: compound.colorSpace,
             sourceIsLinearWorking: true,
             retainedFrame: frame,
-            blendTexture: nil
+            blendTexture: nil,
+            effectTextures: effected.intermediates
+        )
+    }
+
+    /// Applies the ordered FR-FX library stack on the GPU before compositing (FR-FX-007).
+    private func applyEffectStack(
+        _ stack: ClipEffectStack,
+        to sourceTexture: MTLTexture,
+        commandBuffer: MTLCommandBuffer
+    ) throws -> (texture: MTLTexture, intermediates: [MTLTexture]) {
+        try MetalClipEffectStackEncoder.apply(
+            stack: stack,
+            to: sourceTexture,
+            registry: effectStackRegistry,
+            makeTexture: { [self] pixelFormat, width, height in
+                try makeReusableTexture(pixelFormat: pixelFormat, width: width, height: height)
+            },
+            commandBuffer: commandBuffer
         )
     }
 
@@ -1085,6 +1317,46 @@ public final class MetalRenderExecutor {
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
         encoder.endEncoding()
         return blendTexture
+    }
+
+    /// Decodes one display-encoded premultiplied source into half-float linear light (source
+    /// primaries) so FR-FX library nodes share the same working space as compound/frame-blend
+    /// paths (ADR-0010).
+    private func encodeSourceToLinearWorking(
+        _ sourceTexture: MTLTexture,
+        source: RenderSourceNode,
+        commandBuffer: MTLCommandBuffer
+    ) throws -> MTLTexture {
+        let linearTexture = try makeReusableTexture(
+            pixelFormat: Self.linearWorkingPixelFormat,
+            width: sourceTexture.width,
+            height: sourceTexture.height
+        )
+        let pipelineState = try pipelineState(
+            fragmentFunctionName: "ajar_source_to_linear_working_fragment",
+            pixelFormat: linearTexture.pixelFormat
+        )
+        let descriptor = renderPassDescriptor(for: linearTexture)
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
+            throw MetalRenderError.renderEncoderCreationFailed
+        }
+
+        encoder.setRenderPipelineState(pipelineState)
+        var uniforms = AjarSourceToLinearUniforms(
+            sourceTransfer: colorTransferValue(source.colorSpace),
+            padding0: 0,
+            padding1: 0,
+            padding2: 0
+        )
+        encoder.setFragmentTexture(sourceTexture, index: 0)
+        encoder.setFragmentBytes(
+            &uniforms,
+            length: MemoryLayout<AjarSourceToLinearUniforms>.stride,
+            index: 0
+        )
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        encoder.endEncoding()
+        return linearTexture
     }
 
     private func encodeTransparentComposite(
@@ -1950,6 +2222,13 @@ public final class MetalRenderExecutor {
         var padding1: UInt32
     }
 
+    private struct AjarSourceToLinearUniforms {
+        var sourceTransfer: UInt32
+        var padding0: UInt32
+        var padding1: UInt32
+        var padding2: UInt32
+    }
+
     private static let shaderSource = """
         #include <metal_stdlib>
         using namespace metal;
@@ -2051,6 +2330,13 @@ public final class MetalRenderExecutor {
             float laterWeight;
             uint padding0;
             uint padding1;
+        };
+
+        struct AjarSourceToLinearUniforms {
+            uint sourceTransfer;
+            uint padding0;
+            uint padding1;
+            uint padding2;
         };
 
         static float3 ajar_decode_srgb(float3 value) {
@@ -2767,6 +3053,22 @@ public final class MetalRenderExecutor {
             );
             float4 source = float4(sourceLinear * sourceAlpha, sourceAlpha);
             return ajar_composite(source, destination, uniforms.blendMode);
+        }
+
+        // ADR-0010 ordinary-media → linear-working: unpremultiply, decode transfer, re-
+        // premultiply into half-float (source primaries). Used before FR-FX stack application
+        // so ordinary and compound/frame-blend paths evaluate effects in the same space.
+        fragment float4 ajar_source_to_linear_working_fragment(
+            AjarVertexOut in [[stage_in]],
+            texture2d<float> sourceTexture [[texture(0)]],
+            constant AjarSourceToLinearUniforms &uniforms [[buffer(0)]]
+        ) {
+            constexpr sampler sourceSampler(address::clamp_to_edge, filter::nearest);
+            float4 encoded = sourceTexture.sample(sourceSampler, in.uv);
+            float alpha = saturate(encoded.a);
+            float3 straight = alpha > 0.00001 ? encoded.rgb / alpha : float3(0.0);
+            float3 linear = ajar_decode_transfer(saturate(straight), uniforms.sourceTransfer);
+            return float4(linear * alpha, alpha);
         }
 
         // FR-SPD-004 frame blend: mixes two display-encoded premultiplied frames in linear

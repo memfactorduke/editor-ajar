@@ -110,6 +110,58 @@ extension AnimatableClipEffectDefinition {
                 left: .placeholder(AnimatableClipPlaceholderSettings(amount: amount.left)),
                 right: .placeholder(AnimatableClipPlaceholderSettings(amount: amount.right))
             )
+        case .gaussianBlur(let parameters):
+            let radius = try parameters.radius.bladed(at: cut)
+            return (
+                left: .gaussianBlur(AnimatableClipGaussianBlurSettings(radius: radius.left)),
+                right: .gaussianBlur(AnimatableClipGaussianBlurSettings(radius: radius.right))
+            )
+        case .boxBlur(let parameters):
+            let radius = try parameters.radius.bladed(at: cut)
+            return (
+                left: .boxBlur(AnimatableClipBoxBlurSettings(radius: radius.left)),
+                right: .boxBlur(AnimatableClipBoxBlurSettings(radius: radius.right))
+            )
+        case .zoomBlur(let parameters):
+            let amount = try parameters.amount.bladed(at: cut)
+            let centerX = try parameters.centerX.bladed(at: cut)
+            let centerY = try parameters.centerY.bladed(at: cut)
+            return (
+                left: .zoomBlur(
+                    AnimatableClipZoomBlurSettings(
+                        amount: amount.left,
+                        centerX: centerX.left,
+                        centerY: centerY.left
+                    )
+                ),
+                right: .zoomBlur(
+                    AnimatableClipZoomBlurSettings(
+                        amount: amount.right,
+                        centerX: centerX.right,
+                        centerY: centerY.right
+                    )
+                )
+            )
+        case .sharpen(let parameters):
+            let amount = try parameters.amount.bladed(at: cut)
+            let radius = try parameters.radius.bladed(at: cut)
+            return (
+                left: .sharpen(
+                    AnimatableClipSharpenSettings(amount: amount.left, radius: radius.left)
+                ),
+                right: .sharpen(
+                    AnimatableClipSharpenSettings(amount: amount.right, radius: radius.right)
+                )
+            )
+        case .glow(let parameters):
+            let radius = try parameters.radius.bladed(at: cut)
+            let amount = try parameters.amount.bladed(at: cut)
+            return (
+                left: .glow(AnimatableClipGlowSettings(radius: radius.left, amount: amount.left)),
+                right: .glow(
+                    AnimatableClipGlowSettings(radius: radius.right, amount: amount.right)
+                )
+            )
         }
     }
 }

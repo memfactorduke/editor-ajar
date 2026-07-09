@@ -18,10 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a typed diagnostic and never crash. Legacy media/sequence projects — including clips nested
   inside compound sequences — keep decoding. New goldens: `title-multibox-styled`, `title-emoji`,
   `title-rtl-arabic`.
+- FR-FX-002 batch 1 library effect kinds on the FR-FX-003 stack (#181): `gaussianBlur`,
+  `boxBlur`, `zoomBlur`, `sharpen`, and `glow` with typed Codable parameter structs
+  (radius/amount/center as applicable; unit ranges; `decodeIfPresent` + defaults; dual static +
+  `Animatable` keyframing matching the placeholder kind). `schemaMinor` bumps to `2`
+  (ADR-0018). AjarRender wires an ADR-0016 kind→pipeline registry with GPU-resident Metal
+  fragment shaders (separable two-pass Gaussian/box, multi-sample zoom, unsharp sharpen, blur+
+  combine glow); missing pipelines stay typed errors; no CPU readback (FR-FX-007). Render
+  graph carries resolved non-empty stacks on composite inputs (empty omitted for hash
+  stability). Golden fixtures (placeholder references — GPU-only; CI establishes real
+  references) and per-node 1080p GPU cost benchmarks with declared budgets (PERFORMANCE §3).
 - ADR-0018 (schema minor versioning and forward-compatible opens), closing the FR-PROJ-005 gap
   called out on #180’s review (#193): project/media JSON carry `schemaVersion` (major) plus
   additive `schemaMinor` (default `0` when absent so legacy v2 files stay editable). This build
-  writes major `2` / minor `1`. Same major + higher minor opens **read-only** with a typed reason;
+  writes major `2` / minor `1` (bumped to minor `2` by FR-FX-002 library kinds above). Same major + higher minor opens **read-only** with a typed reason;
   `AjarProjectCodec.encode` / `writeSnapshot` require an explicit `openMode` (no default) so
   `encode(loaded.project)` cannot silently strip newer data; in-memory first saves use
   `encodeNewDocument`. Autosave `recover` propagates open mode and **skips journal replay** for

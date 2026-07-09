@@ -59,7 +59,11 @@ public enum AjarCommand {
                     standardError: standardError
                 )
             case "bench":
-                return try await runBench(arguments: arguments, standardOutput: standardOutput)
+                return try await runBench(
+                    arguments: arguments,
+                    standardOutput: standardOutput,
+                    standardError: standardError
+                )
             case "soak":
                 return try await runSoak(arguments: arguments, standardOutput: standardOutput)
             default:
@@ -136,11 +140,25 @@ public enum AjarCommand {
 
     private static func runBench(
         arguments: [String],
-        standardOutput: any AjarTextOutput
+        standardOutput: any AjarTextOutput,
+        standardError: any AjarTextOutput
     ) async throws -> Int32 {
         let options = try BenchmarkOptions.parse(Array(arguments.dropFirst()))
         let results = try await BenchmarkCommand.run(options: options)
         try BenchmarkCommand.writeJSON(results, standardOutput: standardOutput)
+        if options.enforceBudgets {
+            let overBudget = results.filter { result in result.withinBudget == false }
+            if !overBudget.isEmpty {
+                for result in overBudget {
+                    let budget = result.budgetMilliseconds.map { String($0) } ?? "?"
+                    standardError.writeLine(
+                        "budget exceeded: \(result.metric) "
+                            + "value=\(result.value)ms budget=\(budget)ms"
+                    )
+                }
+                return 1
+            }
+        }
         return 0
     }
 
@@ -178,7 +196,7 @@ public enum AjarCommand {
               --duration <value|value/timescale> <project.ajar> -o <out.wav>
           ajar golden [Tests/Fixtures/golden | manifest.json]
           ajar golden-audio [Tests/Fixtures/golden-audio | manifest.json]
-          ajar bench <all|metric> [project.ajar]
+          ajar bench <all|metric> [project.ajar] [--enforce-budgets]
           ajar soak [--iterations <n>] [--duration-seconds <s>] [--seed <n|0xN>]
               [--warmup-iterations <n>] [--growth-band-mb <MiB>]
         """

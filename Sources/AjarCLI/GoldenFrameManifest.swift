@@ -61,6 +61,8 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
                     transformAnimation: nil,
                     effects: nil,
                     effectsAnimation: nil,
+                    effectStack: nil,
+                    effectStackAnimation: nil,
                     trackOpacity: nil,
                     trackBlendMode: nil
                 )
@@ -85,6 +87,10 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let transformAnimation: AnimatableClipTransform?
     let effects: ClipEffects?
     let effectsAnimation: AnimatableClipEffects?
+    /// FR-FX library stack (FR-FX-002/003); absent means empty.
+    let effectStack: ClipEffectStack?
+    /// Keyframable FR-FX stack; absent means constant of `effectStack` / empty.
+    let effectStackAnimation: AnimatableClipEffectStack?
     let trackOpacity: Animatable<RationalValue>?
     let trackBlendMode: ClipBlendMode?
 

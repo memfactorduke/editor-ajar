@@ -142,7 +142,11 @@ public enum RenderGraphBuilder {
         nestingDepth: Int
     ) throws -> RenderGraph {
         let sourceInputs = try candidates.map { candidate in
-            RenderCompositeNodeInput(
+            let stack = candidate.clip.effectStackAnimation.value(at: time)
+            // Omit empty stacks from the graph payload so content hashes stay byte-identical
+            // for clips that never touch FR-FX library kinds (ADR-0009).
+            let effectStack: ClipEffectStack? = stack.nodes.isEmpty ? nil : stack
+            return RenderCompositeNodeInput(
                 node: try sourceNode(
                     for: candidate.clip,
                     at: time,
@@ -151,6 +155,7 @@ public enum RenderGraphBuilder {
                 ),
                 transform: candidate.clip.transformAnimation.value(at: time),
                 effects: candidate.clip.effectsAnimation.value(at: time),
+                effectStack: effectStack,
                 trackOpacity: candidate.trackOpacity,
                 trackBlendMode: candidate.trackBlendMode
             )

@@ -168,6 +168,7 @@ final class TitleTextRasterizerTests: XCTestCase {
                     node: titleNode,
                     transform: .identity,
                     effects: .none,
+                    effectStack: nil,
                     trackOpacity: .one,
                     trackBlendMode: .normal
                 )
