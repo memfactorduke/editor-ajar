@@ -66,6 +66,54 @@ extension AnimatableClipEffects {
     }
 }
 
+extension AnimatableClipEffectStack {
+    /// Splits every keyframed stack parameter at the absolute timeline `cut` (FR-FX-003).
+    func bladed(
+        at cut: RationalTime
+    ) throws -> (left: AnimatableClipEffectStack, right: AnimatableClipEffectStack) {
+        let splitNodes = try nodes.map { node in try node.bladed(at: cut) }
+        return (
+            left: AnimatableClipEffectStack(nodes: splitNodes.map(\.left)),
+            right: AnimatableClipEffectStack(nodes: splitNodes.map(\.right))
+        )
+    }
+}
+
+extension AnimatableClipEffectNode {
+    func bladed(
+        at cut: RationalTime
+    ) throws -> (left: AnimatableClipEffectNode, right: AnimatableClipEffectNode) {
+        let splitDefinition = try definition.bladed(at: cut)
+        return (
+            left: AnimatableClipEffectNode(
+                id: id,
+                enabled: enabled,
+                definition: splitDefinition.left
+            ),
+            right: AnimatableClipEffectNode(
+                id: id,
+                enabled: enabled,
+                definition: splitDefinition.right
+            )
+        )
+    }
+}
+
+extension AnimatableClipEffectDefinition {
+    func bladed(
+        at cut: RationalTime
+    ) throws -> (left: AnimatableClipEffectDefinition, right: AnimatableClipEffectDefinition) {
+        switch self {
+        case .placeholder(let parameters):
+            let amount = try parameters.amount.bladed(at: cut)
+            return (
+                left: .placeholder(AnimatableClipPlaceholderSettings(amount: amount.left)),
+                right: .placeholder(AnimatableClipPlaceholderSettings(amount: amount.right))
+            )
+        }
+    }
+}
+
 extension AnimatableClipChromaKeySettings {
     func bladed(
         at cut: RationalTime

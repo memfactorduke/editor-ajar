@@ -52,6 +52,10 @@ extension EditReducer {
             return try applyTransformClipCommand(command, to: project)
         case .addClipMask, .removeClipMask, .moveClipMask, .setClipMask:
             return try applyClipMaskCommand(command, to: project)
+        case .addClipEffectNode, .removeClipEffectNode, .moveClipEffectNode,
+            .setClipEffectNodeEnabled, .setClipEffectNodeParameters,
+            .resetClipEffectNode, .resetClipEffectStack:
+            return try applyClipEffectStackCommand(command, to: project)
         case .setClipAudioMix, .clearClipAudioMix, .setClipAudioRetimeMode:
             return try applyClipAudioMixCommand(command, to: project)
         case .setClipAudioCrossfade, .removeClipAudioCrossfade:

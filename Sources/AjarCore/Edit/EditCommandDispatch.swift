@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 extension EditReducer {
-    // swiftlint:disable:next cyclomatic_complexity
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     static func applyUnchecked(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
         case .addClip, .insertClip, .overwriteClip, .appendClip,
@@ -14,6 +14,9 @@ extension EditReducer {
             .clearClipLumaKey,
             .setClipColorCorrection, .clearClipColorCorrection,
             .addClipMask, .removeClipMask, .moveClipMask, .setClipMask,
+            .addClipEffectNode, .removeClipEffectNode, .moveClipEffectNode,
+            .setClipEffectNodeEnabled, .setClipEffectNodeParameters,
+            .resetClipEffectNode, .resetClipEffectStack,
             .setClipAudioMix, .clearClipAudioMix, .setClipAudioRetimeMode,
             .setClipAudioCrossfade, .removeClipAudioCrossfade,
             .detachClipAudio, .replaceClipAudioSource:

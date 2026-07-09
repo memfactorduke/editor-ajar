@@ -24,5 +24,36 @@ extension ProjectValidator {
                 )
             )
         }
+
+        let stackParityMatches = clip.effectStackAnimation.baseStack == clip.effectStack
+        // Mirror the dual static/animatable pattern used for ClipEffects: when base and
+        // snapshot diverge, validate both; always require parity for the FR-FX-003 stack
+        // so hand-edited JSON with mismatched IDs/order/kinds/enabled/base params fails.
+        if !stackParityMatches {
+            state.errors.append(
+                .invalidClipEffectStack(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    error: .staticAnimationParityMismatch
+                )
+            )
+        }
+        var staticStackErrors: [ClipEffectStackValidationError] = []
+        if !stackParityMatches {
+            staticStackErrors = ClipEffectStackValidator.errors(for: clip.effectStack)
+        }
+        let stackErrors =
+            staticStackErrors + ClipEffectStackValidator.errors(for: clip.effectStackAnimation)
+        for error in stackErrors {
+            state.errors.append(
+                .invalidClipEffectStack(
+                    sequenceID: context.sequenceID,
+                    trackID: context.trackID,
+                    clipID: clip.id,
+                    error: error
+                )
+            )
+        }
     }
 }

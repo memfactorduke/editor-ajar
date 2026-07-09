@@ -86,7 +86,7 @@ correction (FR-COL-001); **scopes** (FR-COL-003).
 no dropouts during a stress mix.
 **Depends on:** M3 (timeline), parallelizable with M4/M5 after M3.
 
-## M7 — Compound clips, nesting, caching & speed *(started)*
+## M7 — Compound clips, nesting, caching & speed *(complete)*
 
 **Goal:** structure and time control without losing real-time.
 **Delivers:** compound clips: create/open/edit/propagate/decompose, nested with cycle detection
@@ -97,13 +97,12 @@ no dropouts during a stress mix.
 speed-ramp golden-frame tests; soak test stays leak-free (NFR-STAB-005).
 **Depends on:** M4, M5.
 
-**Current status:** M7 is open with the pure `AjarCore` compound source model plus video render
-support: clips can reference another sequence by ID, resolve its current duration/timebase at query
-time, reject direct/transitive cycles, render the referenced sequence as a nested GPU texture, and
-reuse unchanged nested output through the content-hash cache. Create/open/decompose UI, nested audio,
-disk cache warming, and retiming remain unfinished M7 work.
+**Current status:** M7 is complete. Compound create/decompose, nested video + audio, content-hash
+RAM/disk cache, constant/ramp/reverse/freeze/frame-blend retiming, pitch-corrected audio, and the
+FR-SPD-005 exit benchmarks all landed. Exit criteria met, including the 1-hour NFR-STAB-005
+acceptance soak which passed 2026-07-09.
 
-## M8 — Titles, effects, transitions & color depth
+## M8 — Titles, effects, transitions & color depth *(started)*
 
 **Goal:** the creative toolkit.
 **Delivers:** rich text titles + styling + on-canvas edit (FR-TXT-001…003,007); animated title
@@ -112,6 +111,11 @@ curves + secondary color + **LUTs** (FR-COL-002/004); looks save/recall (FR-COL-
 **Exit:** golden-frame tests across the effect/transition/title set; each effect within its GPU
 cost budget (PERFORMANCE §3); playback stays real-time at target spec with a typical stack.
 **Depends on:** M4, M5.
+
+**Current status:** M8 opened with ADR-0016 (effects/transitions architecture) and the pure
+`AjarCore` per-clip video effects stack model (FR-FX-003, #180): ordered nodes with enable/disable,
+reorder, reset, typed Codable-stable parameters, and M4 keyframing. Render integration, real
+library kinds, and transitions remain later M8 work.
 
 ## M9 — Delivery, proxies & 1.0 hardening
 

@@ -128,6 +128,7 @@ extension EditReducer {
             ),
             transformAnimation: animation.leftTransform,
             effectsAnimation: animation.leftEffects,
+            effectStackAnimation: animation.leftEffectStack,
             audioMix: bladeLeftAudioMix(clip.audioMix),
             timeRemap: .some(remapHalves?.left)
         )
@@ -142,6 +143,8 @@ extension EditReducer {
             transformAnimation: animation.rightTransform,
             effects: clip.effects,
             effectsAnimation: animation.rightEffects,
+            effectStack: clip.effectStack,
+            effectStackAnimation: animation.rightEffectStack,
             audioMix: bladeRightAudioMix(clip.audioMix),
             speed: clip.speed,
             reverse: clip.reverse,

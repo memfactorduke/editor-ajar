@@ -16,6 +16,9 @@ extension EditReducer {
         if compoundClip.effects != .none || compoundClip.effectsAnimation != .none {
             throw unsupportedDecomposeAttribute(compoundClip, .effects)
         }
+        if compoundClip.effectStack != .empty || compoundClip.effectStackAnimation != .empty {
+            throw unsupportedDecomposeAttribute(compoundClip, .effectStack)
+        }
         if compoundClip.audioMix != .identity {
             throw unsupportedDecomposeAttribute(compoundClip, .audioMix)
         }

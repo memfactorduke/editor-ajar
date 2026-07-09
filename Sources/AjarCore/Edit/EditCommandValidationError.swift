@@ -10,6 +10,9 @@ public enum CompoundClipDecomposeAttribute: String, Equatable, Sendable {
     /// Non-identity effects or an effects animation on the compound clip.
     case effects
 
+    /// A non-empty video effects stack on the compound clip (FR-FX-003).
+    case effectStack
+
     /// A non-identity audio mix on the compound clip.
     case audioMix
 
@@ -136,6 +139,9 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// A clip effect failed semantic validation.
     case invalidClipEffects(clipID: UUID, error: ClipEffectsValidationError)
 
+    /// A clip effects stack failed FR-FX-003 semantic validation.
+    case invalidClipEffectStack(clipID: UUID, error: ClipEffectStackValidationError)
+
     /// A clip audio mix failed semantic validation.
     case invalidClipAudioMix(clipID: UUID, error: AudioMixValidationError)
 
@@ -192,4 +198,13 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A clip mask reorder target was outside the mask list.
     case clipMaskDestinationIndexOutOfRange(clipID: UUID, index: Int, count: Int)
+
+    /// An effects-stack edit referenced a missing node (FR-FX-003).
+    case clipEffectNodeNotFound(clipID: UUID, nodeID: UUID)
+
+    /// An effects-stack reorder or insert index was out of range (FR-FX-003).
+    case clipEffectNodeDestinationIndexOutOfRange(clipID: UUID, index: Int, count: Int)
+
+    /// Adding an effects-stack node would duplicate a stable node ID (FR-FX-003).
+    case duplicateClipEffectNodeID(clipID: UUID, nodeID: UUID)
 }
