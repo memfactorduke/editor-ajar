@@ -15,6 +15,8 @@ extension EditReducer {
         let rightTransform: AnimatableClipTransform
         let leftEffects: AnimatableClipEffects
         let rightEffects: AnimatableClipEffects
+        let leftEffectStack: AnimatableClipEffectStack
+        let rightEffectStack: AnimatableClipEffectStack
     }
 
     /// Direction-aware source split for a blade (FR-SPD-003, FR-TL-004).
@@ -97,11 +99,14 @@ extension EditReducer {
     ) throws -> BladeAnimationHalves {
         let transform = try exactTime { try clip.transformAnimation.bladed(at: cut) }
         let effects = try exactTime { try clip.effectsAnimation.bladed(at: cut) }
+        let effectStack = try exactTime { try clip.effectStackAnimation.bladed(at: cut) }
         return BladeAnimationHalves(
             leftTransform: transform.left,
             rightTransform: transform.right,
             leftEffects: effects.left,
-            rightEffects: effects.right
+            rightEffects: effects.right,
+            leftEffectStack: effectStack.left,
+            rightEffectStack: effectStack.right
         )
     }
 }

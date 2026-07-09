@@ -14,6 +14,8 @@ extension EditReducer {
         transformAnimation: AnimatableClipTransform? = nil,
         effects: ClipEffects? = nil,
         effectsAnimation: AnimatableClipEffects? = nil,
+        effectStack: ClipEffectStack? = nil,
+        effectStackAnimation: AnimatableClipEffectStack? = nil,
         audioMix: ClipAudioMix? = nil,
         speed: RationalValue? = nil,
         reverse: Bool? = nil,
@@ -32,6 +34,14 @@ extension EditReducer {
                     from: clip.effects,
                     to: replacementEffects
                 ))
+        let replacementEffectStack = effectStack ?? clip.effectStack
+        let replacementEffectStackAnimation = effectStackAnimation
+            ?? (effectStack == nil
+                ? clip.effectStackAnimation
+                : clip.effectStackAnimation.replacingChangedNodes(
+                    from: clip.effectStack,
+                    to: replacementEffectStack
+                ))
         return Clip(
             id: clip.id,
             source: source ?? clip.source,
@@ -44,6 +54,8 @@ extension EditReducer {
             transformAnimation: replacementAnimation,
             effects: replacementEffects,
             effectsAnimation: replacementEffectsAnimation,
+            effectStack: replacementEffectStack,
+            effectStackAnimation: replacementEffectStackAnimation,
             audioMix: audioMix ?? clip.audioMix,
             speed: speed ?? clip.speed,
             reverse: reverse ?? clip.reverse,

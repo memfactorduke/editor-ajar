@@ -241,6 +241,12 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Keyframable visual effects. Evaluates to `effects` when constant.
     public let effectsAnimation: AnimatableClipEffects
 
+    /// Ordered per-clip video effects stack (FR-FX-003, ADR-0016). Empty by default.
+    public let effectStack: ClipEffectStack
+
+    /// Keyframable effects stack. Evaluates to `effectStack` when constant.
+    public let effectStackAnimation: AnimatableClipEffectStack
+
     /// Per-clip audio automation and fade metadata.
     public let audioMix: ClipAudioMix
 
@@ -273,6 +279,8 @@ public struct Clip: Codable, Equatable, Sendable {
         transformAnimation: AnimatableClipTransform? = nil,
         effects: ClipEffects = .none,
         effectsAnimation: AnimatableClipEffects? = nil,
+        effectStack: ClipEffectStack = .empty,
+        effectStackAnimation: AnimatableClipEffectStack? = nil,
         audioMix: ClipAudioMix = .identity,
         speed: RationalValue = .one,
         reverse: Bool = false,
@@ -291,6 +299,8 @@ public struct Clip: Codable, Equatable, Sendable {
         self.transformAnimation = transformAnimation ?? .constant(transform)
         self.effects = effects
         self.effectsAnimation = effectsAnimation ?? .constant(effects)
+        self.effectStack = effectStack
+        self.effectStackAnimation = effectStackAnimation ?? .constant(effectStack)
         self.audioMix = audioMix
         self.speed = speed
         self.reverse = reverse
@@ -311,6 +321,8 @@ public struct Clip: Codable, Equatable, Sendable {
         case transformAnimation
         case effects
         case effectsAnimation
+        case effectStack
+        case effectStackAnimation
         case audioMix
         case speed
         case reverse
@@ -340,6 +352,14 @@ public struct Clip: Codable, Equatable, Sendable {
             AnimatableClipEffects.self,
             forKey: .effectsAnimation
         ) ?? .constant(effects)
+        effectStack = try container.decodeIfPresent(
+            ClipEffectStack.self,
+            forKey: .effectStack
+        ) ?? .empty
+        effectStackAnimation = try container.decodeIfPresent(
+            AnimatableClipEffectStack.self,
+            forKey: .effectStackAnimation
+        ) ?? .constant(effectStack)
         audioMix = try container.decodeIfPresent(ClipAudioMix.self, forKey: .audioMix)
             ?? .identity
         speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed) ?? .one
@@ -366,6 +386,8 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(transformAnimation, forKey: .transformAnimation)
         try container.encode(effects, forKey: .effects)
         try container.encode(effectsAnimation, forKey: .effectsAnimation)
+        try container.encode(effectStack, forKey: .effectStack)
+        try container.encode(effectStackAnimation, forKey: .effectStackAnimation)
         try container.encode(audioMix, forKey: .audioMix)
         try container.encode(speed, forKey: .speed)
         try container.encode(reverse, forKey: .reverse)

@@ -274,6 +274,68 @@ public enum EditCommand: Codable, Equatable, Sendable {
         mask: ClipMask
     )
 
+    /// Adds a node to the per-clip video effects stack (FR-FX-003).
+    ///
+    /// When `destinationIndex` is `nil`, the node is appended. Otherwise it is inserted at
+    /// that index (0...count inclusive).
+    case addClipEffectNode(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        node: ClipEffectNode,
+        destinationIndex: Int? = nil
+    )
+
+    /// Removes a node from the per-clip video effects stack by stable ID (FR-FX-003).
+    case removeClipEffectNode(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        nodeID: UUID
+    )
+
+    /// Reorders a node within the per-clip video effects stack (FR-FX-003).
+    case moveClipEffectNode(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        nodeID: UUID,
+        destinationIndex: Int
+    )
+
+    /// Enables or disables one effects-stack node without changing its parameters (FR-FX-003).
+    case setClipEffectNodeEnabled(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        nodeID: UUID,
+        enabled: Bool
+    )
+
+    /// Replaces the typed parameters of one effects-stack node; kind must match (FR-FX-003).
+    case setClipEffectNodeParameters(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        nodeID: UUID,
+        definition: ClipEffectDefinition
+    )
+
+    /// Resets one effects-stack node's parameters to that kind's identity defaults (FR-FX-003).
+    case resetClipEffectNode(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        nodeID: UUID
+    )
+
+    /// Clears the entire per-clip video effects stack (FR-FX-003).
+    case resetClipEffectStack(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID
+    )
+
     /// Replaces a clip's audio gain, pan, fades, and crossfade metadata.
     case setClipAudioMix(
         sequenceID: UUID,

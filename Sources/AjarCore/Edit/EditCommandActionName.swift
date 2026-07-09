@@ -78,6 +78,20 @@ public extension EditCommand {
             return "Reorder Clip Mask"
         case .setClipMask:
             return "Set Clip Mask"
+        case .addClipEffectNode:
+            return "Add Effect"
+        case .removeClipEffectNode:
+            return "Remove Effect"
+        case .moveClipEffectNode:
+            return "Reorder Effect"
+        case .setClipEffectNodeEnabled:
+            return "Toggle Effect"
+        case .setClipEffectNodeParameters:
+            return "Set Effect Parameters"
+        case .resetClipEffectNode:
+            return "Reset Effect"
+        case .resetClipEffectStack:
+            return "Reset Effects Stack"
         case .setClipAudioMix:
             return "Set Clip Audio Mix"
         case .clearClipAudioMix:

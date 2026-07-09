@@ -109,6 +109,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         error: ClipEffectsValidationError
     )
 
+    /// A clip effects stack violates FR-FX-003 / ADR-0016 invariants.
+    case invalidClipEffectStack(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: ClipEffectStackValidationError
+    )
+
     /// A clip audio mix is outside the supported range.
     case invalidClipAudioMix(
         sequenceID: UUID, trackID: UUID, clipID: UUID, error: AudioMixValidationError

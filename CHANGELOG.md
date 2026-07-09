@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reference M1 Pro tier.
 
 ### Added
+- ADR-0016 (effects and transitions architecture) and FR-FX-003 per-clip video effects stack
+  model in `AjarCore` (#180), opening M8: ordered `ClipEffectStack` / `AnimatableClipEffectStack`
+  on `Clip` with typed Codable-stable parameters per kind (bootstrap `placeholder` kind),
+  enable/disable, reorder, reset, and M4 `Animatable` keyframing. Undoable edit commands
+  (`add`/`remove`/`move`/`setEnabled`/`setParameters`/`reset` node + reset stack) with typed
+  validation errors; blade/copy preserve the stack; legacy projects decode empty stacks,
+  including when the new fields are nested inside a compound clip. Render integration and real
+  library kinds are later issues.
 - FR-SPD-005 M7-exit verification benchmarks in `ajar bench` (report-only CI job, #175). Seven
   retimed-playback metrics render one cold frame over synthetic retimed timelines — constant
   2x, constant 1/2x, a 1x→4x time-remap ramp, reverse, freeze frame, frame-blend at 1/2x, and
