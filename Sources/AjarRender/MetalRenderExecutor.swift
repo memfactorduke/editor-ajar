@@ -455,10 +455,29 @@ public final class MetalRenderExecutor {
         self.commandQueue = commandQueue
 
         do {
-            library = try device.makeLibrary(source: Self.shaderSource, options: nil)
+            // Share one compiled library per device for the process lifetime. Recompiling the
+            // full embedded shader source on every executor init retains driver/compiler
+            // metadata (~tens of KiB per call) that never returns to the OS — fatal under the
+            // NFR-STAB-005 soak when iterations run faster than that growth can be masked.
+            library = try Self.sharedLibrary(for: device)
         } catch {
             throw MetalRenderError.shaderLibraryCreationFailed(String(describing: error))
         }
+    }
+
+    private static let sharedLibraryLock = NSLock()
+    private static var sharedLibrariesByDevice = [ObjectIdentifier: MTLLibrary]()
+
+    private static func sharedLibrary(for device: MTLDevice) throws -> MTLLibrary {
+        let key = ObjectIdentifier(device as AnyObject)
+        sharedLibraryLock.lock()
+        defer { sharedLibraryLock.unlock() }
+        if let existing = sharedLibrariesByDevice[key] {
+            return existing
+        }
+        let compiled = try device.makeLibrary(source: shaderSource, options: nil)
+        sharedLibrariesByDevice[key] = compiled
+        return compiled
     }
 
     /// Executes a render graph and returns a GPU-resident output texture.

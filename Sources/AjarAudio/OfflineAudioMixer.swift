@@ -145,120 +145,6 @@ extension OfflineAudioMixer {
 }
 
 extension OfflineAudioMixer {
-    static func mixTrack(
-        _ track: Track,
-        into output: inout [Float],
-        context: OfflineTrackMixContext,
-        environment: inout OfflineAudioRenderEnvironment,
-        nestingDepth: Int
-    ) throws {
-        for item in track.items {
-            guard case .clip(let clip) = item, clipCarriesAudio(clip, on: track) else {
-                continue
-            }
-            let source = try sourceBuffer(
-                for: clip,
-                context: context.mix,
-                environment: &environment,
-                nestingDepth: nestingDepth
-            )
-            try validateTailSourceDelivery(
-                clip: clip,
-                source: source,
-                context: context.mix,
-                environment: environment
-            )
-            try mixClip(
-                state: retimedClipMixState(
-                    clip: clip,
-                    track: track,
-                    source: source,
-                    environment: &environment
-                ),
-                into: &output,
-                context: context
-            )
-        }
-    }
-
-    static func mixClip(
-        state: OfflineClipMixState,
-        into output: inout [Float],
-        context: OfflineTrackMixContext
-    ) throws {
-        let intersection = try intersectionFrames(
-            clip: state.clip,
-            range: context.mix.range,
-            frameCount: context.mix.frameCount,
-            sampleRate: context.mix.format.sampleRate
-        )
-        guard intersection.lowerBound < intersection.upperBound else {
-            return
-        }
-
-        for outputFrame in intersection {
-            let renderTime = try renderTime(
-                rangeStart: context.mix.range.start,
-                outputFrame: outputFrame,
-                sampleRate: context.mix.format.sampleRate
-            )
-            try mixClipFrame(
-                state: state,
-                frame: OfflineMixFrameContext(
-                    renderTime: renderTime,
-                    outputFrame: outputFrame,
-                    format: context.mix.format,
-                    duckingMultiplier: context.duckingMultipliers?[outputFrame] ?? 1
-                ),
-                output: &output
-            )
-        }
-    }
-
-    static func mixClipFrame(
-        state: OfflineClipMixState,
-        frame: OfflineMixFrameContext,
-        output: inout [Float]
-    ) throws {
-        let clip = state.clip
-        let source = state.source
-        let renderTime = frame.renderTime
-        let format = frame.format
-        let localTime = try subtract(renderTime, clip.timelineRange.start)
-        // ADR-0015 §7 confirmed EOF (`nil`): the mapped tail passed the declared media end, so
-        // it silence-pads deterministically regardless of how many frames the provider had.
-        guard let sourceFrame = try resolvedSourceFramePosition(
-            state: state,
-            renderTime: renderTime
-        ) else {
-            return
-        }
-        let crossfadeGain = try crossfadeGainMultiplier(clip: clip, renderTime: renderTime)
-        let gain = gainMultiplier(
-            clip: clip,
-            track: state.track,
-            renderTime: renderTime,
-            localTime: localTime
-        ) * frame.duckingMultiplier * crossfadeGain
-        let pan = panValue(clip: clip, track: state.track, renderTime: renderTime)
-
-        for outputChannel in 0..<format.channelCount {
-            let sourceSample = mappedSourceSample(
-                source: source,
-                framePosition: sourceFrame,
-                outputChannel: outputChannel,
-                outputChannelCount: format.channelCount
-            )
-            let panned = sourceSample * Float(
-                panMultiplier(pan: pan, channel: outputChannel, format: format)
-            )
-            let outputIndex = (frame.outputFrame * format.channelCount) + outputChannel
-            output[outputIndex] += panned * Float(gain)
-        }
-    }
-}
-
-extension OfflineAudioMixer {
     static func intersectionFrames(
         clip: Clip,
         range: TimeRange,
@@ -471,7 +357,8 @@ extension OfflineAudioMixer {
     ) -> Float {
         var sum = Float(0)
         for term in terms where term.channel < source.format.channelCount {
-            sum += sourceSample(source, framePosition: framePosition, channel: term.channel)
+            sum +=
+                sourceSample(source, framePosition: framePosition, channel: term.channel)
                 * term.gain
         }
         return sum
