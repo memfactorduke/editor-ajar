@@ -53,6 +53,16 @@ jobs:
             Tests/Fixtures/golden/**/_diff/**
           if-no-files-found: ignore
 
+      - name: Upload crash reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crash-reports
+          path: |
+            ~/Library/Logs/DiagnosticReports/*.ips
+            ~/Library/Logs/DiagnosticReports/*.crash
+          if-no-files-found: ignore
+
   lint:
     name: Lint & format
     runs-on: macos-14
