@@ -11,7 +11,7 @@ final class TitleProjectCodecTests: XCTestCase {
         // Nested compound path: outer sequence holds a compound clip whose inner sequence holds
         // a media clip with no title keys. This path has regressed when ClipSource grew cases.
         let fixture = try makeCompoundClipFixture(seed: 8_406)
-        let package = try AjarProjectCodec.encode(fixture.project)
+        let package = try AjarProjectCodec.encodeNewDocument(fixture.project)
         let stripped = try titleProjectJSONWithoutKey("title", in: package.projectJSON)
         let loaded = try editableTitleProject(
             from: AjarProjectCodec.decode(
@@ -32,7 +32,7 @@ final class TitleProjectCodecTests: XCTestCase {
         let title = try makeSampleTitle(seed: 8_407)
         let innerSequenceID = try editUUID(8_407_300)
         XCTAssertTrue(project.validate().isValid)
-        let package = try AjarProjectCodec.encode(project)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
         let loaded = try editableTitleProject(
             from: AjarProjectCodec.decode(
                 projectJSON: package.projectJSON,
