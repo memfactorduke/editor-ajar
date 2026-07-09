@@ -12,9 +12,9 @@ final class TitleSourceModelTests: XCTestCase {
         XCTAssertEqual(TitleSource.deterministicFontFamily, "Helvetica")
     }
 
-    func testFRTXT001EmptyTextIsAllowed() {
+    func testFRTXT001EmptyTextIsAllowed() throws {
         let box = TitleTextBox(
-            id: UUID(uuidString: "00000000-0000-0000-0000-00000000A001")!,
+            id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A001")),
             text: "",
             origin: .zero,
             width: RationalValue(100),
@@ -24,29 +24,18 @@ final class TitleSourceModelTests: XCTestCase {
         XCTAssertNil(title.validate())
     }
 
-    func testFRTXT001ValidationRejectsEmptyFontFamilyAndOutOfRangeValues() {
-        let boxID = UUID(uuidString: "00000000-0000-0000-0000-00000000A002")!
+    func testFRTXT001ValidationRejectsEmptyFontFamily() throws {
+        let boxID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A002"))
         let emptyFamily = TitleSource(boxes: [
-            TitleTextBox(
-                id: boxID,
-                text: "Hi",
-                origin: .zero,
-                width: RationalValue(100),
-                height: RationalValue(40),
-                style: TitleTextStyle(fontFamily: "   ")
-            )
+            sampleBox(id: boxID, style: TitleTextStyle(fontFamily: "   "))
         ])
         XCTAssertEqual(emptyFamily.validate(), .emptyFontFamily)
+    }
 
+    func testFRTXT001ValidationRejectsOutOfRangeFontSizeAndTracking() throws {
+        let boxID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A012"))
         let hugeFont = TitleSource(boxes: [
-            TitleTextBox(
-                id: boxID,
-                text: "Hi",
-                origin: .zero,
-                width: RationalValue(100),
-                height: RationalValue(40),
-                style: TitleTextStyle(fontSize: RationalValue(2_000))
-            )
+            sampleBox(id: boxID, style: TitleTextStyle(fontSize: RationalValue(2_000)))
         ])
         XCTAssertEqual(
             hugeFont.validate(),
@@ -56,16 +45,8 @@ final class TitleSourceModelTests: XCTestCase {
                 maximum: TitleSource.maximumFontSize
             )
         )
-
         let badTracking = TitleSource(boxes: [
-            TitleTextBox(
-                id: boxID,
-                text: "Hi",
-                origin: .zero,
-                width: RationalValue(100),
-                height: RationalValue(40),
-                style: TitleTextStyle(tracking: RationalValue(-500))
-            )
+            sampleBox(id: boxID, style: TitleTextStyle(tracking: RationalValue(-500)))
         ])
         XCTAssertEqual(
             badTracking.validate(),
@@ -75,7 +56,10 @@ final class TitleSourceModelTests: XCTestCase {
                 maximum: TitleSource.maximumTracking
             )
         )
+    }
 
+    func testFRTXT001ValidationRejectsNonPositiveBoxSize() throws {
+        let boxID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A022"))
         let zeroSize = TitleSource(boxes: [
             TitleTextBox(
                 id: boxID,
@@ -91,8 +75,19 @@ final class TitleSourceModelTests: XCTestCase {
         )
     }
 
-    func testFRTXT001DuplicateBoxIDsAreRejected() {
-        let id = UUID(uuidString: "00000000-0000-0000-0000-00000000A003")!
+    private func sampleBox(id: UUID, style: TitleTextStyle) -> TitleTextBox {
+        TitleTextBox(
+            id: id,
+            text: "Hi",
+            origin: .zero,
+            width: RationalValue(100),
+            height: RationalValue(40),
+            style: style
+        )
+    }
+
+    func testFRTXT001DuplicateBoxIDsAreRejected() throws {
+        let id = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A003"))
         let title = TitleSource(boxes: [
             TitleTextBox(
                 id: id, text: "A", origin: .zero, width: RationalValue(10),
@@ -101,7 +96,7 @@ final class TitleSourceModelTests: XCTestCase {
             TitleTextBox(
                 id: id, text: "B", origin: .zero, width: RationalValue(10),
                 height: RationalValue(10)
-            ),
+            )
         ])
         XCTAssertEqual(title.validate(), .duplicateTextBoxID(id))
     }
@@ -146,7 +141,7 @@ final class TitleSourceModelTests: XCTestCase {
     func testFRTXT001ClipSourceTitleRoundTripsOnClip() throws {
         let title = try sampleTitle()
         let clip = Clip(
-            id: UUID(uuidString: "00000000-0000-0000-0000-00000000A010")!,
+            id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A010")),
             source: .title(title),
             sourceRange: try TimeRange(
                 start: .zero,
@@ -170,7 +165,7 @@ final class TitleSourceModelTests: XCTestCase {
     private func sampleTitle() throws -> TitleSource {
         TitleSource(boxes: [
             TitleTextBox(
-                id: UUID(uuidString: "00000000-0000-0000-0000-00000000A020")!,
+                id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A020")),
                 text: "Hello",
                 origin: CanvasPoint(x: RationalValue(10), y: RationalValue(20)),
                 width: RationalValue(200),
@@ -186,12 +181,12 @@ final class TitleSourceModelTests: XCTestCase {
                 )
             ),
             TitleTextBox(
-                id: UUID(uuidString: "00000000-0000-0000-0000-00000000A021")!,
+                id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A021")),
                 text: "World",
                 origin: CanvasPoint(x: RationalValue(10), y: RationalValue(90)),
                 width: RationalValue(200),
                 height: RationalValue(40)
-            ),
+            )
         ])
     }
 }

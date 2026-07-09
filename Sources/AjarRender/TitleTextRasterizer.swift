@@ -73,35 +73,45 @@ public enum TitleTextRasterizer {
         let bytesPerRow = width * 4
         var pixels = [UInt8](repeating: 0, count: bytesPerRow * height)
 
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo =
-            CGBitmapInfo.byteOrder32Little.rawValue
-            | CGImageAlphaInfo.premultipliedFirst.rawValue
-        guard
-            let context = CGContext(
-                data: &pixels,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: bytesPerRow,
-                space: colorSpace,
-                bitmapInfo: bitmapInfo
-            )
-        else {
-            throw TitleRenderError.bitmapContextCreationFailed(width: width, height: height)
-        }
+        // Pin the pixel buffer for the full CGContext lifetime. `CGContext(data: &array, …)`
+        // only guarantees the temporary pointer for the initializer call; the context retains
+        // that pointer for later draws — use-after-scope UB that segfaults on macos-14.
+        try pixels.withUnsafeMutableBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                throw TitleRenderError.bitmapContextCreationFailed(width: width, height: height)
+            }
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let bitmapInfo =
+                CGBitmapInfo.byteOrder32Little.rawValue
+                | CGImageAlphaInfo.premultipliedFirst.rawValue
+            guard
+                let context = CGContext(
+                    data: baseAddress,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: bytesPerRow,
+                    space: colorSpace,
+                    bitmapInfo: bitmapInfo
+                )
+            else {
+                throw TitleRenderError.bitmapContextCreationFailed(width: width, height: height)
+            }
 
-        // CoreGraphics origin is bottom-left; title model origin is top-left (canvas space).
-        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
-        context.textMatrix = .identity
+            // CoreGraphics origin is bottom-left; title model origin is top-left (canvas space).
+            context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+            context.textMatrix = .identity
 
-        for box in title.boxes {
-            draw(
-                box: box,
-                canvasHeight: CGFloat(height),
-                context: context,
-                diagnostics: &diagnostics
-            )
+            for box in title.boxes {
+                draw(
+                    box: box,
+                    canvasHeight: CGFloat(height),
+                    context: context,
+                    diagnostics: &diagnostics
+                )
+            }
+            // Drop the context before the buffer unpins so no deferred draw retains the pointer.
+            context.flush()
         }
         return (pixels, diagnostics)
     }

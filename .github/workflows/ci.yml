@@ -40,6 +40,19 @@ jobs:
       - name: Test
         run: swift test
 
+      # AjarCommandTests runs the golden harness; placeholder title refs fail here and block the
+      # dedicated golden-frame job (needs: build-test). Upload actuals so ADR-0017 reference
+      # establishment still works when the gate is hit through the test suite.
+      - name: Upload build-test golden actuals
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-test-golden-actuals
+          path: |
+            Tests/Fixtures/golden/**/_actual/**
+            Tests/Fixtures/golden/**/_diff/**
+          if-no-files-found: ignore
+
   lint:
     name: Lint & format
     runs-on: macos-14

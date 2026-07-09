@@ -33,6 +33,61 @@ extension EditReducer {
         let boxID: UUID
     }
 
+    /// Dispatches FR-TXT-001 title edit commands (routed from `applyUnchecked`).
+    static func applyTitleClipCommand(
+        _ command: EditCommand,
+        to project: Project
+    ) throws -> Project {
+        switch command {
+        case .insertTitleClip(
+            let sequenceID, let trackID, let clipID, let title, let timelineRange, let name
+        ):
+            return try insertTitleClip(
+                InsertTitleClipEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    title: title,
+                    timelineRange: timelineRange,
+                    name: name
+                ),
+                in: project
+            )
+        case .setClipTitleSource(let sequenceID, let trackID, let clipID, let title):
+            return try setClipTitleSource(
+                SetClipTitleSourceEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    title: title
+                ),
+                in: project
+            )
+        case .setTitleTextBox(let sequenceID, let trackID, let clipID, let box):
+            return try setTitleTextBox(
+                SetTitleTextBoxEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    box: box
+                ),
+                in: project
+            )
+        case .removeTitleTextBox(let sequenceID, let trackID, let clipID, let boxID):
+            return try removeTitleTextBox(
+                RemoveTitleTextBoxEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    boxID: boxID
+                ),
+                in: project
+            )
+        default:
+            throw EditReducerError.validationFailed([])
+        }
+    }
+
     static func insertTitleClip(
         _ edit: InsertTitleClipEdit,
         in project: Project
