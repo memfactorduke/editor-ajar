@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-TXT-004 animated title presets on the M4 keyframe system (#186): built-in
+  `fade` / `slide` / `typewriter` / `pop` / `lowerThird` programs applied as **one**
+  undoable `applyTitleAnimationPreset` edit. Presets write ordinary transform opacity/
+  position/scale keyframes (and lower-third FR-TXT-002 bar styling); typewriter adds a
+  keyframable `TitleSource.revealFraction` (0…1) that the rasterizer honors by laying out
+  only the first N grapheme clusters. Apply-twice replaces cleanly; blade splits reveal
+  keyframes with the same boundary rules as transform animation. `schemaMinor` **7**
+  (after minor 6 video transitions). Mid-animation CI-placeholder goldens:
+  `title-preset-fade-mid`, `title-preset-slide-mid`, `title-preset-typewriter-mid`,
+  `title-preset-pop-mid`, `title-preset-lower-third-mid` (ADR-0017 §6).
 - FR-FX-001 video transitions at cuts (#183 / ADR-0016 §5): cut-edge metadata on clips
   (`leadingTransition` / `trailingTransition`) mirroring ADR-0015 `ClipAudioCrossfade` —
   outgoing trailing record owns rendering, incoming leading is the non-rendering mirror;

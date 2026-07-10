@@ -32,8 +32,8 @@ public enum TitleStyleOpacityComponent: String, Equatable, Sendable {
 
 /// Static outline styling for a title text run (FR-TXT-002).
 ///
-/// Title styling is static in the current title-source model. FR-TXT-004 adds title animation;
-/// this slice does not introduce a parallel animation system.
+/// Styling values remain static per box; FR-TXT-004 animates titles through the shared M4
+/// keyframe system (transform / `revealFraction`), not a parallel style animation engine.
 public struct TitleStrokeStyle: Codable, Equatable, Sendable {
     /// Outline width in canvas points.
     public let width: RationalValue

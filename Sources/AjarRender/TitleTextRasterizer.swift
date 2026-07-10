@@ -102,9 +102,11 @@ public enum TitleTextRasterizer {
             context.clear(CGRect(x: 0, y: 0, width: width, height: height))
             context.textMatrix = .identity
 
+            let revealFraction = title.resolvedRevealFraction
             for box in title.boxes {
                 draw(
                     box: box,
+                    revealFraction: revealFraction,
                     canvasHeight: CGFloat(height),
                     context: context,
                     diagnostics: &diagnostics
@@ -140,17 +142,20 @@ public enum TitleTextRasterizer {
 
     private static func draw(
         box: TitleTextBox,
+        revealFraction: RationalValue,
         canvasHeight: CGFloat,
         context: CGContext,
         diagnostics: inout [TitleRenderError]
     ) {
+        // Typewriter (FR-TXT-004): layout only the first N grapheme clusters.
+        let visibleText = revealedText(box.text, fraction: revealFraction)
         // Empty text is allowed: skip layout entirely.
-        guard !box.text.isEmpty else {
+        guard !visibleText.isEmpty else {
             return
         }
 
         let font = resolveFont(for: box.style, diagnostics: &diagnostics)
-        let attributed = makeAttributedString(text: box.text, style: box.style, font: font)
+        let attributed = makeAttributedString(text: visibleText, style: box.style, font: font)
         let framesetter = CTFramesetterCreateWithAttributedString(attributed)
 
         let boxWidth = max(CGFloat(box.width.doubleValue), 1)
@@ -172,6 +177,7 @@ public enum TitleTextRasterizer {
             box.style.stroke != nil || box.style.dropShadow != nil
             || box.style.gradientFill != nil || box.backgroundBox != nil
         if hasAdvancedStyling {
+            // Style geometry still uses the original box; only the laid-out string is truncated.
             TitleTextStyleRenderer.draw(
                 frame: frame,
                 frameRect: frameRect,
@@ -182,6 +188,23 @@ public enum TitleTextRasterizer {
             CTFrameDraw(frame, context)
         }
         context.restoreGState()
+    }
+
+    /// First `floor(fraction × count)` grapheme clusters; full string at fraction ≥ 1.
+    static func revealedText(_ text: String, fraction: RationalValue) -> String {
+        let clamped = min(1, max(0, fraction.doubleValue))
+        if clamped >= 1 {
+            return text
+        }
+        if clamped <= 0 || text.isEmpty {
+            return ""
+        }
+        let total = text.count
+        let visible = min(total, Int((Double(total) * clamped).rounded(.down)))
+        if visible <= 0 {
+            return ""
+        }
+        return String(text.prefix(visible))
     }
 
     private static func makeAttributedString(

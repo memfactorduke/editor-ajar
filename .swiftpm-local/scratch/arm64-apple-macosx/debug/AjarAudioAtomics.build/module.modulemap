@@ -1,0 +1,4 @@
+module AjarAudioAtomics {
+    umbrella header "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudioAtomics/include/AjarAudioAtomics.h"
+    export *
+}

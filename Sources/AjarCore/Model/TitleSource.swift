@@ -116,6 +116,9 @@ public enum TitleSourceValidationError: Error, Equatable, Sendable, CustomString
     /// Two text boxes share the same stable ID.
     case duplicateTextBoxID(UUID)
 
+    /// Character reveal fraction is outside normalized 0...1 (FR-TXT-004 typewriter).
+    case revealFractionOutOfRange(value: RationalValue)
+
     /// A human-readable description of the validation failure.
     public var description: String {
         switch self {
@@ -168,6 +171,8 @@ public enum TitleSourceValidationError: Error, Equatable, Sendable, CustomString
                 + "\(height.numerator)/\(height.denominator) must be positive"
         case .duplicateTextBoxID(let id):
             "duplicate title text box id \(id)"
+        case .revealFractionOutOfRange(let value):
+            "title reveal fraction \(value.numerator)/\(value.denominator) outside 0...1"
         }
     }
 }
@@ -353,7 +358,7 @@ public struct TitleTextBox: Codable, Equatable, Sendable {
     }
 }
 
-/// Generator payload for a title clip (FR-TXT-001/002, ADR-0017).
+/// Generator payload for a title clip (FR-TXT-001/002/004, ADR-0017).
 public struct TitleSource: Codable, Equatable, Sendable {
     /// PostScript / family name pinned for goldens and missing-font fallback (ADR-0017).
     public static let deterministicFontFamily = "Helvetica"
@@ -406,19 +411,38 @@ public struct TitleSource: Codable, Equatable, Sendable {
     /// Ordered text boxes, bottom-to-top paint order (later boxes draw on top).
     public let boxes: [TitleTextBox]
 
+    /// Keyframable 0...1 character reveal fraction for typewriter presets (FR-TXT-004).
+    ///
+    /// `1` is fully revealed (legacy default). The rasterizer lays out only the first
+    /// `floor(fraction × characterCount)` grapheme clusters per box. Keyframe times use the
+    /// same absolute timeline domain as transform animation (FR-KEY-001).
+    public let revealFraction: Animatable<RationalValue>
+
     /// Creates a title source.
-    public init(boxes: [TitleTextBox] = []) {
+    ///
+    /// - Parameters:
+    ///   - boxes: Ordered text boxes.
+    ///   - revealFraction: Character reveal animation. Defaults to fully revealed.
+    public init(
+        boxes: [TitleTextBox] = [],
+        revealFraction: Animatable<RationalValue> = .constant(.one)
+    ) {
         self.boxes = boxes
+        self.revealFraction = revealFraction
     }
 
     private enum CodingKeys: String, CodingKey {
         case boxes
+        case revealFraction
     }
 
-    /// Decodes with an empty box list when the key is absent.
+    /// Decodes with an empty box list and full reveal when keys are absent (legacy nested titles).
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         boxes = try container.decodeIfPresent([TitleTextBox].self, forKey: .boxes) ?? []
+        revealFraction =
+            try container.decodeIfPresent(Animatable<RationalValue>.self, forKey: .revealFraction)
+            ?? .constant(.one)
     }
 
     /// Returns a copy with `box` replacing the matching ID, or appended when new.
@@ -429,11 +453,26 @@ public struct TitleSource: Codable, Equatable, Sendable {
         } else {
             next.append(box)
         }
-        return TitleSource(boxes: next)
+        return TitleSource(boxes: next, revealFraction: revealFraction)
     }
 
     /// Returns a copy without the box with `boxID`.
     public func removingBox(id boxID: UUID) -> TitleSource {
-        TitleSource(boxes: boxes.filter { $0.id != boxID })
+        TitleSource(boxes: boxes.filter { $0.id != boxID }, revealFraction: revealFraction)
+    }
+
+    /// Returns a copy with a different reveal animation (FR-TXT-004).
+    public func withRevealFraction(_ revealFraction: Animatable<RationalValue>) -> TitleSource {
+        TitleSource(boxes: boxes, revealFraction: revealFraction)
+    }
+
+    /// Returns a copy whose reveal is the constant evaluation at `time` (render-graph snapshot).
+    public func evaluated(at time: RationalTime) -> TitleSource {
+        withRevealFraction(.constant(revealFraction.value(at: time)))
+    }
+
+    /// Resolved reveal fraction for rasterization after evaluation to a constant.
+    public var resolvedRevealFraction: RationalValue {
+        revealFraction.base
     }
 }

@@ -33,7 +33,14 @@ extension EditReducer {
         let boxID: UUID
     }
 
-    /// Dispatches FR-TXT-001 title edit commands (routed from `applyUnchecked`).
+    struct ApplyTitleAnimationPresetEdit {
+        let sequenceID: UUID
+        let trackID: UUID
+        let clipID: UUID
+        let preset: TitleAnimationPreset
+    }
+
+    /// Dispatches FR-TXT-001/004 title edit commands (routed from `applyUnchecked`).
     static func applyTitleClipCommand(
         _ command: EditCommand,
         to project: Project
@@ -80,6 +87,16 @@ extension EditReducer {
                     trackID: trackID,
                     clipID: clipID,
                     boxID: boxID
+                ),
+                in: project
+            )
+        case .applyTitleAnimationPreset(let sequenceID, let trackID, let clipID, let preset):
+            return try applyTitleAnimationPreset(
+                ApplyTitleAnimationPresetEdit(
+                    sequenceID: sequenceID,
+                    trackID: trackID,
+                    clipID: clipID,
+                    preset: preset
                 ),
                 in: project
             )
@@ -172,6 +189,86 @@ extension EditReducer {
                 )
             }
             return title.removingBox(id: edit.boxID)
+        }
+    }
+
+    /// Applies a FR-TXT-004 preset as one undoable edit.
+    ///
+    /// The preset **resets the clip's whole transform animation and reveal program** to that
+    /// preset's clean keyframe program (not a selective merge of channels). Prior user-authored
+    /// position/rotation/scale/opacity/reveal keyframes are discarded. Apply-twice is therefore
+    /// idempotent for the same program. Undo restores the previous transform animation and
+    /// reveal state in full.
+    static func applyTitleAnimationPreset(
+        _ edit: ApplyTitleAnimationPresetEdit,
+        in project: Project
+    ) throws -> Project {
+        try replacingTrack(edit.trackID, sequenceID: edit.sequenceID, in: project) { track in
+            guard track.kind == .video else {
+                throw EditReducerError.invalidEdit(
+                    .titleRequiresVideoTrack(clipID: edit.clipID, trackKind: track.kind)
+                )
+            }
+            var items = track.items
+            guard
+                let index = clipIndex(edit.clipID, in: items),
+                case .clip(let clip) = items[index]
+            else {
+                throw EditReducerError.clipNotFound(
+                    sequenceID: edit.sequenceID,
+                    trackID: edit.trackID,
+                    clipID: edit.clipID
+                )
+            }
+            guard case .title(let title) = clip.source else {
+                throw EditReducerError.invalidEdit(
+                    .titleRequiresTitleClip(clipID: edit.clipID)
+                )
+            }
+            try validateTitleAnimationPreset(edit.preset, clip: clip)
+            let program = try TitleAnimationPresetBuilder.program(
+                for: edit.preset,
+                clip: clip,
+                title: title,
+                frame: project.settings.resolution
+            )
+            if let error = program.title.validate() {
+                throw EditReducerError.invalidEdit(
+                    .invalidTitleSource(clipID: edit.clipID, error: error)
+                )
+            }
+            items[index] = .clip(
+                copying(
+                    clip,
+                    source: .title(program.title),
+                    transform: program.transform,
+                    transformAnimation: program.transformAnimation
+                )
+            )
+            return copying(track, items: items)
+        }
+    }
+
+    private static func validateTitleAnimationPreset(
+        _ preset: TitleAnimationPreset,
+        clip: Clip
+    ) throws {
+        if preset.duration <= .zero {
+            throw EditReducerError.invalidEdit(
+                .titleAnimationPresetNonPositiveDuration(
+                    clipID: clip.id,
+                    duration: preset.duration
+                )
+            )
+        }
+        if preset.duration > clip.timelineRange.duration {
+            throw EditReducerError.invalidEdit(
+                .titleAnimationPresetDurationExceedsClip(
+                    clipID: clip.id,
+                    duration: preset.duration,
+                    clipDuration: clip.timelineRange.duration
+                )
+            )
         }
     }
 

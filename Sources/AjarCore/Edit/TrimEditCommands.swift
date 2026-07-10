@@ -126,8 +126,10 @@ extension EditReducer {
         )
         let remapHalves = try bladeTimeRemapHalves(of: clip, leftDuration: leftDuration)
         let animation = try bladeAnimationHalves(of: clip, at: edit.atTime)
+        let sources = try bladeTitleSources(of: clip, at: edit.atTime)
         let leftClip = copying(
             clip,
+            source: sources.left,
             sourceRange: sourceRanges.left,
             timelineRange: try makeRange(
                 start: clip.timelineRange.start,
@@ -143,7 +145,7 @@ extension EditReducer {
         )
         let rightClip = Clip(
             id: edit.rightClipID,
-            source: clip.source,
+            source: sources.right,
             sourceRange: sourceRanges.right,
             timelineRange: try makeRange(start: edit.atTime, duration: rightDuration),
             kind: clip.kind,
@@ -164,6 +166,22 @@ extension EditReducer {
             frameSampling: clip.frameSampling
         )
         return (left: leftClip, right: rightClip)
+    }
+
+    /// Blades title `revealFraction` keyframes with the same boundary rules as transform
+    /// animation (FR-TXT-004 / FR-XFORM-008). Non-title sources pass through unchanged.
+    static func bladeTitleSources(
+        of clip: Clip,
+        at cut: RationalTime
+    ) throws -> (left: ClipSource, right: ClipSource) {
+        guard case .title(let title) = clip.source else {
+            return (clip.source, clip.source)
+        }
+        let split = try exactTime { try title.revealFraction.bladed(at: cut) }
+        return (
+            left: .title(title.withRevealFraction(split.left)),
+            right: .title(title.withRevealFraction(split.right))
+        )
     }
 
     /// The left half keeps the start-edge audio metadata: gain/pan automation, `fadeIn`,

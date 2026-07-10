@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/EditorAjarPackageTests.build/primary.swiftdeps"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/EditorAjarPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/EditorAjarPackageTests.build/runner.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/EditorAjarPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/EditorAjarPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/EditorAjarPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/EditorAjarPackageTests.build/runner.dia"
+  }
+}

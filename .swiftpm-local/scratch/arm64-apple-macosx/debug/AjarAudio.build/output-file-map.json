@@ -1,0 +1,152 @@
+{
+  "": {
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/primary.swiftdeps"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/AudioBuffer.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioBuffer.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioBuffer.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioBuffer~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioBuffer.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioBuffer.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/AudioCrossfadeValidator.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioCrossfadeValidator.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioCrossfadeValidator.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioCrossfadeValidator~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioCrossfadeValidator.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioCrossfadeValidator.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/AudioMixerMeterAnalyzer.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioMixerMeterAnalyzer.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioMixerMeterAnalyzer.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioMixerMeterAnalyzer~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioMixerMeterAnalyzer.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioMixerMeterAnalyzer.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/AudioProgramLoudnessAnalyzer.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessAnalyzer.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessAnalyzer.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessAnalyzer~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessAnalyzer.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessAnalyzer.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/AudioProgramLoudnessNormalization.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessNormalization.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessNormalization.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessNormalization~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessNormalization.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioProgramLoudnessNormalization.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/AudioRenderError.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioRenderError.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioRenderError.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioRenderError~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioRenderError.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioRenderError.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/AudioWaveformSummary.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioWaveformSummary.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioWaveformSummary.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioWaveformSummary~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioWaveformSummary.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/AudioWaveformSummary.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/LiveAudioOutputDriver.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/LiveAudioOutputDriver.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/LiveAudioOutputDriver.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/LiveAudioOutputDriver~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/LiveAudioOutputDriver.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/LiveAudioOutputDriver.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioCompoundSources.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCompoundSources.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCompoundSources.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCompoundSources~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCompoundSources.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCompoundSources.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioCrossfade.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCrossfade.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCrossfade.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCrossfade~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCrossfade.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioCrossfade.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioDucking.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioDucking.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioDucking.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioDucking~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioDucking.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioDucking.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioMixFastPath.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixFastPath.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixFastPath.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixFastPath~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixFastPath.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixFastPath.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioMixer.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixer.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixer.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixer~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixer.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioMixer.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioPitchCorrection.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioPitchCorrection.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioPitchCorrection.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioPitchCorrection~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioPitchCorrection.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioPitchCorrection.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioSourceFramePosition.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioSourceFramePosition.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioSourceFramePosition.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioSourceFramePosition~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioSourceFramePosition.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioSourceFramePosition.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/OfflineAudioTimeMapping.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioTimeMapping.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioTimeMapping.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioTimeMapping~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioTimeMapping.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/OfflineAudioTimeMapping.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/RealtimeAudioRenderPlan.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlan.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlan.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlan~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlan.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlan.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/RealtimeAudioRenderPlanHandoff.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlanHandoff.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlanHandoff.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlanHandoff~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlanHandoff.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioRenderPlanHandoff.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/RealtimeAudioSampleStorage.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioSampleStorage.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioSampleStorage.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioSampleStorage~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioSampleStorage.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeAudioSampleStorage.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/RealtimeCompoundAudioPlan.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeCompoundAudioPlan.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeCompoundAudioPlan.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeCompoundAudioPlan~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeCompoundAudioPlan.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/RealtimeCompoundAudioPlan.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Sources/AjarAudio/WSOLATimeStretcher.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/WSOLATimeStretcher.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/WSOLATimeStretcher.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/WSOLATimeStretcher~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/WSOLATimeStretcher.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarAudio.build/WSOLATimeStretcher.dia"
+  }
+}

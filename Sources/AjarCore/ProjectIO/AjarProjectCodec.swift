@@ -177,7 +177,8 @@ public enum AjarProjectCodec {
     /// - `5`: FR-FX-002 batch 2 (vignette, mirror, mosaic, colorAdjust, posterize, invert) (#182).
     /// - `6`: FR-FX-001 video transitions (`leadingTransition` / `trailingTransition` on
     ///   `Clip`, ADR-0016 §5 / #183).
-    public static let currentSchemaMinor = 6
+    /// - `7`: FR-TXT-004 title `revealFraction` keyframable typewriter reveal (#186).
+    public static let currentSchemaMinor = 7
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

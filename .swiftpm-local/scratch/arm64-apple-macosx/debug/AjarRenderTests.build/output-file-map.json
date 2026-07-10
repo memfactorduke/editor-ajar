@@ -1,0 +1,152 @@
+{
+  "": {
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/primary.swiftdeps"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalDiskFrameCacheIntegrityTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheIntegrityTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheIntegrityTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheIntegrityTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheIntegrityTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheIntegrityTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalDiskFrameCacheTestSupport.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTestSupport.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTestSupport.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTestSupport~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTestSupport.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTestSupport.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalDiskFrameCacheTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalDiskFrameCacheTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalEffectBatch2KernelTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectBatch2KernelTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectBatch2KernelTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectBatch2KernelTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectBatch2KernelTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectBatch2KernelTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalEffectStackDiscriminationTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackDiscriminationTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackDiscriminationTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackDiscriminationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackDiscriminationTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackDiscriminationTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalEffectStackTestSupport.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackTestSupport.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackTestSupport.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackTestSupport~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackTestSupport.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectStackTestSupport.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalEffectUniformLayoutTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectUniformLayoutTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectUniformLayoutTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectUniformLayoutTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectUniformLayoutTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalEffectUniformLayoutTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorChromaKeyTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorChromaKeyTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorChromaKeyTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorChromaKeyTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorChromaKeyTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorChromaKeyTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorColorCorrectionTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorColorCorrectionTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorColorCorrectionTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorColorCorrectionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorColorCorrectionTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorColorCorrectionTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorFrameBlendTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorFrameBlendTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorFrameBlendTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorFrameBlendTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorFrameBlendTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorFrameBlendTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorLUTTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLUTTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLUTTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLUTTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLUTTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLUTTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorLumaKeyTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLumaKeyTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLumaKeyTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLumaKeyTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLumaKeyTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorLumaKeyTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorMaskTestSupport.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTestSupport.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTestSupport.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTestSupport~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTestSupport.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTestSupport.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorMaskTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorMaskTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalRenderExecutorTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalRenderExecutorTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalScopeAnalyzerTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalScopeAnalyzerTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalScopeAnalyzerTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalScopeAnalyzerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalScopeAnalyzerTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalScopeAnalyzerTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/MetalVideoTransitionTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalVideoTransitionTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalVideoTransitionTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalVideoTransitionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalVideoTransitionTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/MetalVideoTransitionTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/Placeholder.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/Placeholder.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/Placeholder.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/Placeholder~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/Placeholder.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/Placeholder.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/TitleRevealRasterizerTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleRevealRasterizerTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleRevealRasterizerTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleRevealRasterizerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleRevealRasterizerTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleRevealRasterizerTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/TitleTextRasterizerTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextRasterizerTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextRasterizerTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextRasterizerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextRasterizerTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextRasterizerTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarRenderTests/TitleTextStylingRasterizerTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextStylingRasterizerTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextStylingRasterizerTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextStylingRasterizerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextStylingRasterizerTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarRenderTests.build/TitleTextStylingRasterizerTests.dia"
+  }
+}

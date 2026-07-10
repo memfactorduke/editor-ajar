@@ -429,6 +429,17 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Removes one text box from a title clip by stable box ID (FR-TXT-001).
     case removeTitleTextBox(sequenceID: UUID, trackID: UUID, clipID: UUID, boxID: UUID)
 
+    /// Applies a built-in title animation preset as ordinary keyframes (FR-TXT-004).
+    ///
+    /// One undoable edit: writes transform and/or `revealFraction` keyframes (and lower-third
+    /// FR-TXT-002 styling when requested). Applying again replaces cleanly.
+    case applyTitleAnimationPreset(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        preset: TitleAnimationPreset
+    )
+
     /// Adds a video or audio track to a sequence.
     case addTrack(sequenceID: UUID, track: Track)
 
