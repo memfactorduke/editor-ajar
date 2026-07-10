@@ -22,9 +22,11 @@ final class MediaRefTests: XCTestCase {
 
     func testFRMED007RelinkMatchesMovedMediaByContentHash() throws {
         let original = try makeMediaRef(sourceURL: URL(fileURLWithPath: "/old/interview.mov"))
+        let bookmark = Data([0xAA, 0xBB])
         let candidate = MediaRelinkCandidate(
             sourceURL: URL(fileURLWithPath: "/new/renamed.mov"),
-            contentHash: original.contentHash
+            contentHash: original.contentHash,
+            bookmark: bookmark
         )
 
         XCTAssertEqual(original.relinkMatch(for: candidate), .contentHash)
@@ -32,7 +34,58 @@ final class MediaRefTests: XCTestCase {
         let relinked = original.relinked(to: candidate)
         XCTAssertEqual(relinked.id, original.id)
         XCTAssertEqual(relinked.sourceURL, candidate.sourceURL)
+        XCTAssertEqual(relinked.bookmark, bookmark)
         XCTAssertFalse(relinked.isOffline)
+    }
+
+    func testFRMED007HashMismatchReturnsWarningUntilCallerExplicitlyOverrides() throws {
+        let original = try makeMediaRef(sourceURL: URL(fileURLWithPath: "/old/interview.mov"))
+        let candidateHash = ContentHash.sha256(data: Data("different media".utf8))
+        let candidate = MediaRelinkCandidate(
+            sourceURL: URL(fileURLWithPath: "/new/interview.mov"),
+            contentHash: candidateHash,
+            bookmark: Data([0x10])
+        )
+
+        let warned = original.relinkDecision(for: candidate, mismatchPolicy: .warn)
+        XCTAssertEqual(
+            warned,
+            .warning(
+                MediaRelinkWarning(
+                    mediaID: original.id,
+                    candidateURL: candidate.sourceURL,
+                    reason: .contentHashMismatch(
+                        expected: try XCTUnwrap(original.contentHash),
+                        actual: candidateHash
+                    )
+                )
+            )
+        )
+
+        guard
+            case .relinked(let overridden, let match) = original.relinkDecision(
+                for: candidate,
+                mismatchPolicy: .override
+            )
+        else {
+            return XCTFail("expected explicit override to prepare replacement")
+        }
+        XCTAssertEqual(match, .overriddenContentHash)
+        XCTAssertEqual(overridden.id, original.id)
+        XCTAssertEqual(overridden.contentHash, candidateHash)
+        XCTAssertEqual(overridden.sourceURL, candidate.sourceURL)
+        XCTAssertEqual(overridden.bookmark, candidate.bookmark)
+        XCTAssertEqual(overridden.availability, .available)
+    }
+
+    func testFRMED007MatchingFilenameNeverOverridesConflictingHashes() throws {
+        let original = try makeMediaRef(sourceURL: URL(fileURLWithPath: "/old/interview.mov"))
+        let candidate = MediaRelinkCandidate(
+            sourceURL: URL(fileURLWithPath: "/new/interview.mov"),
+            contentHash: ContentHash.sha256(data: Data("replacement".utf8))
+        )
+
+        XCTAssertNil(original.relinkMatch(for: candidate))
     }
 
     func testFRMED007RelinkFallsBackToFilenameWhenHashIsMissing() throws {
@@ -64,6 +117,37 @@ final class MediaRefTests: XCTestCase {
                 )
             )
         )
+    }
+
+    func testFRMED007OfflineStateMachineTransitionsWithoutChangingStableIdentity() throws {
+        let available = try makeMediaRef(
+            sourceURL: URL(fileURLWithPath: "/missing/interview.mov")
+        )
+        let offline = available.withAvailability(.offline)
+        let restored = offline.withAvailability(.available)
+
+        XCTAssertEqual(offline.id, available.id)
+        XCTAssertEqual(offline.availability, .offline)
+        XCTAssertTrue(offline.isOffline)
+        XCTAssertEqual(restored.id, available.id)
+        XCTAssertEqual(restored.availability, .available)
+        XCTAssertFalse(restored.isOffline)
+    }
+
+    func testFRMED007LegacyReferenceWithoutAvailabilityDefaultsAvailable() throws {
+        let media = try makeMediaRef(sourceURL: URL(fileURLWithPath: "/media/interview.mov"))
+        let encoded = try JSONEncoder().encode(media)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "availability")
+        let legacy = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+
+        let decoded = try JSONDecoder().decode(MediaRef.self, from: legacy)
+
+        XCTAssertEqual(decoded.id, media.id)
+        XCTAssertEqual(decoded.availability, .available)
+        XCTAssertFalse(decoded.isOffline)
     }
 
     func testFRMED010RepresentsVariableFrameRateConformedTimebase() throws {

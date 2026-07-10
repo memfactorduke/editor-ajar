@@ -245,6 +245,17 @@ final class ProjectModelTests: XCTestCase {
 }
 
 final class ProjectValidationTests: XCTestCase {
+    func testFRPROJ004ValidationRejectsDuplicateMediaReferenceIDs() throws {
+        let mediaID = try uuid(69)
+        let first = try makeMediaRef(id: mediaID)
+        let duplicate = try makeMediaRef(id: mediaID)
+        let project = try makeProject(mediaPool: [first, duplicate], sequences: [])
+
+        XCTAssertTrue(
+            validationErrors(from: project).contains(.duplicateMediaReferenceID(mediaID))
+        )
+    }
+
     func testFRCMP005ClipSourceCanRepresentCompoundSequenceReference() throws {
         let sourceSequenceID = try uuid(70)
         let targetSequenceID = try uuid(71)

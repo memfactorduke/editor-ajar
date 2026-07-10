@@ -2,6 +2,7 @@
 
 import AjarCore
 import AjarExport
+import AjarMedia
 import Foundation
 import Metal
 import SwiftUI
@@ -46,6 +47,7 @@ final class EditorAjarAppModel: ObservableObject {
     private let exportPresetStore: EditorAjarExportPresetStore
     private var autosaveLoopTask: Task<Void, Never>?
     private var autosaveWriteTask: Task<Void, Never>?
+    private var mediaResolutionTask: Task<Void, Never>?
     private var autosaveCommandCount = 0
     private var renderGeneration = 0
     private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
@@ -148,6 +150,9 @@ final class EditorAjarAppModel: ObservableObject {
         startAutosaveLoop()
         reloadExportPresets()
         requestRenderForCurrentFrame()
+        if let initialLoadResult {
+            startMediaResolution(for: initialLoadResult)
+        }
     }
 
     // MARK: - Export dialog (FR-EXP-003 / FR-EXP-004)
@@ -305,6 +310,33 @@ final class EditorAjarAppModel: ObservableObject {
         audioCoordinator?.stop()
         autosaveLoopTask?.cancel()
         autosaveWriteTask?.cancel()
+        mediaResolutionTask?.cancel()
+    }
+
+    private func startMediaResolution(for loadResult: AjarProjectLoadResult) {
+        let originalProject = loadResult.project
+        let openMode = loadResult.openMode
+        mediaResolutionTask = Task { [weak self, originalProject, openMode] in
+            let resolvedProject = await Task.detached(priority: .userInitiated) {
+                MediaReferenceResolver().reconcile(originalProject)
+            }.value
+            guard !Task.isCancelled, let self, var history = self.editHistory else {
+                return
+            }
+            do {
+                let mergedProject = try history.reconcileMediaReferences(
+                    expected: originalProject.mediaPool,
+                    resolved: resolvedProject.mediaPool
+                )
+                self.editHistory = history
+                self.updateProject(mergedProject)
+                if openMode.allowsEditing {
+                    self.scheduleAutosaveCheckpoint(project: mergedProject)
+                }
+            } catch {
+                self.loadMessage = "Media availability refresh unavailable: \(error)"
+            }
+        }
     }
 
     var canUndo: Bool {
@@ -1882,7 +1914,7 @@ final class EditorAjarAppModel: ObservableObject {
 
         Task { [weak self, project, sequence, renderPipeline, frame, generation] in
             do {
-                let texture = try await renderPipeline.renderFrame(
+                let renderedFrame = try await renderPipeline.renderFrame(
                     project: project,
                     sequence: sequence,
                     frame: frame
@@ -1891,7 +1923,11 @@ final class EditorAjarAppModel: ObservableObject {
                     guard self?.renderGeneration == generation else {
                         return
                     }
-                    self?.presentedTexture = texture
+                    self?.applyRuntimeOfflineState(
+                        mediaIDs: renderedFrame.runtimeOfflineMediaIDs,
+                        expectedProject: project
+                    )
+                    self?.presentedTexture = renderedFrame.texture
                     self?.loadMessage = "Rendered \(sequence.name), frame \(frame)"
                 }
             } catch {
@@ -1911,6 +1947,32 @@ final class EditorAjarAppModel: ObservableObject {
     /// the last valid frame so `StillFrameExportRequest` validation does not throw.
     static func clampedStillExportFrame(playheadFrame: Int64, durationFrames: Int64) -> Int64 {
         min(playheadFrame, max(0, durationFrames - 1))
+    }
+
+    private func applyRuntimeOfflineState(
+        mediaIDs: Set<UUID>,
+        expectedProject: Project
+    ) {
+        guard !mediaIDs.isEmpty, var history = editHistory else {
+            return
+        }
+        let resolvedMedia = expectedProject.updatingMediaAvailability(
+            .offline,
+            for: mediaIDs
+        ).mediaPool
+        do {
+            let mergedProject = try history.reconcileMediaReferences(
+                expected: expectedProject.mediaPool,
+                resolved: resolvedMedia
+            )
+            editHistory = history
+            project = mergedProject
+            if projectOpenMode.allowsEditing {
+                scheduleAutosaveCheckpoint(project: mergedProject)
+            }
+        } catch {
+            loadMessage = "Media offline-state update unavailable: \(error)"
+        }
     }
 
     private static func durationFrames(for sequence: Sequence) -> Int64 {

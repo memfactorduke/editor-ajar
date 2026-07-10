@@ -181,7 +181,9 @@ public enum AjarProjectCodec {
     /// - `8`: `ClipEffectKind.curves` (FR-COL-002 RGB master + R/G/B, #189). Minor 7 was
     ///   claimed by #186 title presets; this branch renumbered from the 7/8 race.
     /// - `9`: project-persisted color-grade looks (`Project.looks`, FR-COL-007 / #190).
-    public static let currentSchemaMinor = 9
+    /// - `10`: media relink/consolidate edit-journal commands and persisted offline workflow
+    ///   (`FR-MED-007`, `FR-MED-008`, #218).
+    public static let currentSchemaMinor = 10
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

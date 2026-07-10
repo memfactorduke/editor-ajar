@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Foundation
+
 /// A command plus the project states needed for undo and deterministic redo.
 public struct EditLogEntry: Equatable, Sendable {
     /// Command that produced `after` from `before`.
@@ -29,6 +31,9 @@ public enum EditHistoryError: Error, Equatable, Sendable {
 
     /// The session was opened read-only (newer schema minor); edits are refused (FR-PROJ-005).
     case projectOpenedReadOnly(reason: AjarProjectReadOnlyReason)
+
+    /// Platform media-state synchronization would make an existing undo entry non-replayable.
+    case mediaReferenceReconciliationDiverged(command: EditCommand)
 }
 
 /// Unbounded per-session undo/redo history for immutable project values.
@@ -169,5 +174,97 @@ public struct EditHistory: Equatable, Sendable {
         )
         currentProject = replayed
         return currentProject
+    }
+
+    /// Merges bookmark/offline resolution into every undo snapshot without creating an undo step.
+    ///
+    /// Only a reference still equal to `expected` apart from availability is replaced. A
+    /// relink/consolidate edit that wins the race is therefore preserved, while unrelated timeline
+    /// edits keep the newly resolved media state across undo and redo.
+    @discardableResult
+    public mutating func reconcileMediaReferences(
+        expected: [MediaRef],
+        resolved: [MediaRef]
+    ) throws -> Project {
+        let expectedByID = unambiguousMediaReferences(expected)
+        let resolvedByID = unambiguousMediaReferences(resolved)
+
+        func reconciledProject(_ project: Project) -> Project {
+            Project(
+                schemaVersion: project.schemaVersion,
+                schemaMinor: project.schemaMinor,
+                settings: project.settings,
+                mediaPool: project.mediaPool.map { media in
+                    guard
+                        let expected = expectedByID[media.id],
+                        referencesDifferOnlyByAvailability(media, expected),
+                        let replacement = resolvedByID[media.id]
+                    else {
+                        return media
+                    }
+                    return replacement
+                },
+                sequences: project.sequences,
+                looks: project.looks
+            )
+        }
+
+        func reconciledEntry(_ entry: EditLogEntry) -> EditLogEntry {
+            EditLogEntry(
+                command: entry.command,
+                before: reconciledProject(entry.before),
+                after: reconciledProject(entry.after)
+            )
+        }
+
+        let reconciledUndo = undoEntries.map(reconciledEntry)
+        let reconciledRedo = redoEntries.map(reconciledEntry)
+        for entry in reconciledUndo + reconciledRedo {
+            let replayed: Project
+            do {
+                replayed = try EditReducer.apply(entry.command, to: entry.before)
+            } catch {
+                throw EditHistoryError.mediaReferenceReconciliationDiverged(
+                    command: entry.command
+                )
+            }
+            guard replayed == entry.after else {
+                throw EditHistoryError.mediaReferenceReconciliationDiverged(
+                    command: entry.command
+                )
+            }
+        }
+
+        currentProject = reconciledProject(currentProject)
+        undoEntries = reconciledUndo
+        redoEntries = reconciledRedo
+        return currentProject
+    }
+
+    private func referencesDifferOnlyByAvailability(
+        _ first: MediaRef,
+        _ second: MediaRef
+    ) -> Bool {
+        first.id == second.id
+            && first.sourceURL == second.sourceURL
+            && first.bookmark == second.bookmark
+            && first.contentHash == second.contentHash
+            && first.metadata == second.metadata
+    }
+
+    private func unambiguousMediaReferences(_ references: [MediaRef]) -> [UUID: MediaRef] {
+        var result: [UUID: MediaRef] = [:]
+        var duplicates = Set<UUID>()
+        for reference in references {
+            if result[reference.id] == nil {
+                result[reference.id] = reference
+            } else {
+                duplicates.insert(reference.id)
+            }
+        }
+        for duplicate in duplicates {
+            result[duplicate] = nil
+        }
+        return result
     }
 }

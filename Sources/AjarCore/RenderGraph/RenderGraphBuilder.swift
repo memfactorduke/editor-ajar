@@ -456,7 +456,11 @@ public enum RenderGraphBuilder {
                 freezeFrame: clip.freezeFrame,
                 timeRemap: clip.timeRemap,
                 frameSampling: renderFrameSampling(for: clip),
-                colorSpace: media.metadata.colorSpace
+                colorSpace: media.metadata.colorSpace,
+                mediaContentHash: media.contentHash,
+                mediaAvailability: media.availability,
+                offlineSlateDimensions: media.metadata.pixelDimensions
+                    ?? project.settings.resolution
             )
         )
     }

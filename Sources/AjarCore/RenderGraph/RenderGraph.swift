@@ -93,7 +93,8 @@ public struct RenderCompositeInput: Codable, Equatable, Sendable {
         } else {
             effectStack = nil
         }
-        trackOpacity = try container.decodeIfPresent(RationalValue.self, forKey: .trackOpacity)
+        trackOpacity =
+            try container.decodeIfPresent(RationalValue.self, forKey: .trackOpacity)
             ?? .one
         trackBlendMode =
             try container.decodeIfPresent(ClipBlendMode.self, forKey: .trackBlendMode) ?? .normal
@@ -151,6 +152,9 @@ struct RenderSourceNodeSpec {
     let timeRemap: ClipTimeRemap?
     let frameSampling: ClipFrameSamplingMode?
     let colorSpace: MediaColorSpace
+    let mediaContentHash: ContentHash?
+    let mediaAvailability: MediaAvailability?
+    let offlineSlateDimensions: PixelDimensions?
 }
 
 /// Resolved media source parameters for a source render node.
@@ -188,6 +192,21 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Tagged source color space used by the render pipeline.
     public let colorSpace: MediaColorSpace
 
+    /// Original-media identity folded into render-cache keys.
+    ///
+    /// Optional for backward-compatible decoding of render graphs created before FR-MED-007.
+    public let mediaContentHash: ContentHash?
+
+    /// Last resolved availability folded into render-cache keys.
+    ///
+    /// Optional for backward-compatible decoding of render graphs created before FR-MED-007.
+    public let mediaAvailability: MediaAvailability?
+
+    /// Dimensions of the deterministic offline frame, folded into render-cache keys.
+    ///
+    /// Optional for backward-compatible decoding of render graphs created before FR-MED-007.
+    public let offlineSlateDimensions: PixelDimensions?
+
     /// Creates resolved source node parameters.
     public init(
         mediaID: UUID,
@@ -199,7 +218,10 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         freezeFrame: Bool = false,
         timeRemap: ClipTimeRemap? = nil,
         frameSampling: ClipFrameSamplingMode? = nil,
-        colorSpace: MediaColorSpace = .rec709
+        colorSpace: MediaColorSpace = .rec709,
+        mediaContentHash: ContentHash? = nil,
+        mediaAvailability: MediaAvailability? = nil,
+        offlineSlateDimensions: PixelDimensions? = nil
     ) {
         self.mediaID = mediaID
         self.clipID = clipID
@@ -211,6 +233,9 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         self.timeRemap = timeRemap
         self.frameSampling = frameSampling
         self.colorSpace = colorSpace
+        self.mediaContentHash = mediaContentHash
+        self.mediaAvailability = mediaAvailability
+        self.offlineSlateDimensions = offlineSlateDimensions
     }
 }
 
@@ -422,7 +447,10 @@ enum RenderNodeFactory {
                 freezeFrame: spec.freezeFrame,
                 timeRemap: spec.timeRemap,
                 frameSampling: spec.frameSampling,
-                colorSpace: spec.colorSpace
+                colorSpace: spec.colorSpace,
+                mediaContentHash: spec.mediaContentHash,
+                mediaAvailability: spec.mediaAvailability,
+                offlineSlateDimensions: spec.offlineSlateDimensions
             )
         )
         return try makeNode(

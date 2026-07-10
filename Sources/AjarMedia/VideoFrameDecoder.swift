@@ -76,6 +76,19 @@ public enum MediaDecodeError: Error, Equatable, Sendable, CustomStringConvertibl
             "decoded sample had an invalid presentation timestamp"
         }
     }
+
+    /// Whether the source disappeared (or has no URL) and should render as offline.
+    public var indicatesOfflineSource: Bool {
+        switch self {
+        case .missingSourceURL, .missingSource:
+            true
+        case .metalDeviceUnavailable, .unsupportedSource, .invalidTime, .readerSetupFailed,
+            .readerFailed, .frameUnavailable, .missingImageBuffer,
+            .metalTextureCacheCreationFailed, .metalTextureCreationFailed,
+            .invalidPresentationTime:
+            false
+        }
+    }
 }
 
 /// One decoded native video frame and its zero-copy Metal texture wrapper.
@@ -183,25 +196,38 @@ public final class VideoFrameDecoder {
         from sourceURL: URL,
         at time: RationalTime
     ) async throws -> DecodedFrame {
-        if sourceURL.isFileURL && !FileManager.default.isReadableFile(atPath: sourceURL.path) {
-            throw MediaDecodeError.missingSource(sourceURL)
+        let startedSecurityScope = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if startedSecurityScope {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
         }
+        try requireAvailableSource(sourceURL)
 
         let asset = AVURLAsset(url: sourceURL)
         let tracks: [AVAssetTrack]
         do {
             tracks = try await asset.loadTracks(withMediaType: .video)
         } catch {
+            try requireAvailableSource(sourceURL)
             throw MediaDecodeError.unsupportedSource(sourceURL)
         }
 
         guard let track = tracks.first else {
+            try requireAvailableSource(sourceURL)
             throw MediaDecodeError.unsupportedSource(sourceURL)
         }
 
-        let reader = try makeReader(asset: asset)
+        let reader: AVAssetReader
+        do {
+            reader = try makeReader(asset: asset)
+        } catch {
+            try requireAvailableSource(sourceURL)
+            throw error
+        }
         let output = makeOutput(for: track)
         guard reader.canAdd(output) else {
+            try requireAvailableSource(sourceURL)
             throw MediaDecodeError.readerSetupFailed("asset reader cannot add video output")
         }
 
@@ -209,6 +235,7 @@ public final class VideoFrameDecoder {
         reader.timeRange = CMTimeRange(start: try cmTime(from: time), duration: .positiveInfinity)
 
         guard reader.startReading() else {
+            try requireAvailableSource(sourceURL)
             throw MediaDecodeError.readerSetupFailed(reader.errorDescription)
         }
         defer {
@@ -218,6 +245,7 @@ public final class VideoFrameDecoder {
         }
 
         guard let sampleBuffer = output.copyNextSampleBuffer() else {
+            try requireAvailableSource(sourceURL)
             if reader.status == .failed {
                 throw MediaDecodeError.readerFailed(reader.errorDescription)
             }
@@ -236,6 +264,12 @@ public final class VideoFrameDecoder {
         )
 
         return frame
+    }
+
+    private func requireAvailableSource(_ sourceURL: URL) throws {
+        if sourceURL.isFileURL && !FileManager.default.isReadableFile(atPath: sourceURL.path) {
+            throw MediaDecodeError.missingSource(sourceURL)
+        }
     }
 
     private func makeReader(asset: AVAsset) throws -> AVAssetReader {

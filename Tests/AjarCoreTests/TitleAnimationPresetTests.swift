@@ -167,7 +167,7 @@ final class TitleAnimationPresetTests: XCTestCase {
 
     func testFRTXT004SchemaMinorRemainsRegisteredInCurrentBuild() {
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 7)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 9)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 10)
     }
 
     /// Applying a preset resets the whole transform animation and reveal program (not a

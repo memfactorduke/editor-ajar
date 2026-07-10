@@ -2,6 +2,7 @@
 // swiftlint:disable file_length
 
 import AjarCore
+import AjarRender
 import Foundation
 import Metal
 
@@ -41,16 +42,16 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
         options: GoldenFrameOptions,
         standardOutput: any AjarTextOutput
     ) async throws -> GoldenFrameSummary {
-        guard MTLCreateSystemDefaultDevice() != nil else {
-            standardOutput.writeLine("SKIP golden-frame: Metal device unavailable")
-            return GoldenFrameSummary(passCount: 0, failureCount: 0)
-        }
-
         let manifestURLs = try discoverManifestURLs(at: options.suiteURL)
         guard !manifestURLs.isEmpty else {
             throw AjarCLIError.invalidGoldenManifest(
                 "no golden manifest JSON files found at \(options.suiteURL.path)"
             )
+        }
+        guard MTLCreateSystemDefaultDevice() != nil else {
+            try writeOfflineSlateAuthoringCandidates(manifestURLs: manifestURLs)
+            standardOutput.writeLine("SKIP golden-frame: Metal device unavailable")
+            return GoldenFrameSummary(passCount: 0, failureCount: 0)
         }
 
         var passCount = 0
@@ -83,6 +84,48 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
         }
 
         return GoldenFrameSummary(passCount: passCount, failureCount: failureCount)
+    }
+
+    /// Writes a provisional CPU candidate for the one-source offline fixture on GPU-less hosts.
+    ///
+    /// This never promotes a reference. CI still renders through Metal and remains canonical per
+    /// ADR-0017 section 6; the candidate only makes local fixture authoring possible.
+    private static func writeOfflineSlateAuthoringCandidates(
+        manifestURLs: [URL]
+    ) throws {
+        for manifestURL in manifestURLs {
+            let manifest = try GoldenFrameManifest.load(from: manifestURL)
+            let clips = try manifest.resolvedClipSpecs()
+            guard clips.count == 1,
+                clips[0].offline == true,
+                let synthetic = clips[0].syntheticMedia
+            else {
+                continue
+            }
+            let referenceURL =
+                manifestURL
+                .deletingLastPathComponent()
+                .appendingPathComponent(manifest.referencePNG)
+            guard !FileManager.default.fileExists(atPath: referenceURL.path) else {
+                continue
+            }
+            let dimensions =
+                manifest.outputDimensions
+                ?? PixelDimensions(width: synthetic.width, height: synthetic.height)
+            let candidateURL =
+                manifestURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("_actual")
+                .appendingPathComponent("\(manifest.id).png")
+            try PNGCodec.write(
+                PNGImage(
+                    width: dimensions.width,
+                    height: dimensions.height,
+                    bgra8: try OfflineSlateRenderer.bgra8Pixels(dimensions: dimensions)
+                ),
+                to: candidateURL
+            )
+        }
     }
 
     private static func discoverManifestURLs(at url: URL) throws -> [URL] {
@@ -134,7 +177,11 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
         let projectURL = workingDirectory.appendingPathComponent("project.ajar")
         let actualURL = workingDirectory.appendingPathComponent("actual.png")
         for (clipSpec, mediaURL) in zip(clipSpecs, mediaURLs) {
-            guard let mediaURL, let syntheticMedia = clipSpec.syntheticMedia else {
+            guard
+                clipSpec.offline != true,
+                let mediaURL,
+                let syntheticMedia = clipSpec.syntheticMedia
+            else {
                 continue
             }
             try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: syntheticMedia)
@@ -159,7 +206,12 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
             .deletingLastPathComponent()
             .appendingPathComponent(manifest.referencePNG)
         let actualImage = try PNGCodec.read(from: actualURL)
-        let referenceImage = try PNGCodec.read(from: referenceURL)
+        let referenceImage = try referenceImage(
+            at: referenceURL,
+            actualImage: actualImage,
+            manifest: manifest,
+            manifestURL: manifestURL
+        )
         let comparison = try GoldenFrameComparator.compare(
             actual: actualImage,
             reference: referenceImage,
@@ -170,6 +222,27 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
             actualImage: actualImage,
             comparison: comparison
         )
+    }
+
+    private static func referenceImage(
+        at referenceURL: URL,
+        actualImage: PNGImage,
+        manifest: GoldenFrameManifest,
+        manifestURL: URL
+    ) throws -> PNGImage {
+        guard FileManager.default.fileExists(atPath: referenceURL.path) else {
+            let candidateURL =
+                manifestURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("_actual")
+                .appendingPathComponent("\(manifest.id).png")
+            try PNGCodec.write(actualImage, to: candidateURL)
+            throw AjarCLIError.invalidGoldenManifest(
+                "\(manifest.id) is missing \(manifest.referencePNG); rendered candidate at "
+                    + candidateURL.path
+            )
+        }
+        return try PNGCodec.read(from: referenceURL)
     }
 
     private static func writeFailureArtifacts(
@@ -405,7 +478,8 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
                 audioChannelLayout: nil,
                 isVariableFrameRate: false,
                 conformedFrameRate: nil
-            )
+            ),
+            availability: clipSpec.offline == true ? .offline : .available
         )
     }
 

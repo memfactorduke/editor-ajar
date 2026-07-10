@@ -50,6 +50,7 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
             return [
                 GoldenFrameClipSpec(
                     syntheticMedia: syntheticMedia,
+                    offline: nil,
                     title: nil,
                     compound: nil,
                     speed: nil,
@@ -79,6 +80,8 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
 struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     /// Synthetic movie for media-backed clips. Optional when `title` is present (ADR-0017).
     let syntheticMedia: SyntheticMovieSpec?
+    /// FR-MED-007 fixture hook: retain metadata/URL but omit the file and render the slate.
+    let offline: Bool?
     /// Title generator payload (FR-TXT-001). When set, the clip source is `.title`.
     let title: TitleSource?
     let compound: GoldenFrameCompoundSpec?

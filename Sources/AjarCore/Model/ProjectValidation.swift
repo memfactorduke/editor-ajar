@@ -19,6 +19,9 @@ public enum ProjectValidationResult: Equatable, Sendable {
 
 /// Typed project validation error.
 public enum ProjectValidationError: Equatable, Sendable {
+    /// Two media references use the same stable ID.
+    case duplicateMediaReferenceID(UUID)
+
     /// Two project looks use the same stable ID.
     case duplicateLookID(UUID)
 
@@ -227,6 +230,7 @@ enum ProjectValidator {
 
         var seenSequenceIDs = Set<UUID>()
 
+        validateMediaReferences(project.mediaPool, state: &state)
         validateLooks(project.looks, state: &state)
 
         for sequence in project.sequences {
@@ -256,6 +260,16 @@ enum ProjectValidator {
             return .valid
         }
         return .invalid(state.errors)
+    }
+
+    private static func validateMediaReferences(
+        _ media: [MediaRef],
+        state: inout ValidationState
+    ) {
+        var seenIDs = Set<UUID>()
+        for reference in media where !seenIDs.insert(reference.id).inserted {
+            state.errors.append(.duplicateMediaReferenceID(reference.id))
+        }
     }
 
     private static func validateLooks(_ looks: [ProjectLook], state: inout ValidationState) {

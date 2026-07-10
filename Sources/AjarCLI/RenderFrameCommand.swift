@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
+import AjarMedia
 import AjarRender
 import Foundation
 import Metal
@@ -86,8 +87,8 @@ public enum FrameTimeArgument: Equatable, Sendable {
         if rawValue.contains("/") {
             let parts = rawValue.split(separator: "/", omittingEmptySubsequences: false)
             guard parts.count == 2,
-                  let value = Int64(parts[0]),
-                  let timescale = Int64(parts[1])
+                let value = Int64(parts[0]),
+                let timescale = Int64(parts[1])
             else {
                 throw AjarCLIError.invalidUsage("invalid rational frame time '\(rawValue)'")
             }
@@ -127,13 +128,14 @@ public enum RenderFrameCommand {
     /// Loads, renders, reads back, and writes one PNG frame.
     public static func render(options: RenderFrameOptions) async throws -> RenderFrameResult {
         // Render is non-destructive: higher-minor (read-only) projects are allowed.
-        let project = try ProjectPackageIO.loadProject(from: options.projectURL).project
+        let loadedProject = try ProjectPackageIO.loadProject(from: options.projectURL).project
+        let project = MediaReferenceResolver().reconcile(loadedProject)
         guard let sequence = project.sequences.first else {
             throw AjarCLIError.missingSequence
         }
 
         let renderTime = try options.frameTime.resolve(frameRate: project.settings.frameRate)
-        let graph = try buildRenderGraph(for: sequence, at: renderTime, in: project)
+        var graph = try buildRenderGraph(for: sequence, at: renderTime, in: project)
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw MetalRenderError.metalDeviceUnavailable
         }
@@ -143,6 +145,13 @@ public enum RenderFrameCommand {
             project: project,
             device: device
         )
+        if !sourceProvider.runtimeOfflineMediaIDs.isEmpty {
+            let runtimeProject = project.updatingMediaAvailability(
+                .offline,
+                for: sourceProvider.runtimeOfflineMediaIDs
+            )
+            graph = try buildRenderGraph(for: sequence, at: renderTime, in: runtimeProject)
+        }
         let executor = try MetalRenderExecutor(device: device)
         let frame = try executor.render(
             graph: graph,
@@ -175,7 +184,8 @@ public enum RenderFrameCommand {
             throw AjarCLIError.renderCommandFailed(String(describing: error))
         }
         guard frame.commandBuffer?.status ?? .completed == .completed else {
-            let statusDescription = frame.commandBuffer
+            let statusDescription =
+                frame.commandBuffer
                 .map { String(describing: $0.status) }
                 ?? "unknown"
             throw AjarCLIError.renderCommandFailed(
