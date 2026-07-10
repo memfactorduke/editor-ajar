@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the next edit (#198).
 
 ### Added
+- FR-PROJ-005 open-mode adoption through app + CLI consumers (#196, completes #193):
+  `ProjectPackageIO.loadProject` returns the full `AjarProjectLoadResult` so render/bench/golden
+  may still **read** higher-minor packages while any CLI **write** path refuses read-only with
+  typed `AjarCLIError.projectWriteBlockedReadOnly`. `EditorAjarAppModel` builds `EditHistory`
+  from the load/recovery result, shows a VoiceOver-labelled read-only workspace banner
+  (`AjarProjectReadOnlyReason.message`, keyboard-reachable dismiss), gates save/autosave, and
+  surfaces edit refusal once (not per-command spam). Recovery presents `AjarRecoveryResult.openMode`.
+  No `schemaMinor` bump (no new persisted fields).
 - FR-TXT-003 on-canvas title editing and positioning (#187): visible title boxes use a positioned
   system `NSTextView` for caret, selection, marked-text/IME input, and live model updates through
   undoable `setTitleTextBox` commands (one coalesced undo step per text-focus session). Boxes drag
@@ -146,8 +154,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read-only snapshots. `EditHistory` refuses edit commands on a read-only open. Higher **major**
   refuses open entirely (typed error) without full document decode. Unknown `ClipEffectKind`
   values surface as typed `AjarProjectCodecError.unknownClipEffectKind` /
-  `ClipEffectDecodingError` (not a bare `DecodingError`). UI/CLI layers that still discard
-  `AjarProjectLoadResult` open mode remain a small follow-up adoption.
+  `ClipEffectDecodingError` (not a bare `DecodingError`). UI/CLI open-mode adoption completed
+  in #196.
 
 ### Fixed
 - Offline audio mix plan-build performance for FR-AUD-007 (#178): `OfflineAudioMixer` now

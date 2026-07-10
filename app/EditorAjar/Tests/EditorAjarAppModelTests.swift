@@ -1104,6 +1104,96 @@ final class EditorAjarAppModelTests: XCTestCase {
         )
 
         XCTAssertEqual(model.project, recoveredProject)
+        XCTAssertTrue(model.isProjectEditable)
+        XCTAssertFalse(model.isReadOnlyBannerVisible)
+        XCTAssertTrue(model.canSaveProject)
+    }
+
+    /// Higher-minor recovery opens read-only: banner, save gated, edit refusal once (#196).
+    func testFRPROJ005Issue196ReadOnlyOpenSurfacesBannerAndGatesSaveAndEdits() async throws {
+        let packageURL = try temporaryAutosavePackageURL(named: "ReadOnlyOpen.ajar")
+        defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
+
+        let sampleProject = try EditorAjarAppModel.makeSampleProject().get()
+        let higherMinor = AjarProjectCodec.currentSchemaMinor + 3
+        let reason = AjarProjectReadOnlyReason.newerSchemaMinor(
+            found: higherMinor,
+            supported: AjarProjectCodec.currentSchemaMinor
+        )
+        try writeHigherMinorPackage(
+            project: sampleProject,
+            schemaMinor: higherMinor,
+            to: packageURL
+        )
+
+        let model = EditorAjarAppModel(
+            autosavePackageURL: packageURL,
+            autosaveIntervalSeconds: 0
+        )
+
+        XCTAssertEqual(model.project?.schemaMinor, higherMinor)
+        XCTAssertTrue(model.isProjectReadOnly)
+        XCTAssertFalse(model.isProjectEditable)
+        XCTAssertEqual(model.projectOpenMode, .readOnly(reason: reason))
+        XCTAssertEqual(model.projectReadOnlyReason, reason)
+        XCTAssertTrue(model.isReadOnlyBannerVisible)
+        XCTAssertEqual(model.readOnlyBannerMessage, reason.message)
+        XCTAssertFalse(model.canSaveProject)
+        // loadMessage is set to "… (read-only)" during recovery, then immediately overwritten
+        // by requestRenderForCurrentFrame() ("Rendering frame …") or Metal setup failure
+        // before init returns — so it is not a stable post-init surface. The durable
+        // FR-PROJ-005 copy is the banner (asserted above); first edit refusal reasserts
+        // reason.message on loadMessage below.
+
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let track = try XCTUnwrap(sequence.videoTracks.first)
+        let projectBefore = try XCTUnwrap(model.project)
+
+        // First edit refusal surfaces the typed reason once.
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: track.id,
+            enabled: false,
+            locked: true,
+            hidden: true
+        )
+        XCTAssertEqual(model.project, projectBefore)
+        XCTAssertEqual(model.loadMessage, reason.message)
+        XCTAssertTrue(model.isReadOnlyBannerVisible)
+
+        // Subsequent edits stay no-ops without spamming loadMessage changes.
+        let messageAfterFirstRefusal = model.loadMessage
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: track.id,
+            enabled: true,
+            locked: false,
+            hidden: false
+        )
+        XCTAssertEqual(model.loadMessage, messageAfterFirstRefusal)
+        XCTAssertEqual(model.project, projectBefore)
+
+        // Autosave must not rewrite a higher-minor package.
+        await model.autosaveCheckpointForTesting()
+        let reloaded = try AjarAutosaveStore.recoverProject(from: packageURL)
+        XCTAssertEqual(reloaded.openMode, .readOnly(reason: reason))
+        XCTAssertEqual(reloaded.project.schemaMinor, higherMinor)
+        XCTAssertEqual(reloaded.project, projectBefore)
+
+        model.dismissReadOnlyBanner()
+        XCTAssertFalse(model.isReadOnlyBannerVisible)
+        XCTAssertNil(model.readOnlyBannerMessage)
+
+        // A later edit re-presents the banner without changing the one-shot loadMessage.
+        model.setTrackState(
+            sequenceID: sequence.id,
+            trackID: track.id,
+            enabled: false,
+            locked: false,
+            hidden: false
+        )
+        XCTAssertTrue(model.isReadOnlyBannerVisible)
+        XCTAssertEqual(model.loadMessage, messageAfterFirstRefusal)
     }
 
     func testFRTL014AppAutosavesSignificantEditToRecoverablePackage() async throws {
@@ -1219,6 +1309,39 @@ final class EditorAjarAppModelTests: XCTestCase {
             withIntermediateDirectories: true
         )
         return directoryURL.appendingPathComponent(name, isDirectory: true)
+    }
+
+    /// Writes a higher-minor package without going through encode (which rewrites current minor).
+    private func writeHigherMinorPackage(
+        project: Project,
+        schemaMinor: Int,
+        to packageURL: URL
+    ) throws {
+        let document = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: schemaMinor,
+            settings: project.settings,
+            mediaPool: [],
+            sequences: project.sequences,
+            looks: project.looks
+        )
+        let manifest = AjarMediaManifest(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            schemaMinor: schemaMinor,
+            media: project.mediaPool
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        try FileManager.default.createDirectory(
+            at: packageURL,
+            withIntermediateDirectories: true
+        )
+        try encoder.encode(document).write(
+            to: packageURL.appendingPathComponent("project.json")
+        )
+        try encoder.encode(manifest).write(
+            to: packageURL.appendingPathComponent("media.json")
+        )
     }
 
     private func makeGradeAppFixture() throws -> GradeAppFixture {

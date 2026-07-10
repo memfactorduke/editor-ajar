@@ -8,6 +8,9 @@ struct EditorAjarWorkspaceView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if model.isReadOnlyBannerVisible {
+                ReadOnlyProjectBanner(model: model)
+            }
             header
             SequenceTabsBar(model: model)
             Divider()
@@ -45,6 +48,56 @@ struct EditorAjarWorkspaceView: View {
         .frame(height: 44)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Editor Ajar, \(model.projectSummary)")
+    }
+}
+
+/// Workspace banner for FR-PROJ-005 read-only opens (higher schema minor / ADR-0018).
+private struct ReadOnlyProjectBanner: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    private var message: String {
+        model.readOnlyBannerMessage ?? "This project is open read-only."
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lock.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.orange)
+                .accessibilityHidden(true)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Read-only project")
+                    .font(.callout.weight(.semibold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.86))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button("Dismiss") {
+                model.dismissReadOnlyBanner()
+            }
+            .buttonStyle(.bordered)
+            .keyboardShortcut(.cancelAction)
+            .help("Dismiss read-only notice")
+            .accessibilityLabel("Dismiss read-only project notice")
+            .accessibilityIdentifier("Dismiss Read-Only Banner")
+            .accessibilityHint("Hides the read-only banner. Editing and saving remain disabled.")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.18))
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Read-Only Project Banner")
+        .accessibilityLabel("Read-only project notice")
+        .accessibilityValue(message)
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 

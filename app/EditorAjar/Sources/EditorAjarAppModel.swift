@@ -20,6 +20,12 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var selectedCanvasTitleBoxReference: CanvasTitleBoxReference?
     @Published private(set) var editingCanvasTitleBoxReference: CanvasTitleBoxReference?
 
+    /// Session open mode from the load / recovery path (ADR-0018 / FR-PROJ-005).
+    @Published private(set) var projectOpenMode: AjarProjectOpenMode = .editable
+
+    /// Whether the read-only workspace banner is currently shown.
+    @Published private(set) var isReadOnlyBannerVisible = false
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
@@ -33,6 +39,8 @@ final class EditorAjarAppModel: ObservableObject {
     private var renderGeneration = 0
     private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
     private var canvasTitleEditingUndoBaseline: Int?
+    /// Surfaces the read-only edit refusal message once per session (not per-command spam).
+    private var hasSurfacedReadOnlyEditRefusal = false
 
     init(
         autosavePackageURL: URL? = nil,
@@ -49,36 +57,49 @@ final class EditorAjarAppModel: ObservableObject {
 
         loadMessage = "Loading sample project"
 
-        var initialProject: Project?
+        var initialLoadResult: AjarProjectLoadResult?
         if let autosavePackageURL,
            AjarAutosaveStore.hasRecoverableSnapshot(at: autosavePackageURL)
         {
             do {
                 let recovery = try AjarAutosaveStore.recoverProject(from: autosavePackageURL)
-                initialProject = recovery.project
+                initialLoadResult = recovery.loadResult
                 autosaveCommandCount = recovery.latestCommandCount
-                loadMessage = recovery.isComplete
-                    ? "Recovered autosave"
-                    : "Recovered autosave to last good state"
+                switch recovery.openMode {
+                case .editable:
+                    loadMessage = recovery.isComplete
+                        ? "Recovered autosave"
+                        : "Recovered autosave to last good state"
+                case .readOnly:
+                    // Journal was skipped (#193); banner shows the typed reason message.
+                    let recoveryPrefix = recovery.isComplete
+                        ? "Recovered autosave"
+                        : "Recovered autosave to last good state"
+                    loadMessage = "\(recoveryPrefix) (read-only)"
+                }
             } catch {
                 loadMessage = "Autosave recovery unavailable: \(error)"
             }
         }
 
-        if initialProject == nil {
+        if initialLoadResult == nil {
             switch Self.makeSampleProject() {
-            case .success(let project):
-                initialProject = project
+            case .success(let sampleProject):
+                initialLoadResult = .editable(sampleProject)
                 loadMessage = "Sample project loaded"
             case .failure(let error):
                 loadMessage = "Sample project unavailable: \(error)"
             }
         }
 
-        if let initialProject {
-            project = initialProject
-            editHistory = EditHistory(project: initialProject)
-            if let sequence = initialProject.sequences.first {
+        if let initialLoadResult {
+            project = initialLoadResult.project
+            projectOpenMode = initialLoadResult.openMode
+            editHistory = EditHistory(loadResult: initialLoadResult)
+            if case .readOnly = initialLoadResult.openMode {
+                isReadOnlyBannerVisible = true
+            }
+            if let sequence = initialLoadResult.project.sequences.first {
                 activeSequenceID = sequence.id
                 durationFrames = Self.durationFrames(for: sequence)
                 playbackController = EditorAjarPlaybackController(
@@ -103,7 +124,8 @@ final class EditorAjarAppModel: ObservableObject {
         displayLinkDriver = EditorAjarDisplayLinkDriver { [weak self] deltaSeconds in
             self?.displayLinkTick(deltaSeconds)
         }
-        if let project {
+        // Only checkpoint editable sessions — read-only must never rewrite package bytes.
+        if let project, projectOpenMode.allowsEditing {
             scheduleAutosaveCheckpoint(project: project)
         }
         startAutosaveLoop()
@@ -117,11 +139,55 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var canUndo: Bool {
-        (editHistory?.undoCount ?? 0) > 0
+        projectOpenMode.allowsEditing && (editHistory?.undoCount ?? 0) > 0
     }
 
     var canRedo: Bool {
-        (editHistory?.redoCount ?? 0) > 0
+        projectOpenMode.allowsEditing && (editHistory?.redoCount ?? 0) > 0
+    }
+
+    /// Whether the open project may be edited and resaved (FR-PROJ-005).
+    var isProjectEditable: Bool {
+        projectOpenMode.allowsEditing
+    }
+
+    /// Whether the open project is read-only (higher schema minor).
+    var isProjectReadOnly: Bool {
+        !projectOpenMode.allowsEditing
+    }
+
+    /// Typed reason when the session is read-only.
+    var projectReadOnlyReason: AjarProjectReadOnlyReason? {
+        if case .readOnly(let reason) = projectOpenMode {
+            return reason
+        }
+        return nil
+    }
+
+    /// User-facing banner copy for a read-only open (nil when banner is hidden).
+    var readOnlyBannerMessage: String? {
+        guard isReadOnlyBannerVisible, let reason = projectReadOnlyReason else {
+            return nil
+        }
+        return reason.message
+    }
+
+    /// Save / autosave gate: blocked for read-only opens (FR-PROJ-005 / ADR-0018).
+    var canSaveProject: Bool {
+        project != nil && projectOpenMode.allowsEditing
+    }
+
+    /// Dismisses the read-only workspace banner (keyboard-reachable from the banner control).
+    func dismissReadOnlyBanner() {
+        isReadOnlyBannerVisible = false
+    }
+
+    /// Re-shows the read-only banner when the user tries an edit after dismissing it.
+    func presentReadOnlyBannerIfNeeded() {
+        guard isProjectReadOnly else {
+            return
+        }
+        isReadOnlyBannerVisible = true
     }
 
     var undoMenuTitle: String {
@@ -153,7 +219,7 @@ final class EditorAjarAppModel: ObservableObject {
             return []
         }
         let activeID = activeSequence?.id
-        let canClose = project.sequences.count > 1
+        let canClose = isProjectEditable && project.sequences.count > 1
         return project.sequences.map { sequence in
             SequenceTab(
                 id: sequence.id,
@@ -165,7 +231,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var canCloseActiveSequence: Bool {
-        (project?.sequences.count ?? 0) > 1
+        isProjectEditable && (project?.sequences.count ?? 0) > 1
     }
 
     var projectSummary: String {
@@ -229,6 +295,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var canCopyGrade: Bool {
+        // Copy is non-destructive; allowed even for read-only inspection.
         guard let selectedClip, selectedClip.kind == .video else {
             return false
         }
@@ -236,7 +303,8 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var canPasteGrade: Bool {
-        guard selectedClip?.kind == .video,
+        guard isProjectEditable,
+              selectedClip?.kind == .video,
               let project,
               let copiedGradeSource,
               let sourceClip = Self.clip(copiedGradeSource, in: project)
@@ -247,11 +315,11 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var canSaveLook: Bool {
-        canCopyGrade
+        isProjectEditable && canCopyGrade
     }
 
     var canApplyLook: Bool {
-        selectedClip?.kind == .video && !savedLooks.isEmpty
+        isProjectEditable && selectedClip?.kind == .video && !savedLooks.isEmpty
     }
 
     var selectedTransformClipReference: TimelineClipReference? {
@@ -1687,6 +1755,11 @@ final class EditorAjarAppModel: ObservableObject {
         _ command: EditCommand,
         coalescingWithPrevious: Bool = false
     ) -> Bool {
+        if case .readOnly(let reason) = projectOpenMode {
+            surfaceReadOnlyEditRefusalOnce(reason: reason)
+            return false
+        }
+
         guard var history = editHistory else {
             return false
         }
@@ -1703,10 +1776,27 @@ final class EditorAjarAppModel: ObservableObject {
             updateProject(project)
             scheduleAutosave(command: command, project: project)
             return true
+        } catch let error as EditHistoryError {
+            if case .projectOpenedReadOnly(let reason) = error {
+                surfaceReadOnlyEditRefusalOnce(reason: reason)
+                return false
+            }
+            loadMessage = "Edit failed: \(error)"
+            return false
         } catch {
             loadMessage = "Edit failed: \(error)"
             return false
         }
+    }
+
+    /// Surfaces the read-only refusal message once so UI edit paths stay quiet after the first try.
+    private func surfaceReadOnlyEditRefusalOnce(reason: AjarProjectReadOnlyReason) {
+        presentReadOnlyBannerIfNeeded()
+        guard !hasSurfacedReadOnlyEditRefusal else {
+            return
+        }
+        hasSurfacedReadOnlyEditRefusal = true
+        loadMessage = reason.message
     }
 
     private func canvasTitleLayout(
@@ -1849,7 +1939,8 @@ final class EditorAjarAppModel: ObservableObject {
     private func startAutosaveLoop() {
         guard autosaveCoordinator != nil,
               autosaveIntervalSeconds.isFinite,
-              autosaveIntervalSeconds > 0
+              autosaveIntervalSeconds > 0,
+              projectOpenMode.allowsEditing
         else {
             return
         }
@@ -1864,20 +1955,30 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func scheduleAutosave(command: EditCommand, project: Project) {
-        guard let autosaveCoordinator else {
+        guard let autosaveCoordinator, projectOpenMode.allowsEditing else {
             return
         }
 
+        let openMode = projectOpenMode
         autosaveCommandCount += 1
         let commandCount = autosaveCommandCount
         let previousWriteTask = autosaveWriteTask
         autosaveWriteTask = Task {
-            [weak self, autosaveCoordinator, command, commandCount, project, previousWriteTask] in
+            [
+                weak self,
+                autosaveCoordinator,
+                command,
+                commandCount,
+                project,
+                openMode,
+                previousWriteTask
+            ] in
             await previousWriteTask?.value
             let message = await autosaveCoordinator.recordSignificantEdit(
                 command: command,
                 sequenceNumber: commandCount,
-                project: project
+                project: project,
+                openMode: openMode
             )
             await MainActor.run {
                 if let message {
@@ -1888,17 +1989,20 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func scheduleAutosaveCheckpoint(project: Project) {
-        guard let autosaveCoordinator else {
+        guard let autosaveCoordinator, projectOpenMode.allowsEditing else {
             return
         }
 
+        let openMode = projectOpenMode
         let commandCount = autosaveCommandCount
         let previousWriteTask = autosaveWriteTask
-        autosaveWriteTask = Task { [weak self, autosaveCoordinator, commandCount, project, previousWriteTask] in
+        autosaveWriteTask = Task {
+            [weak self, autosaveCoordinator, commandCount, project, openMode, previousWriteTask] in
             await previousWriteTask?.value
             let message = await autosaveCoordinator.writeSnapshot(
                 project: project,
-                appliedCommandCount: commandCount
+                appliedCommandCount: commandCount,
+                openMode: openMode
             )
             await MainActor.run {
                 if let message {
@@ -1909,7 +2013,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func autosaveCurrentProject() {
-        guard let project else {
+        guard let project, projectOpenMode.allowsEditing else {
             return
         }
         scheduleAutosaveCheckpoint(project: project)
@@ -1917,7 +2021,8 @@ final class EditorAjarAppModel: ObservableObject {
 
     private func autosaveCurrentProjectAndWait() async {
         guard let project,
-              let autosaveCoordinator
+              let autosaveCoordinator,
+              projectOpenMode.allowsEditing
         else {
             return
         }
@@ -1925,7 +2030,8 @@ final class EditorAjarAppModel: ObservableObject {
         await autosaveWriteTask?.value
         let message = await autosaveCoordinator.writeSnapshot(
             project: project,
-            appliedCommandCount: autosaveCommandCount
+            appliedCommandCount: autosaveCommandCount,
+            openMode: projectOpenMode
         )
         if let message {
             loadMessage = message
@@ -1943,7 +2049,8 @@ private actor EditorAjarAutosaveCoordinator {
     func recordSignificantEdit(
         command: EditCommand,
         sequenceNumber: Int,
-        project: Project
+        project: Project,
+        openMode: AjarProjectOpenMode
     ) -> String? {
         do {
             try AjarAutosaveStore.appendJournalEntry(
@@ -1954,7 +2061,7 @@ private actor EditorAjarAutosaveCoordinator {
             try AjarAutosaveStore.writeSnapshot(
                 project,
                 appliedCommandCount: sequenceNumber,
-                openMode: .editable,
+                openMode: openMode,
                 to: packageURL
             )
             return nil
@@ -1963,12 +2070,16 @@ private actor EditorAjarAutosaveCoordinator {
         }
     }
 
-    func writeSnapshot(project: Project, appliedCommandCount: Int) -> String? {
+    func writeSnapshot(
+        project: Project,
+        appliedCommandCount: Int,
+        openMode: AjarProjectOpenMode
+    ) -> String? {
         do {
             try AjarAutosaveStore.writeSnapshot(
                 project,
                 appliedCommandCount: appliedCommandCount,
-                openMode: .editable,
+                openMode: openMode,
                 to: packageURL
             )
             return nil
