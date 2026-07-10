@@ -28,12 +28,13 @@ an improvement. Back it out or fix the regression.
 ## Module map & the one hard rule
 
 ```
-EditorAjar (app) → AjarRender · AjarMedia · AjarAudio → AjarCore → (no in-project deps)
+EditorAjar (app) → AjarExport → AjarRender · AjarAudio · AjarCore
+                 → AjarRender · AjarMedia · AjarAudio → AjarCore → (no in-project deps)
 ```
 
 **`AjarCore` MUST NOT import AppKit, SwiftUI, Metal, or AVFoundation.** It is pure, headless, and
 fully unit-testable. This dependency rule is CI-enforced (ADR-0005, ADR-0011). Put platform code in
-the platform modules, not the core.
+the platform modules (including the offline `AjarExport` orchestration boundary), not the core.
 
 ## How to pick work
 

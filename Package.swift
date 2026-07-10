@@ -4,7 +4,8 @@
 // Copyright (C) 2026  Editor Ajar contributors. Licensed under GPL-3.0-or-later (see LICENSE).
 //
 // Module split is defined by ADR-0005 (headless core / thin UI). The dependency rule is:
-//   EditorAjar(app) → {AjarRender, AjarMedia, AjarAudio} → AjarCore → (nothing in-project)
+//   EditorAjar(app) → AjarExport → {AjarRender, AjarAudio, AjarCore}
+//                   → {AjarRender, AjarMedia, AjarAudio} → AjarCore
 // AjarCore MUST NOT import AppKit/SwiftUI/Metal/AVFoundation — enforced in CI (ADR-0011).
 //
 // The macOS app (app/EditorAjar) is built with Xcode and consumes these libraries; it is not a
@@ -23,6 +24,7 @@ let package = Package(
         .library(name: "AjarRender", targets: ["AjarRender"]),
         .library(name: "AjarMedia", targets: ["AjarMedia"]),
         .library(name: "AjarAudio", targets: ["AjarAudio"]),
+        .library(name: "AjarExport", targets: ["AjarExport"]),
         .executable(name: "ajar", targets: ["ajar-cli"]),
     ],
     targets: [
@@ -39,7 +41,7 @@ let package = Package(
             path: "Sources/AjarRender"
         ),
 
-        // AVFoundation/VideoToolbox decode/encode + FFmpeg import boundary (ADR-0003).
+        // AVFoundation/VideoToolbox decode + FFmpeg import boundary (ADR-0003).
         .target(
             name: "AjarMedia",
             dependencies: ["AjarCore"],
@@ -58,6 +60,13 @@ let package = Package(
             name: "AjarAudio",
             dependencies: ["AjarCore", "AjarAudioAtomics"],
             path: "Sources/AjarAudio"
+        ),
+
+        // Offline export orchestration + AVFoundation/VideoToolbox encode (ADR-0019).
+        .target(
+            name: "AjarExport",
+            dependencies: ["AjarAudio", "AjarCore", "AjarRender"],
+            path: "Sources/AjarExport"
         ),
 
         // Testable implementation for the `ajar` executable.
@@ -94,6 +103,11 @@ let package = Package(
             name: "AjarRenderTests",
             dependencies: ["AjarRender", "AjarCore"],
             path: "Tests/AjarRenderTests"
+        ),
+        .testTarget(
+            name: "AjarExportTests",
+            dependencies: ["AjarAudio", "AjarCore", "AjarExport", "AjarRender"],
+            path: "Tests/AjarExportTests"
         ),
         .testTarget(
             name: "AjarCLITests",

@@ -1,6 +1,6 @@
 # Editor Ajar — Architecture
 
-> **Status:** Draft v0.1 · **Last updated:** 2026-06-20
+> **Status:** Draft v0.1 · **Last updated:** 2026-07-10
 > Companion to [SPEC](SPEC.md). Decisions referenced here are recorded in [ADRs](adr/).
 
 This document describes *how* Editor Ajar is built. It is the map the autonomous build agent
@@ -35,16 +35,20 @@ module boundaries because those boundaries are what protect stability and perfor
 │  app/EditorAjar/          inspector, drag/drop. NO editing logic here. │
 └───────────────┬──────────────────────────────────────────────────────┘
                 │ depends on
-┌───────────────▼───────────┐  ┌──────────────┐  ┌──────────────┐
-│  AjarRender (macOS)        │  │ AjarMedia    │  │ AjarAudio    │
-│  Metal compositor;         │  │ (macOS)      │  │ (macOS)      │
-│  executes the render graph;│  │ AVFoundation/│  │ AVAudioEngine│
-│  effect/transition shaders;│  │ VideoToolbox │  │ Core Audio;  │
-│  MetalFX; scopes.          │  │ decode/encode│  │ mixer; RT    │
-│                            │  │ + FFmpeg     │  │ audio graph. │
-│                            │  │ import bdry. │  │              │
-└───────────────┬────────────┘  └──────┬───────┘  └──────┬───────┘
-                │                       │                 │
+┌───────────────────────────┐  ┌──────────────┐  ┌──────────────┐
+│  AjarExport (macOS)        │  │ AjarMedia    │  │ AjarAudio    │
+│  offline session;          │  │ (macOS)      │  │ (macOS)      │
+│  AVAssetWriter/VT encode;  │  │ AVFoundation/│  │ AVAudioEngine│
+│  atomic publish/cancel.    │  │ VideoToolbox │  │ Core Audio;  │
+└──────┬───────────┬────────┘  │ decode +     │  │ mixer; RT +  │
+       │           │            │ FFmpeg import│  │ offline mix. │
+       │           │            └──────┬───────┘  └──────┬───────┘
+┌──────▼───────────┴────────┐          │                 │
+│  AjarRender (macOS)        │          │                 │
+│  Metal render-graph        │          │                 │
+│  execution, effects,       │          │                 │
+│  transitions, scopes.      │          │                 │
+└───────────────┬────────────┘          │                 │
                 └───────────┬───────────┴─────────────────┘
                             │ all depend on (and only on)
                 ┌───────────▼─────────────────────────────────────────┐
@@ -56,11 +60,14 @@ module boundaries because those boundaries are what protect stability and perfor
 
         ajar-cli  →  links AjarCore + AjarRender + AjarMedia + AjarAudio
                      headless render / inspect / benchmark / golden-frame harness
+        export queue / CLI adapter → AjarExport (source decode remains injected)
 ```
 
 **Dependency rule:** arrows point downward only. `AjarCore` depends on nothing in the project.
-Platform modules depend on `AjarCore`. The app depends on all. Nothing depends on the app.
-CI enforces that `AjarCore` imports no UI/GPU framework (ADR-0005, ADR-0011).
+Platform modules depend on `AjarCore`; `AjarExport` is the offline orchestration boundary and also
+depends on `AjarRender` and `AjarAudio`. Source decoding is injected, so it does not depend on
+`AjarMedia`. The app depends on all. Nothing depends on the app. CI enforces that `AjarCore`
+imports no UI/GPU framework (ADR-0005, ADR-0011, ADR-0019).
 
 ### Why this split
 
@@ -72,8 +79,8 @@ CI enforces that `AjarCore` imports no UI/GPU framework (ADR-0005, ADR-0011).
   to reason about and fuzz. GPU/driver concerns are isolated in `AjarRender`.
 - **Performance.** The render graph lets us cache, dedupe, and schedule work optimally before
   touching the GPU.
-- **Portability (optional, later).** Only `AjarRender/Media/Audio` are platform-bound. The core
-  could back an iPad app or, in a distant future, a non-Apple backend.
+- **Portability (optional, later).** Only `AjarRender/Media/Audio/Export` are platform-bound. The
+  core could back an iPad app or, in a distant future, a non-Apple backend.
 
 ---
 
@@ -183,18 +190,20 @@ seek latency (NFR-PERF-005).
 
 ---
 
-## 6. Media pipeline (`AjarMedia`)
+## 6. Media and export pipelines (`AjarMedia`, `AjarExport`)
 
-- **Fast path:** AVFoundation + VideoToolbox for H.264/HEVC/ProRes decode and encode, with
-  hardware acceleration and zero-copy `CVPixelBuffer` → Metal texture handoff.
+- **Decode fast path (`AjarMedia`):** AVFoundation + VideoToolbox for H.264/HEVC/ProRes decode,
+  with hardware acceleration and zero-copy `CVPixelBuffer` → Metal texture handoff.
 - **Import boundary (ADR-0003):** on import, files AVFoundation can't open natively are probed
   and transcoded by **FFmpeg** to ProRes (or decoded to frames) so the playback engine only
   ever sees a small, well-behaved format set. FFmpeg is *never* on the playback hot path.
 - **Probing & conform:** detect codec, resolution, fps (incl. variable frame rate → conformed
   timebase, FR-MED-010), color space, and channel layout; store on the `MediaRef`.
-- **Encode/export (EXP):** VideoToolbox hardware encoders for H.264/HEVC; AVAssetWriter for
-  muxing; correct color tagging on output (ADR-0010). Export reads originals, not proxies
-  (FR-EXP-007).
+- **Encode/export (`AjarExport`, EXP):** exact sequential frame pulls execute the render graph;
+  the offline mixer supplies audio; VideoToolbox hardware encoders handle H.264/HEVC and
+  AVAssetWriter handles ProRes/muxing. Output is converted and tagged per ADR-0010, then atomically
+  published. Original-media texture providers are injected; proxies do not satisfy the export
+  contract (FR-EXP-007, ADR-0019).
 - **Licensing:** FFmpeg is integrated as a GPL-compatible component consistent with the
   project license (ADR-0004); the boundary keeps it cleanly separable.
 
