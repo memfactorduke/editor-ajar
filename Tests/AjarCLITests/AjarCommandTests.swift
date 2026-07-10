@@ -133,29 +133,35 @@ final class AjarCommandTests: XCTestCase {
             standardError: secondErrorOutput
         )
 
-        let diagnosticOutput = (firstOutput.lines + firstErrorOutput.lines
+        let diagnosticOutput =
+            (firstOutput.lines + firstErrorOutput.lines
             + secondOutput.lines + secondErrorOutput.lines).joined(separator: "\n")
         XCTAssertEqual(firstExitCode, 0, diagnosticOutput)
         XCTAssertEqual(secondExitCode, 0, diagnosticOutput)
         XCTAssertEqual(firstOutput.lines, secondOutput.lines)
         XCTAssertEqual(firstErrorOutput.lines, secondErrorOutput.lines)
 
-        XCTAssertTrue(firstOutput.lines.contains { line in
-            line.contains("PASS ducking-sidechain")
-        })
-        XCTAssertTrue(firstOutput.lines.contains { line in
-            line.contains("PASS ducking-ramp-envelope")
-        })
+        XCTAssertTrue(
+            firstOutput.lines.contains { line in
+                line.contains("PASS ducking-sidechain")
+            })
+        XCTAssertTrue(
+            firstOutput.lines.contains { line in
+                line.contains("PASS ducking-ramp-envelope")
+            })
         XCTAssertTrue(firstOutput.lines.contains { line in line.contains("PASS gain-pan-fade") })
-        XCTAssertTrue(firstOutput.lines.contains { line in
-            line.contains("PASS multi-track-summing")
-        })
-        XCTAssertTrue(firstOutput.lines.contains { line in
-            line.contains("PASS solo-track-selection")
-        })
-        XCTAssertTrue(firstOutput.lines.contains { line in
-            line.contains("PASS same-track-multiple-clips")
-        })
+        XCTAssertTrue(
+            firstOutput.lines.contains { line in
+                line.contains("PASS multi-track-summing")
+            })
+        XCTAssertTrue(
+            firstOutput.lines.contains { line in
+                line.contains("PASS solo-track-selection")
+            })
+        XCTAssertTrue(
+            firstOutput.lines.contains { line in
+                line.contains("PASS same-track-multiple-clips")
+            })
         XCTAssertTrue(firstOutput.lines.contains { line in line.contains("golden-audio passed") })
     }
 
@@ -176,7 +182,8 @@ final class AjarCommandTests: XCTestCase {
             standardOutput: output,
             standardError: errorOutput
         )
-        let actualURL = manifestDirectory
+        let actualURL =
+            manifestDirectory
             .appendingPathComponent("_actual")
             .appendingPathComponent("format-mismatch.wav")
 
@@ -251,7 +258,13 @@ final class AjarCommandTests: XCTestCase {
             "effect-node-zoom-blur-1080p-fr-fx-002": "FR-FX-002",
             "effect-node-sharpen-1080p-fr-fx-002": "FR-FX-002",
             "effect-node-glow-1080p-fr-fx-002": "FR-FX-002",
-            "effect-node-lut-gpu-fr-col-004": "FR-COL-004"
+            "effect-node-lut-gpu-fr-col-004": "FR-COL-004",
+            "effect-node-vignette-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-mirror-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-mosaic-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-color-adjust-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-posterize-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-invert-1080p-fr-fx-002": "FR-FX-002"
         ]
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))

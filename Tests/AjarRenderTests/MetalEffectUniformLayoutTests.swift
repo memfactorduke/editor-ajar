@@ -35,12 +35,14 @@ final class MetalEffectUniformLayoutTests: XCTestCase {
     func testFRFX002SharpenPackWritesAmountThenRadiusPx() {
         let bytes = MetalEffectUniformLayout.packSharpen(amount: 0.5, radiusPx: 1.0)
         XCTAssertEqual(bytes.count, MetalEffectUniformLayout.sharpen.byteCount)
-        XCTAssertEqual(MetalEffectUniformLayout.sharpen.fieldNamesInPackOrder, [
-            "amount",
-            "radiusPx",
-            "padding0",
-            "padding1"
-        ])
+        XCTAssertEqual(
+            MetalEffectUniformLayout.sharpen.fieldNamesInPackOrder,
+            [
+                "amount",
+                "radiusPx",
+                "padding0",
+                "padding1"
+            ])
         let amount = readFloat(bytes, at: MetalEffectUniformLayout.sharpen.fieldByteOffsets[0])
         let radius = readFloat(bytes, at: MetalEffectUniformLayout.sharpen.fieldByteOffsets[1])
         XCTAssertEqual(amount, 0.5, accuracy: 0.000_1)
@@ -52,7 +54,35 @@ final class MetalEffectUniformLayoutTests: XCTestCase {
             XCTAssertGreaterThan(layout.byteCount, 0, layout.mslTypeName)
             XCTAssertEqual(layout.fieldByteOffsets.count, layout.fields.count)
         }
-        XCTAssertEqual(MetalEffectUniformLayout.all.count, 5)
+        // batch1 (4 unique layouts) + lut + batch2 (6) = 11
+        XCTAssertEqual(MetalEffectUniformLayout.all.count, 11)
+    }
+
+    func testFRFX002Batch2LayoutsAndPackHelpersUseGeneratedFieldOrder() {
+        XCTAssertEqual(
+            MetalEffectUniformLayout.vignette.fieldNamesInPackOrder,
+            [
+                "amount", "radius", "softness", "padding0"
+            ])
+        XCTAssertEqual(
+            MetalEffectUniformLayout.colorAdjust.fieldNamesInPackOrder,
+            [
+                "brightness", "contrast", "saturation", "tint"
+            ])
+        XCTAssertEqual(
+            MetalEffectUniformLayout.packVignette(amount: 0.75, radius: 0.5, softness: 0.25)
+                .count,
+            MetalEffectUniformLayout.vignette.byteCount
+        )
+        XCTAssertEqual(
+            MetalEffectUniformLayout.packColorAdjust(
+                brightness: 0.1,
+                contrast: 1.2,
+                saturation: 0.8,
+                tint: 0.2
+            ).count,
+            MetalEffectUniformLayout.colorAdjust.byteCount
+        )
     }
 
     // MARK: - Helpers

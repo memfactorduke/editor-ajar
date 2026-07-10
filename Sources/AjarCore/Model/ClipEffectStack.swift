@@ -365,6 +365,33 @@ public enum ClipEffectStackValidationError: Equatable, Sendable {
     /// The inline LUT table failed size/entry validation (FR-COL-004 payload ceiling).
     case lutTableInvalid(CubeLUTValidationError)
 
+    /// A vignette amount is outside the normalized 0...1 range.
+    case vignetteAmountOutOfRange(RationalValue)
+
+    /// A vignette radius is outside the normalized 0...1 range.
+    case vignetteRadiusOutOfRange(RationalValue)
+
+    /// A vignette softness is outside the normalized 0...1 range.
+    case vignetteSoftnessOutOfRange(RationalValue)
+
+    /// A mosaic cell size is outside 1...256 source pixels.
+    case mosaicCellSizeOutOfRange(RationalValue)
+
+    /// Color-adjust brightness is outside -1...1.
+    case colorAdjustBrightnessOutOfRange(RationalValue)
+
+    /// Color-adjust contrast is outside 0...4.
+    case colorAdjustContrastOutOfRange(RationalValue)
+
+    /// Color-adjust saturation is outside 0...4.
+    case colorAdjustSaturationOutOfRange(RationalValue)
+
+    /// Color-adjust tint is outside -1...1.
+    case colorAdjustTintOutOfRange(RationalValue)
+
+    /// Posterize levels are outside 2...256.
+    case posterizeLevelsOutOfRange(RationalValue)
+
     /// A set-parameter edit changed the node's kind.
     case effectNodeKindMismatch(
         nodeID: UUID,

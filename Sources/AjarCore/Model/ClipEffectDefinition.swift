@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import Foundation
-
 /// Typed effect definition: kind identity plus that kind's parameter struct (ADR-0016).
 public enum ClipEffectDefinition: Codable, Equatable, Sendable {
     /// Placeholder bootstrap kind.
@@ -25,7 +23,25 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
     /// Imported `.cube` LUT with adjustable strength (FR-COL-004).
     case lut(ClipLUTEffectParameters)
 
-    private enum CodingKeys: String, CodingKey {
+    /// Radial edge darkening (FR-FX-002).
+    case vignette(ClipVignetteParameters)
+
+    /// Horizontal, vertical, or four-quadrant reflection (FR-FX-002).
+    case mirror(ClipMirrorParameters)
+
+    /// Mosaic / pixelation (FR-FX-002).
+    case mosaic(ClipMosaicParameters)
+
+    /// Basic brightness, contrast, saturation, and tint adjustment (FR-FX-002).
+    case colorAdjust(ClipColorAdjustParameters)
+
+    /// Discrete color-level posterization (FR-FX-002).
+    case posterize(ClipPosterizeParameters)
+
+    /// RGB inversion (FR-FX-002).
+    case invert(ClipInvertParameters)
+
+    enum CodingKeys: String, CodingKey {
         case kind
         case parameters
     }
@@ -34,39 +50,65 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
     public var kind: ClipEffectKind {
         switch self {
         case .placeholder:
-            return .placeholder
+            .placeholder
         case .gaussianBlur:
-            return .gaussianBlur
+            .gaussianBlur
         case .boxBlur:
-            return .boxBlur
+            .boxBlur
         case .zoomBlur:
-            return .zoomBlur
+            .zoomBlur
         case .sharpen:
-            return .sharpen
+            .sharpen
         case .glow:
-            return .glow
+            .glow
         case .lut:
-            return .lut
+            .lut
+        case .vignette:
+            .vignette
+        case .mirror:
+            .mirror
+        case .mosaic:
+            .mosaic
+        case .colorAdjust:
+            .colorAdjust
+        case .posterize:
+            .posterize
+        case .invert:
+            .invert
         }
     }
 
-    /// Identity definition for `kind`.
-    public static func identity(for kind: ClipEffectKind) -> ClipEffectDefinition {
+    /// Default definition for `kind` (a no-op where that kind has an identity control).
+    public static func identity(  // swiftlint:disable:this cyclomatic_complexity
+        for kind: ClipEffectKind
+    ) -> ClipEffectDefinition {
         switch kind {
         case .placeholder:
-            return .placeholder(.identity)
+            .placeholder(.identity)
         case .gaussianBlur:
-            return .gaussianBlur(.identity)
+            .gaussianBlur(.identity)
         case .boxBlur:
-            return .boxBlur(.identity)
+            .boxBlur(.identity)
         case .zoomBlur:
-            return .zoomBlur(.identity)
+            .zoomBlur(.identity)
         case .sharpen:
-            return .sharpen(.identity)
+            .sharpen(.identity)
         case .glow:
-            return .glow(.identity)
+            .glow(.identity)
         case .lut:
-            return .lut(ClipLUTEffectParameters(table: .identityOneD, strength: .zero))
+            .lut(ClipLUTEffectParameters(table: .identityOneD, strength: .zero))
+        case .vignette:
+            .vignette(.identity)
+        case .mirror:
+            .mirror(.identity)
+        case .mosaic:
+            .mosaic(.identity)
+        case .colorAdjust:
+            .colorAdjust(.identity)
+        case .posterize:
+            .posterize(.identity)
+        case .invert:
+            .invert(.identity)
         }
     }
 
@@ -76,274 +118,5 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
         placement: ClipLUTPlacement = .look
     ) -> ClipEffectDefinition {
         .lut(ClipLUTEffectParameters(table: table, strength: .zero, placement: placement))
-    }
-
-    /// Decodes a kind-tagged parameter payload.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(ClipEffectKind.self, forKey: .kind)
-        switch kind {
-        case .placeholder:
-            let parameters =
-                try container.decodeIfPresent(
-                    ClipPlaceholderEffectParameters.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .placeholder(parameters)
-        case .gaussianBlur:
-            let parameters =
-                try container.decodeIfPresent(
-                    ClipGaussianBlurParameters.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .gaussianBlur(parameters)
-        case .boxBlur:
-            let parameters =
-                try container.decodeIfPresent(
-                    ClipBoxBlurParameters.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .boxBlur(parameters)
-        case .zoomBlur:
-            let parameters =
-                try container.decodeIfPresent(
-                    ClipZoomBlurParameters.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .zoomBlur(parameters)
-        case .sharpen:
-            let parameters =
-                try container.decodeIfPresent(
-                    ClipSharpenParameters.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .sharpen(parameters)
-        case .glow:
-            let parameters =
-                try container.decodeIfPresent(
-                    ClipGlowParameters.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .glow(parameters)
-        case .lut:
-            let parameters = try container.decode(ClipLUTEffectParameters.self, forKey: .parameters)
-            self = .lut(parameters)
-        }
-    }
-
-    /// Encodes kind + parameters.
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(kind, forKey: .kind)
-        switch self {
-        case .placeholder(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .gaussianBlur(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .boxBlur(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .zoomBlur(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .sharpen(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .glow(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .lut(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        }
-    }
-}
-
-/// Keyframable effect definition.
-public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
-    /// Keyframable placeholder bootstrap kind.
-    case placeholder(AnimatableClipPlaceholderSettings)
-
-    /// Keyframable Gaussian blur (FR-FX-002).
-    case gaussianBlur(AnimatableClipGaussianBlurSettings)
-
-    /// Keyframable box blur (FR-FX-002).
-    case boxBlur(AnimatableClipBoxBlurSettings)
-
-    /// Keyframable zoom blur (FR-FX-002).
-    case zoomBlur(AnimatableClipZoomBlurSettings)
-
-    /// Keyframable sharpen (FR-FX-002).
-    case sharpen(AnimatableClipSharpenSettings)
-
-    /// Keyframable glow (FR-FX-002).
-    case glow(AnimatableClipGlowSettings)
-
-    /// Keyframable LUT kind (table constant, strength keyframable).
-    case lut(AnimatableClipLUTSettings)
-
-    private enum CodingKeys: String, CodingKey {
-        case kind
-        case parameters
-    }
-
-    /// Kind identity for registry and diagnostics.
-    public var kind: ClipEffectKind {
-        switch self {
-        case .placeholder:
-            return .placeholder
-        case .gaussianBlur:
-            return .gaussianBlur
-        case .boxBlur:
-            return .boxBlur
-        case .zoomBlur:
-            return .zoomBlur
-        case .sharpen:
-            return .sharpen
-        case .glow:
-            return .glow
-        case .lut:
-            return .lut
-        }
-    }
-
-    /// Identity definition for `kind`.
-    public static func identity(for kind: ClipEffectKind) -> AnimatableClipEffectDefinition {
-        .constant(ClipEffectDefinition.identity(for: kind))
-    }
-
-    /// Creates a constant animatable definition from static parameters.
-    public static func constant(
-        _ definition: ClipEffectDefinition
-    ) -> AnimatableClipEffectDefinition {
-        switch definition {
-        case .placeholder(let parameters):
-            return .placeholder(.constant(parameters))
-        case .gaussianBlur(let parameters):
-            return .gaussianBlur(.constant(parameters))
-        case .boxBlur(let parameters):
-            return .boxBlur(.constant(parameters))
-        case .zoomBlur(let parameters):
-            return .zoomBlur(.constant(parameters))
-        case .sharpen(let parameters):
-            return .sharpen(.constant(parameters))
-        case .glow(let parameters):
-            return .glow(.constant(parameters))
-        case .lut(let parameters):
-            return .lut(.constant(parameters))
-        }
-    }
-
-    /// Decodes a kind-tagged keyframable parameter payload.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(ClipEffectKind.self, forKey: .kind)
-        switch kind {
-        case .placeholder:
-            let parameters =
-                try container.decodeIfPresent(
-                    AnimatableClipPlaceholderSettings.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .placeholder(parameters)
-        case .gaussianBlur:
-            let parameters =
-                try container.decodeIfPresent(
-                    AnimatableClipGaussianBlurSettings.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .gaussianBlur(parameters)
-        case .boxBlur:
-            let parameters =
-                try container.decodeIfPresent(
-                    AnimatableClipBoxBlurSettings.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .boxBlur(parameters)
-        case .zoomBlur:
-            let parameters =
-                try container.decodeIfPresent(
-                    AnimatableClipZoomBlurSettings.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .zoomBlur(parameters)
-        case .sharpen:
-            let parameters =
-                try container.decodeIfPresent(
-                    AnimatableClipSharpenSettings.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .sharpen(parameters)
-        case .glow:
-            let parameters =
-                try container.decodeIfPresent(
-                    AnimatableClipGlowSettings.self,
-                    forKey: .parameters
-                ) ?? .identity
-            self = .glow(parameters)
-        case .lut:
-            let parameters = try container.decode(
-                AnimatableClipLUTSettings.self,
-                forKey: .parameters
-            )
-            self = .lut(parameters)
-        }
-    }
-
-    /// Encodes kind + parameters.
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(kind, forKey: .kind)
-        switch self {
-        case .placeholder(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .gaussianBlur(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .boxBlur(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .zoomBlur(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .sharpen(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .glow(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        case .lut(let parameters):
-            try container.encode(parameters, forKey: .parameters)
-        }
-    }
-
-    /// Evaluates the definition at a sequence time.
-    public func value(at time: RationalTime) -> ClipEffectDefinition {
-        switch self {
-        case .placeholder(let parameters):
-            return .placeholder(parameters.value(at: time))
-        case .gaussianBlur(let parameters):
-            return .gaussianBlur(parameters.value(at: time))
-        case .boxBlur(let parameters):
-            return .boxBlur(parameters.value(at: time))
-        case .zoomBlur(let parameters):
-            return .zoomBlur(parameters.value(at: time))
-        case .sharpen(let parameters):
-            return .sharpen(parameters.value(at: time))
-        case .glow(let parameters):
-            return .glow(parameters.value(at: time))
-        case .lut(let parameters):
-            return .lut(parameters.value(at: time))
-        }
-    }
-
-    /// Static definition represented by base keyframe values.
-    public var baseDefinition: ClipEffectDefinition {
-        switch self {
-        case .placeholder(let parameters):
-            return .placeholder(parameters.baseParameters)
-        case .gaussianBlur(let parameters):
-            return .gaussianBlur(parameters.baseParameters)
-        case .boxBlur(let parameters):
-            return .boxBlur(parameters.baseParameters)
-        case .zoomBlur(let parameters):
-            return .zoomBlur(parameters.baseParameters)
-        case .sharpen(let parameters):
-            return .sharpen(parameters.baseParameters)
-        case .glow(let parameters):
-            return .glow(parameters.baseParameters)
-        case .lut(let parameters):
-            return .lut(parameters.baseParameters)
-        }
     }
 }

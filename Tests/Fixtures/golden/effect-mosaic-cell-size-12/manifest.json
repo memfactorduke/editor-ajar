@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "effect-mosaic-cell-size-12",
+  "requirements": [
+    "FR-FX-002",
+    "FR-FX-003",
+    "FR-FX-007",
+    "ADR-0016",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "frame": "0/24",
+  "referencePNG": "reference.png",
+  "outputDimensions": {
+    "width": 96,
+    "height": 96
+  },
+  "clips": [
+    {
+      "syntheticMedia": {
+        "bgra": [64, 96, 160, 255],
+        "frameCount": 1,
+        "frameRate": 24,
+        "width": 96,
+        "height": 96,
+        "checkerboard": {
+          "cellSize": 8,
+          "colorABGRA": [64, 96, 160, 255],
+          "colorBBGRA": [160, 96, 64, 255]
+        }
+      },
+      "effectStack": {
+        "nodes": [
+          {
+            "id": "00000000-0000-0000-0000-00000000f203",
+            "enabled": true,
+            "definition": {
+              "kind": "mosaic",
+              "parameters": {
+                "cellSize": {"numerator": 12, "denominator": 1}
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tolerance": {
+    "maximumAlphaDelta": 1,
+    "maximumDeltaE": 1,
+    "minimumSSIM": 0.99
+  }
+}

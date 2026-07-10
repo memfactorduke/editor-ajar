@@ -485,7 +485,9 @@ public final class MetalRenderExecutor {
     private static var sharedLibrariesByKey = [String: MTLLibrary]()
 
     private static func sharedLibrary(for device: MTLDevice) throws -> MTLLibrary {
-        let combinedSource = shaderSource + MetalClipEffectStackShaders.source
+        let combinedSource =
+            shaderSource + MetalClipEffectStackShaders.source
+            + MetalClipEffectBatch2Shaders.source
         let fingerprint = ContentHash.sha256(data: Data(combinedSource.utf8)).digest
         let key = "\(ObjectIdentifier(device as AnyObject))-\(fingerprint)"
         sharedLibraryLock.lock()
@@ -586,7 +588,7 @@ public final class MetalRenderExecutor {
         }
     }
 
-    private func runEffectKernelForTests(
+    func runEffectKernelForTests(
         source: MTLTexture,
         encode: (MetalEffectEncodeContext) throws -> MTLTexture
     ) throws -> [UInt8] {

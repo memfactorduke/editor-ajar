@@ -4,7 +4,7 @@ import XCTest
 
 @testable import AjarCore
 
-/// FR-FX-002 batch-1 parameter validation and identity coverage.
+/// FR-FX-002 batch-1 parameter validation plus all-kind identity and schema coverage.
 final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
     func testFRFX002ParameterValidationRejectsOutOfRangeValues() throws {
         let highAmount = try RationalValue(numerator: 3, denominator: 2)
@@ -71,17 +71,25 @@ final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
         }
     }
 
-    func testFRFX002SchemaMinorIsTwoAfterLibraryKinds() {
-        // FR-FX-002 claimed minor 2; FR-COL-004 lut (#188) is gate 3; FR-TXT-002 styling is 4.
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 4)
+    func testFRFX002SchemaMinorIsFiveAfterBatch2LibraryKinds() {
+        // FR-FX-002 batch 1 claimed minor 2; FR-COL-004 lut (#188) is gate 3;
+        // FR-TXT-002 styling is 4; FR-FX-002 batch 2 (#182) is 5.
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 5)
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 2)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.gaussianBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.boxBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.zoomBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.sharpen))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.glow))
-        XCTAssertEqual(ClipEffectKind.allCases.count, 7)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.lut))
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.vignette))
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.mirror))
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.mosaic))
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.colorAdjust))
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.posterize))
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.invert))
+        // placeholder + batch1 (5) + lut + batch2 (6) = 13
+        XCTAssertEqual(ClipEffectKind.allCases.count, 13)
     }
 
     func testFRFX002StaticAnimationParityCoversLibraryKinds() throws {

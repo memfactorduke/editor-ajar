@@ -311,6 +311,10 @@ private func assertFragmentBindsTexture0AndBuffer0(
 // MARK: - Helpers
 
 private func discriminationEffectDefinitions() throws -> [(String, ClipEffectDefinition)] {
+    try batch1DiscriminationDefinitions() + batch2DiscriminationDefinitions()
+}
+
+private func batch1DiscriminationDefinitions() throws -> [(String, ClipEffectDefinition)] {
     [
         (
             "gaussianBlur",
@@ -348,6 +352,36 @@ private func discriminationEffectDefinitions() throws -> [(String, ClipEffectDef
                 )
             )
         )
+    ]
+}
+
+private func batch2DiscriminationDefinitions() throws -> [(String, ClipEffectDefinition)] {
+    [
+        (
+            "vignette",
+            .vignette(
+                ClipVignetteParameters(
+                    amount: try RationalValue(numerator: 3, denominator: 4),
+                    radius: try RationalValue(numerator: 1, denominator: 2),
+                    softness: try RationalValue(numerator: 1, denominator: 4)
+                )
+            )
+        ),
+        ("mirror", .mirror(ClipMirrorParameters(axis: .horizontal))),
+        ("mosaic", .mosaic(ClipMosaicParameters(cellSize: RationalValue(12)))),
+        (
+            "colorAdjust",
+            .colorAdjust(
+                ClipColorAdjustParameters(
+                    brightness: try RationalValue(numerator: 1, denominator: 10),
+                    contrast: try RationalValue(numerator: 6, denominator: 5),
+                    saturation: try RationalValue(numerator: 4, denominator: 5),
+                    tint: try RationalValue(numerator: 1, denominator: 5)
+                )
+            )
+        ),
+        ("posterize", .posterize(ClipPosterizeParameters(levels: RationalValue(4)))),
+        ("invert", .invert(ClipInvertParameters()))
     ]
 }
 

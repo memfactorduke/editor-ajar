@@ -74,6 +74,24 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// (PERFORMANCE §3 / ADR-0016 §4). Metric slug includes the kind raw value `lut`.
     case effectNodeLUTGPU = "effect-node-lut-gpu-fr-col-004"
 
+    /// Per-node GPU cost of one 1080p vignette stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeVignette1080p = "effect-node-vignette-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p mirror stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeMirror1080p = "effect-node-mirror-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p mosaic stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeMosaic1080p = "effect-node-mosaic-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p color-adjust stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeColorAdjust1080p = "effect-node-color-adjust-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p posterize stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodePosterize1080p = "effect-node-posterize-1080p-fr-fx-002"
+
+    /// Per-node GPU cost of one 1080p invert stack node (FR-FX-002, PERFORMANCE §3).
+    case effectNodeInvert1080p = "effect-node-invert-1080p-fr-fx-002"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -98,7 +116,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .realtimeAudioPlanBuildNestedCompound, .realtimeAudioPlanBuildWideTimeline:
             "FR-AUD-007"
         case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
-            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p:
+            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p,
+            .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
+            .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p:
             "FR-FX-002"
         case .effectNodeLUTGPU:
             "FR-COL-004"
@@ -138,6 +158,24 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .effectNodeLUTGPU:
             // Differential cost of one 33³ LUT node at 1080p30 (see BenchmarkBudget.effectNodeLUT).
             .effectNodeLUT
+        case .effectNodeVignette1080p:
+            // One sample plus aspect-corrected falloff and premultiply-safe RGB scaling.
+            .effectNodeGPU(targetMilliseconds: 2)
+        case .effectNodeMirror1080p:
+            // One sample with only a coordinate fold; same conservative class as sharpen.
+            .effectNodeGPU(targetMilliseconds: 2)
+        case .effectNodeMosaic1080p:
+            // One nearest sample after source-pixel cell-center quantization.
+            .effectNodeGPU(targetMilliseconds: 2)
+        case .effectNodeColorAdjust1080p:
+            // One sample plus straight-linear RGB grading and repremultiplication.
+            .effectNodeGPU(targetMilliseconds: 2)
+        case .effectNodePosterize1080p:
+            // One sample plus three-channel quantization in straight linear RGB.
+            .effectNodeGPU(targetMilliseconds: 2)
+        case .effectNodeInvert1080p:
+            // One sample plus straight-linear RGB inversion and repremultiplication.
+            .effectNodeGPU(targetMilliseconds: 2)
         default:
             nil
         }
@@ -201,7 +239,9 @@ extension BenchmarkMetric {
         switch self {
         case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
             .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p,
-            .effectNodeLUTGPU:
+            .effectNodeLUTGPU,
+            .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
+            .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p:
             true
         default:
             false
