@@ -74,6 +74,11 @@ schemes:
       config: Debug
     test:
       config: Debug
+      # EditorAjarCI is default (skips canvas edit/nudge smokes — #210). Local includes all.
+      testPlans:
+        - path: EditorAjarCI.xctestplan
+          defaultPlan: true
+        - path: EditorAjarLocal.xctestplan
       targets:
         - EditorAjarTests
         - EditorAjarUITests

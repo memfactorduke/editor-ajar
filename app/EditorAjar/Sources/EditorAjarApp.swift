@@ -7,9 +7,12 @@ struct EditorAjarApp: App {
     @StateObject private var model: EditorAjarAppModel
 
     init() {
+        let isRunningUISmoke = ProcessInfo.processInfo.environment["EDITOR_AJAR_UI_TESTING"] == "1"
         _model = StateObject(
             wrappedValue: EditorAjarAppModel(
-                autosavePackageURL: EditorAjarAppModel.defaultAutosavePackageURL()
+                autosavePackageURL: isRunningUISmoke
+                    ? nil
+                    : EditorAjarAppModel.defaultAutosavePackageURL()
             )
         )
     }
@@ -111,6 +114,29 @@ struct EditorAjarApp: App {
                     model.detachAudioForSelectedClip()
                 }
                 .disabled(!model.selectedClipIsLinked)
+            }
+            // FR-TXT-003: menu/keyboard paths for headless UI-smoke (same pattern as Undo).
+            CommandMenu("Title") {
+                Button("Edit Canvas Title") {
+                    model.editPrimaryCanvasTitleBox()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .option])
+                .disabled(model.primaryCanvasTitleBoxReference == nil)
+                .accessibilityLabel("Edit Canvas Title")
+
+                Button("Nudge Title Right") {
+                    model.nudgePrimaryCanvasTitleBox(direction: .right, largeStep: true)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                .disabled(model.primaryCanvasTitleBoxReference == nil)
+                .accessibilityLabel("Nudge Canvas Title Right")
+
+                Button("Nudge Title Down") {
+                    model.nudgePrimaryCanvasTitleBox(direction: .down, largeStep: true)
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(model.primaryCanvasTitleBoxReference == nil)
+                .accessibilityLabel("Nudge Canvas Title Down")
             }
         }
     }

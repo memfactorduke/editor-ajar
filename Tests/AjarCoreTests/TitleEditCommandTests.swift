@@ -69,6 +69,45 @@ final class TitleEditCommandTests: XCTestCase {
         XCTAssertEqual(try history.redo(), set)
     }
 
+    func testFRTXT003LiveTitleTextEditsCoalesceIntoOneUndoStep() throws {
+        let fixture = try makeTitleProjectFixture(seed: 8_413)
+        let originalBox = try XCTUnwrap(fixture.titleSource.boxes.first)
+        var history = EditHistory(project: fixture.project)
+
+        let intermediateBox = copying(originalBox, text: "Live")
+        _ = try history.apply(
+            .setTitleTextBox(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                box: intermediateBox
+            )
+        )
+        let finalBox = copying(originalBox, text: "Live title edit")
+        let edited = try history.applyCoalescingWithPrevious(
+            .setTitleTextBox(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clipID: fixture.clipID,
+                box: finalBox
+            )
+        )
+
+        XCTAssertEqual(history.undoCount, 1)
+        XCTAssertEqual(
+            try titleBox(
+                originalBox.id,
+                clipID: fixture.clipID,
+                trackID: fixture.videoTrackID,
+                sequenceID: fixture.sequenceID,
+                project: edited
+            ).text,
+            "Live title edit"
+        )
+        XCTAssertEqual(history.undo(), fixture.project)
+        XCTAssertEqual(try history.redo(), edited)
+    }
+
     func testFRTXT001RemoveTitleTextBoxIsUndoable() throws {
         let fixture = try makeTitleProjectFixture(seed: 8_412)
         var history = EditHistory(project: fixture.project)
@@ -187,4 +226,39 @@ final class TitleEditCommandTests: XCTestCase {
         XCTAssertNotNil(copiedBox.style.gradientFill)
         XCTAssertNotNil(copiedBox.backgroundBox)
     }
+
+    private func copying(_ box: TitleTextBox, text: String) -> TitleTextBox {
+        TitleTextBox(
+            id: box.id,
+            text: text,
+            origin: box.origin,
+            width: box.width,
+            height: box.height,
+            style: box.style,
+            backgroundBox: box.backgroundBox
+        )
+    }
+
+    private func titleBox(
+        _ boxID: UUID,
+        clipID: UUID,
+        trackID: UUID,
+        sequenceID: UUID,
+        project: Project
+    ) throws -> TitleTextBox {
+        let clip = try titleClip(
+            clipID,
+            trackID: trackID,
+            in: project,
+            sequenceID: sequenceID
+        )
+        guard case .title(let title) = clip.source else {
+            throw TitleEditCommandTestError.expectedTitle
+        }
+        return try XCTUnwrap(title.boxes.first { $0.id == boxID })
+    }
+}
+
+private enum TitleEditCommandTestError: Error {
+    case expectedTitle
 }

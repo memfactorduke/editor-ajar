@@ -933,6 +933,152 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(scaled.scale.y.doubleValue, 1.5, accuracy: 0.000_001)
     }
 
+    func testFRTXT003CanvasTitleTextEditingIsLiveAndOneUndoStep() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let originalProject = try XCTUnwrap(model.project)
+        let firstLayout = try XCTUnwrap(model.visibleCanvasTitleBoxes.first)
+
+        XCTAssertEqual(model.visibleCanvasTitleBoxes.count, 2)
+        XCTAssertTrue(model.beginCanvasTitleTextEditing(firstLayout.reference))
+        XCTAssertTrue(model.updateCanvasTitleText("Canvas", reference: firstLayout.reference))
+        XCTAssertTrue(
+            model.updateCanvasTitleText("Canvas edited", reference: firstLayout.reference)
+        )
+        XCTAssertEqual(
+            model.visibleCanvasTitleBoxes.first { $0.reference == firstLayout.reference }?.box.text,
+            "Canvas edited"
+        )
+        XCTAssertEqual(model.undoMenuTitle, "Undo Set Title Text Box")
+
+        model.endCanvasTitleTextEditing()
+        model.undo()
+
+        XCTAssertEqual(model.project, originalProject)
+        XCTAssertEqual(
+            model.visibleCanvasTitleBoxes.first { $0.reference == firstLayout.reference }?.box.text,
+            "Edit me"
+        )
+    }
+
+    func testFRTXT003CanvasTitleDragSnapsAndArrowKeysNudge() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let firstLayout = try XCTUnwrap(model.visibleCanvasTitleBoxes.first)
+        let actionSafeOrigin = CanvasTitlePositioning.draggedOrigin(
+            for: firstLayout,
+            translationX: -55,
+            translationY: -41,
+            canvasScale: 1
+        )
+        XCTAssertEqual(actionSafeOrigin.x.doubleValue, 16, accuracy: 0.000_001)
+        XCTAssertEqual(actionSafeOrigin.y.doubleValue, 9, accuracy: 0.000_001)
+
+        XCTAssertTrue(
+            model.dragCanvasTitleBox(
+                firstLayout.reference,
+                translationX: -36,
+                translationY: -30,
+                canvasScale: 1
+            )
+        )
+        let snapped = try XCTUnwrap(
+            model.visibleCanvasTitleBoxes.first { $0.reference == firstLayout.reference }
+        )
+        XCTAssertEqual(snapped.box.origin.x.doubleValue, 32, accuracy: 0.000_001)
+        XCTAssertEqual(snapped.box.origin.y.doubleValue, 18, accuracy: 0.000_001)
+
+        XCTAssertTrue(
+            model.dragCanvasTitleBox(
+                firstLayout.reference,
+                translationX: 35,
+                translationY: 0,
+                canvasScale: 1
+            )
+        )
+        let centered = try XCTUnwrap(
+            model.visibleCanvasTitleBoxes.first { $0.reference == firstLayout.reference }
+        )
+        XCTAssertEqual(centered.box.origin.x.doubleValue, 70, accuracy: 0.000_001)
+        XCTAssertEqual(centered.box.origin.y.doubleValue, 18, accuracy: 0.000_001)
+
+        XCTAssertTrue(
+            model.nudgeCanvasTitleBox(
+                firstLayout.reference,
+                direction: .right,
+                largeStep: true
+            )
+        )
+        let nudged = try XCTUnwrap(
+            model.visibleCanvasTitleBoxes.first { $0.reference == firstLayout.reference }
+        )
+        XCTAssertEqual(nudged.box.origin.x.doubleValue, 80, accuracy: 0.000_001)
+        XCTAssertEqual(nudged.box.origin.y.doubleValue, 18, accuracy: 0.000_001)
+        XCTAssertEqual(model.undoMenuTitle, "Undo Set Title Text Box")
+    }
+
+    func testFRTXT003TabMovesEditingToTheNextCanvasTitleBox() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let layouts = model.visibleCanvasTitleBoxes
+        XCTAssertEqual(layouts.count, 2)
+        let first = try XCTUnwrap(layouts.first)
+        let second = try XCTUnwrap(layouts.last)
+
+        XCTAssertTrue(model.beginCanvasTitleTextEditing(first.reference))
+        XCTAssertEqual(
+            model.editAdjacentCanvasTitleBox(from: first.reference, reverse: false),
+            second.reference
+        )
+        XCTAssertEqual(model.editingCanvasTitleBoxReference, second.reference)
+        XCTAssertEqual(
+            model.editAdjacentCanvasTitleBox(from: second.reference, reverse: true),
+            first.reference
+        )
+    }
+
+    func testFRTXT003StaleEndCommitDoesNotClobberOtherBoxEditSession() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let layouts = model.visibleCanvasTitleBoxes
+        XCTAssertEqual(layouts.count, 2)
+        let first = try XCTUnwrap(layouts.first)
+        let second = try XCTUnwrap(layouts.last)
+
+        XCTAssertTrue(model.beginCanvasTitleTextEditing(first.reference))
+        XCTAssertEqual(model.editingCanvasTitleBoxReference, first.reference)
+
+        // Direct click-to-other-box: B starts while A's textDidEndEditing is still pending.
+        XCTAssertTrue(model.beginCanvasTitleTextEditing(second.reference))
+        XCTAssertEqual(model.editingCanvasTitleBoxReference, second.reference)
+
+        // Late commit from A must be a no-op (reference-scoped teardown).
+        model.endCanvasTitleTextEditing(for: first.reference)
+        XCTAssertEqual(model.editingCanvasTitleBoxReference, second.reference)
+
+        // Matching commit still ends the active session.
+        model.endCanvasTitleTextEditing(for: second.reference)
+        XCTAssertNil(model.editingCanvasTitleBoxReference)
+    }
+
+    func testFRTXT003SafeAreaGuidesNeverEnterProjectOrRenderedOutput() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let project = try XCTUnwrap(model.project)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let graphBefore = try buildRenderGraph(for: sequence, at: .zero, in: project)
+        let outputHashBefore = try XCTUnwrap(graphBefore.outputNode?.contentHash)
+
+        model.toggleCanvasSafeAreaGuides()
+
+        XCTAssertTrue(model.canvasSafeAreaGuidesVisible)
+        XCTAssertEqual(model.project, project)
+        let projectAfter = try XCTUnwrap(model.project)
+        let sequenceAfter = try XCTUnwrap(model.activeSequence)
+        let graphAfter = try buildRenderGraph(
+            for: sequenceAfter,
+            at: .zero,
+            in: projectAfter
+        )
+        XCTAssertEqual(graphAfter, graphBefore)
+        XCTAssertEqual(graphAfter.outputNode?.contentHash, outputHashBefore)
+    }
+
     func testFRTL014NFRSTAB002AppLaunchRecoversAutosavePackage() throws {
         let packageURL = try temporaryAutosavePackageURL(named: "LaunchRecovery.ajar")
         defer { try? FileManager.default.removeItem(at: packageURL.deletingLastPathComponent()) }
@@ -1108,11 +1254,18 @@ final class EditorAjarAppModelTests: XCTestCase {
             ),
             to: project
         )
+        // V2 already holds the FR-TXT-003 title clip at [0, 60). Abut the grade target
+        // at [60, 90) so copy/paste/look tests do not trip itemsOverlap.
+        let targetDurationFrames: Int64 = 30
+        let targetDuration = try sequence.timebase.duration(ofFrames: targetDurationFrames)
+        let targetStart = try trackTimelineEnd(targetTrack)
+        let targetSourceRange = try TimeRange(start: .zero, duration: targetDuration)
+        let targetTimelineRange = try TimeRange(start: targetStart, duration: targetDuration)
         let targetClip = Clip(
             id: targetReference.clipID,
             source: sourceClip.source,
-            sourceRange: sourceClip.sourceRange,
-            timelineRange: sourceClip.timelineRange,
+            sourceRange: targetSourceRange,
+            timelineRange: targetTimelineRange,
             kind: .video,
             name: "Grade target"
         )
@@ -1129,6 +1282,20 @@ final class EditorAjarAppModelTests: XCTestCase {
             source: sourceReference,
             target: targetReference
         )
+    }
+
+    private func trackTimelineEnd(_ track: Track) throws -> RationalTime {
+        var end = RationalTime.zero
+        for item in track.items {
+            guard case .clip(let clip) = item else {
+                continue
+            }
+            let clipEnd = try clip.timelineRange.end()
+            if clipEnd > end {
+                end = clipEnd
+            }
+        }
+        return end
     }
 
     private func loadGradeAppModel(

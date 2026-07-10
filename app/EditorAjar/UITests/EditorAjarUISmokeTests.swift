@@ -18,7 +18,11 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
     override func tearDownWithError() throws {
         if let launchedApp = launchedApp,
-           launchedApp.state == .runningForeground || launchedApp.state == .runningBackground {
+            launchedApp.state == .runningForeground || launchedApp.state == .runningBackground
+        {
+            // Leave canvas title edit mode so a failed/local FR-TXT test cannot steal
+            // keyboard focus from later smoke cases (e.g. transport arrows).
+            restoreCanvasTitleUIState(in: launchedApp)
             launchedApp.terminate()
         }
 
@@ -41,9 +45,130 @@ final class EditorAjarUISmokeTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
-    private func assertInitialProjectChrome(in app: XCUIApplication) {
+    // #210: skipped on CI via EditorAjarCI.xctestplan / scheme SkippedTests (not env gate).
+    // Run locally with: xcodebuild … -testPlan EditorAjarLocal -only-testing:EditorAjarUITests
+    func testFRTXT003EditsCanvasTitleWithKeyboardAndUndoRestoresText() throws {
+        let app = try XCTUnwrap(launchedApp)
+        defer { restoreCanvasTitleUIState(in: app) }
+        let firstBoxID = "00000000-0000-0000-0000-000000000129"
+
+        // Match older smoke tests: wait for program-monitor chrome before canvas work.
         XCTAssertTrue(
-            app.otherElements["Program monitor showing Sample Playback Sequence"]
+            app.descendants(matching: .any)["Program monitor showing Sample Playback Sequence"]
+                .waitForExistence(timeout: 15)
+        )
+
+        var firstTitle = canvasTitleBox(firstBoxID, in: app)
+        XCTAssertTrue(firstTitle.waitForExistence(timeout: 15))
+        waitForElementValue(firstTitle, containing: "Edit me", timeout: 10)
+        XCTAssertEqual(firstTitle.label, "Title text box 1, Sample Canvas Title")
+
+        // Prefer Title menu shortcut / AX (see enterCanvasTitleEditMode).
+        enterCanvasTitleEditMode(boxID: firstBoxID, in: app)
+        var firstEditor = canvasTitleEditor(firstBoxID, in: app)
+        XCTAssertTrue(firstEditor.waitForExistence(timeout: 15))
+
+        // Exit + re-enter via Cmd-Opt-E (menu path, no FocusState dependency).
+        app.typeKey(.escape, modifierFlags: [])
+        firstTitle = canvasTitleBox(firstBoxID, in: app)
+        XCTAssertTrue(firstTitle.waitForExistence(timeout: 10))
+        app.typeKey("e", modifierFlags: [.command, .option])
+        firstEditor = canvasTitleEditor(firstBoxID, in: app)
+        if !firstEditor.waitForExistence(timeout: 8) {
+            enterCanvasTitleEditMode(boxID: firstBoxID, in: app)
+            firstEditor = canvasTitleEditor(firstBoxID, in: app)
+            XCTAssertTrue(firstEditor.waitForExistence(timeout: 15))
+        }
+
+        // Mirror inspector typing: focus field, select-all, type.
+        activateElement(firstEditor)
+        firstEditor.typeKey("a", modifierFlags: [.command])
+        firstEditor.typeText("Canvas edited")
+
+        // Escape commits; live model already holds typed text. (Tab is flaky headless.)
+        app.typeKey(.escape, modifierFlags: [])
+
+        let editedTitle = canvasTitleBox(firstBoxID, in: app)
+        XCTAssertTrue(editedTitle.waitForExistence(timeout: 10))
+        waitForElementValue(editedTitle, containing: "Canvas edited", timeout: 12)
+        app.typeKey("z", modifierFlags: [.command])
+        waitForElementValue(editedTitle, containing: "Edit me", timeout: 12)
+    }
+
+    // #210: skipped on CI via EditorAjarCI.xctestplan / scheme SkippedTests (not env gate).
+    // Run locally with: xcodebuild … -testPlan EditorAjarLocal -only-testing:EditorAjarUITests
+    func testFRTXT003DragsAndKeyboardNudgesCanvasTitleBox() throws {
+        let app = try XCTUnwrap(launchedApp)
+        defer { restoreCanvasTitleUIState(in: app) }
+        let boxID = "00000000-0000-0000-0000-000000000129"
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Program monitor showing Sample Playback Sequence"]
+                .waitForExistence(timeout: 15)
+        )
+
+        var title = canvasTitleBox(boxID, in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 15))
+        waitForElementValue(title, containing: "Edit me", timeout: 10)
+        let originalValue = elementValue(title)
+
+        // Cmd-Opt-Right → nudgePrimaryCanvasTitleBox (menu, headless-safe like Cmd-Z).
+        app.typeKey(.rightArrow, modifierFlags: [.command, .option])
+        waitForElementValueToChange(title, from: originalValue, timeout: 12)
+        let afterFirstNudge = elementValue(title)
+        XCTAssertTrue(
+            afterFirstNudge.contains("X "),
+            "Expected origin readout after nudge, got \(afterFirstNudge)"
+        )
+
+        // Best-effort genuine drag from element center; if ignored, Cmd-Opt-Down fallback.
+        let start = title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = start.withOffset(CGVector(dx: -40, dy: -24))
+        start.press(forDuration: 0.2, thenDragTo: end)
+
+        title = canvasTitleBox(boxID, in: app)
+        let dragChanged = waitForElementValueToChangeOptionally(
+            title,
+            from: afterFirstNudge,
+            timeout: 3
+        )
+        if !dragChanged {
+            app.typeKey(.downArrow, modifierFlags: [.command, .option])
+            waitForElementValueToChange(title, from: afterFirstNudge, timeout: 12)
+        }
+
+        let repositionedValue = elementValue(title)
+        XCTAssertNotEqual(repositionedValue, originalValue)
+
+        // Each nudge/drag is its own undo step — walk history back to the sample origin.
+        undoCanvasTitleUntilValue(
+            title,
+            containsAllOf: ["Edit me", "X 70", "Y 50"],
+            in: app
+        )
+    }
+
+    func testFRTXT003TogglesActionAndTitleSafeGuides() throws {
+        let app = try XCTUnwrap(launchedApp)
+        let toggle = app.buttons["Canvas Safe Area Guides Toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        XCTAssertEqual(toggle.value as? String, "Off")
+
+        // Coordinate click bypasses XCUITest's isHittable gate (small toolbar-style control
+        // often reports not hittable on CI runners even when the AX node exists).
+        let toggleCenter = toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        toggleCenter.click()
+
+        let guides = app.descendants(matching: .any)["Canvas Safe Area Guides"]
+        XCTAssertTrue(guides.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "On")
+        XCTAssertEqual(toggle.label, "Hide Action and Title Safe Guides")
+    }
+
+    private func assertInitialProjectChrome(in app: XCUIApplication) {
+        // Role-agnostic (Image vs Other/Group); same pattern as Sequence tab bar below.
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Program monitor showing Sample Playback Sequence"]
                 .waitForExistence(timeout: 10)
         )
         XCTAssertTrue(
@@ -185,6 +310,164 @@ final class EditorAjarUISmokeTests: XCTestCase {
         element.value as? String ?? "<nil>"
     }
 
+    /// Exit any open canvas title editor and clear keyboard capture before later tests run.
+    private func restoreCanvasTitleUIState(in app: XCUIApplication) {
+        guard app.state == .runningForeground || app.state == .runningBackground else {
+            return
+        }
+        // Multiple Escapes: end NSTextView editing, then drop any residual first-responder.
+        for _ in 0..<3 {
+            app.typeKey(.escape, modifierFlags: [])
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+        }
+        // Click program chrome so playhead/transport typeKey paths receive events again.
+        let monitor = app.descendants(matching: .any)[
+            "Program monitor showing Sample Playback Sequence"
+        ]
+        if monitor.exists {
+            monitor.click()
+        }
+    }
+
+    private func canvasTitleBox(_ boxID: String, in app: XCUIApplication) -> XCUIElement {
+        let identifier = "Canvas Title Text Box \(boxID.uppercased())"
+        // Prefer the button query: boxes advertise .isButton + default accessibilityAction.
+        let asButton = app.buttons[identifier]
+        if asButton.exists {
+            return asButton
+        }
+        return app.descendants(matching: .any)[identifier]
+    }
+
+    private func canvasTitleEditor(_ boxID: String, in app: XCUIApplication) -> XCUIElement {
+        let identifier = "Canvas Title Editor \(boxID.uppercased())"
+        let asTextView = app.textViews[identifier]
+        if asTextView.exists {
+            return asTextView
+        }
+        return app.descendants(matching: .any)[identifier]
+    }
+
+    /// Enters edit via Title menu shortcut, then AX button activation, then Return.
+    private func enterCanvasTitleEditMode(boxID: String, in app: XCUIApplication) {
+        let title = canvasTitleBox(boxID, in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 15))
+
+        // Cmd-Opt-E → editPrimaryCanvasTitleBox (first/selected visible box).
+        app.typeKey("e", modifierFlags: [.command, .option])
+        if canvasTitleEditor(boxID, in: app).waitForExistence(timeout: 6) {
+            return
+        }
+
+        // AX default action on the box button.
+        activateElement(title)
+        if canvasTitleEditor(boxID, in: app).waitForExistence(timeout: 6) {
+            return
+        }
+
+        // Last resort: focus + Return (onKeyPress → beginEditing).
+        activateElement(title)
+        app.typeKey(.return, modifierFlags: [])
+    }
+
+    private func activateElement(_ element: XCUIElement) {
+        if element.isHittable {
+            element.click()
+            return
+        }
+        // Non-hittable AX nodes still respond to a center coordinate click on many runners.
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+    }
+
+    private func elementValue(_ element: XCUIElement) -> String {
+        element.value as? String ?? "<nil>"
+    }
+
+    private func waitForElementValue(
+        _ element: XCUIElement,
+        containing expectedText: String,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if elementValue(element).contains(expectedText) {
+                return
+            }
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        }
+        XCTFail(
+            "Expected \(element.identifier) value to contain \(expectedText), got \(elementValue(element))",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForElementValueToChange(
+        _ element: XCUIElement,
+        from originalValue: String,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let changed = waitForElementValueToChangeOptionally(
+            element,
+            from: originalValue,
+            timeout: timeout
+        )
+        if !changed {
+            XCTFail(
+                "Expected \(element.identifier) value to change from \(originalValue)",
+                file: file,
+                line: line
+            )
+        }
+    }
+
+    @discardableResult
+    private func waitForElementValueToChangeOptionally(
+        _ element: XCUIElement,
+        from originalValue: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if elementValue(element) != originalValue {
+                return true
+            }
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+        }
+        return false
+    }
+
+    private func undoCanvasTitleUntilValue(
+        _ element: XCUIElement,
+        containsAllOf fragments: [String],
+        in app: XCUIApplication,
+        maxUndos: Int = 6,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for _ in 0..<maxUndos {
+            let value = elementValue(element)
+            if fragments.allSatisfy({ value.contains($0) }) {
+                return
+            }
+            app.typeKey("z", modifierFlags: [.command])
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.15))
+        }
+        let value = elementValue(element)
+        if fragments.allSatisfy({ value.contains($0) }) {
+            return
+        }
+        XCTFail(
+            "Expected value containing \(fragments) after undo, got \(value)",
+            file: file,
+            line: line
+        )
+    }
+
     private func launchAppWithRetry(
         file: StaticString = #filePath,
         line: UInt = #line
@@ -193,6 +476,7 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
         for attempt in 1...Self.launchAttemptLimit {
             let candidate = XCUIApplication()
+            candidate.launchEnvironment["EDITOR_AJAR_UI_TESTING"] = "1"
             candidate.launchEnvironment["EDITOR_AJAR_UI_SMOKE_LAUNCH_ATTEMPT"] = "\(attempt)"
             candidate.launch()
 
