@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-COL-007 per-clip grades and project looks (#190, M8 scope): a grade is the ordered
+  `colorAdjust` / `curves` / `lut` / `posterize` / `invert` subset of a clip's FR-FX-003 stack.
+  Undoable copy-grade edits replace only those nodes with fresh IDs across tracks and compound-
+  nested sequences while preserving every target non-color node in order. Named looks save,
+  apply, rename, and delete through typed commands and persist in the project document's `looks`
+  array (`project.json`, no sidecar); legacy projects default to no looks and `schemaMinor` is now
+  **9**. The app adds keyboard-accessible, VoiceOver-labelled Copy/Paste Grade and Save/Apply Look
+  menu hooks. Adjustment-layer grading remains deferred with FR-TL-013 to **v1.x**.
 - FR-COL-002 color curves on the FR-FX-003 effect stack (#189, M8 scope): `ClipEffectKind.curves`
   with RGB **master** + per-channel R/G/B control-point curves. **Secondary curves**
   (hue-vs-hue, hue-vs-sat, luma-vs-sat) remain **v1.x** per SPEC — only primary RGB curves ship

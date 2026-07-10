@@ -230,6 +230,28 @@ public struct ClipEffectStack: Codable, Equatable, Sendable {
     public func replacing(nodes: [ClipEffectNode]) -> ClipEffectStack {
         ClipEffectStack(nodes: nodes)
     }
+
+    /// Ordered FR-COL-007 color-grade subset of this effect stack.
+    public var grade: ClipEffectStack {
+        ClipEffectStack(nodes: nodes.filter { $0.kind.isColorGrade })
+    }
+
+    /// Replaces this stack's color-grade nodes while preserving every non-color node in order.
+    ///
+    /// The replacement is inserted contiguously where the first old grade node appeared. If this
+    /// stack had no grade, the replacement is appended. Only color-grade nodes from `grade` are
+    /// inserted; callers assign fresh node IDs before invoking this helper.
+    public func replacingGrade(with grade: ClipEffectStack) -> ClipEffectStack {
+        let replacementNodes = grade.grade.nodes
+        guard let firstGradeIndex = nodes.firstIndex(where: { $0.kind.isColorGrade }) else {
+            return ClipEffectStack(nodes: nodes + replacementNodes)
+        }
+
+        let insertionIndex = nodes[..<firstGradeIndex].filter { !$0.kind.isColorGrade }.count
+        var preservedNodes = nodes.filter { !$0.kind.isColorGrade }
+        preservedNodes.insert(contentsOf: replacementNodes, at: insertionIndex)
+        return ClipEffectStack(nodes: preservedNodes)
+    }
 }
 
 /// Keyframable ordered per-clip video effects stack.

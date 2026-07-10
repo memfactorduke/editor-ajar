@@ -27,6 +27,8 @@ extension EditReducer {
             return try applyTitleClipCommand(command, to: project)
         case .setTrackState, .setTrackCompositing, .setTrackAudioMix, .clearTrackAudioMix:
             return try applyTrackCommand(command, to: project)
+        case .copyClipGrade, .saveLookFromClip, .applyLookToClip, .renameLook, .deleteLook:
+            return try applyLookCommand(command, to: project)
         case .addTrack(let sequenceID, let track):
             return try addTrack(track, sequenceID: sequenceID, to: project)
         case .removeTrack(let sequenceID, let trackID):
@@ -66,7 +68,8 @@ extension EditReducer {
                 schemaVersion: project.schemaVersion,
                 settings: settings,
                 mediaPool: project.mediaPool,
-                sequences: project.sequences
+                sequences: project.sequences,
+                looks: project.looks
             )
         }
     }

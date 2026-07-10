@@ -1,5 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import Foundation
+
+/// Stable address of a clip anywhere in a project, including a compound's nested sequence.
+public struct ProjectClipReference: Codable, Equatable, Hashable, Sendable {
+    /// Sequence containing the clip's track.
+    public let sequenceID: UUID
+
+    /// Track containing the clip.
+    public let trackID: UUID
+
+    /// Addressed clip ID.
+    public let clipID: UUID
+
+    /// Creates a project-wide clip reference.
+    public init(sequenceID: UUID, trackID: UUID, clipID: UUID) {
+        self.sequenceID = sequenceID
+        self.trackID = trackID
+        self.clipID = clipID
+    }
+}
+
 /// Whether an edit should propagate through linked clip groups.
 public enum LinkedClipEditMode: String, Codable, Equatable, Sendable {
     /// Apply the same compatible edit to linked partner clips.

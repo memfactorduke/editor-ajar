@@ -71,6 +71,42 @@ struct EditorAjarApp: App {
                 .disabled(model.selectedMarker == nil)
             }
             CommandMenu("Clip") {
+                Button("Copy Grade") {
+                    model.copyGradeFromSelectedClip()
+                }
+                .keyboardShortcut("c", modifiers: [.command, .option])
+                .disabled(!model.canCopyGrade)
+                .accessibilityLabel("Copy Grade from Selected Clip")
+
+                Button("Paste Grade") {
+                    model.pasteGradeToSelectedClip()
+                }
+                .keyboardShortcut("v", modifiers: [.command, .option])
+                .disabled(!model.canPasteGrade)
+                .accessibilityLabel("Paste Grade to Selected Clip")
+
+                Divider()
+
+                Button("Save Look") {
+                    model.saveLookFromSelectedClip()
+                }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+                .disabled(!model.canSaveLook)
+                .accessibilityLabel("Save Look from Selected Clip")
+
+                Menu("Apply Look") {
+                    ForEach(model.savedLooks, id: \.id) { look in
+                        Button(look.name) {
+                            model.applyLookToSelectedClip(lookID: look.id)
+                        }
+                        .accessibilityLabel("Apply Look \(look.name)")
+                    }
+                }
+                .disabled(!model.canApplyLook)
+                .accessibilityLabel("Apply Look to Selected Clip")
+
+                Divider()
+
                 Button("Detach Audio") {
                     model.detachAudioForSelectedClip()
                 }

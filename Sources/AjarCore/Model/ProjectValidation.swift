@@ -19,6 +19,15 @@ public enum ProjectValidationResult: Equatable, Sendable {
 
 /// Typed project validation error.
 public enum ProjectValidationError: Equatable, Sendable {
+    /// Two project looks use the same stable ID.
+    case duplicateLookID(UUID)
+
+    /// Two project looks use the same trimmed name, ignoring case.
+    case duplicateLookName(String)
+
+    /// A project look violates an FR-COL-007 model invariant.
+    case invalidLook(lookID: UUID, error: ProjectLookValidationError)
+
     /// Two sequences use the same stable ID.
     case duplicateSequenceID(UUID)
 
@@ -218,6 +227,8 @@ enum ProjectValidator {
 
         var seenSequenceIDs = Set<UUID>()
 
+        validateLooks(project.looks, state: &state)
+
         for sequence in project.sequences {
             if seenSequenceIDs.contains(sequence.id) {
                 state.errors.append(.duplicateSequenceID(sequence.id))
@@ -245,6 +256,25 @@ enum ProjectValidator {
             return .valid
         }
         return .invalid(state.errors)
+    }
+
+    private static func validateLooks(_ looks: [ProjectLook], state: inout ValidationState) {
+        var seenIDs = Set<UUID>()
+        var seenNames = Set<String>()
+        for look in looks {
+            if !seenIDs.insert(look.id).inserted {
+                state.errors.append(.duplicateLookID(look.id))
+            }
+
+            let normalizedName = ProjectLookValidator.normalizedName(look.name)
+            if !normalizedName.isEmpty && !seenNames.insert(normalizedName).inserted {
+                state.errors.append(.duplicateLookName(look.name))
+            }
+
+            for error in ProjectLookValidator.errors(for: look) {
+                state.errors.append(.invalidLook(lookID: look.id, error: error))
+            }
+        }
     }
 
     private static func validateTracks(

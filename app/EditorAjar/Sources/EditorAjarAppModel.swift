@@ -15,6 +15,7 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var loadMessage: String
     @Published private(set) var timelineState = TimelineInteractionState()
     @Published private(set) var activeSequenceID: UUID?
+    @Published private(set) var copiedGradeSource: ProjectClipReference?
 
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
@@ -197,6 +198,19 @@ final class EditorAjarAppModel: ObservableObject {
         return timelineState.selectedClips.first
     }
 
+    var selectedProjectClipReference: ProjectClipReference? {
+        guard let sequenceID = activeSequence?.id,
+              let selectedClipReference
+        else {
+            return nil
+        }
+        return ProjectClipReference(
+            sequenceID: sequenceID,
+            trackID: selectedClipReference.trackID,
+            clipID: selectedClipReference.clipID
+        )
+    }
+
     var selectedClip: Clip? {
         guard let selectedClipReference,
               let sequence = activeSequence
@@ -204,6 +218,36 @@ final class EditorAjarAppModel: ObservableObject {
             return nil
         }
         return Self.clip(selectedClipReference, in: sequence)
+    }
+
+    var savedLooks: [ProjectLook] {
+        project?.looks ?? []
+    }
+
+    var canCopyGrade: Bool {
+        guard let selectedClip, selectedClip.kind == .video else {
+            return false
+        }
+        return !selectedClip.effectStack.grade.nodes.isEmpty
+    }
+
+    var canPasteGrade: Bool {
+        guard selectedClip?.kind == .video,
+              let project,
+              let copiedGradeSource,
+              let sourceClip = Self.clip(copiedGradeSource, in: project)
+        else {
+            return false
+        }
+        return !sourceClip.effectStack.grade.nodes.isEmpty
+    }
+
+    var canSaveLook: Bool {
+        canCopyGrade
+    }
+
+    var canApplyLook: Bool {
+        selectedClip?.kind == .video && !savedLooks.isEmpty
     }
 
     var selectedTransformClipReference: TimelineClipReference? {
@@ -503,6 +547,68 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectionAnchor = result.anchor
         timelineState.selectedMarkerID = nil
         persistActiveSequenceContext()
+    }
+
+    @discardableResult
+    func copyGradeFromSelectedClip() -> Bool {
+        guard canCopyGrade,
+              let selectedProjectClipReference
+        else {
+            return false
+        }
+        copiedGradeSource = selectedProjectClipReference
+        return true
+    }
+
+    @discardableResult
+    func pasteGradeToSelectedClip() -> Bool {
+        guard let project,
+              let source = copiedGradeSource,
+              let target = selectedProjectClipReference,
+              let sourceClip = Self.clip(source, in: project)
+        else {
+            return false
+        }
+        let newNodeIDs = sourceClip.effectStack.grade.nodes.map { _ in UUID() }
+        guard !newNodeIDs.isEmpty else {
+            return false
+        }
+        return applyEdit(
+            .copyClipGrade(source: source, target: target, newNodeIDs: newNodeIDs)
+        )
+    }
+
+    @discardableResult
+    func saveLookFromSelectedClip() -> Bool {
+        guard let project,
+              canSaveLook,
+              let source = selectedProjectClipReference
+        else {
+            return false
+        }
+        return applyEdit(
+            .saveLookFromClip(
+                source: source,
+                lookID: UUID(),
+                name: Self.nextLookName(in: project)
+            )
+        )
+    }
+
+    @discardableResult
+    func applyLookToSelectedClip(lookID: UUID) -> Bool {
+        guard let target = selectedProjectClipReference,
+              let look = savedLooks.first(where: { $0.id == lookID })
+        else {
+            return false
+        }
+        let newNodeIDs = look.grade.nodes.map { _ in UUID() }
+        guard !newNodeIDs.isEmpty else {
+            return false
+        }
+        return applyEdit(
+            .applyLookToClip(lookID: lookID, target: target, newNodeIDs: newNodeIDs)
+        )
     }
 
     func selectAllClips(on trackID: UUID) {
@@ -1321,6 +1427,30 @@ final class EditorAjarAppModel: ObservableObject {
             }
         }
         return nil
+    }
+
+    private static func clip(_ reference: ProjectClipReference, in project: Project) -> Clip? {
+        guard let sequence = project.sequences.first(where: { $0.id == reference.sequenceID })
+        else {
+            return nil
+        }
+        return clip(
+            TimelineClipReference(trackID: reference.trackID, clipID: reference.clipID),
+            in: sequence
+        )
+    }
+
+    private static func nextLookName(in project: Project) -> String {
+        let names = Set(
+            project.looks.map { look in
+                look.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            }
+        )
+        var suffix = 1
+        while names.contains("look \(suffix)") {
+            suffix += 1
+        }
+        return "Look \(suffix)"
     }
 
     private static func mediaDimensions(for clip: Clip, in project: Project) -> PixelDimensions? {

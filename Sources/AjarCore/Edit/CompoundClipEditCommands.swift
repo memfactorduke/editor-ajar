@@ -118,9 +118,11 @@ extension EditReducer {
         _ edit: InsertCompoundClipEdit,
         in project: Project
     ) throws -> Project {
-        guard let targetSequence = project.sequences.first(
-            where: { $0.id == edit.targetSequenceID }
-        ) else {
+        guard
+            let targetSequence = project.sequences.first(
+                where: { $0.id == edit.targetSequenceID }
+            )
+        else {
             throw EditReducerError.sequenceNotFound(edit.targetSequenceID)
         }
 
@@ -171,9 +173,11 @@ extension EditReducer {
         guard !project.sequences.contains(where: { $0.id == edit.compoundSequenceID }) else {
             throw EditReducerError.duplicateSequenceID(edit.compoundSequenceID)
         }
-        guard let sequenceIndex = project.sequences.firstIndex(
-            where: { $0.id == edit.sequenceID }
-        ) else {
+        guard
+            let sequenceIndex = project.sequences.firstIndex(
+                where: { $0.id == edit.sequenceID }
+            )
+        else {
             throw EditReducerError.sequenceNotFound(edit.sequenceID)
         }
 
@@ -226,7 +230,8 @@ extension EditReducer {
             schemaVersion: project.schemaVersion,
             settings: project.settings,
             mediaPool: project.mediaPool,
-            sequences: sequences
+            sequences: sequences,
+            looks: project.looks
         )
     }
 

@@ -703,6 +703,124 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertTrue(model.canUndo)
     }
 
+    func testFRCOL007AppCopiesAndPastesGradeThroughUndoableHistory() throws {
+        let fixture = try makeGradeAppFixture()
+        let loaded = try loadGradeAppModel(project: fixture.project, named: "CopyPasteGrade.ajar")
+        defer { try? FileManager.default.removeItem(at: loaded.packageDirectory) }
+        let model = loaded.model
+
+        XCTAssertFalse(model.canCopyGrade)
+        XCTAssertFalse(model.canPasteGrade)
+        model.selectClip(
+            trackID: fixture.source.trackID,
+            clipID: fixture.source.clipID,
+            mode: .replace
+        )
+
+        XCTAssertTrue(model.canCopyGrade)
+        XCTAssertTrue(model.copyGradeFromSelectedClip())
+        XCTAssertEqual(model.copiedGradeSource, fixture.source)
+
+        model.selectClip(
+            trackID: fixture.target.trackID,
+            clipID: fixture.target.clipID,
+            mode: .replace
+        )
+        XCTAssertTrue(model.canPasteGrade)
+        XCTAssertTrue(model.pasteGradeToSelectedClip())
+        XCTAssertEqual(model.undoMenuTitle, "Undo Copy Grade")
+
+        let source = try projectClip(fixture.source, in: XCTUnwrap(model.project))
+        let pasted = try projectClip(fixture.target, in: XCTUnwrap(model.project))
+        XCTAssertEqual(
+            pasted.effectStack.grade.nodes.map(\.definition),
+            source.effectStack.grade.nodes.map(\.definition)
+        )
+        XCTAssertNotEqual(
+            pasted.effectStack.grade.nodes.map(\.id),
+            source.effectStack.grade.nodes.map(\.id)
+        )
+        let pastedIDs = pasted.effectStack.grade.nodes.map(\.id)
+
+        model.undo()
+        XCTAssertTrue(
+            try projectClip(fixture.target, in: XCTUnwrap(model.project))
+                .effectStack.grade.nodes.isEmpty
+        )
+
+        model.redo()
+        XCTAssertEqual(
+            try projectClip(fixture.target, in: XCTUnwrap(model.project))
+                .effectStack.grade.nodes.map(\.id),
+            pastedIDs
+        )
+    }
+
+    func testFRCOL007AppSavesUniqueLookAndAppliesItToSelectedClip() throws {
+        let fixture = try makeGradeAppFixture()
+        let existingLook = ProjectLook(
+            id: try appTestUUID("00000000-0000-0000-0000-000000007104"),
+            name: " look 1 ",
+            grade: ClipEffectStack(
+                nodes: [
+                    ClipEffectNode(
+                        id: try appTestUUID("00000000-0000-0000-0000-000000007105"),
+                        definition: .invert(.identity)
+                    )
+                ]
+            )
+        )
+        let project = Project(
+            schemaVersion: fixture.project.schemaVersion,
+            schemaMinor: fixture.project.schemaMinor,
+            settings: fixture.project.settings,
+            mediaPool: fixture.project.mediaPool,
+            sequences: fixture.project.sequences,
+            looks: [existingLook]
+        )
+        let loaded = try loadGradeAppModel(project: project, named: "SaveApplyLook.ajar")
+        defer { try? FileManager.default.removeItem(at: loaded.packageDirectory) }
+        let model = loaded.model
+
+        model.selectClip(
+            trackID: fixture.source.trackID,
+            clipID: fixture.source.clipID,
+            mode: .replace
+        )
+        XCTAssertTrue(model.canSaveLook)
+        XCTAssertTrue(model.saveLookFromSelectedClip())
+        XCTAssertEqual(model.savedLooks.map(\.name), [" look 1 ", "Look 2"])
+        XCTAssertEqual(model.undoMenuTitle, "Undo Save Look")
+        let savedLook = try XCTUnwrap(model.savedLooks.last)
+
+        model.selectClip(
+            trackID: fixture.target.trackID,
+            clipID: fixture.target.clipID,
+            mode: .replace
+        )
+        XCTAssertTrue(model.canApplyLook)
+        XCTAssertTrue(model.applyLookToSelectedClip(lookID: savedLook.id))
+        XCTAssertEqual(model.undoMenuTitle, "Undo Apply Look")
+
+        let applied = try projectClip(fixture.target, in: XCTUnwrap(model.project))
+        XCTAssertEqual(
+            applied.effectStack.grade.nodes.map(\.definition),
+            savedLook.grade.nodes.map(\.definition)
+        )
+        XCTAssertNotEqual(
+            applied.effectStack.grade.nodes.map(\.id),
+            savedLook.grade.nodes.map(\.id)
+        )
+
+        model.undo()
+        XCTAssertTrue(
+            try projectClip(fixture.target, in: XCTUnwrap(model.project))
+                .effectStack.grade.nodes.isEmpty
+        )
+        model.undo()
+        XCTAssertEqual(model.savedLooks, [existingLook])
+    }
+
     func testFRCOMP006TrackCompositingInspectorRoutesThroughEditHistoryAndUndo() throws {
         let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
 
@@ -957,6 +1075,106 @@ final class EditorAjarAppModelTests: XCTestCase {
         return directoryURL.appendingPathComponent(name, isDirectory: true)
     }
 
+    private func makeGradeAppFixture() throws -> GradeAppFixture {
+        var project = try EditorAjarAppModel.makeSampleProject().get()
+        let sequence = try XCTUnwrap(project.sequences.first)
+        let sourceTrack = try XCTUnwrap(sequence.videoTracks.first)
+        let targetTrack = try XCTUnwrap(sequence.videoTracks.dropFirst().first)
+        let sourceClip = try firstClip(in: sourceTrack)
+        let sourceReference = ProjectClipReference(
+            sequenceID: sequence.id,
+            trackID: sourceTrack.id,
+            clipID: sourceClip.id
+        )
+        let targetReference = ProjectClipReference(
+            sequenceID: sequence.id,
+            trackID: targetTrack.id,
+            clipID: try appTestUUID("00000000-0000-0000-0000-000000007102")
+        )
+        let gradeNode = ClipEffectNode(
+            id: try appTestUUID("00000000-0000-0000-0000-000000007101"),
+            definition: .colorAdjust(
+                ClipColorAdjustParameters(
+                    brightness: try RationalValue(numerator: 1, denominator: 4)
+                )
+            )
+        )
+        project = try apply(
+            .addClipEffectNode(
+                sequenceID: sourceReference.sequenceID,
+                trackID: sourceReference.trackID,
+                clipID: sourceReference.clipID,
+                node: gradeNode
+            ),
+            to: project
+        )
+        let targetClip = Clip(
+            id: targetReference.clipID,
+            source: sourceClip.source,
+            sourceRange: sourceClip.sourceRange,
+            timelineRange: sourceClip.timelineRange,
+            kind: .video,
+            name: "Grade target"
+        )
+        project = try apply(
+            .addClip(
+                sequenceID: targetReference.sequenceID,
+                trackID: targetReference.trackID,
+                clip: targetClip
+            ),
+            to: project
+        )
+        return GradeAppFixture(
+            project: project,
+            source: sourceReference,
+            target: targetReference
+        )
+    }
+
+    private func loadGradeAppModel(
+        project: Project,
+        named packageName: String
+    ) throws -> (model: EditorAjarAppModel, packageDirectory: URL) {
+        let packageURL = try temporaryAutosavePackageURL(named: packageName)
+        try AjarAutosaveStore.writeSnapshot(
+            project,
+            appliedCommandCount: 0,
+            openMode: .editable,
+            to: packageURL
+        )
+        return (
+            EditorAjarAppModel(
+                autosavePackageURL: packageURL,
+                autosaveIntervalSeconds: 0
+            ),
+            packageURL.deletingLastPathComponent()
+        )
+    }
+
+    private func projectClip(
+        _ reference: ProjectClipReference,
+        in project: Project
+    ) throws -> Clip {
+        let sequence = try XCTUnwrap(
+            project.sequences.first { $0.id == reference.sequenceID }
+        )
+        let track = try XCTUnwrap(
+            (sequence.videoTracks + sequence.audioTracks).first { $0.id == reference.trackID }
+        )
+        return try XCTUnwrap(
+            track.items.compactMap { item -> Clip? in
+                guard case .clip(let clip) = item, clip.id == reference.clipID else {
+                    return nil
+                }
+                return clip
+            }.first
+        )
+    }
+
+    private func appTestUUID(_ rawValue: String) throws -> UUID {
+        try XCTUnwrap(UUID(uuidString: rawValue))
+    }
+
     private func sampleLinkedSelection(
         in model: EditorAjarAppModel
     ) throws -> SampleLinkedSelection {
@@ -1048,6 +1266,12 @@ private struct SampleLinkedSelection {
     let audioTrackID: UUID
     let videoClip: Clip
     let audioClip: Clip
+}
+
+private struct GradeAppFixture {
+    let project: Project
+    let source: ProjectClipReference
+    let target: ProjectClipReference
 }
 
 private final class FakeAudioCoordinator: EditorAjarAudioCoordinating {

@@ -185,7 +185,7 @@ final class ClipCurvesEffectTests: XCTestCase {
             return XCTFail("expected editable open")
         }
         XCTAssertEqual(restored.schemaMinor, AjarProjectCodec.currentSchemaMinor)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 8)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 9)
         let clip = try XCTUnwrap(
             restored.sequences.first?.videoTracks.first?.items.compactMap { item -> Clip? in
                 if case .clip(let clip) = item {
@@ -252,7 +252,7 @@ final class ClipCurvesEffectTests: XCTestCase {
 
     func testFRCOL002SchemaMinorAndKindRegistration() {
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 8)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 8)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 9)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.curves))
         XCTAssertEqual(ClipEffectKind.curves.rawValue, "curves")
     }
