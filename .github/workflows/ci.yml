@@ -96,6 +96,11 @@ jobs:
       - name: Golden-frame gate (TESTING §2, ADR-0011)
         run: swift run ajar golden Tests/Fixtures/golden
 
+      # FR-EXP-007: export through ExportSession, decode, compare to render-path expectation.
+      # ProRes + still PNG must pass; H.264/HEVC capability-skip when VT encoder unavailable.
+      - name: Export golden (FR-EXP-007)
+        run: swift run ajar golden-export Tests/Fixtures/golden-export
+
       # On failure, upload harness actual/diff PNGs so new-fixture references can be
       # established from this macos-14 gate (ADR-0017 reference establishment).
       - name: Upload golden-frame actuals

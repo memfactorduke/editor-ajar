@@ -72,7 +72,7 @@ let package = Package(
         // Testable implementation for the `ajar` executable.
         .target(
             name: "AjarCLI",
-            dependencies: ["AjarAudio", "AjarCore", "AjarRender", "AjarMedia"],
+            dependencies: ["AjarAudio", "AjarCore", "AjarExport", "AjarRender", "AjarMedia"],
             path: "Sources/AjarCLI"
         ),
 

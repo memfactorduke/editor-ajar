@@ -32,6 +32,16 @@ watching every diff. If it's not tested, it's not done.
   review (ignored by git). Updating a golden is a deliberate, reviewed commit — never automatic.
 - Goldens live under `Tests/Fixtures/golden/`; source media is tiny or synthetic.
 
+### 2b. Export golden (FR-EXP-007)
+
+- `ajar golden-export [Tests/Fixtures/golden-export]` runs movie/still cases through the real
+  `ExportSession`, decodes the output, and compares to the **live** render-path delivery BGRA
+  (not a stored PNG reference for movie codecs).
+- Tolerances are codec-banded in `ExportGoldenTolerance` (ProRes near-lossless; H.264/HEVC lossy;
+  still PNG bit-exact). H.264/HEVC skip cleanly when the hardware encoder is unavailable.
+- Determinism tests hash decoded pixel buffers (and PCM when present) across two exports — never
+  container bytes.
+
 ## 3. Determinism rules (what makes the above possible)
 
 - All time is `RationalTime`; no float frame indices.
@@ -59,7 +69,7 @@ On every PR, in order, failing fast:
 build (all modules, warnings-as-errors in AjarCore)
  └─ lint + format check
      └─ unit + property tests        (+ Thread/Address Sanitizer)
-         └─ golden-frame + golden-audio
+         └─ golden-frame + golden-export (FR-EXP-007) + golden-audio
              └─ integration round-trips
                  └─ benchmarks vs. baseline   (gated NFRs)
                      └─ UI smoke

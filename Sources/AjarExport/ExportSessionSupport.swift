@@ -86,4 +86,33 @@ extension ExportSession {
         stateLock.unlock()
         onFrameProgress?(snapshot)
     }
+
+    /// Records the resolved media tier for every media id visible to this export (FR-EXP-007).
+    ///
+    /// Media-pool ids plus media-backed clip sources are audited so title-only timelines with an
+    /// audio media ref still leave a non-empty trail. Proxy adapters (#217) must keep resolving
+    /// `.original` here even when playback is in proxy mode.
+    func recordSourceSelections(forFrame index: Int64) {
+        var mediaIDs = Set(request.project.mediaPool.map(\.id))
+        for track in request.sequence.videoTracks + request.sequence.audioTracks {
+            for item in track.items {
+                guard case .clip(let clip) = item else {
+                    continue
+                }
+                if case .media(let mediaID) = clip.source {
+                    mediaIDs.insert(mediaID)
+                }
+            }
+        }
+        let rows = mediaIDs.sorted { $0.uuidString < $1.uuidString }.map { mediaID in
+            ExportFrameSourceSelection(
+                frameIndex: index,
+                mediaID: mediaID,
+                tier: sourceSelectionPolicy.resolvedTier(for: mediaID)
+            )
+        }
+        stateLock.lock()
+        sourceSelectionRecordsValue.append(contentsOf: rows)
+        stateLock.unlock()
+    }
 }

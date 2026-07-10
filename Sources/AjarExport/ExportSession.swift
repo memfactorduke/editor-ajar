@@ -19,6 +19,11 @@ public final class ExportSession: @unchecked Sendable {
     /// Immutable export inputs.
     public let request: ExportRequest
 
+    /// Source-tier resolution policy (FR-EXP-007). Production uses ``ExportSourceSelectionPolicy/alwaysOriginal``.
+    ///
+    /// See `ExportSourceSelection.swift` and ADR-0019 "Proxy exclusion audit hook".
+    public let sourceSelectionPolicy: ExportSourceSelectionPolicy
+
     private let frameProvider: any ExportVideoFrameProvider
     private let audioSourceProvider: (any AudioSourceProvider)?
     private let writerFactory: ExportWriterFactory
@@ -30,6 +35,7 @@ public final class ExportSession: @unchecked Sendable {
     var framesWrittenValue = Int64(0)
     var totalFramesValue = Int64(0)
     var activeWriter: (any ExportWriting)?
+    var sourceSelectionRecordsValue: [ExportFrameSourceSelection] = []
     private static let audioAppendFrameCount = 4_096
 
     /// Current lifecycle state, safe to poll from a queue or UI adapter.
@@ -49,12 +55,24 @@ public final class ExportSession: @unchecked Sendable {
         )
     }
 
+    /// Per-frame media-tier resolutions recorded during `run()` (FR-EXP-007 proxy exclusion hook).
+    ///
+    /// Empty until the session starts writing frames. After a successful export, every row must
+    /// be `.original` under the production policy; FR-MED-004 (#217) extends adapters while this
+    /// audit stays the test surface.
+    public var sourceSelectionRecords: [ExportFrameSourceSelection] {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return sourceSelectionRecordsValue
+    }
+
     /// Creates a session using the production AVAssetWriter boundary.
     public convenience init(
         id: UUID = UUID(),
         request: ExportRequest,
         frameProvider: any ExportVideoFrameProvider,
         audioSourceProvider: (any AudioSourceProvider)? = nil,
+        sourceSelectionPolicy: ExportSourceSelectionPolicy = .alwaysOriginal,
         onFrameProgress: (@Sendable (ExportProgress) -> Void)? = nil
     ) {
         self.init(
@@ -62,6 +80,7 @@ public final class ExportSession: @unchecked Sendable {
             request: request,
             frameProvider: frameProvider,
             audioSourceProvider: audioSourceProvider,
+            sourceSelectionPolicy: sourceSelectionPolicy,
             writerFactory: { url, settings in
                 try AVAssetExportWriter(outputURL: url, settings: settings)
             },
@@ -75,6 +94,7 @@ public final class ExportSession: @unchecked Sendable {
         request: ExportRequest,
         frameProvider: any ExportVideoFrameProvider,
         audioSourceProvider: (any AudioSourceProvider)? = nil,
+        sourceSelectionPolicy: ExportSourceSelectionPolicy = .alwaysOriginal,
         writerFactory: @escaping ExportWriterFactory,
         beforePublish: (() -> Void)? = nil,
         onFrameProgress: (@Sendable (ExportProgress) -> Void)? = nil
@@ -83,6 +103,7 @@ public final class ExportSession: @unchecked Sendable {
         self.request = request
         self.frameProvider = frameProvider
         self.audioSourceProvider = audioSourceProvider
+        self.sourceSelectionPolicy = sourceSelectionPolicy
         self.writerFactory = writerFactory
         self.beforePublish = beforePublish
         self.onFrameProgress = onFrameProgress
@@ -162,8 +183,13 @@ public final class ExportSession: @unchecked Sendable {
         )
         try checkCancellation()
         try transition(to: .finishing)
+        // Use the video frame-rate CMTime basis for frame-aligned ranges so endSession compares
+        // cleanly against presentationTime stamps (see ExportTimeMapping.endTime).
         try await preparedWriter.finish(
-            at: try ExportTimeMapping.endTime(for: request.range.duration)
+            at: try ExportTimeMapping.endTime(
+                for: request.range.duration,
+                frameRate: request.settings.video.frameRate
+            )
         )
         beforePublish?()
         try publish(preparedTransaction)
@@ -246,6 +272,7 @@ public final class ExportSession: @unchecked Sendable {
         var pendingVideoFrame: PendingVideoFrame?
 
         while videoFrameIndex < videoFrameCount
+            || pendingVideoFrame != nil
             || audioFrameIndex < (audioBuffer?.frameCount ?? 0) {
             try checkCancellation()
             try writer.checkForFailure()
@@ -288,6 +315,14 @@ public final class ExportSession: @unchecked Sendable {
                 await Task.yield()
             }
         }
+        // Structural guarantee: never call finish while a rendered frame is still pending append.
+        // (videoFrameIndex tracks successful appends; pending is independent.)
+        if pendingVideoFrame != nil || videoFrameIndex != videoFrameCount {
+            throw ExportError.writerFailed(
+                "export video drain incomplete: appended=\(videoFrameIndex) "
+                    + "expected=\(videoFrameCount) pending=\(pendingVideoFrame != nil)"
+            )
+        }
     }
 
     private func renderVideoFrame(
@@ -309,6 +344,7 @@ public final class ExportSession: @unchecked Sendable {
                 reason: String(describing: error)
             )
         }
+        recordSourceSelections(forFrame: index)
         try checkCancellation()
         let presentationTime = try ExportTimeMapping.presentationTime(
             forFrame: index,
@@ -319,5 +355,4 @@ public final class ExportSession: @unchecked Sendable {
             presentationTime: presentationTime
         )
     }
-
 }

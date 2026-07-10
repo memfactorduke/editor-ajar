@@ -30,11 +30,16 @@ final class LifecycleWriter: ExportWriting {
     var onFinishEntered: (() -> Void)?
     var suspendFinishUntilCancelled = false
     var audioReady = false
+    /// Number of `appendVideoIfReady` polls that return `false` before accepting (pending path).
+    var videoNotReadyPollsRemaining = 0
     private(set) var didStart = false
     private(set) var didFinish = false
     private(set) var appendedVideoCount = 0
+    private(set) var appendedVideoPresentationTimes: [CMTime] = []
     private(set) var appendedAudioRanges: [Range<Int>] = []
     private(set) var finishedAt: CMTime?
+    /// True if any video append arrived after `finish(at:)` began.
+    private(set) var appendedVideoAfterFinish = false
     private let finishLock = NSLock()
     private var didCancelValue = false
     private var finishContinuation: CheckedContinuation<Void, Never>?
@@ -79,11 +84,18 @@ final class LifecycleWriter: ExportWriting {
         at time: CMTime
     ) throws -> Bool {
         _ = pixelBuffer
-        _ = time
         if let appendVideoError {
             throw appendVideoError
         }
+        if videoNotReadyPollsRemaining > 0 {
+            videoNotReadyPollsRemaining -= 1
+            return false
+        }
+        if didFinish || finishedAt != nil {
+            appendedVideoAfterFinish = true
+        }
         appendedVideoCount += 1
+        appendedVideoPresentationTimes.append(time)
         onAppendVideo?()
         return true
     }

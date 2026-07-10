@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "export-hevc-title",
+  "requirements": ["FR-EXP-007", "ADR-0019"],
+  "mode": "movie",
+  "codec": "hevc8Bit",
+  "container": "mp4",
+  "frameCount": 12,
+  "width": 64,
+  "height": 64,
+  "includeAudio": false
+}

@@ -62,6 +62,19 @@ stay sequential and CPU-deterministic.
 The source provider prepares each graph from original media. Proxy selection is outside the export
 module and does not satisfy this contract (FR-EXP-007).
 
+### Proxy exclusion audit hook (FR-EXP-007 / FR-MED-004)
+
+`ExportSession` carries an `ExportSourceSelectionPolicy` (production default:
+`alwaysOriginal`) and records per-frame `ExportFrameSourceSelection` rows while writing. Each row
+is the resolved `ExportMediaSourceTier` (`.original` / `.proxy`) for a media-pool or media-backed
+clip id. Golden-export and unit tests assert every recorded tier is `.original`.
+
+This is intentionally an **audit / assertion surface**, not a second media stack: source decode
+remains injected via `ExportRenderSourceProvider`. When FR-MED-004 proxy generation lands
+(issue #217), playback may select proxy files, but export adapters must keep resolving
+`.original` through this policy (extend `resolvedTier(for:)` rather than inventing a parallel
+hook). The session does not import `AjarMedia` and does not open proxy URLs itself.
+
 ### Codecs, containers, and pixel formats
 
 `AVAssetWriter` muxes MP4 and MOV. H.264 and HEVC output settings require
@@ -96,6 +109,20 @@ matching primaries, transfer function, and YCbCr matrix in `AVVideoColorProperti
 H.264/HEVC and on every encoder pixel buffer. High-bit-depth ProRes omits the output-settings color
 dictionary as required by AVAssetWriter and propagates the pixel-buffer tags instead. A mismatched
 graph/output tag is a typed error rather than mislabeled media.
+
+### Export golden and determinism gate (FR-EXP-007)
+
+The `ajar golden-export` harness (and `AjarExportTests` determinism cases) export a small fixture
+through the real `ExportSession`, decode the container, and compare **decoded** BGRA frames to the
+live render-path delivery expectation with codec-banded tolerances:
+
+- **ProRes 422:** near-lossless band (must run on CI).
+- **H.264 / HEVC:** lossy band; capability-gated skip via
+  `ExportError.isHardwareEncoderUnavailable` (VT statuses -12902…-12906 wrapping pattern).
+- **Still PNG:** bit-exact vs delivery BGRA (FR-EXP-004 path).
+
+Determinism hashes **decoded** pixel buffers (and PCM when present), never container bytes —
+encoder timestamps may differ across runs. See `ExportGoldenComparison.swift` for the exact bands.
 
 ### Offline audio and interleaving
 
