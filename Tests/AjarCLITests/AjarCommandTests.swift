@@ -270,7 +270,9 @@ final class AjarCommandTests: XCTestCase {
             "transition-dip-fade-1080p-fr-fx-001": "FR-FX-001",
             "transition-push-slide-1080p-fr-fx-001": "FR-FX-001",
             "transition-wipe-1080p-fr-fx-001": "FR-FX-001",
-            "transition-zoom-1080p-fr-fx-001": "FR-FX-001"
+            "transition-zoom-1080p-fr-fx-001": "FR-FX-001",
+            "typical-stack-1080p-playback-m8-exit": "NFR-PERF-003",
+            "title-node-styled-1080p-fr-txt-001": "FR-TXT-001"
         ]
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))

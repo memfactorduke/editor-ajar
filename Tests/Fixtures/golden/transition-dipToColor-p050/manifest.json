@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "id": "transition-dipToColor-p050",
+  "requirements": [
+    "FR-FX-001",
+    "FR-FX-007",
+    "ADR-0016",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "frame": "10/24",
+  "referencePNG": "reference.png",
+  "outputDimensions": {
+    "width": 64,
+    "height": 64
+  },
+  "clips": [
+    {
+      "syntheticMedia": {
+        "bgra": [
+          96,
+          112,
+          128,
+          255
+        ],
+        "frameCount": 16,
+        "frameRate": 24,
+        "width": 64,
+        "height": 64,
+        "checkerboard": {
+          "cellSize": 8,
+          "colorABGRA": [
+            96,
+            112,
+            128,
+            255
+          ],
+          "colorBBGRA": [
+            112,
+            128,
+            144,
+            255
+          ]
+        }
+      },
+      "timelineStartFrame": 0,
+      "sourceFrameCount": 8,
+      "trailingTransition": {
+        "partnerClipID": "00000000-0000-0000-0000-000000000119",
+        "duration": {
+          "value": 4,
+          "timescale": 24
+        },
+        "kind": "dipToColor",
+        "color": {
+          "red": {
+            "numerator": 4,
+            "denominator": 5
+          },
+          "green": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "blue": {
+            "numerator": 0,
+            "denominator": 1
+          }
+        }
+      }
+    },
+    {
+      "syntheticMedia": {
+        "bgra": [
+          128,
+          112,
+          96,
+          255
+        ],
+        "frameCount": 16,
+        "frameRate": 24,
+        "width": 64,
+        "height": 64,
+        "checkerboard": {
+          "cellSize": 8,
+          "colorABGRA": [
+            128,
+            112,
+            96,
+            255
+          ],
+          "colorBBGRA": [
+            144,
+            128,
+            112,
+            255
+          ]
+        }
+      },
+      "timelineStartFrame": 8,
+      "sourceFrameCount": 8,
+      "leadingTransition": {
+        "partnerClipID": "00000000-0000-0000-0000-000000000118",
+        "duration": {
+          "value": 4,
+          "timescale": 24
+        },
+        "kind": "dipToColor",
+        "color": {
+          "red": {
+            "numerator": 4,
+            "denominator": 5
+          },
+          "green": {
+            "numerator": 0,
+            "denominator": 1
+          },
+          "blue": {
+            "numerator": 0,
+            "denominator": 1
+          }
+        }
+      }
+    }
+  ],
+  "tolerance": {
+    "maximumAlphaDelta": 1,
+    "maximumDeltaE": 1,
+    "minimumSSIM": 0.99
+  },
+  "comment": "dipToColor mid-progress (p=0.5) through deep red (0.8,0,0). Per-pixel lerp family like crossDissolve/fade — tight deltaE 1 / SSIM 0.99. reference.png is a VALID solid-gray CI-establishment placeholder (ADR-0017 §6)."
+}

@@ -111,6 +111,15 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Per-kind-family GPU cost for FR-FX-001 zoom at 1080p.
     case transitionZoom1080p = "transition-zoom-1080p-fr-fx-001"
 
+    /// M8 exit: full-frame 1080p30 playback of a typical creative stack (grade + blur +
+    /// vignette + styled title + crossDissolve). Exercises FR-FX-001/002/003, FR-COL-002/004,
+    /// and FR-TXT-001 together under the NFR-PERF-003 real-time budget.
+    case typicalStack1080pPlaybackM8Exit = "typical-stack-1080p-playback-m8-exit"
+
+    /// Per-node cost of one 1080p fully-styled title (FR-TXT-001/002): stroke + shadow +
+    /// gradient fill + background box, rasterized (CPU CoreText) and composited over media.
+    case titleNodeStyled1080p = "title-node-styled-1080p-fr-txt-001"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -119,7 +128,7 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "NFR-PERF-002"
         case .coldStartProxy:
             "NFR-PERF-001"
-        case .multiLayerTransformPlayback:
+        case .multiLayerTransformPlayback, .typicalStack1080pPlaybackM8Exit:
             "NFR-PERF-003"
         case .twoLayerChromaKeyChoke4K30Playback:
             "NFR-PERF-004"
@@ -146,6 +155,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .transitionCrossDissolve1080p, .transitionDipFade1080p,
             .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
             "FR-FX-001"
+        case .titleNodeStyled1080p:
+            "FR-TXT-001"
         }
     }
 
@@ -207,6 +218,14 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
             // Two-input full-frame transition at 1080p; headroom under 30 fps frame budget.
             .effectNodeGPU(targetMilliseconds: 3)
+        case .typicalStack1080pPlaybackM8Exit:
+            // Full composite (grade + 2 fx + title + mid crossDissolve) must stay inside the
+            // 1080p30 frame. PERFORMANCE §2/§3: 30 fps gives ~33.3 ms; target 28 ms so the
+            // interactive layer and decode/prefetch keep ~5 ms headroom on M1 Pro (NFR-PERF-003).
+            .typicalStackPlayback1080p30
+        case .titleNodeStyled1080p:
+            // Full 1080p styled title: CPU CoreText raster + upload + composite (see budget).
+            .titleNodeGPU
         default:
             nil
         }
@@ -262,6 +281,32 @@ public struct BenchmarkBudget: Equatable, Sendable {
         targetMilliseconds: 1.5,
         noiseBandPercent: 5
     )
+
+    /// M8 exit full-stack 1080p30 playback budget (PERFORMANCE §2/§3, NFR-PERF-003).
+    ///
+    /// Real-time at 30 fps is 1000/30 ≈ 33.3 ms per frame. The suite targets **28 ms** so a
+    /// typical creative stack (grade + blur + vignette + styled title + mid crossDissolve)
+    /// still leaves ~5 ms headroom for present/sync and decode amortization on the M1 Pro
+    /// reference machine. Noise band is the suite default (5%).
+    static let typicalStackPlayback1080p30 = BenchmarkBudget(
+        targetMilliseconds: 28,
+        noiseBandPercent: 5
+    )
+
+    /// FR-TXT-001/002 fully-styled title at 1080p (PERFORMANCE §3).
+    ///
+    /// Unlike pure GPU effect nodes (2–6 ms), a title pays **CPU CoreText layout + full-frame
+    /// BGRA raster**, then MTL texture upload and one composite pass over media. 10 ms on M1
+    /// Pro leaves headroom under the ~33.3 ms 30 fps frame while still failing a pathological
+    /// CoreText or upload regression. Noise band is the suite default (5%).
+    ///
+    /// Title **animation presets** (FR-TXT-004) are keyframe programs on transform /
+    /// `revealFraction` — they do not add a second raster path, so preset-level GPU budgets
+    /// are not needed; this metric covers the styled raster cost once.
+    static let titleNodeGPU = BenchmarkBudget(
+        targetMilliseconds: 10,
+        noiseBandPercent: 5
+    )
 }
 
 extension BenchmarkMetric {
@@ -274,7 +319,8 @@ extension BenchmarkMetric {
             .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
             .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p,
             .transitionCrossDissolve1080p, .transitionDipFade1080p,
-            .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
+            .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p,
+            .typicalStack1080pPlaybackM8Exit, .titleNodeStyled1080p:
             true
         default:
             false

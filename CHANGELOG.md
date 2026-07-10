@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- M8 exit criterion coverage close-out (#191): golden fixtures for the three missing
+  transition kinds at mid-progress — `transition-dipToColor-p050` (deep-red dip),
+  `transition-fade-p050` (per-pixel lerp tolerances matching crossDissolve: deltaE 1 /
+  SSIM 0.99), `transition-slide-p050` (resampling tolerances: deltaE 2 / SSIM 0.98). Mid-tone
+  A/B checkerboards match the existing transition set; `reference.png` files are VALID
+  solid-gray CI-establishment placeholders (ADR-0017 §6). Dedicated title-node metric
+  `title-node-styled-1080p-fr-txt-001` (FR-TXT-001/002): full styling (stroke + shadow +
+  gradient + background box) rasterized and composited at 1080p; budget **10 ms** (CPU
+  CoreText + upload + composite; heavier than pure GPU effect nodes, still under the 33.3 ms
+  frame). Exact-set `testBenchmarkAllEmitsReportOnlyPerformanceJSON` expectations updated.
+  Title animation presets remain without per-preset GPU budgets — they are keyframe programs
+  on transform / `revealFraction`; raster cost is covered once by the title-node metric.
+- M8 exit benchmark: `typical-stack-1080p-playback-m8-exit` — self-contained 1080p30 full-
+  frame playback of a representative creative stack (grade: master S-curve curves + 8³ invert
+  LUT at half strength; gaussian blur radius 2 + vignette; styled title with stroke + drop
+  shadow; mid crossDissolve between two graded clips). Budget **28 ms** (NFR-PERF-003;
+  PERFORMANCE §2/§3: 30 fps gives ~33.3 ms, 28 ms leaves ~5 ms headroom on M1 Pro). Wired into
+  `BenchmarkCommand` / `BenchmarkMetric.allCases` and the exact-set
+  `testBenchmarkAllEmitsReportOnlyPerformanceJSON` expectations (#191).
+
 ### Fixed
 - Animation keyframes no longer freeze or fire at the wrong sequence time after a clip is
   body-moved. Keyframes store **absolute** sequence times (same model as `Animatable.bladed(at:)`),
