@@ -173,7 +173,8 @@ public enum AjarProjectCodec {
     /// - `1`: introduces `schemaMinor` itself (ADR-0018 / #193).
     /// - `2`: FR-FX-002 library kinds (gaussian/box/zoom blur, sharpen, glow) (#181).
     /// - `3`: `ClipEffectKind.lut` (FR-COL-004 / #188).
-    public static let currentSchemaMinor = 3
+    /// - `4`: FR-TXT-002 title styling (stroke, shadow, background-box, linear-gradient fill) (#185).
+    public static let currentSchemaMinor = 4
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

@@ -55,15 +55,29 @@ strategy across CI machines.
    commit them as `reference.png` in an **explicit, reviewed** commit — never auto-promote
    without visual review (ADR-0011).
 
+7. **FR-TXT-002 styling layer.** Stroke, drop shadow, and linear-gradient fill are optional
+   static values on `TitleTextStyle`; the background box is optional on `TitleTextBox` because
+   its geometry derives from that box's rendered text-run bounds. The existing solid color is
+   the fallback when no gradient is present. Core Text shapes once; Core Graphics strokes or
+   clips those shaped glyph paths, draws the rounded background first, and shadows the composed
+   stroke + fill through a transparency layer. **Only linear gradients ship in v1** (start/end
+   colors plus a canvas-space angle); radial and conic gradients remain future additive work.
+   The title source has no animation container yet, so these values stay static until the
+   FR-TXT-004 animation model supplies one. Bitmap/color glyph runs (such as Apple Color Emoji)
+   retain their native system pixels because they have no outline path; path stroke/gradient
+   styling applies to vector glyph runs, while shadow and background still cover the composed
+   mixed-glyph result.
+
 ## Consequences
 
 - FR-TXT-001 model edits are fully unit-testable in `AjarCore`; FR-TXT-007 pixel behavior is
   golden-tested through the existing harness.
+- FR-TXT-002 styling stays legacy-safe through optional fields with sparse decode defaults; its
+  five new references follow the CI-canonical establishment workflow above.
 - Title clips participate in compound nesting, blade/copy, undo, and project codec paths
   without special-case project fields.
 - **Costs:** CoreText layout can differ slightly across OS/font versions (mitigated by the
-  Helvetica pin and CI-established references); animated titles (FR-TXT-004) and advanced styling
-  (stroke/shadow, FR-TXT-002) are out of scope here and layer on later.
+  Helvetica pin and CI-established references); animated titles (FR-TXT-004) layer on later.
 
 ## Alternatives considered
 
@@ -76,7 +90,8 @@ strategy across CI machines.
 
 ## References
 
-- SPEC FR-TXT-001, FR-TXT-007; [ARCHITECTURE §3–4](../ARCHITECTURE.md).
+- SPEC FR-TXT-001, FR-TXT-002, FR-TXT-007; [ARCHITECTURE §3–4](../ARCHITECTURE.md).
 - [ADR-0005](0005-core-ui-separation.md), [ADR-0006](0006-gpu-compositing-metal.md),
   [ADR-0008](0008-timeline-data-model.md), [ADR-0009](0009-render-graph-and-caching.md),
-  [ADR-0011](0011-testing-and-quality-gates.md).
+  [ADR-0011](0011-testing-and-quality-gates.md),
+  [ADR-0018](0018-schema-minor-versioning.md).

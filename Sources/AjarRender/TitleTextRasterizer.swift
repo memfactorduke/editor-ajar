@@ -168,7 +168,19 @@ public enum TitleTextRasterizer {
         )
 
         context.saveGState()
-        CTFrameDraw(frame, context)
+        let hasAdvancedStyling =
+            box.style.stroke != nil || box.style.dropShadow != nil
+            || box.style.gradientFill != nil || box.backgroundBox != nil
+        if hasAdvancedStyling {
+            TitleTextStyleRenderer.draw(
+                frame: frame,
+                frameRect: frameRect,
+                box: box,
+                context: context
+            )
+        } else {
+            CTFrameDraw(frame, context)
+        }
         context.restoreGState()
     }
 
@@ -210,6 +222,7 @@ public enum TitleTextRasterizer {
         var lineSpacing = CGFloat(max(style.leading.doubleValue, 0))
         return withUnsafePointer(to: &alignmentValue) { alignmentPointer in
             withUnsafePointer(to: &lineSpacing) { spacingPointer in
+                // swift-format-ignore
                 let settings = [
                     CTParagraphStyleSetting(
                         spec: .alignment,
@@ -238,6 +251,7 @@ public enum TitleTextRasterizer {
         let traits: [CFString: Any] = [
             kCTFontWeightTrait: weight
         ]
+        // swift-format-ignore
         let descriptorAttributes: [CFString: Any] = [
             kCTFontFamilyNameAttribute: style.fontFamily as CFString,
             kCTFontTraitsAttribute: traits
@@ -260,6 +274,7 @@ public enum TitleTextRasterizer {
         diagnostics.append(
             .fontUnavailable(requested: requested, fallback: fallbackName)
         )
+        // swift-format-ignore
         let fallbackDescriptor = CTFontDescriptorCreateWithAttributes(
             [
                 kCTFontFamilyNameAttribute: fallbackName as CFString,

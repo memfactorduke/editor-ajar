@@ -131,7 +131,7 @@ final class TitleEditCommandTests: XCTestCase {
         }
     }
 
-    func testFRTXT001BladeSplitPreservesTitleSourceOnBothHalves() throws {
+    func testFRTXT001FRTXT002BladeSplitPreservesStyledTitleSourceOnBothHalves() throws {
         let fixture = try makeTitleProjectFixture(seed: 8_404)
         let rightClipID = try editUUID(8_404_090)
         let bladed = try EditReducer.apply(
@@ -156,11 +156,16 @@ final class TitleEditCommandTests: XCTestCase {
             in: bladed,
             sequenceID: fixture.sequenceID
         )
+        let style = try XCTUnwrap(fixture.titleSource.boxes.first)
+        XCTAssertNotNil(style.style.stroke)
+        XCTAssertNotNil(style.style.dropShadow)
+        XCTAssertNotNil(style.style.gradientFill)
+        XCTAssertNotNil(style.backgroundBox)
         XCTAssertEqual(left.source, .title(fixture.titleSource))
         XCTAssertEqual(right.source, .title(fixture.titleSource))
     }
 
-    func testFRTXT001CopyingPropagatesTitleSource() throws {
+    func testFRTXT001FRTXT002CopyingPropagatesStyledTitleSource() throws {
         let fixture = try makeTitleProjectFixture(seed: 8_405)
         let clip = try titleClip(
             fixture.clipID,
@@ -173,8 +178,13 @@ final class TitleEditCommandTests: XCTestCase {
             timelineRange: try editRange(startFrame: 20, durationFrames: 10)
         )
         XCTAssertEqual(copied.source, clip.source)
-        guard case .title = copied.source else {
+        guard case .title(let copiedTitle) = copied.source else {
             return XCTFail("expected title source on copy")
         }
+        let copiedBox = try XCTUnwrap(copiedTitle.boxes.first)
+        XCTAssertNotNil(copiedBox.style.stroke)
+        XCTAssertNotNil(copiedBox.style.dropShadow)
+        XCTAssertNotNil(copiedBox.style.gradientFill)
+        XCTAssertNotNil(copiedBox.backgroundBox)
     }
 }

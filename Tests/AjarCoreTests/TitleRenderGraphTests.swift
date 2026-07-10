@@ -7,7 +7,7 @@ import XCTest
 
 /// FR-TXT-001 / ADR-0009 title render-graph content-hash behavior.
 final class TitleRenderGraphTests: XCTestCase {
-    func testFRTXT001RenderGraphEmitsTitleNodeWithStableContentHash() throws {
+    func testFRTXT001FRTXT002StylingDiscriminatesTitleContentHash() throws {
         let fixture = try makeTitleProjectFixture(seed: 8_408)
         let sequence = try XCTUnwrap(
             fixture.project.sequences.first { $0.id == fixture.sequenceID }
@@ -29,7 +29,7 @@ final class TitleRenderGraphTests: XCTestCase {
                 sequenceID: fixture.sequenceID,
                 trackID: fixture.videoTrackID,
                 clipID: fixture.clipID,
-                title: enlargedTitle(fixture.titleSource)
+                title: widerStrokeTitle(fixture.titleSource)
             ),
             to: fixture.project
         )
@@ -55,7 +55,7 @@ final class TitleRenderGraphTests: XCTestCase {
         )
     }
 
-    private func enlargedTitle(_ source: TitleSource) -> TitleSource {
+    private func widerStrokeTitle(_ source: TitleSource) -> TitleSource {
         let boxes = source.boxes.map { box in
             TitleTextBox(
                 id: box.id,
@@ -65,13 +65,22 @@ final class TitleRenderGraphTests: XCTestCase {
                 height: box.height,
                 style: TitleTextStyle(
                     fontFamily: box.style.fontFamily,
-                    fontSize: RationalValue(60),
+                    fontSize: box.style.fontSize,
                     fontWeight: box.style.fontWeight,
                     color: box.style.color,
                     tracking: box.style.tracking,
                     leading: box.style.leading,
-                    alignment: box.style.alignment
-                )
+                    alignment: box.style.alignment,
+                    stroke: TitleStrokeStyle(
+                        width: RationalValue(3),
+                        color: box.style.stroke?.color
+                            ?? ClipRGBColor(red: .zero, green: .zero, blue: .zero),
+                        join: box.style.stroke?.join ?? .miter
+                    ),
+                    dropShadow: box.style.dropShadow,
+                    gradientFill: box.style.gradientFill
+                ),
+                backgroundBox: box.backgroundBox
             )
         }
         return TitleSource(boxes: boxes)

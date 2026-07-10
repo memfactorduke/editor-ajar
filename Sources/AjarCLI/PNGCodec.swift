@@ -44,27 +44,31 @@ public enum PNGCodec {
         guard let provider = CGDataProvider(data: data as CFData) else {
             throw AjarCLIError.pngFailed("could not create image data provider")
         }
-        guard let cgImage = CGImage(
-            width: image.width,
-            height: image.height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: image.width * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: bgraBitmapInfo,
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: false,
-            intent: .defaultIntent
-        ) else {
+        guard
+            let cgImage = CGImage(
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: image.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: bgraBitmapInfo,
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+            )
+        else {
             throw AjarCLIError.pngFailed("could not create CGImage")
         }
-        guard let destination = CGImageDestinationCreateWithURL(
-            url as CFURL,
-            UTType.png.identifier as CFString,
-            1,
-            nil
-        ) else {
+        guard
+            let destination = CGImageDestinationCreateWithURL(
+                url as CFURL,
+                UTType.png.identifier as CFString,
+                1,
+                nil
+            )
+        else {
             throw AjarCLIError.pngFailed("could not create PNG destination")
         }
 
@@ -77,7 +81,7 @@ public enum PNGCodec {
     /// Reads a PNG into BGRA8 bytes.
     public static func read(from url: URL) throws -> PNGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else {
             throw AjarCLIError.pngFailed("could not read PNG at \(url.path)")
         }
@@ -85,19 +89,27 @@ public enum PNGCodec {
         let width = image.width
         let height = image.height
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        guard let context = CGContext(
-            data: &bytes,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: bgraBitmapInfo.rawValue
-        ) else {
-            throw AjarCLIError.pngFailed("could not create decode bitmap context")
-        }
+        try bytes.withUnsafeMutableBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                throw AjarCLIError.pngFailed("could not pin decode bitmap buffer")
+            }
+            guard
+                let context = CGContext(
+                    data: baseAddress,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: bgraBitmapInfo.rawValue
+                )
+            else {
+                throw AjarCLIError.pngFailed("could not create decode bitmap context")
+            }
 
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            context.flush()
+        }
         return PNGImage(width: width, height: height, bgra8: bytes)
     }
 

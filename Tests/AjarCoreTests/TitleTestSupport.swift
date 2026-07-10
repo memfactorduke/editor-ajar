@@ -47,7 +47,30 @@ func makeSampleTitle(seed: Int) throws -> TitleSource {
                 fontSize: RationalValue(32),
                 fontWeight: .bold,
                 color: ClipRGBColor(red: .one, green: .one, blue: .one),
-                alignment: .left
+                alignment: .left,
+                stroke: TitleStrokeStyle(
+                    width: RationalValue(2),
+                    color: ClipRGBColor(red: .zero, green: .zero, blue: .zero),
+                    join: .round
+                ),
+                dropShadow: TitleDropShadowStyle(
+                    offsetX: RationalValue(3),
+                    offsetY: RationalValue(2),
+                    blurRadius: RationalValue(2),
+                    color: ClipRGBColor(red: .zero, green: .zero, blue: .zero),
+                    opacity: try RationalValue(numerator: 3, denominator: 4)
+                ),
+                gradientFill: TitleLinearGradientFill(
+                    startColor: ClipRGBColor(red: .one, green: .one, blue: .one),
+                    endColor: ClipRGBColor(red: .one, green: .one, blue: .zero),
+                    angleDegrees: RationalValue(15)
+                )
+            ),
+            backgroundBox: TitleBackgroundBoxStyle(
+                padding: RationalValue(4),
+                cornerRadius: RationalValue(3),
+                fillColor: ClipRGBColor(red: .zero, green: .zero, blue: .zero),
+                opacity: try RationalValue(numerator: 3, denominator: 4)
             )
         )
     ])

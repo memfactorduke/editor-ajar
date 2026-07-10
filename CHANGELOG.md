@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-TXT-002 title styling (#185): optional glyph outlines (width/color/miter-round-bevel join),
+  deterministic drop shadows (x/y offset, blur, color, opacity), rounded text-run background
+  boxes (padding/radius/fill/opacity), and linear gradient glyph fills (start/end color + angle).
+  Core Text still owns shaping and fallback; Core Graphics strokes/clips the shaped glyph paths,
+  draws the run-bounds box behind text, and shadows the composed stroke + fill. Only linear
+  gradients ship in v1. Styling is static until FR-TXT-004 adds a title animation model. All
+  fields use typed ranges and sparse legacy defaults, including nested compound-title decoding;
+  blade/copy preserve the full style. `schemaMinor` is now `4` (ADR-0018; minor 3 = FR-COL-004
+  LUT). New CI-canonical placeholder goldens: `title-stroke-outline`, `title-drop-shadow`,
+  `title-background-box`, `title-linear-gradient-fill`, and `title-combined-styling` (ADR-0017 §6).
 - Rich text title generator clips (FR-TXT-001) and emoji/complex-script rendering via the system
   text stack (FR-TXT-007), opening M8's text track (#184). ADR-0017 records the split: the pure
   Codable title model (`TitleSource` / multi-box styled text) lives in `AjarCore` with typed
@@ -40,7 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ADR-0018 (schema minor versioning and forward-compatible opens), closing the FR-PROJ-005 gap
   called out on #180’s review (#193): project/media JSON carry `schemaVersion` (major) plus
   additive `schemaMinor` (default `0` when absent so legacy v2 files stay editable). This build
-  writes major `2` / minor `3` (minor 2 = FR-FX-002; minor 3 = FR-COL-004 LUT). Same major + higher minor opens **read-only** with a typed reason;
+  writes major `2` / minor `4` (minor 2 = FR-FX-002; minor 3 = FR-COL-004 LUT; minor 4 =
+  FR-TXT-002 title styling). Same major + higher minor opens **read-only** with a typed reason;
   `AjarProjectCodec.encode` / `writeSnapshot` require an explicit `openMode` (no default) so
   `encode(loaded.project)` cannot silently strip newer data; in-memory first saves use
   `encodeNewDocument`. Autosave `recover` propagates open mode and **skips journal replay** for

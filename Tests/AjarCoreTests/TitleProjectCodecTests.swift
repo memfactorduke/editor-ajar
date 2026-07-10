@@ -51,6 +51,42 @@ final class TitleProjectCodecTests: XCTestCase {
         XCTAssertEqual(loadedTitle, title)
     }
 
+    func testFRTXT002NestedLegacyTitleDefaultsEveryAbsentStylingField() throws {
+        let seed = 8_408
+        let project = try makeNestedTitleCompoundProject(seed: seed)
+        let package = try AjarProjectCodec.encodeNewDocument(project)
+        let stylingKeys = ["stroke", "dropShadow", "gradientFill", "backgroundBox"]
+        let strippedProject = try stylingKeys.reduce(package.projectJSON) { json, key in
+            try titleProjectJSONWithoutKey(key, in: json)
+        }
+        // Previous minor before FR-TXT-002 styling (minor 4): force decode at 3 so absent
+        // stroke/shadow/gradient/backgroundBox keys default cleanly (LUT gate is 3).
+        let legacyProjectJSON = try jsonSettingSchemaMinor(3, in: strippedProject)
+        let legacyMediaJSON = try jsonSettingSchemaMinor(3, in: package.mediaJSON)
+        let loaded = try editableTitleProject(
+            from: AjarProjectCodec.decode(
+                projectJSON: legacyProjectJSON,
+                mediaJSON: legacyMediaJSON
+            )
+        )
+
+        XCTAssertTrue(loaded.validate().isValid)
+        XCTAssertEqual(loaded.schemaMinor, 3)
+        let innerSequenceID = try editUUID(seed * 1_000 + 300)
+        let inner = try XCTUnwrap(loaded.sequences.first { $0.id == innerSequenceID })
+        guard case .clip(let titleClip) = inner.videoTracks[0].items[0],
+            case .title(let title) = titleClip.source
+        else {
+            return XCTFail("expected nested legacy title clip")
+        }
+        let box = try XCTUnwrap(title.boxes.first)
+        XCTAssertNil(box.style.stroke)
+        XCTAssertNil(box.style.dropShadow)
+        XCTAssertNil(box.style.gradientFill)
+        XCTAssertNil(box.backgroundBox)
+        XCTAssertEqual(box.text, "Title \(seed)")
+    }
+
     private func makeNestedTitleCompoundProject(seed: Int) throws -> Project {
         let outer = try makeEditFixture(seed: seed)
         let title = try makeSampleTitle(seed: seed)
@@ -87,6 +123,7 @@ final class TitleProjectCodecTests: XCTestCase {
         let outerSequence = try XCTUnwrap(
             outer.project.sequences.first { $0.id == outer.sequenceID }
         )
+        // swift-format-ignore
         return Project(
             schemaVersion: AjarProjectCodec.currentSchemaVersion,
             settings: outer.project.settings,
@@ -109,5 +146,13 @@ final class TitleProjectCodecTests: XCTestCase {
                 innerSequence
             ]
         )
+    }
+
+    private func jsonSettingSchemaMinor(_ minor: Int, in data: Data) throws -> Data {
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object["schemaMinor"] = minor
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     }
 }

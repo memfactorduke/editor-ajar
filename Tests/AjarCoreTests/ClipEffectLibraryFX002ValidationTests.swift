@@ -8,6 +8,7 @@ import XCTest
 final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
     func testFRFX002ParameterValidationRejectsOutOfRangeValues() throws {
         let highAmount = try RationalValue(numerator: 3, denominator: 2)
+        // swift-format-ignore
         let cases: [(ClipEffectDefinition, ClipEffectStackValidationError)] = try [
             (
                 .gaussianBlur(ClipGaussianBlurParameters(radius: RationalValue(65))),
@@ -71,8 +72,9 @@ final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
     }
 
     func testFRFX002SchemaMinorIsTwoAfterLibraryKinds() {
-        // Bumped again for FR-COL-004 lut (#188); FR-FX-002 claimed minor 2.
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 3)
+        // FR-FX-002 claimed minor 2; FR-COL-004 lut (#188) is gate 3; FR-TXT-002 styling is 4.
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 4)
+        XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 2)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.gaussianBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.boxBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.zoomBlur))

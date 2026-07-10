@@ -75,19 +75,25 @@ final class TitleSourceModelTests: XCTestCase {
         )
     }
 
-    private func sampleBox(id: UUID, style: TitleTextStyle) -> TitleTextBox {
+    private func sampleBox(
+        id: UUID,
+        style: TitleTextStyle,
+        backgroundBox: TitleBackgroundBoxStyle? = nil
+    ) -> TitleTextBox {
         TitleTextBox(
             id: id,
             text: "Hi",
             origin: .zero,
             width: RationalValue(100),
             height: RationalValue(40),
-            style: style
+            style: style,
+            backgroundBox: backgroundBox
         )
     }
 
     func testFRTXT001DuplicateBoxIDsAreRejected() throws {
         let id = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A003"))
+        // swift-format-ignore
         let title = TitleSource(boxes: [
             TitleTextBox(
                 id: id, text: "A", origin: .zero, width: RationalValue(10),
@@ -109,6 +115,9 @@ final class TitleSourceModelTests: XCTestCase {
         XCTAssertEqual(style.fontWeight, .regular)
         XCTAssertEqual(style.tracking, .zero)
         XCTAssertEqual(style.alignment, .left)
+        XCTAssertNil(style.stroke)
+        XCTAssertNil(style.dropShadow)
+        XCTAssertNil(style.gradientFill)
 
         let boxJSON = Data(
             """
@@ -123,6 +132,7 @@ final class TitleSourceModelTests: XCTestCase {
         XCTAssertEqual(box.origin, .zero)
         XCTAssertEqual(box.width, RationalValue(100))
         XCTAssertEqual(box.style.fontFamily, "Helvetica")
+        XCTAssertNil(box.backgroundBox)
 
         let titleJSON = Data(#"{}"#.utf8)
         let title = try JSONDecoder().decode(TitleSource.self, from: titleJSON)
@@ -163,6 +173,7 @@ final class TitleSourceModelTests: XCTestCase {
     }
 
     private func sampleTitle() throws -> TitleSource {
+        // swift-format-ignore
         TitleSource(boxes: [
             TitleTextBox(
                 id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A020")),
@@ -177,8 +188,20 @@ final class TitleSourceModelTests: XCTestCase {
                     color: ClipRGBColor(red: .one, green: .zero, blue: .zero),
                     tracking: RationalValue(1),
                     leading: RationalValue(2),
-                    alignment: .center
-                )
+                    alignment: .center,
+                    stroke: TitleStrokeStyle(
+                        width: RationalValue(2),
+                        color: ClipRGBColor(red: .zero, green: .zero, blue: .zero),
+                        join: .bevel
+                    ),
+                    dropShadow: TitleDropShadowStyle(),
+                    gradientFill: TitleLinearGradientFill(
+                        startColor: ClipRGBColor(red: .one, green: .zero, blue: .zero),
+                        endColor: ClipRGBColor(red: .zero, green: .zero, blue: .one),
+                        angleDegrees: RationalValue(45)
+                    )
+                ),
+                backgroundBox: TitleBackgroundBoxStyle()
             ),
             TitleTextBox(
                 id: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-00000000A021")),
