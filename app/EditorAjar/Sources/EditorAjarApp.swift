@@ -144,6 +144,23 @@ struct EditorAjarApp: App {
                 }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 .accessibilityLabel("Open export dialog")
+
+                Button("Export Active Sequence") {
+                    model.enqueueActiveSequenceExport()
+                }
+                // ⌘⇧E is the export dialog; enqueue uses ⌘⌃⇧E to avoid collision.
+                .keyboardShortcut("e", modifiers: [.command, .control, .shift])
+                .accessibilityLabel("Export Active Sequence")
+
+                Button(model.isExportQueuePanelVisible ? "Hide Export Queue" : "Show Export Queue") {
+                    model.toggleExportQueuePanel()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .control])
+                .accessibilityLabel(
+                    model.isExportQueuePanelVisible
+                        ? "Hide Export Queue"
+                        : "Show Export Queue"
+                )
             }
         }
     }

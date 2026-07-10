@@ -99,7 +99,7 @@ public struct ExportRequest: Sendable {
     }
 }
 
-/// Successful export summary returned to a future FR-EXP-005 queue.
+/// Successful export summary returned to the FR-EXP-005 queue.
 public struct ExportResult: Equatable, Sendable {
     /// Atomically published output URL.
     public let destinationURL: URL

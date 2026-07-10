@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-EXP-005 background export queue (#216): ordered jobs with a pure
+  `ExportJobStateMachine` (`pending` / `running` / `pausedWillRestart` /
+  `cancelled` / `failed` / `done`), sequential single-encode `ExportQueue` actor
+  (VideoToolbox contention — one hardware encode at a time), project **value**
+  snapshot isolation at enqueue, frames + rolling ETA progress (monotonic within
+  a run), cancel that aborts the existing temp-then-publish transaction, and
+  pause as graceful stop + full restart on resume (AVAssetWriter cannot true-
+  pause; `pausedWillRestart` surfaces that honestly). Jobs are **not** persisted
+  across app relaunch. Minimal SwiftUI queue panel (list, progress, cancel/
+  pause/resume) with keyboard + VoiceOver labels. Headless unit/concurrency
+  tests; ProRes preferred for queue integration. Soak: TODO for M9 exit — wire
+  one queued ProRes job into `ajar soak` when AjarCLI depends on AjarExport.
 - FR-EXP-003/004 export presets, ranges, stills, and audio-only (#215): `ExportPreset` + built-ins
   (YouTube 1080p/4K, Square 1080, Vertical 9:16, ProRes 422 master) resolve through
   `ExportSettings` validation. Custom presets persist **app-side only** (Application Support JSON,

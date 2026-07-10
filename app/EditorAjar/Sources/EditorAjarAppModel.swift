@@ -27,8 +27,14 @@ final class EditorAjarAppModel: ObservableObject {
     /// Whether the read-only workspace banner is currently shown.
     @Published private(set) var isReadOnlyBannerVisible = false
 
-    /// Minimal export dialog state (FR-EXP-003/004). Running export is a later FR-EXP-005 queue.
+    /// Minimal export dialog state (FR-EXP-003/004).
     @Published private(set) var exportDialog = EditorAjarExportDialogModel()
+
+    /// Whether the FR-EXP-005 export queue panel is visible.
+    @Published var isExportQueuePanelVisible = false
+
+    /// Background export queue bridge (FR-EXP-005). Observe this for job list updates.
+    let exportQueueController: EditorAjarExportQueueController
 
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
@@ -51,7 +57,8 @@ final class EditorAjarAppModel: ObservableObject {
         autosavePackageURL: URL? = nil,
         autosaveIntervalSeconds: TimeInterval = 5.0,
         audioCoordinator: (any EditorAjarAudioCoordinating)? = nil,
-        exportPresetStoreURL: URL? = nil
+        exportPresetStoreURL: URL? = nil,
+        exportQueueController: EditorAjarExportQueueController? = nil
     ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
         if let autosavePackageURL {
@@ -63,6 +70,7 @@ final class EditorAjarAppModel: ObservableObject {
         exportPresetStore = EditorAjarExportPresetStore(
             fileURL: exportPresetStoreURL ?? EditorAjarExportPresetStore.defaultFileURL()
         )
+        self.exportQueueController = exportQueueController ?? EditorAjarExportQueueController()
 
         loadMessage = "Loading sample project"
 
@@ -341,6 +349,104 @@ final class EditorAjarAppModel: ObservableObject {
     /// Dismisses the read-only workspace banner (keyboard-reachable from the banner control).
     func dismissReadOnlyBanner() {
         isReadOnlyBannerVisible = false
+    }
+
+    /// Shows or hides the background export queue panel (FR-EXP-005).
+    func toggleExportQueuePanel() {
+        isExportQueuePanelVisible.toggle()
+    }
+
+    /// Enqueues a ProRes export of the active sequence range (full sequence by default).
+    ///
+    /// Captures the current `project` value into the queue job so later edits cannot mutate
+    /// the in-flight encode (FR-EXP-005 snapshot isolation).
+    func enqueueActiveSequenceExport(destinationURL: URL? = nil) {
+        guard let project, let sequence = activeSequence else {
+            exportQueueController.presentError(
+                NSError(
+                    domain: "EditorAjar",
+                    code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "No active sequence to export"
+                    ]
+                )
+            )
+            isExportQueuePanelVisible = true
+            return
+        }
+
+        let exportsDirectory = FileManager.default.urls(
+            for: .moviesDirectory,
+            in: .userDomainMask
+        ).first?
+            .appendingPathComponent("Editor Ajar Exports", isDirectory: true)
+            ?? FileManager.default.temporaryDirectory
+
+        do {
+            try FileManager.default.createDirectory(
+                at: exportsDirectory,
+                withIntermediateDirectories: true
+            )
+            let settings = try EditorAjarExportQueueController.defaultSettings(for: project)
+            let url =
+                destinationURL
+                ?? exportsDirectory.appendingPathComponent(
+                    "\(sequence.name)-\(UUID().uuidString.prefix(8)).mov"
+                )
+            let duration = try sequence.timelineDuration()
+            let range = try TimeRange(start: .zero, duration: duration)
+            // Snapshot `project` by value at enqueue (struct copy).
+            let snapshot = project
+            Task {
+                do {
+                    _ = try await exportQueueController.enqueueExport(
+                        project: snapshot,
+                        sequenceID: sequence.id,
+                        range: range,
+                        destinationURL: url,
+                        settings: settings,
+                        displayName: sequence.name
+                    )
+                    isExportQueuePanelVisible = true
+                } catch {
+                    exportQueueController.presentError(error)
+                    isExportQueuePanelVisible = true
+                }
+            }
+        } catch {
+            exportQueueController.presentError(error)
+            isExportQueuePanelVisible = true
+        }
+    }
+
+    func cancelExportJob(_ jobID: UUID) {
+        Task {
+            do {
+                try await exportQueueController.cancel(jobID: jobID)
+            } catch {
+                exportQueueController.presentError(error)
+            }
+        }
+    }
+
+    func pauseExportJob(_ jobID: UUID) {
+        Task {
+            do {
+                try await exportQueueController.pause(jobID: jobID)
+            } catch {
+                exportQueueController.presentError(error)
+            }
+        }
+    }
+
+    func resumeExportJob(_ jobID: UUID) {
+        Task {
+            do {
+                try await exportQueueController.resume(jobID: jobID)
+            } catch {
+                exportQueueController.presentError(error)
+            }
+        }
     }
 
     /// Re-shows the read-only banner when the user tries an edit after dismissing it.
