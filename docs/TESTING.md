@@ -18,7 +18,7 @@ watching every diff. If it's not tested, it's not done.
 | **Benchmark** | the SPEC §5 NFRs on the reference machine | reference runner, every PR | min |
 | **Fuzz** | importers + project loader against malformed/truncated input (NFR-STAB-006) | nightly + corpus on PR | min |
 | **Soak** | seeded edit+render loop for leaks/stability, §8 (NFR-STAB-005) | short: every PR · full 1-hour: pre-release | ~3 min / 1 h |
-| **Sanitizers** | Thread + Address Sanitizer on unit/integration (NFR-STAB-004) | every PR | min |
+| **Sanitizers** | Thread Sanitizer on the concurrency-relevant suite (NFR-STAB-004); Address Sanitizer forthcoming on the reference runner | every PR (TSan) | min |
 | **UI smoke** | app launches, opens a project, plays; **AX tree walk** asserts every interactive role has a VoiceOver label (NFR-A11Y-001); canvas edit/nudge smokes are local-only (#210) | every PR | min |
 
 ## 2. Golden-frame testing (the core visual gate)
@@ -77,6 +77,17 @@ build (all modules, warnings-as-errors in AjarCore)
 
 A short soak (§8) runs per PR in parallel with the gates above. Nightly adds: fuzz corpus,
 expanded benchmark matrix (secondary HW tier).
+
+The **Thread Sanitizer** gate (`sanitizers` job, NFR-STAB-004 / ADR-0012) also runs per PR in
+parallel. It runs `swift test --sanitize=thread` over the concurrency surfaces — the export
+queue/session/writer state machine, the real-time audio plan handoff, the seeded soak loop, and
+the executor's concurrent-render guard — with `TSAN_OPTIONS=halt_on_error=1` so any **unsuppressed**
+data race fails the job (TSan otherwise only warns and exits 0). GPU golden / media-decode tests are
+excluded: their cross-thread ordering is owned by Metal/AVFoundation, not our code, and TSan cannot
+see through those frameworks. Known framework false positives (Metal command-buffer completion
+handlers) are documented, narrowly, in `.tsan-suppressions.txt` — a reviewed commit, never a way to
+hide a real race. Full-suite TSan plus Address Sanitizer join the matrix on the dedicated reference
+runner (PERFORMANCE §1).
 
 ## 6. Coverage & traceability
 
