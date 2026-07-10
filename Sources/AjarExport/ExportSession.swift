@@ -1,0 +1,323 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import AjarAudio
+import AjarCore
+import CoreMedia
+import CoreVideo
+import Foundation
+
+private struct PendingVideoFrame {
+    let pixelBuffer: CVPixelBuffer
+    let presentationTime: CMTime
+}
+
+/// One-shot export lifecycle designed to be owned by the FR-EXP-005 background queue.
+public final class ExportSession: @unchecked Sendable {
+    /// Stable queue identity.
+    public let id: UUID
+
+    /// Immutable export inputs.
+    public let request: ExportRequest
+
+    private let frameProvider: any ExportVideoFrameProvider
+    private let audioSourceProvider: (any AudioSourceProvider)?
+    private let writerFactory: ExportWriterFactory
+    private let beforePublish: (() -> Void)?
+    let onFrameProgress: (@Sendable (ExportProgress) -> Void)?
+    let stateLock = NSLock()
+    var stateValue = ExportSessionState.ready
+    var cancellationRequested = false
+    var framesWrittenValue = Int64(0)
+    var totalFramesValue = Int64(0)
+    var activeWriter: (any ExportWriting)?
+    private static let audioAppendFrameCount = 4_096
+
+    /// Current lifecycle state, safe to poll from a queue or UI adapter.
+    public var state: ExportSessionState {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return stateValue
+    }
+
+    /// Thread-safe frame progress (`framesWritten` / `totalFrames`) for the queue driver.
+    public var progress: ExportProgress {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return ExportProgress(
+            framesWritten: framesWrittenValue,
+            totalFrames: totalFramesValue
+        )
+    }
+
+    /// Creates a session using the production AVAssetWriter boundary.
+    public convenience init(
+        id: UUID = UUID(),
+        request: ExportRequest,
+        frameProvider: any ExportVideoFrameProvider,
+        audioSourceProvider: (any AudioSourceProvider)? = nil,
+        onFrameProgress: (@Sendable (ExportProgress) -> Void)? = nil
+    ) {
+        self.init(
+            id: id,
+            request: request,
+            frameProvider: frameProvider,
+            audioSourceProvider: audioSourceProvider,
+            writerFactory: { url, settings in
+                try AVAssetExportWriter(outputURL: url, settings: settings)
+            },
+            beforePublish: nil,
+            onFrameProgress: onFrameProgress
+        )
+    }
+
+    init(
+        id: UUID = UUID(),
+        request: ExportRequest,
+        frameProvider: any ExportVideoFrameProvider,
+        audioSourceProvider: (any AudioSourceProvider)? = nil,
+        writerFactory: @escaping ExportWriterFactory,
+        beforePublish: (() -> Void)? = nil,
+        onFrameProgress: (@Sendable (ExportProgress) -> Void)? = nil
+    ) {
+        self.id = id
+        self.request = request
+        self.frameProvider = frameProvider
+        self.audioSourceProvider = audioSourceProvider
+        self.writerFactory = writerFactory
+        self.beforePublish = beforePublish
+        self.onFrameProgress = onFrameProgress
+    }
+
+    /// Requests cooperative cancellation. Cleanup completes before `run()` returns.
+    public func cancel() {
+        var writerToCancel: (any ExportWriting)?
+        stateLock.lock()
+        switch stateValue {
+        case .preparing, .writing, .finishing:
+            cancellationRequested = true
+            stateValue = .cancelling
+            writerToCancel = activeWriter
+        case .ready:
+            cancellationRequested = true
+            stateValue = .cancelled
+        case .cancelling:
+            writerToCancel = activeWriter
+        case .completed, .cancelled, .failed:
+            break
+        }
+        stateLock.unlock()
+        writerToCancel?.cancel()
+    }
+
+    /// Runs the complete start → append → finalize lifecycle exactly once.
+    public func run() async throws -> ExportResult {
+        try beginRun()
+        return try await withTaskCancellationHandler {
+            try await executeRun()
+        } onCancel: {
+            self.cancel()
+        }
+    }
+
+    private func executeRun() async throws -> ExportResult {
+        var transaction: ExportOutputTransaction?
+        var writer: (any ExportWriting)?
+        do {
+            return try await performExport(
+                transaction: &transaction,
+                writer: &writer
+            )
+        } catch {
+            writer?.cancel()
+            throw finalizeFailure(error, transaction: transaction)
+        }
+    }
+
+    private func performExport(
+        transaction: inout ExportOutputTransaction?,
+        writer: inout (any ExportWriting)?
+    ) async throws -> ExportResult {
+        try checkCancellation()
+        let preparedTransaction = try ExportOutputTransaction(
+            destinationURL: request.destinationURL
+        )
+        transaction = preparedTransaction
+        let preparedWriter = try writerFactory(
+            preparedTransaction.temporaryURL,
+            request.settings
+        )
+        writer = preparedWriter
+        try installActiveWriter(preparedWriter)
+        let audioBuffer = try renderAudioIfRequested()
+        try checkCancellation()
+        try preparedWriter.start()
+        try transition(to: .writing)
+
+        let videoFrameCount = try request.videoFrameCount()
+        setTotalFrames(videoFrameCount)
+        try await appendMedia(
+            writer: preparedWriter,
+            videoFrameCount: videoFrameCount,
+            audioBuffer: audioBuffer
+        )
+        try checkCancellation()
+        try transition(to: .finishing)
+        try await preparedWriter.finish(
+            at: try ExportTimeMapping.endTime(for: request.range.duration)
+        )
+        beforePublish?()
+        try publish(preparedTransaction)
+        return ExportResult(
+            destinationURL: request.destinationURL,
+            duration: request.range.duration,
+            videoFrameCount: videoFrameCount,
+            audioFrameCount: audioBuffer?.frameCount ?? 0
+        )
+    }
+
+    private func finalizeFailure(
+        _ error: Error,
+        transaction: ExportOutputTransaction?
+    ) -> ExportError {
+        let mapped = mapRunError(error)
+        do {
+            try transaction?.cleanUp()
+        } catch let cleanup as ExportCleanupFailure {
+            setTerminalState(.failed)
+            return .cleanupFailed(
+                rootCause: mapped,
+                temporaryURL: cleanup.temporaryURL,
+                reason: cleanup.reason
+            )
+        } catch {
+            setTerminalState(.failed)
+            return .cleanupFailed(
+                rootCause: mapped,
+                temporaryURL: transaction?.temporaryURL ?? request.destinationURL,
+                reason: String(describing: error)
+            )
+        }
+        setTerminalState(mapped == .cancelled ? .cancelled : .failed)
+        return mapped
+    }
+
+    private func beginRun() throws {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        // cancel() before run() leaves the session in `.cancelled` with the cancellation flag set;
+        // produce the clean cancelled outcome instead of invalidSessionState.
+        if stateValue == .cancelled || (stateValue == .ready && cancellationRequested) {
+            stateValue = .cancelled
+            throw ExportError.cancelled
+        }
+        guard stateValue == .ready else {
+            throw ExportError.invalidSessionState(stateValue)
+        }
+        stateValue = .preparing
+    }
+
+    private func renderAudioIfRequested() throws -> RenderedAudioBuffer? {
+        guard let audioSettings = request.settings.audio else {
+            return nil
+        }
+        guard let audioSourceProvider else {
+            throw ExportError.missingAudioSourceProvider
+        }
+        do {
+            return try OfflineAudioMixer.render(
+                project: request.project,
+                sequence: request.sequence,
+                range: request.range,
+                sourceProvider: audioSourceProvider,
+                channelCount: audioSettings.channelCount
+            )
+        } catch {
+            throw ExportError.audioMixFailed(String(describing: error))
+        }
+    }
+
+    private func appendMedia(
+        writer: any ExportWriting,
+        videoFrameCount: Int64,
+        audioBuffer: RenderedAudioBuffer?
+    ) async throws {
+        var videoFrameIndex = Int64(0)
+        var audioFrameIndex = 0
+        var pendingVideoFrame: PendingVideoFrame?
+
+        while videoFrameIndex < videoFrameCount
+            || audioFrameIndex < (audioBuffer?.frameCount ?? 0) {
+            try checkCancellation()
+            try writer.checkForFailure()
+            var madeProgress = false
+
+            if videoFrameIndex < videoFrameCount, pendingVideoFrame == nil {
+                pendingVideoFrame = try await renderVideoFrame(
+                    index: videoFrameIndex,
+                    writer: writer
+                )
+            }
+            if let frame = pendingVideoFrame,
+                try writer.appendVideoIfReady(
+                    frame.pixelBuffer,
+                    at: frame.presentationTime
+                ) {
+                pendingVideoFrame = nil
+                videoFrameIndex += 1
+                recordFrameWritten()
+                madeProgress = true
+            }
+            if let audioBuffer,
+                audioFrameIndex < audioBuffer.frameCount {
+                let end = min(
+                    audioFrameIndex + Self.audioAppendFrameCount,
+                    audioBuffer.frameCount
+                )
+                if try writer.appendAudioIfReady(
+                    audioBuffer,
+                    frames: audioFrameIndex..<end
+                ) {
+                    audioFrameIndex = end
+                    madeProgress = true
+                }
+            }
+
+            if !madeProgress {
+                try await Task<Never, Never>.sleep(nanoseconds: 1_000_000)
+            } else {
+                await Task.yield()
+            }
+        }
+    }
+
+    private func renderVideoFrame(
+        index: Int64,
+        writer: any ExportWriting
+    ) async throws -> PendingVideoFrame {
+        let pixelBuffer = try writer.makeVideoPixelBuffer()
+        let timelineTime = try request.timelineTime(forFrame: index)
+        do {
+            try await frameProvider.renderFrame(at: timelineTime, into: pixelBuffer)
+        } catch is CancellationError {
+            throw ExportError.cancelled
+        } catch let error as ExportError {
+            // Providers already emit typed ExportError (including frameRenderFailed); do not wrap.
+            throw error
+        } catch {
+            throw ExportError.frameRenderFailed(
+                frameIndex: index,
+                reason: String(describing: error)
+            )
+        }
+        try checkCancellation()
+        let presentationTime = try ExportTimeMapping.presentationTime(
+            forFrame: index,
+            frameRate: request.settings.video.frameRate
+        )
+        return PendingVideoFrame(
+            pixelBuffer: pixelBuffer,
+            presentationTime: presentationTime
+        )
+    }
+
+}

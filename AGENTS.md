@@ -21,7 +21,7 @@ and reviews your pull requests. You write the code; it manages the work.
 
 `AjarCore` MUST NOT import AppKit, SwiftUI, UIKit, Metal, MetalKit, MetalFX, AVFoundation, AVFAudio,
 or CoreImage. It is pure, headless, testable. Platform code goes in `AjarRender` / `AjarMedia` /
-`AjarAudio`. (CI enforces this.)
+`AjarAudio` / `AjarExport`. (CI enforces this.)
 
 ## Your workflow — one issue, one branch, one PR
 

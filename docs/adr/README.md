@@ -29,6 +29,7 @@ silently editing code against an Accepted ADR.
 | [0016](0016-effects-and-transitions.md) | Effects and transitions architecture | Accepted |
 | [0017](0017-title-rendering.md) | Title rendering architecture: Core model + CoreText rasterization | Accepted |
 | [0018](0018-schema-minor-versioning.md) | Schema minor versioning and forward-compatible opens | Accepted |
+| [0019](0019-export-pipeline-architecture.md) | Export pipeline architecture | Accepted |
 
 To add one: copy `0000-adr-template.md` to the next number, fill it in, set status, and add a row
 here.

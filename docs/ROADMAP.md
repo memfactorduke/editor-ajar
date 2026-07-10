@@ -102,7 +102,7 @@ RAM/disk cache, constant/ramp/reverse/freeze/frame-blend retiming, pitch-correct
 FR-SPD-005 exit benchmarks all landed. Exit criteria met, including the 1-hour NFR-STAB-005
 acceptance soak which passed 2026-07-09.
 
-## M8 — Titles, effects, transitions & color depth *(started)*
+## M8 — Titles, effects, transitions & color depth *(complete)*
 
 **Goal:** the creative toolkit.
 **Delivers:** rich text titles + styling + on-canvas edit (FR-TXT-001…003,007); animated title
@@ -112,12 +112,12 @@ curves + secondary color + **LUTs** (FR-COL-002/004); looks save/recall (FR-COL-
 cost budget (PERFORMANCE §3); playback stays real-time at target spec with a typical stack.
 **Depends on:** M4, M5.
 
-**Current status:** M8 opened with ADR-0016 (effects/transitions architecture) and the pure
-`AjarCore` per-clip video effects stack model (FR-FX-003, #180): ordered nodes with enable/disable,
-reorder, reset, typed Codable-stable parameters, and M4 keyframing. Render integration, real
-library kinds, and transitions remain later M8 work.
+**Current status:** M8 is complete. The #191 exit review closed the remaining transition-golden,
+styled-title metric, and typical-stack 1080p30 benchmark coverage. Titles, animation presets,
+transitions, the core effects stack/library, curves, LUTs, and reusable looks now satisfy the M8
+deliverables and exit gates.
 
-## M9 — Delivery, proxies & 1.0 hardening
+## M9 — Delivery, proxies & 1.0 hardening *(started)*
 
 **Goal:** ship-quality export and the full performance/stability bar.
 **Delivers:** export H.264/HEVC/ProRes via hardware encode, presets, ranges, stills, audio-only
@@ -127,6 +127,12 @@ toggle (FR-MED-004); relink/consolidate polish (FR-MED-007/008); full accessibil
 **Exit:** export golden-frame/round-trip tests (FR-EXP-007); the entire benchmark suite green on
 the reference machine; crash-free + soak targets met; release candidate.
 **Depends on:** all prior.
+
+**Current status:** M9 started with #213 / ADR-0019: the new `AjarExport` module implements the
+FR-EXP-001/002 engine, typed settings, deterministic sequential render-graph pulls, offline-mixed
+audio, color-tagged H.264/HEVC/ProRes output, and an atomic cancel-safe session lifecycle. Presets,
+range-selection UI/stills/audio-only, the FR-EXP-005 queue, proxies, and the remaining 1.0
+hardening stay in later M9 slices.
 
 ---
 

@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-EXP-001/002 export engine and ADR-0019 (#213): new `AjarExport` module with validated Codable
+  H.264, HEVC Main/Main10, ProRes 422/422 HQ/4444, MP4/MOV, AAC/Float32 PCM, bitrate/quality/fps/
+  resolution, and Rec.709/Display-P3 settings. Export pulls exact sequential render-graph frames,
+  uses the deterministic offline audio mixer, requires VideoToolbox hardware for H.264/HEVC, and
+  publishes only a fully finalized same-directory temporary file. Typed disk-full, encoder,
+  append/finalize, and cancellation paths remove partial output; lifecycle/unit tests cover the
+  failure matrix and hardware-gated ten-frame H.264/ProRes AVAsset round trips.
 - M8 exit criterion coverage close-out (#191): golden fixtures for the three missing
   transition kinds at mid-progress — `transition-dipToColor-p050` (deep-red dip),
   `transition-fade-p050` (per-pixel lerp tolerances matching crossDissolve: deltaE 1 /
