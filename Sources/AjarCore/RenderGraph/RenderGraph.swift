@@ -639,6 +639,7 @@ private struct RenderEffectNodeHash: Codable {
     let kind: String
     let parameters: RenderEffectParameterHash
 
+    // swiftlint:disable:next cyclomatic_complexity
     init(_ node: ClipEffectNode) {
         id = node.id
         enabled = node.enabled
@@ -669,6 +670,27 @@ private struct RenderEffectNodeHash: Codable {
                 strength: lutParameters.strength,
                 placement: lutParameters.placement
             )
+        case .vignette(let vignetteParameters):
+            parameters = .vignette(
+                amount: vignetteParameters.amount,
+                radius: vignetteParameters.radius,
+                softness: vignetteParameters.softness
+            )
+        case .mirror(let mirrorParameters):
+            parameters = .mirror(axis: mirrorParameters.axis)
+        case .mosaic(let mosaicParameters):
+            parameters = .mosaic(cellSize: mosaicParameters.cellSize)
+        case .colorAdjust(let colorParameters):
+            parameters = .colorAdjust(
+                brightness: colorParameters.brightness,
+                contrast: colorParameters.contrast,
+                saturation: colorParameters.saturation,
+                tint: colorParameters.tint
+            )
+        case .posterize(let posterizeParameters):
+            parameters = .posterize(levels: posterizeParameters.levels)
+        case .invert:
+            parameters = .invert
         }
     }
 }
@@ -681,6 +703,17 @@ private enum RenderEffectParameterHash: Codable {
     case sharpen(amount: RationalValue, radius: RationalValue)
     case glow(radius: RationalValue, amount: RationalValue)
     case lut(tableDigest: ContentHash, strength: RationalValue, placement: ClipLUTPlacement)
+    case vignette(amount: RationalValue, radius: RationalValue, softness: RationalValue)
+    case mirror(axis: ClipMirrorAxis)
+    case mosaic(cellSize: RationalValue)
+    case colorAdjust(
+        brightness: RationalValue,
+        contrast: RationalValue,
+        saturation: RationalValue,
+        tint: RationalValue
+    )
+    case posterize(levels: RationalValue)
+    case invert
 }
 
 private struct RenderNodeHashPayload: Codable {

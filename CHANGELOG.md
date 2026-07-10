@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blade/copy preserve the full style. `schemaMinor` is now `4` (ADR-0018; minor 3 = FR-COL-004
   LUT). New CI-canonical placeholder goldens: `title-stroke-outline`, `title-drop-shadow`,
   `title-background-box`, `title-linear-gradient-fill`, and `title-combined-styling` (ADR-0017 §6).
+- FR-FX-002 batch 2 library effects on the ordered clip stack (#182): `vignette`
+  (amount/radius/softness), `mirror` (horizontal/vertical/quad axis), `mosaic` (source-pixel
+  cell size), keyframable `colorAdjust` (brightness/contrast/saturation/tint), `posterize`
+  (levels), and `invert`. Every kind has typed static + `Animatable` Codable parameters with
+  missing-field defaults, centralized range/keyframe validation, blade fidelity, and static /
+  animation parity coverage. `schemaMinor` advances to `5` for the additive kind cases
+  (ADR-0018; minor 3 = FR-COL-004 LUT, minor 4 = FR-TXT-002 title styling). AjarRender routes
+  all six through the ADR-0016 pipeline registry with generated MSL uniform layouts and
+  single-pass linear-working-space fragments: aspect-aware vignette, coordinate-fold mirror,
+  cell-center mosaic, straight-RGB color adjustment, posterization, and inversion. RGB-changing
+  effects unpremultiply and repremultiply while preserving alpha; the playback path remains
+  GPU-resident. New strict 96x96 golden fixtures are `effect-vignette-amount-three-quarters`,
+  `effect-mirror-quad`, `effect-mosaic-cell-size-12`, `effect-color-adjust-representative`,
+  `effect-posterize-levels-4`, and `effect-invert` (valid black placeholders pending reviewed
+  GPU references). Each kind also publishes a 1080p per-node 2 ms GPU budget with a 5% noise
+  band (PERFORMANCE section 3).
 - Rich text title generator clips (FR-TXT-001) and emoji/complex-script rendering via the system
   text stack (FR-TXT-007), opening M8's text track (#184). ADR-0017 records the split: the pure
   Codable title model (`TitleSource` / multi-box styled text) lives in `AjarCore` with typed
@@ -50,8 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ADR-0018 (schema minor versioning and forward-compatible opens), closing the FR-PROJ-005 gap
   called out on #180’s review (#193): project/media JSON carry `schemaVersion` (major) plus
   additive `schemaMinor` (default `0` when absent so legacy v2 files stay editable). This build
-  writes major `2` / minor `4` (minor 2 = FR-FX-002; minor 3 = FR-COL-004 LUT; minor 4 =
-  FR-TXT-002 title styling). Same major + higher minor opens **read-only** with a typed reason;
+  writes major `2` / minor `5` (minor 2 = FR-FX-002 batch 1; minor 3 = FR-COL-004 LUT; minor 4 =
+  FR-TXT-002 title styling; minor 5 = FR-FX-002 batch 2). Same major + higher minor opens
+  **read-only** with a typed reason;
   `AjarProjectCodec.encode` / `writeSnapshot` require an explicit `openMode` (no default) so
   `encode(loaded.project)` cannot silently strip newer data; in-memory first saves use
   `encodeNewDocument`. Autosave `recover` propagates open mode and **skips journal replay** for

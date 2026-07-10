@@ -5,6 +5,7 @@
     "spaces": 4
   },
   "tabWidth": 4,
+  "multiElementCollectionTrailingCommas": false,
   "maximumBlankLines": 1,
   "respectsExistingLineBreaks": true,
   "lineBreakBeforeControlFlowKeywords": false,

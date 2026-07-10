@@ -174,7 +174,8 @@ public enum AjarProjectCodec {
     /// - `2`: FR-FX-002 library kinds (gaussian/box/zoom blur, sharpen, glow) (#181).
     /// - `3`: `ClipEffectKind.lut` (FR-COL-004 / #188).
     /// - `4`: FR-TXT-002 title styling (stroke, shadow, background-box, linear-gradient fill) (#185).
-    public static let currentSchemaMinor = 4
+    /// - `5`: FR-FX-002 batch 2 (vignette, mirror, mosaic, colorAdjust, posterize, invert) (#182).
+    public static let currentSchemaMinor = 5
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

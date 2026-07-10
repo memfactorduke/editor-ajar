@@ -28,6 +28,24 @@ public enum ClipEffectKind: String, Codable, Equatable, Sendable, CaseIterable {
     /// Introduced at `schemaMinor` **3** (ADR-0018): minor 2 is FR-FX-002 five kinds (#181).
     case lut
 
+    /// Radial edge darkening with configurable falloff (FR-FX-002).
+    case vignette
+
+    /// Horizontal, vertical, or four-quadrant mirroring (FR-FX-002).
+    case mirror
+
+    /// Source-pixel mosaic / pixelation (FR-FX-002).
+    case mosaic
+
+    /// Basic brightness, contrast, saturation, and tint adjustment (FR-FX-002).
+    case colorAdjust
+
+    /// Discrete color-level posterization (FR-FX-002).
+    case posterize
+
+    /// Linear-working-space RGB inversion (FR-FX-002).
+    case invert
+
     /// Decodes a kind string; unknown raw values become `ClipEffectDecodingError.unknownKind`
     /// (not a bare `DecodingError`) so callers can surface the newer-project situation (ADR-0018).
     public init(from decoder: Decoder) throws {

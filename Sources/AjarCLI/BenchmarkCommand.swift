@@ -96,7 +96,8 @@ public enum BenchmarkCommand {
         let needsProjectFixture = metrics.contains { metric in
             !metric.isSelfContainedEffectNodeMetric
         }
-        let fixture = needsProjectFixture
+        let fixture =
+            needsProjectFixture
             ? try BenchmarkProjectFixture(projectURL: options.projectURL)
             : nil
         defer {
@@ -172,7 +173,9 @@ public enum BenchmarkCommand {
         case .diskCacheWarmStartPlayback:
             try await measureDiskCacheWarmStartPlayback(projectURL: projectURL)
         case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
-            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p:
+            .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p,
+            .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
+            .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p:
             try await measureEffectNodeMetric(metric)
         case .effectNodeLUTGPU:
             try await BenchmarkLUTMeasurement.measureEffectNodeLUTGPU()

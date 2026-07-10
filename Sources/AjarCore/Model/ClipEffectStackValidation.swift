@@ -34,6 +34,7 @@ enum ClipEffectStackValidator {
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private static func appendDefinitionErrors(
         _ definition: ClipEffectDefinition,
         to errors: inout [ClipEffectStackValidationError]
@@ -56,9 +57,22 @@ enum ClipEffectStackValidator {
             appendUnitIntervalError(parameters.strength, to: &errors) { value in
                 .lutStrengthOutOfRange(value)
             }
+        case .vignette(let parameters):
+            ClipEffectBatch2Validator.appendVignetteErrors(parameters, to: &errors)
+        case .mirror:
+            break
+        case .mosaic(let parameters):
+            ClipEffectBatch2Validator.appendMosaicErrors(parameters, to: &errors)
+        case .colorAdjust(let parameters):
+            ClipEffectBatch2Validator.appendColorAdjustErrors(parameters, to: &errors)
+        case .posterize(let parameters):
+            ClipEffectBatch2Validator.appendPosterizeErrors(parameters, to: &errors)
+        case .invert:
+            break
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private static func appendAnimatableDefinitionErrors(
         _ definition: AnimatableClipEffectDefinition,
         to errors: inout [ClipEffectStackValidationError]
@@ -78,6 +92,18 @@ enum ClipEffectStackValidator {
             appendAnimatableGlowErrors(parameters, to: &errors)
         case .lut(let parameters):
             appendAnimatableLUTErrors(parameters, to: &errors)
+        case .vignette(let parameters):
+            ClipEffectBatch2Validator.appendAnimatableVignetteErrors(parameters, to: &errors)
+        case .mirror:
+            break
+        case .mosaic(let parameters):
+            ClipEffectBatch2Validator.appendAnimatableMosaicErrors(parameters, to: &errors)
+        case .colorAdjust(let parameters):
+            ClipEffectBatch2Validator.appendAnimatableColorAdjustErrors(parameters, to: &errors)
+        case .posterize(let parameters):
+            ClipEffectBatch2Validator.appendAnimatablePosterizeErrors(parameters, to: &errors)
+        case .invert:
+            break
         }
     }
 

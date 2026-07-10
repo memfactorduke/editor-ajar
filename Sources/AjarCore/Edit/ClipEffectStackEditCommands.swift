@@ -323,6 +323,8 @@ extension EditReducer {
             return .identity(for: node.kind)
         case .lut(let parameters):
             return .lutIdentity(table: parameters.table, placement: parameters.placement)
+        case .vignette, .mirror, .mosaic, .colorAdjust, .posterize, .invert:
+            return .identity(for: node.kind)
         }
     }
 

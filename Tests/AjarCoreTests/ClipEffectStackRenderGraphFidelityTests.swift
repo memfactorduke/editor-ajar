@@ -40,11 +40,13 @@ final class ClipEffectStackRenderGraphFidelityTests: XCTestCase {
                 Round-tripped: \(String(describing: roundTrippedNode.definition))
                 """
             )
-            XCTAssertNotEqual(
-                entry.definition,
-                ClipEffectDefinition.identity(for: entry.kind),
-                "fixture for \(entry.kind.rawValue) must be non-identity"
-            )
+            if entry.kind != .invert {
+                XCTAssertNotEqual(
+                    entry.definition,
+                    ClipEffectDefinition.identity(for: entry.kind),
+                    "fixture for \(entry.kind.rawValue) must be non-identity"
+                )
+            }
         }
     }
 
@@ -72,6 +74,10 @@ private struct KindDefinition {
 }
 
 private func nonIdentityDefinitionsByKind() throws -> [KindDefinition] {
+    try batch1DefinitionsByKind() + batch2DefinitionsByKind()
+}
+
+private func batch1DefinitionsByKind() throws -> [KindDefinition] {
     [
         KindDefinition(
             kind: .placeholder,
@@ -126,6 +132,48 @@ private func nonIdentityDefinitionsByKind() throws -> [KindDefinition] {
                     placement: .look
                 )
             )
+        )
+    ]
+}
+
+private func batch2DefinitionsByKind() throws -> [KindDefinition] {
+    [
+        KindDefinition(
+            kind: .vignette,
+            definition: .vignette(
+                ClipVignetteParameters(
+                    amount: try RationalValue(numerator: 3, denominator: 4),
+                    radius: try RationalValue(numerator: 1, denominator: 2),
+                    softness: try RationalValue(numerator: 1, denominator: 4)
+                )
+            )
+        ),
+        KindDefinition(
+            kind: .mirror,
+            definition: .mirror(ClipMirrorParameters(axis: .quad))
+        ),
+        KindDefinition(
+            kind: .mosaic,
+            definition: .mosaic(ClipMosaicParameters(cellSize: RationalValue(12)))
+        ),
+        KindDefinition(
+            kind: .colorAdjust,
+            definition: .colorAdjust(
+                ClipColorAdjustParameters(
+                    brightness: try RationalValue(numerator: 1, denominator: 10),
+                    contrast: try RationalValue(numerator: 6, denominator: 5),
+                    saturation: try RationalValue(numerator: 4, denominator: 5),
+                    tint: try RationalValue(numerator: 1, denominator: 5)
+                )
+            )
+        ),
+        KindDefinition(
+            kind: .posterize,
+            definition: .posterize(ClipPosterizeParameters(levels: RationalValue(4)))
+        ),
+        KindDefinition(
+            kind: .invert,
+            definition: .invert(ClipInvertParameters())
         )
     ]
 }

@@ -11,7 +11,9 @@ final class TitleTextStylingModelTests: XCTestCase {
         XCTAssertNil(TitleTextStyle.default.stroke)
         XCTAssertNil(TitleTextStyle.default.dropShadow)
         XCTAssertNil(TitleTextStyle.default.gradientFill)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 4)
+        // Title styling claimed minor 4; later additive kinds (FR-FX-002 batch 2) advance past it.
+        XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 4)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 5)
     }
 
     func testFRTXT002SparseNestedStylePayloadsDecodeStableDefaults() throws {

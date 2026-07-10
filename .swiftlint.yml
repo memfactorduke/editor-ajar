@@ -10,6 +10,9 @@ excluded:
   - .build
   - app/EditorAjar/Generated
 
+# Keep the cache in the package build directory so repo-local lint works in restricted runners.
+cache_path: .build/swiftlint-cache
+
 opt_in_rules:
   - empty_count
   - explicit_init

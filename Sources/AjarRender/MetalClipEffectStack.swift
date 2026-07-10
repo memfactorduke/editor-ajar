@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import AjarCore
 import Foundation
@@ -130,6 +131,7 @@ final class MetalClipEffectStackRegistry {
         return (hasTexture0, hasBuffer0)
     }
 
+    // swiftlint:disable cyclomatic_complexity
     /// Primary fragment function for a built-in kind (registry entry; ADR-0016 §3).
     func fragmentFunctionName(for kind: ClipEffectKind) throws -> String {
         switch kind {
@@ -148,8 +150,21 @@ final class MetalClipEffectStackRegistry {
         case .lut:
             // 1D vs 3D selected at encode time via fragmentFunctionName(forLUT:).
             return "ajar_lut_3d_fragment"
+        case .vignette:
+            return "ajar_vignette_fragment"
+        case .mirror:
+            return "ajar_mirror_fragment"
+        case .mosaic:
+            return "ajar_mosaic_fragment"
+        case .colorAdjust:
+            return "ajar_color_adjust_fragment"
+        case .posterize:
+            return "ajar_posterize_fragment"
+        case .invert:
+            return "ajar_invert_fragment"
         }
     }
+    // swiftlint:enable cyclomatic_complexity
 
     /// Fragment function for a concrete LUT table dimensionality.
     func fragmentFunctionName(forLUT dimensions: CubeLUTDimensions) -> String {
@@ -320,6 +335,7 @@ enum MetalClipEffectStackEncoder {
         return (current, intermediates)
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private static func apply(
         definition: ClipEffectDefinition,
         to sourceTexture: MTLTexture,
@@ -340,6 +356,18 @@ enum MetalClipEffectStackEncoder {
             return try applyGlow(parameters, to: sourceTexture, context: context)
         case .lut(let parameters):
             return try applyLUT(parameters, to: sourceTexture, context: context)
+        case .vignette(let parameters):
+            return try applyVignette(parameters, to: sourceTexture, context: context)
+        case .mirror(let parameters):
+            return try applyMirror(parameters, to: sourceTexture, context: context)
+        case .mosaic(let parameters):
+            return try applyMosaic(parameters, to: sourceTexture, context: context)
+        case .colorAdjust(let parameters):
+            return try applyColorAdjust(parameters, to: sourceTexture, context: context)
+        case .posterize(let parameters):
+            return try applyPosterize(parameters, to: sourceTexture, context: context)
+        case .invert:
+            return try applyInvert(to: sourceTexture, context: context)
         }
     }
 

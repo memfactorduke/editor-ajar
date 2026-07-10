@@ -251,13 +251,19 @@ extension MetalEffectUniformLayout {
         ]
     )
 
-    /// Every distinct FR-FX-002 / FR-COL-004 uniform block.
+    /// Every distinct FR-FX-002 / FR-COL-004 uniform block (batch 1, LUT, and batch 2).
     public static let all: [MetalEffectUniformLayout] = [
         .separableBlur,
         .zoomBlur,
         .sharpen,
         .glowCombine,
-        .lut
+        .lut,
+        .vignette,
+        .mirror,
+        .mosaic,
+        .colorAdjust,
+        .posterize,
+        .invert
     ]
 
     /// Concatenated MSL struct declarations for injection into the effect shader source.
