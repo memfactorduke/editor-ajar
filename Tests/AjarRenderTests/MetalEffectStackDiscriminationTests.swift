@@ -312,6 +312,22 @@ private func assertFragmentBindsTexture0AndBuffer0(
 
 private func discriminationEffectDefinitions() throws -> [(String, ClipEffectDefinition)] {
     try batch1DiscriminationDefinitions() + batch2DiscriminationDefinitions()
+        + curvesDiscriminationDefinitions()
+}
+
+private func curvesDiscriminationDefinitions() throws -> [(String, ClipEffectDefinition)] {
+    [
+        (
+            "curves",
+            .curves(
+                ClipCurvesEffectParameters(
+                    rgb: .rgbSCurve,
+                    red: .redLift,
+                    strength: .one
+                )
+            )
+        )
+    ]
 }
 
 private func batch1DiscriminationDefinitions() throws -> [(String, ClipEffectDefinition)] {

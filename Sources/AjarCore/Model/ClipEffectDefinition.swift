@@ -41,6 +41,9 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
     /// RGB inversion (FR-FX-002).
     case invert(ClipInvertParameters)
 
+    /// RGB master + per-channel color curves (FR-COL-002).
+    case curves(ClipCurvesEffectParameters)
+
     enum CodingKeys: String, CodingKey {
         case kind
         case parameters
@@ -75,6 +78,8 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
             .posterize
         case .invert:
             .invert
+        case .curves:
+            .curves
         }
     }
 
@@ -109,6 +114,8 @@ public enum ClipEffectDefinition: Codable, Equatable, Sendable {
             .posterize(.identity)
         case .invert:
             .invert(.identity)
+        case .curves:
+            .curves(ClipCurvesEffectParameters(strength: .zero))
         }
     }
 

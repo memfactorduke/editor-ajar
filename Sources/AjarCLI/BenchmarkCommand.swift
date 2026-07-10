@@ -175,7 +175,8 @@ public enum BenchmarkCommand {
         case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
             .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p,
             .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
-            .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p:
+            .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p,
+            .effectNodeCurvesGPU:
             try await measureEffectNodeMetric(metric)
         case .effectNodeLUTGPU:
             try await BenchmarkLUTMeasurement.measureEffectNodeLUTGPU()

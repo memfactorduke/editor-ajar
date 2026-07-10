@@ -47,6 +47,12 @@ public enum ClipEffectKind: String, Codable, Equatable, Sendable, CaseIterable {
     /// Linear-working-space RGB inversion (FR-FX-002).
     case invert
 
+    /// RGB master + per-channel color curves (FR-COL-002, M8). Secondary curves stay v1.x.
+    ///
+    /// Introduced at `schemaMinor` **8** (ADR-0018). Minor 7 is FR-TXT-004 title presets
+    /// (`revealFraction`, #186); this kind renumbered from the 7/8 race.
+    case curves
+
     /// Decodes a kind string; unknown raw values become `ClipEffectDecodingError.unknownKind`
     /// (not a bare `DecodingError`) so callers can surface the newer-project situation (ADR-0018).
     public init(from decoder: Decoder) throws {

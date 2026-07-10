@@ -92,6 +92,10 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Per-node GPU cost of one 1080p invert stack node (FR-FX-002, PERFORMANCE §3).
     case effectNodeInvert1080p = "effect-node-invert-1080p-fr-fx-002"
 
+    /// Per-node GPU cost for one FR-COL-002 `curves` effect stack node at 1080p
+    /// (PERFORMANCE §3 / ADR-0016 §4). Metric slug includes the kind raw value `curves`.
+    case effectNodeCurvesGPU = "effect-node-curves-gpu-fr-col-002"
+
     /// Per-kind-family GPU cost for FR-FX-001 crossDissolve at 1080p (PERFORMANCE §3).
     case transitionCrossDissolve1080p = "transition-cross-dissolve-1080p-fr-fx-001"
 
@@ -137,6 +141,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "FR-FX-002"
         case .effectNodeLUTGPU:
             "FR-COL-004"
+        case .effectNodeCurvesGPU:
+            "FR-COL-002"
         case .transitionCrossDissolve1080p, .transitionDipFade1080p,
             .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
             "FR-FX-001"
@@ -193,6 +199,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             .effectNodeGPU(targetMilliseconds: 2)
         case .effectNodeInvert1080p:
             // One sample plus straight-linear RGB inversion and repremultiplication.
+            .effectNodeGPU(targetMilliseconds: 2)
+        case .effectNodeCurvesGPU:
+            // One sample + four 1D ramp lookups (master then R/G/B); digest-cached texture.
             .effectNodeGPU(targetMilliseconds: 2)
         case .transitionCrossDissolve1080p, .transitionDipFade1080p,
             .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
@@ -261,7 +270,7 @@ extension BenchmarkMetric {
         switch self {
         case .effectNodeGaussianBlur1080p, .effectNodeBoxBlur1080p,
             .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p,
-            .effectNodeLUTGPU,
+            .effectNodeLUTGPU, .effectNodeCurvesGPU,
             .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
             .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p,
             .transitionCrossDissolve1080p, .transitionDipFade1080p,

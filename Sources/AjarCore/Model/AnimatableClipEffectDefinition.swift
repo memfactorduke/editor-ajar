@@ -41,6 +41,9 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
     /// Parameterless RGB inversion (FR-FX-002).
     case invert(AnimatableClipInvertSettings)
 
+    /// Keyframable color curves (curves constant; strength keyframable) (FR-COL-002).
+    case curves(AnimatableClipCurvesSettings)
+
     enum CodingKeys: String, CodingKey {
         case kind
         case parameters
@@ -75,6 +78,8 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             .posterize
         case .invert:
             .invert
+        case .curves:
+            .curves
         }
     }
 
@@ -109,6 +114,8 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             .posterize(.identity)
         case .invert:
             .invert(.identity)
+        case .curves:
+            .constant(ClipEffectDefinition.identity(for: .curves))
         }
     }
 
@@ -143,6 +150,8 @@ public enum AnimatableClipEffectDefinition: Codable, Equatable, Sendable {
             .posterize(.constant(parameters))
         case .invert(let parameters):
             .invert(.constant(parameters))
+        case .curves(let parameters):
+            .curves(.constant(parameters))
         }
     }
 }

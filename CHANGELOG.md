@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-COL-002 color curves on the FR-FX-003 effect stack (#189, M8 scope): `ClipEffectKind.curves`
+  with RGB **master** + per-channel R/G/B control-point curves. **Secondary curves**
+  (hue-vs-hue, hue-vs-sat, luma-vs-sat) remain **v1.x** per SPEC — only primary RGB curves ship
+  here. Model: ordered control points in 0…1 with strictly increasing `x`, 2…16 points, typed
+  validation; **Fritsch–Carlson** monotone cubic interpolation baked on the CPU into 256-entry 1D
+  ramps (packed RGBA texture: R/G/B/A = red/green/blue/master), uploaded on parameter change and
+  cached by content digest like the LUT texture cache — **no per-frame CPU work**. Control points
+  are static for M8; master **strength** 0…1 is keyframable. Identity curves / strength 0 are
+  bit-identical passthrough (skip the GPU pass). `schemaMinor` **8** (#186 title presets claimed
+  **7**; this branch renumbered from the 7/8 race). Registry-routed fragment with generated MSL
+  uniforms, linear working space, premultiply-aware. Goldens: `effect-curves-master-s-curve`,
+  `effect-curves-red-lift` (96×96 mid-tone checkerboard, strict deltaE 1 / SSIM 0.99, VALID
+  solid-gray placeholders). Per-node GPU metric `effect-node-curves-gpu-fr-col-002` (2 ms @
+  1080p, 5% noise).
 - FR-TXT-004 animated title presets on the M4 keyframe system (#186): built-in
   `fade` / `slide` / `typewriter` / `pop` / `lowerThird` programs applied as **one**
   undoable `applyTitleAnimationPreset` edit. Presets write ordinary transform opacity/

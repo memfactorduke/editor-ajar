@@ -289,5 +289,6 @@ enum MetalClipEffectStackShaders {
             float3 mixed = mix(source, lutColor, strength);
             return float4(mixed * alpha, alpha);
         }
+
         """
 }

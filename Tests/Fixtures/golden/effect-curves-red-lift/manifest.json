@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "id": "effect-curves-red-lift",
+  "requirements": [
+    "FR-COL-002",
+    "FR-FX-003",
+    "FR-FX-007",
+    "ADR-0010",
+    "ADR-0011",
+    "ADR-0016",
+    "NFR-QUAL-001",
+    "NFR-QUAL-002"
+  ],
+  "frame": "0/24",
+  "referencePNG": "reference.png",
+  "outputDimensions": {
+    "width": 96,
+    "height": 96
+  },
+  "clips": [
+    {
+      "syntheticMedia": {
+        "bgra": [
+          64,
+          96,
+          160,
+          255
+        ],
+        "frameCount": 1,
+        "frameRate": 24,
+        "width": 96,
+        "height": 96,
+        "checkerboard": {
+          "cellSize": 8,
+          "colorABGRA": [
+            64,
+            96,
+            160,
+            255
+          ],
+          "colorBBGRA": [
+            160,
+            96,
+            64,
+            255
+          ]
+        }
+      },
+      "effectStack": {
+        "nodes": [
+          {
+            "id": "00000000-0000-0000-0000-00000000c102",
+            "enabled": true,
+            "definition": {
+              "kind": "curves",
+              "parameters": {
+                "red": {
+                  "points": [
+                    {
+                      "x": 0,
+                      "y": 0.12
+                    },
+                    {
+                      "x": 0.5,
+                      "y": 0.55
+                    },
+                    {
+                      "x": 1,
+                      "y": 1
+                    }
+                  ]
+                },
+                "green": {
+                  "points": [
+                    {
+                      "x": 0,
+                      "y": 0
+                    },
+                    {
+                      "x": 1,
+                      "y": 1
+                    }
+                  ]
+                },
+                "blue": {
+                  "points": [
+                    {
+                      "x": 0,
+                      "y": 0
+                    },
+                    {
+                      "x": 1,
+                      "y": 1
+                    }
+                  ]
+                },
+                "strength": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "rgb": {
+                  "points": [
+                    {
+                      "x": 0,
+                      "y": 0
+                    },
+                    {
+                      "x": 1,
+                      "y": 1
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tolerance": {
+    "maximumAlphaDelta": 1,
+    "maximumDeltaE": 1,
+    "minimumSSIM": 0.99
+  }
+}

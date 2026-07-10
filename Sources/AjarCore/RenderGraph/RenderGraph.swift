@@ -751,6 +751,11 @@ private struct RenderEffectNodeHash: Codable {
             parameters = .posterize(levels: posterizeParameters.levels)
         case .invert:
             parameters = .invert
+        case .curves(let curvesParameters):
+            parameters = .curves(
+                rampDigest: curvesParameters.rampContentDigest,
+                strength: curvesParameters.strength
+            )
         }
     }
 }
@@ -774,6 +779,7 @@ private enum RenderEffectParameterHash: Codable {
     )
     case posterize(levels: RationalValue)
     case invert
+    case curves(rampDigest: ContentHash, strength: RationalValue)
 }
 
 private struct RenderNodeHashPayload: Codable {

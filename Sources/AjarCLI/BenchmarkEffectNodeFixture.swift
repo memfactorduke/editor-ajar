@@ -67,6 +67,14 @@ enum BenchmarkEffectNodeFixture {
         case .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
             .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p:
             return try BenchmarkEffectNodeBatch2Definitions.definition(for: metric)
+        case .effectNodeCurvesGPU:
+            return .curves(
+                ClipCurvesEffectParameters(
+                    rgb: .rgbSCurve,
+                    red: .redLift,
+                    strength: .one
+                )
+            )
         default:
             throw AjarCLIError.benchmarkFailed(
                 "metric \(metric.rawValue) is not an effect-node GPU cost metric"

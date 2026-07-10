@@ -14,7 +14,7 @@ final class TitleTextStylingModelTests: XCTestCase {
         // Title styling claimed minor 4; later additive kinds advance past it (batch 2 = 5,
         // FR-FX-001 transitions = 6).
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 4)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 7)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 8)
     }
 
     func testFRTXT002SparseNestedStylePayloadsDecodeStableDefaults() throws {
