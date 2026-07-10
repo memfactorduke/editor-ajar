@@ -250,7 +250,8 @@ final class AjarCommandTests: XCTestCase {
             "effect-node-box-blur-1080p-fr-fx-002": "FR-FX-002",
             "effect-node-zoom-blur-1080p-fr-fx-002": "FR-FX-002",
             "effect-node-sharpen-1080p-fr-fx-002": "FR-FX-002",
-            "effect-node-glow-1080p-fr-fx-002": "FR-FX-002"
+            "effect-node-glow-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-lut-gpu-fr-col-004": "FR-COL-004"
         ]
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))
