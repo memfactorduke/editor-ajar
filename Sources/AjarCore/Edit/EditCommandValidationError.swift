@@ -162,6 +162,22 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// the ADR does not define; the edit is rejected rather than guessed at.
     case bladeInsideCrossfadeRegion(clipID: UUID, atTime: RationalTime)
 
+    /// A video transition edit failed the ADR-0016 §5 pair taxonomy, retime, or
+    /// source-handle rules (FR-FX-001).
+    case invalidClipVideoTransition(clipID: UUID, error: VideoTransitionValidationError)
+
+    /// Creating a video transition requires an abutting next clip on the same track.
+    case videoTransitionRequiresAdjacentClips(clipID: UUID)
+
+    /// Video transitions are video-track metadata; the addressed track is not a video track.
+    case videoTransitionRequiresVideoTrack(clipID: UUID)
+
+    /// Removing a video transition requires an existing trailing record on the addressed clip.
+    case videoTransitionNotFound(clipID: UUID)
+
+    /// The blade point falls inside an active ADR-0016 video transition region `[T, T + D)`.
+    case bladeInsideVideoTransitionRegion(clipID: UUID, atTime: RationalTime)
+
     /// A clip speed failed semantic validation.
     case invalidClipSpeed(clipID: UUID, error: ClipSpeedValidationError)
 

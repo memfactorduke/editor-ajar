@@ -92,6 +92,21 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Per-node GPU cost of one 1080p invert stack node (FR-FX-002, PERFORMANCE §3).
     case effectNodeInvert1080p = "effect-node-invert-1080p-fr-fx-002"
 
+    /// Per-kind-family GPU cost for FR-FX-001 crossDissolve at 1080p (PERFORMANCE §3).
+    case transitionCrossDissolve1080p = "transition-cross-dissolve-1080p-fr-fx-001"
+
+    /// Per-kind-family GPU cost for FR-FX-001 dip/fade family at 1080p.
+    case transitionDipFade1080p = "transition-dip-fade-1080p-fr-fx-001"
+
+    /// Per-kind-family GPU cost for FR-FX-001 push/slide family at 1080p.
+    case transitionPushSlide1080p = "transition-push-slide-1080p-fr-fx-001"
+
+    /// Per-kind-family GPU cost for FR-FX-001 wipe family at 1080p.
+    case transitionWipe1080p = "transition-wipe-1080p-fr-fx-001"
+
+    /// Per-kind-family GPU cost for FR-FX-001 zoom at 1080p.
+    case transitionZoom1080p = "transition-zoom-1080p-fr-fx-001"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -122,6 +137,9 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "FR-FX-002"
         case .effectNodeLUTGPU:
             "FR-COL-004"
+        case .transitionCrossDissolve1080p, .transitionDipFade1080p,
+            .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
+            "FR-FX-001"
         }
     }
 
@@ -176,6 +194,10 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .effectNodeInvert1080p:
             // One sample plus straight-linear RGB inversion and repremultiplication.
             .effectNodeGPU(targetMilliseconds: 2)
+        case .transitionCrossDissolve1080p, .transitionDipFade1080p,
+            .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
+            // Two-input full-frame transition at 1080p; headroom under 30 fps frame budget.
+            .effectNodeGPU(targetMilliseconds: 3)
         default:
             nil
         }
@@ -241,7 +263,9 @@ extension BenchmarkMetric {
             .effectNodeZoomBlur1080p, .effectNodeSharpen1080p, .effectNodeGlow1080p,
             .effectNodeLUTGPU,
             .effectNodeVignette1080p, .effectNodeMirror1080p, .effectNodeMosaic1080p,
-            .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p:
+            .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p,
+            .transitionCrossDissolve1080p, .transitionDipFade1080p,
+            .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
             true
         default:
             false

@@ -218,7 +218,9 @@ private extension RenderGraph {
                 sources.append(source)
             case .compound(let compound):
                 compound.graph.appendRenderSourceNodes(to: &sources)
-            case .title, .composite:
+            case .title, .composite, .transition:
+                // Transition sources are collected from the transition node's source inputs
+                // when those nodes are visited in dependency order.
                 continue
             }
         }

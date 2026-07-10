@@ -486,8 +486,10 @@ public final class MetalRenderExecutor {
 
     private static func sharedLibrary(for device: MTLDevice) throws -> MTLLibrary {
         let combinedSource =
-            shaderSource + MetalClipEffectStackShaders.source
+            shaderSource
+            + MetalClipEffectStackShaders.source
             + MetalClipEffectBatch2Shaders.source
+            + MetalVideoTransitionShaders.source
         let fingerprint = ContentHash.sha256(data: Data(combinedSource.utf8)).digest
         let key = "\(ObjectIdentifier(device as AnyObject))-\(fingerprint)"
         sharedLibraryLock.lock()
@@ -927,7 +929,8 @@ public final class MetalRenderExecutor {
         }
     }
 
-    private struct SourceCompositeInput {
+    /// Per-input composite payload (shared with FR-FX-001 transition encoding).
+    struct SourceCompositeInput {
         let source: RenderSourceNode
         let texture: MTLTexture
         let transform: ClipTransform
@@ -998,6 +1001,17 @@ public final class MetalRenderExecutor {
                 input: input,
                 output: output,
                 commandBuffer: commandBuffer
+            )
+        case .transition(let transition):
+            return try transitionSourceInput(
+                TransitionSourceRequest(
+                    graph: graph,
+                    transitionNode: inputNode,
+                    transition: transition,
+                    input: input,
+                    sourceProvider: sourceProvider,
+                    commandBuffer: commandBuffer
+                )
             )
         case .composite:
             throw MetalRenderError.unsupportedInputNode(input.sourceNodeID)
@@ -1234,7 +1248,7 @@ public final class MetalRenderExecutor {
     }
 
     /// Applies the ordered FR-FX library stack on the GPU before compositing (FR-FX-007).
-    private func applyEffectStack(
+    func applyEffectStack(
         _ stack: ClipEffectStack,
         to sourceTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer
@@ -1323,7 +1337,7 @@ public final class MetalRenderExecutor {
     /// Decodes one display-encoded premultiplied source into half-float linear light (source
     /// primaries) so FR-FX library nodes share the same working space as compound/frame-blend
     /// paths (ADR-0010).
-    private func encodeSourceToLinearWorking(
+    func encodeSourceToLinearWorking(
         _ sourceTexture: MTLTexture,
         source: RenderSourceNode,
         commandBuffer: MTLCommandBuffer
@@ -1539,7 +1553,7 @@ public final class MetalRenderExecutor {
         )
     }
 
-    private func makeReusableTexture(
+    func makeReusableTexture(
         pixelFormat: MTLPixelFormat,
         width: Int,
         height: Int
@@ -1671,7 +1685,7 @@ public final class MetalRenderExecutor {
         blitEncoder.endEncoding()
     }
 
-    private func renderPassDescriptor(for outputTexture: MTLTexture) -> MTLRenderPassDescriptor {
+    func renderPassDescriptor(for outputTexture: MTLTexture) -> MTLRenderPassDescriptor {
         let descriptor = MTLRenderPassDescriptor()
         let colorAttachment = descriptor.colorAttachments[0]
         colorAttachment?.texture = outputTexture
@@ -1681,7 +1695,7 @@ public final class MetalRenderExecutor {
         return descriptor
     }
 
-    private func pipelineState(
+    func pipelineState(
         fragmentFunctionName: String,
         pixelFormat: MTLPixelFormat
     ) throws -> MTLRenderPipelineState {

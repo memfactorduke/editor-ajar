@@ -79,6 +79,7 @@ extension EditReducer {
                 )
             }
             try rejectBladeInsideCrossfadeRegion(clip: clip, atTime: edit.atTime)
+            try rejectBladeInsideVideoTransitionRegion(clip: clip, atTime: edit.atTime)
 
             let halves = try bladeHalves(of: clip, edit: edit, clipEnd: clipEnd)
             items[index] = .clip(halves.left)
@@ -89,7 +90,13 @@ extension EditReducer {
                 from: clip.id,
                 to: edit.rightClipID
             )
-            return try maintainingCrossfades(
+            repointBladeVideoTransitionMirror(
+                &items,
+                record: clip.trailingTransition,
+                from: clip.id,
+                to: edit.rightClipID
+            )
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )
@@ -130,6 +137,8 @@ extension EditReducer {
             effectsAnimation: animation.leftEffects,
             effectStackAnimation: animation.leftEffectStack,
             audioMix: bladeLeftAudioMix(clip.audioMix),
+            leadingTransition: .some(clip.leadingTransition),
+            trailingTransition: .some(nil),
             timeRemap: .some(remapHalves?.left)
         )
         let rightClip = Clip(
@@ -146,6 +155,8 @@ extension EditReducer {
             effectStack: clip.effectStack,
             effectStackAnimation: animation.rightEffectStack,
             audioMix: bladeRightAudioMix(clip.audioMix),
+            leadingTransition: nil,
+            trailingTransition: clip.trailingTransition,
             speed: clip.speed,
             reverse: clip.reverse,
             freezeFrame: clip.freezeFrame,
@@ -213,7 +224,7 @@ extension EditReducer {
                 }
             }
 
-            return try maintainingCrossfades(
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )
@@ -239,7 +250,7 @@ extension EditReducer {
                     timelineRange: ranges.rightTimelineRange
                 )
             )
-            return try maintainingCrossfades(
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )
@@ -303,7 +314,7 @@ extension EditReducer {
                 speed: clip.speed
             )
             items[index] = .clip(copying(clip, sourceRange: edit.sourceRange))
-            return try maintainingCrossfades(
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )
@@ -354,7 +365,7 @@ extension EditReducer {
             items[previousIndex] = try adjustingItemEnd(previous, end: edit.timelineRange.start)
             items[index] = .clip(copying(clip, timelineRange: edit.timelineRange))
             items[nextIndex] = try adjustingItemStart(next, start: newEnd)
-            return try maintainingCrossfades(
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )
@@ -395,7 +406,7 @@ extension EditReducer {
             }
             // ADR-0015 §8: the deleted clip's pairs and mirrors are removed; the newly
             // abutting neighbors get no automatic crossfade.
-            return try maintainingCrossfades(
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )
@@ -424,7 +435,7 @@ extension EditReducer {
             items[index] = .gap(clip.timelineRange)
             // ADR-0015 §8: the gap breaks adjacency, so the lifted clip's pairs vanish
             // with it and the neighbors' mirrors are cleared.
-            return try maintainingCrossfades(
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )

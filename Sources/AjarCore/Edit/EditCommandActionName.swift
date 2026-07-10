@@ -102,6 +102,10 @@ public extension EditCommand {
             return "Add Crossfade"
         case .removeClipAudioCrossfade:
             return "Remove Crossfade"
+        case .setClipVideoTransition:
+            return "Add Transition"
+        case .removeClipVideoTransition:
+            return "Remove Transition"
         case .detachClipAudio:
             return "Detach Audio"
         case .replaceClipAudioSource:

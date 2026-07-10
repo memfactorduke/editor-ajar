@@ -32,6 +32,7 @@ extension EditReducer {
         let mode: ThreePointEditMode
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     static func applyClipCommand(_ command: EditCommand, to project: Project) throws -> Project {
         switch command {
         case .insertCompoundClip, .makeCompoundClip, .decomposeCompoundClip:
@@ -60,6 +61,8 @@ extension EditReducer {
             return try applyClipAudioMixCommand(command, to: project)
         case .setClipAudioCrossfade, .removeClipAudioCrossfade:
             return try applyClipAudioCrossfadeCommand(command, to: project)
+        case .setClipVideoTransition, .removeClipVideoTransition:
+            return try applyClipVideoTransitionCommand(command, to: project)
         case .detachClipAudio, .replaceClipAudioSource:
             return try applyClipAudioSourceCommand(command, to: project)
         default:
