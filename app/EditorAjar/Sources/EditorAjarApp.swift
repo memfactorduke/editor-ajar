@@ -138,6 +138,13 @@ struct EditorAjarApp: App {
                 .disabled(model.primaryCanvasTitleBoxReference == nil)
                 .accessibilityLabel("Nudge Canvas Title Down")
             }
+            CommandMenu("Export") {
+                Button("Export…") {
+                    model.presentExportDialog()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .accessibilityLabel("Open export dialog")
+            }
         }
     }
 }

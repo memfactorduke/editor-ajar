@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-EXP-003/004 export presets, ranges, stills, and audio-only (#215): `ExportPreset` + built-ins
+  (YouTube 1080p/4K, Square 1080, Vertical 9:16, ProRes 422 master) resolve through
+  `ExportSettings` validation. Custom presets persist **app-side only** (Application Support JSON,
+  atomic write) — never in project packages / `schemaMinor`. Export range selection covers whole
+  timeline or in/out marks with typed empty/inverted errors; frame pulls honor range first/last
+  boundaries. Still-frame PNG/JPEG uses the ADR-0019 delivery conversion path (PNG golden is
+  bit-exact vs in-test rendered BGRA). Audio-only WAV (exact offline-mix round-trip) and AAC/M4A
+  (documented MAE tolerance; capability-gated skip). Minimal app export dialog (preset/range/
+  still/audio modes) with app-model unit tests, keyboard access, and VoiceOver labels.
 - FR-EXP-001/002 export engine and ADR-0019 (#213): new `AjarExport` module with validated Codable
   H.264, HEVC Main/Main10, ProRes 422/422 HQ/4444, MP4/MOV, AAC/Float32 PCM, bitrate/quality/fps/
   resolution, and Rec.709/Display-P3 settings. Export pulls exact sequential render-graph frames,
