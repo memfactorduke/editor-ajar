@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
-// swiftlint:disable type_body_length
+// swiftlint:disable file_length type_body_length
 /// A deterministic edit operation applied to an immutable `Project`.
 public enum EditCommand: Codable, Equatable, Sendable {
     /// Adds a clip to an existing track.
@@ -337,6 +337,39 @@ public enum EditCommand: Codable, Equatable, Sendable {
         clipID: UUID
     )
 
+    /// Replaces a target clip's color-grade nodes with fresh-ID copies from another clip.
+    ///
+    /// Grade animation is flattened to base values; grades and looks are static snapshots.
+    case copyClipGrade(
+        source: ProjectClipReference,
+        target: ProjectClipReference,
+        newNodeIDs: [UUID]
+    )
+
+    /// Saves a source clip's color grade as a named project look.
+    ///
+    /// Grade animation is flattened to base values; grades and looks are static snapshots.
+    case saveLookFromClip(
+        source: ProjectClipReference,
+        lookID: UUID,
+        name: String
+    )
+
+    /// Replaces a target clip's color grade with a fresh-ID copy of a saved project look.
+    ///
+    /// Grade animation is flattened to base values; grades and looks are static snapshots.
+    case applyLookToClip(
+        lookID: UUID,
+        target: ProjectClipReference,
+        newNodeIDs: [UUID]
+    )
+
+    /// Renames a saved project look.
+    case renameLook(lookID: UUID, name: String)
+
+    /// Deletes a saved project look.
+    case deleteLook(lookID: UUID)
+
     /// Replaces a clip's audio gain, pan, fades, and crossfade metadata.
     case setClipAudioMix(
         sequenceID: UUID,
@@ -482,4 +515,4 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Replaces project-wide settings.
     case setProjectSettings(ProjectSettings)
 }
-// swiftlint:enable type_body_length
+// swiftlint:enable file_length type_body_length

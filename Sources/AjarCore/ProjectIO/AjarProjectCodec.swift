@@ -180,7 +180,8 @@ public enum AjarProjectCodec {
     /// - `7`: FR-TXT-004 title `revealFraction` keyframable typewriter reveal (#186).
     /// - `8`: `ClipEffectKind.curves` (FR-COL-002 RGB master + R/G/B, #189). Minor 7 was
     ///   claimed by #186 title presets; this branch renumbered from the 7/8 race.
-    public static let currentSchemaMinor = 8
+    /// - `9`: project-persisted color-grade looks (`Project.looks`, FR-COL-007 / #190).
+    public static let currentSchemaMinor = 9
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///
@@ -210,7 +211,8 @@ public enum AjarProjectCodec {
             schemaMinor: currentSchemaMinor,
             settings: project.settings,
             mediaPool: [],
-            sequences: project.sequences
+            sequences: project.sequences,
+            looks: project.looks
         )
         let mediaManifest = AjarMediaManifest(
             schemaVersion: currentSchemaVersion,
@@ -270,7 +272,8 @@ public enum AjarProjectCodec {
             schemaMinor: migratedProject.schemaMinor,
             settings: migratedProject.settings,
             mediaPool: mediaPool,
-            sequences: migratedProject.sequences
+            sequences: migratedProject.sequences,
+            looks: migratedProject.looks
         )
 
         try validate(project)
@@ -423,7 +426,8 @@ private extension AjarProjectCodec {
                 schemaMinor: project.schemaMinor,
                 settings: project.settings,
                 mediaPool: project.mediaPool,
-                sequences: project.sequences
+                sequences: project.sequences,
+                looks: project.looks
             )
         }
 

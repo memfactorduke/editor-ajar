@@ -20,12 +20,16 @@ public struct Project: Codable, Equatable, Sendable {
     /// Editable sequences contained in the project.
     public let sequences: [Sequence]
 
+    /// Named color-grade presets persisted in this project (FR-COL-007).
+    public let looks: [ProjectLook]
+
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
         case schemaMinor
         case settings
         case mediaPool
         case sequences
+        case looks
     }
 
     /// Creates a project document.
@@ -37,18 +41,21 @@ public struct Project: Codable, Equatable, Sendable {
     ///   - settings: Project-wide settings.
     ///   - mediaPool: Media references.
     ///   - sequences: Sequences.
+    ///   - looks: Named project color-grade presets.
     public init(
         schemaVersion: Int,
         schemaMinor: Int = AjarProjectCodec.currentSchemaMinor,
         settings: ProjectSettings,
         mediaPool: [MediaRef],
-        sequences: [Sequence]
+        sequences: [Sequence],
+        looks: [ProjectLook] = []
     ) {
         self.schemaVersion = schemaVersion
         self.schemaMinor = schemaMinor
         self.settings = settings
         self.mediaPool = mediaPool
         self.sequences = sequences
+        self.looks = looks
     }
 
     /// Decodes a project, defaulting absent `schemaMinor` to `0` (legacy v2 files; ADR-0018).
@@ -59,6 +66,7 @@ public struct Project: Codable, Equatable, Sendable {
         settings = try container.decode(ProjectSettings.self, forKey: .settings)
         mediaPool = try container.decode([MediaRef].self, forKey: .mediaPool)
         sequences = try container.decode([Sequence].self, forKey: .sequences)
+        looks = try container.decodeIfPresent([ProjectLook].self, forKey: .looks) ?? []
     }
 
     /// Encodes the project document, always including `schemaMinor`.
@@ -69,6 +77,7 @@ public struct Project: Codable, Equatable, Sendable {
         try container.encode(settings, forKey: .settings)
         try container.encode(mediaPool, forKey: .mediaPool)
         try container.encode(sequences, forKey: .sequences)
+        try container.encode(looks, forKey: .looks)
     }
 
     /// Validates timeline invariants without trapping on malformed input.

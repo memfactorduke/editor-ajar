@@ -252,7 +252,8 @@ extension EditReducer {
             schemaVersion: project.schemaVersion,
             settings: project.settings,
             mediaPool: project.mediaPool,
-            sequences: project.sequences + [sequence]
+            sequences: project.sequences + [sequence],
+            looks: project.looks
         )
     }
 
@@ -270,7 +271,8 @@ extension EditReducer {
             schemaVersion: project.schemaVersion,
             settings: project.settings,
             mediaPool: project.mediaPool,
-            sequences: sequences
+            sequences: sequences,
+            looks: project.looks
         )
     }
 
@@ -279,9 +281,11 @@ extension EditReducer {
         duplicate: Sequence,
         in project: Project
     ) throws -> Project {
-        guard let sourceIndex = project.sequences.firstIndex(
-            where: { $0.id == sourceSequenceID }
-        ) else {
+        guard
+            let sourceIndex = project.sequences.firstIndex(
+                where: { $0.id == sourceSequenceID }
+            )
+        else {
             throw EditReducerError.sequenceNotFound(sourceSequenceID)
         }
         guard !project.sequences.contains(where: { $0.id == duplicate.id }) else {
@@ -294,7 +298,8 @@ extension EditReducer {
             schemaVersion: project.schemaVersion,
             settings: project.settings,
             mediaPool: project.mediaPool,
-            sequences: sequences
+            sequences: sequences,
+            looks: project.looks
         )
     }
 }
@@ -337,7 +342,8 @@ extension EditReducer {
             schemaVersion: project.schemaVersion,
             settings: project.settings,
             mediaPool: project.mediaPool,
-            sequences: sequences
+            sequences: sequences,
+            looks: project.looks
         )
     }
 

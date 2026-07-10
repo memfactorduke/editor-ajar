@@ -92,6 +92,16 @@ public extension EditCommand {
             return "Reset Effect"
         case .resetClipEffectStack:
             return "Reset Effects Stack"
+        case .copyClipGrade:
+            return "Copy Grade"
+        case .saveLookFromClip:
+            return "Save Look"
+        case .applyLookToClip:
+            return "Apply Look"
+        case .renameLook:
+            return "Rename Look"
+        case .deleteLook:
+            return "Delete Look"
         case .setClipAudioMix:
             return "Set Clip Audio Mix"
         case .clearClipAudioMix:

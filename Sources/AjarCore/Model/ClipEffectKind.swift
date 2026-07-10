@@ -53,6 +53,19 @@ public enum ClipEffectKind: String, Codable, Equatable, Sendable, CaseIterable {
     /// (`revealFraction`, #186); this kind renumbered from the 7/8 race.
     case curves
 
+    /// Whether this kind is part of an FR-COL-007 clip grade.
+    ///
+    /// This is the single source of truth for grade filtering, copying, looks, and validation.
+    public var isColorGrade: Bool {
+        switch self {
+        case .colorAdjust, .curves, .lut, .posterize, .invert:
+            true
+        case .placeholder, .gaussianBlur, .boxBlur, .zoomBlur, .sharpen, .glow, .vignette,
+            .mirror, .mosaic:
+            false
+        }
+    }
+
     /// Decodes a kind string; unknown raw values become `ClipEffectDecodingError.unknownKind`
     /// (not a bare `DecodingError`) so callers can surface the newer-project situation (ADR-0018).
     public init(from decoder: Decoder) throws {

@@ -76,7 +76,8 @@ final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
         // 5 = FR-FX-002 batch 2; 6 = FR-FX-001 video transitions (#183);
         // 7 = FR-TXT-004 title revealFraction / presets (#186);
         // 8 = FR-COL-002 curves (#189; renumbered after #186 claimed 7).
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 8)
+        // 9 = FR-COL-007 project looks (#190).
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 9)
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 2)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.gaussianBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.boxBlur))

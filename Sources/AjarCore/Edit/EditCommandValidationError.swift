@@ -224,6 +224,33 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// Adding an effects-stack node would duplicate a stable node ID (FR-FX-003).
     case duplicateClipEffectNodeID(clipID: UUID, nodeID: UUID)
 
+    /// Copying or saving a grade requires at least one color-grade node on the source clip.
+    case gradeSourceHasNoGrade(clipID: UUID)
+
+    /// Color grades can only be copied from or applied to video clips.
+    case gradeRequiresVideoClip(clipID: UUID, kind: TrackKind)
+
+    /// A grade copy must provide exactly one fresh destination ID per copied node.
+    case gradeNodeIDCountMismatch(expected: Int, actual: Int)
+
+    /// The destination-ID payload repeats an ID within one grade copy.
+    case duplicateGradeNodeID(nodeID: UUID)
+
+    /// A supplied destination ID belongs to the source/look or any existing target node.
+    case gradeNodeIDNotFresh(nodeID: UUID)
+
+    /// A look name cannot be empty or contain only whitespace and newlines.
+    case blankLookName
+
+    /// Look names must be unique within a project after normalization.
+    case duplicateLookName(String)
+
+    /// Saving a look cannot reuse another saved look's stable ID.
+    case duplicateLookID(UUID)
+
+    /// A look command referenced a missing saved look.
+    case lookNotFound(UUID)
+
     /// A title generator source failed FR-TXT-001 semantic validation.
     case invalidTitleSource(clipID: UUID, error: TitleSourceValidationError)
 
