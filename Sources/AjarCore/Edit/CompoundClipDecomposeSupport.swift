@@ -33,6 +33,33 @@ extension EditReducer {
         }
     }
 
+    /// Rejects decompose when a nested track carries keyframed track-level automation
+    /// (opacity / audioGain / audioPan). Nested track curves have nowhere to merge onto the
+    /// parent track (which keeps its own automation); constant (non-keyframed) curves are
+    /// allowed and either stay with a newly-created parent track or are superseded by an
+    /// existing parent track's constant automation.
+    static func validateDecomposableNestedTrackAutomation(
+        in targetSequence: Sequence,
+        compoundClipID: UUID
+    ) throws {
+        let nestedTracks = targetSequence.videoTracks + targetSequence.audioTracks
+        for track in nestedTracks where hasKeyframedTrackAutomation(track) {
+            throw EditReducerError.invalidEdit(
+                .compoundDecomposeUnsupportedAttribute(
+                    clipID: compoundClipID,
+                    attribute: .trackAutomation
+                )
+            )
+        }
+    }
+
+    /// Whether any of the track's absolute-time automation parameters carries keyframes.
+    static func hasKeyframedTrackAutomation(_ track: Track) -> Bool {
+        !track.opacity.keyframes.isEmpty
+            || !track.audioGain.keyframes.isEmpty
+            || !track.audioPan.keyframes.isEmpty
+    }
+
     private static func unsupportedDecomposeAttribute(
         _ compoundClip: Clip,
         _ attribute: CompoundClipDecomposeAttribute
@@ -87,7 +114,10 @@ extension EditReducer {
         let headDelta = try subtractTimes(clippedStart, clip.timelineRange.start)
         let tailDelta = try subtractTimes(clipEnd, clippedEnd)
 
-        return copying(
+        // Map absolute nested keyframe times onto the parent timebase through the compound's
+        // placement and speed (inverse of make-compound's selectionStart collapse). Do this
+        // once here — never also call relocating, which would double-shift pure translations.
+        return try remappingAnimationTimes(
             clip,
             sourceRange: try windowedSourceRange(
                 for: clip,
@@ -100,7 +130,10 @@ extension EditReducer {
                 nestedDuration: clippedDuration,
                 compoundClip: compoundClip
             ),
-            speed: try combinedSpeed(clip.speed, compoundClip.speed)
+            speed: try combinedSpeed(clip.speed, compoundClip.speed),
+            mapTime: { nestedTime in
+                try parentTimelineTime(forNestedTime: nestedTime, compoundClip: compoundClip)
+            }
         )
     }
 

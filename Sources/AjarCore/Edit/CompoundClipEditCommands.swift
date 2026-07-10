@@ -401,7 +401,7 @@ extension EditReducer {
             }
             selectedItems.append(
                 .clip(
-                    copying(
+                    try relocating(
                         clip,
                         timelineRange: try makeRange(
                             start: try exactTime {
@@ -417,7 +417,16 @@ extension EditReducer {
         guard !selectedItems.isEmpty else {
             return nil
         }
-        return copying(track, items: sortedItems(selectedItems))
+        // Track opacity / audioGain / audioPan are absolute sequence times (same as clip
+        // keyframes). Shift them into the compound's inner timebase with the same delta as
+        // the collapsed clips so automation still lines up with the content.
+        return try remappingTrackAutomationTimes(
+            track,
+            items: sortedItems(selectedItems),
+            mapTime: { time in
+                try subtractTimes(time, selectionStart)
+            }
+        )
     }
 
     private static func sourceSequenceReplacingCompoundSelection(
@@ -486,7 +495,4 @@ extension EditReducer {
         }
     }
 
-    static func items(_ items: [TimelineItem], overlap range: TimeRange) throws -> Bool {
-        try items.contains { try rangesIntersect($0.timelineRange, range) }
-    }
 }
