@@ -17,21 +17,28 @@ public enum ExportMediaSourceTier: String, Codable, Equatable, Sendable {
 
 /// Session-level policy that resolves which media tier export will request per `MediaRef` id.
 ///
-/// ## Proxy exclusion hook (FR-EXP-007, FR-MED-004 not yet landed)
+/// ## Proxy exclusion hook (FR-EXP-007 / FR-MED-004)
 ///
 /// `AjarExport` does not depend on `AjarMedia` and does not select proxy files itself
-/// (ADR-0019). The app/CLI injects an `ExportRenderSourceProvider` that **must** decode
-/// originals. This policy is the stable assertion hook:
+/// (ADR-0019). Production ``RenderGraphExportFrameProvider`` builds graphs with
+/// `proxyFileExists {_ in false}` and records **executed** source-node tiers into
+/// ``ExportFrameSourceSelection`` rows (via ``ExportGraphSourceAuditing``). The policy remains
+/// the fallback for stub providers and a secondary invariant:
 ///
 /// 1. Production sessions use ``alwaysOriginal`` — every media id resolves to `.original`.
-/// 2. `ExportSession` records each resolution into ``ExportFrameSourceSelection`` rows while
-///    writing frames so tests can assert `records.allSatisfy { $0.tier == .original }`.
-/// 3. When FR-MED-004 (#217) lands, playback may point at proxies, but export adapters still
-///    consult this policy (or an extended resolver) and continue to resolve `.original`. Extend
-///    ``resolvedTier(for:)`` / add resolver injection rather than inventing a second audit path.
+/// 2. `ExportSession` prefers graph-observed tiers when available, else this policy, so tests
+///    can assert `records.allSatisfy { $0.tier == .original }` against the real graph.
+/// 3. Playback may select proxies when `ProjectSettings.preferProxyPlayback` is on and a
+///    proxy is ready (FR-MED-004), but export graphs stay structurally original-only.
 public struct ExportSourceSelectionPolicy: Equatable, Sendable {
     /// Production default: every media id resolves to original media.
     public static let alwaysOriginal = ExportSourceSelectionPolicy(defaultTier: .original)
+
+    /// Explicit alias for proxy-enabled projects: export remains pinned to originals
+    /// (FR-EXP-007) even when playback prefers proxies (FR-MED-004).
+    public static let alwaysOriginalForProxyEnabledProject = ExportSourceSelectionPolicy(
+        defaultTier: .original
+    )
 
     /// Tier returned by ``resolvedTier(for:)`` for every media id.
     ///
@@ -45,6 +52,8 @@ public struct ExportSourceSelectionPolicy: Equatable, Sendable {
     }
 
     /// Resolves the media tier export will request for `mediaID`.
+    ///
+    /// Production policies ignore playback proxy preference and always return `.original`.
     public func resolvedTier(for mediaID: UUID) -> ExportMediaSourceTier {
         _ = mediaID
         return defaultTier

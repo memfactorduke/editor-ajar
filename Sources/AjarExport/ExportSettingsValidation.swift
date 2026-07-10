@@ -174,7 +174,7 @@ extension ExportVideoCodec {
         switch self {
         case .h264, .hevc8Bit, .hevc10Bit:
             false
-        case .proRes422, .proRes422HQ, .proRes4444:
+        case .proRes422, .proRes422HQ, .proRes4444, .proRes422Proxy:
             true
         }
     }
@@ -188,7 +188,7 @@ extension ExportVideoCodec {
         switch self {
         case .h264, .hevc8Bit, .hevc10Bit:
             true
-        case .proRes422, .proRes422HQ, .proRes4444:
+        case .proRes422, .proRes422HQ, .proRes4444, .proRes422Proxy:
             false
         }
     }

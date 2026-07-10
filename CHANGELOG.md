@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-MED-004 proxy / optimized media pipeline (#217): **working** end-to-end app path — background
+  ProRes 422 Proxy generation on a dedicated `ProxyGenerationQueue` (does not block user
+  `ExportQueue` encodes) driven from playback when proxies are missing/stale, package-relative
+  storage under `caches/proxies/` (ADR-0007), durable `MediaRef.proxyState` + project
+  `preferProxyPlayback` toggle (schemaMinor **11**), render-graph content-hash tier distinction so
+  RAM/disk caches never serve the wrong tier (app decode follows the graph node), missing-proxy
+  fallback to originals with re-enqueue, export graphs structurally original-only
+  (`proxyFileExists {_ in false}` + per-frame audit from the executed graph; FR-EXP-007 /
+  ADR-0019), workspace one-click toggle (⌘⌥P, VoiceOver-labelled; `docs/ACCESSIBILITY.md`) that
+  actually flips decode once proxies are ready, consolidate preserves ready proxy state (relink
+  still resets), and unbudgeted proxy-vs-original heavy-timeline **comparison** bench metrics.
 - NFR-A11Y-001 full accessibility audit + keyboard control (#219): every interactive app
   surface (workspace chrome, sequence tabs, transport, timeline, canvas title overlays,
   inspector, export dialog, export queue, read-only banner) carries VoiceOver labels/values

@@ -24,7 +24,8 @@ public final class ExportSession: @unchecked Sendable {
     /// See `ExportSourceSelection.swift` and ADR-0019 "Proxy exclusion audit hook".
     public let sourceSelectionPolicy: ExportSourceSelectionPolicy
 
-    private let frameProvider: any ExportVideoFrameProvider
+    /// Frame provider (module-internal so ``ExportSessionSupport`` can audit graph tiers).
+    let frameProvider: any ExportVideoFrameProvider
     private let audioSourceProvider: (any AudioSourceProvider)?
     private let writerFactory: ExportWriterFactory
     private let beforePublish: (() -> Void)?

@@ -67,6 +67,7 @@ struct EditorAjarWorkspaceView: View {
             Text(model.projectSummary)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            proxyPlaybackToggle
             Button("Export…") {
                 model.presentExportDialog()
             }
@@ -90,6 +91,31 @@ struct EditorAjarWorkspaceView: View {
         .frame(height: 44)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Editor Ajar, \(model.projectSummary)")
+    }
+
+    /// One-click proxy/original playback toggle (FR-MED-004).
+    private var proxyPlaybackToggle: some View {
+        Button(model.preferProxyPlayback ? "Proxy" : "Original") {
+            model.togglePreferProxyPlayback()
+        }
+        .buttonStyle(.bordered)
+        .keyboardShortcut("p", modifiers: [.command, .option])
+        .help(
+            model.preferProxyPlayback
+                ? "Playback uses proxy media when ready. Export always uses originals."
+                : "Playback uses original media. Turn on for faster scrubbing of heavy media."
+        )
+        .accessibilityLabel(
+            model.preferProxyPlayback
+                ? "Proxy playback on"
+                : "Original playback on"
+        )
+        .accessibilityHint(
+            "Toggles timeline playback between optimized proxy media and originals. Export always uses originals."
+        )
+        .accessibilityValue(model.preferProxyPlayback ? "Proxy" : "Original")
+        .accessibilityIdentifier("Toggle Proxy Playback")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

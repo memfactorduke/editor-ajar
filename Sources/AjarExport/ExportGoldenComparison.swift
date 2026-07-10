@@ -126,7 +126,7 @@ public struct ExportGoldenTolerance: Equatable, Sendable {
     /// Default band for a video codec used by the golden-export harness.
     public static func forVideoCodec(_ codec: ExportVideoCodec) -> ExportGoldenTolerance {
         switch codec {
-        case .proRes422, .proRes422HQ, .proRes4444:
+        case .proRes422, .proRes422HQ, .proRes4444, .proRes422Proxy:
             .proRes422NearLossless
         case .h264:
             .h264Lossy

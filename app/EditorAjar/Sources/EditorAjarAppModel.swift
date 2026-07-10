@@ -37,6 +37,9 @@ final class EditorAjarAppModel: ObservableObject {
     /// Background export queue bridge (FR-EXP-005). Observe this for job list updates.
     let exportQueueController: EditorAjarExportQueueController
 
+    /// In-memory proxy generation progress by media id (FR-MED-004; not persisted).
+    @Published private(set) var proxyGenerationProgress: [UUID: Double] = [:]
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
@@ -45,6 +48,13 @@ final class EditorAjarAppModel: ObservableObject {
     private let autosaveIntervalSeconds: TimeInterval
     private let audioCoordinator: (any EditorAjarAudioCoordinating)?
     private let exportPresetStore: EditorAjarExportPresetStore
+    /// Package root for `caches/proxies/` resolution and proxy writes (FR-MED-004).
+    private var projectPackageRootURL: URL?
+    /// Dedicated proxy-generation queue (not the user export queue).
+    private let proxyGenerationQueue: ProxyGenerationQueue
+    private var proxyObserveTask: Task<Void, Never>?
+    /// Media ids with a pending/running proxy job (dedupe app-side enqueue).
+    private var proxyJobsInFlight: Set<UUID> = []
     private var autosaveLoopTask: Task<Void, Never>?
     private var autosaveWriteTask: Task<Void, Never>?
     private var mediaResolutionTask: Task<Void, Never>?
@@ -63,6 +73,7 @@ final class EditorAjarAppModel: ObservableObject {
         exportQueueController: EditorAjarExportQueueController? = nil
     ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
+        projectPackageRootURL = autosavePackageURL
         if let autosavePackageURL {
             autosaveCoordinator = EditorAjarAutosaveCoordinator(packageURL: autosavePackageURL)
         } else {
@@ -73,6 +84,9 @@ final class EditorAjarAppModel: ObservableObject {
             fileURL: exportPresetStoreURL ?? EditorAjarExportPresetStore.defaultFileURL()
         )
         self.exportQueueController = exportQueueController ?? EditorAjarExportQueueController()
+        proxyGenerationQueue = ProxyGenerationQueue(
+            sessionFactory: Self.makeProxySessionFactory()
+        )
 
         loadMessage = "Loading sample project"
 
@@ -133,6 +147,7 @@ final class EditorAjarAppModel: ObservableObject {
 
         do {
             renderPipeline = try EditorAjarRenderPipeline()
+            bindRenderPackageRoot()
             if project != nil, loadMessage == "Loading sample project" {
                 loadMessage = "Sample project loaded"
             }
@@ -148,6 +163,7 @@ final class EditorAjarAppModel: ObservableObject {
             scheduleAutosaveCheckpoint(project: project)
         }
         startAutosaveLoop()
+        startProxyQueueObservation()
         reloadExportPresets()
         requestRenderForCurrentFrame()
         if let initialLoadResult {
@@ -311,6 +327,7 @@ final class EditorAjarAppModel: ObservableObject {
         autosaveLoopTask?.cancel()
         autosaveWriteTask?.cancel()
         mediaResolutionTask?.cancel()
+        proxyObserveTask?.cancel()
     }
 
     private func startMediaResolution(for loadResult: AjarProjectLoadResult) {
@@ -386,6 +403,34 @@ final class EditorAjarAppModel: ObservableObject {
     /// Shows or hides the background export queue panel (FR-EXP-005).
     func toggleExportQueuePanel() {
         isExportQueuePanelVisible.toggle()
+    }
+
+    /// Whether playback prefers proxy media when ready (FR-MED-004).
+    var preferProxyPlayback: Bool {
+        project?.settings.preferProxyPlayback ?? false
+    }
+
+    /// One-click project-level proxy/original playback toggle (FR-MED-004).
+    ///
+    /// Persists on `ProjectSettings` so reopening a heavy project keeps proxy mode.
+    @discardableResult
+    func togglePreferProxyPlayback() -> Bool {
+        guard let project else {
+            return false
+        }
+        let next = !project.settings.preferProxyPlayback
+        let updated = project.updatingPreferProxyPlayback(next)
+        if var history = editHistory, projectOpenMode.allowsEditing {
+            self.project = history.replaceCurrentProjectPreservingHistory(updated)
+            editHistory = history
+            scheduleAutosaveCheckpoint(project: updated)
+        } else {
+            // Session-local flip under read-only open (no package rewrite).
+            self.project = updated
+        }
+        loadMessage = next ? "Proxy playback on" : "Original playback on"
+        requestRenderForCurrentFrame()
+        return true
     }
 
     /// Enqueues a ProRes export of the active sequence range (full sequence by default).
@@ -1927,6 +1972,12 @@ final class EditorAjarAppModel: ObservableObject {
                         mediaIDs: renderedFrame.runtimeOfflineMediaIDs,
                         expectedProject: project
                     )
+                    // FR-MED-004: missing/stale proxy falls back to original and re-enqueues.
+                    if !renderedFrame.mediaIDsNeedingProxyGeneration.isEmpty {
+                        self?.enqueueProxyGeneration(
+                            for: renderedFrame.mediaIDsNeedingProxyGeneration
+                        )
+                    }
                     self?.presentedTexture = renderedFrame.texture
                     self?.loadMessage = "Rendered \(sequence.name), frame \(frame)"
                 }
@@ -2207,6 +2258,7 @@ final class EditorAjarAppModel: ObservableObject {
     private func updateProject(_ project: Project) {
         persistActiveSequenceContext()
         self.project = project
+        bindRenderPackageRoot()
         let sequenceIDs = Set(project.sequences.map(\.id))
         sequenceContexts = sequenceContexts.filter { sequenceIDs.contains($0.key) }
 
@@ -2226,6 +2278,223 @@ final class EditorAjarAppModel: ObservableObject {
         }
         requestRenderForCurrentFrame()
         ensureAudioPlanForPlayback()
+    }
+
+    /// Assigns or clears `EditorAjarRenderPipeline.packageRootURL` from the open package.
+    ///
+    /// The package URL is known when the session opens (autosave / project package path). Without
+    /// it, proxy path resolution and generation cannot run. Cleared when no project is open.
+    private func bindRenderPackageRoot() {
+        renderPipeline?.packageRootURL = project != nil ? projectPackageRootURL : nil
+    }
+
+    // MARK: - Proxy generation (FR-MED-004)
+
+    /// Production proxy session factory: original-media decode via `MediaTranscodeFrameProvider`.
+    private static func makeProxySessionFactory() -> ProxySessionFactory {
+        { jobID, request, onProgress in
+            do {
+                let mediaProvider = MediaTranscodeFrameProvider(
+                    mediaID: request.mediaID,
+                    sourceURL: request.sourceURL,
+                    frameRate: request.frameRate,
+                    frameCount: request.frameCount,
+                    outputResolution: request.resolution
+                )
+                let adapter = ClosureProxySourceFrameProvider { index, buffer in
+                    try await mediaProvider.provideFrame(index: index, into: buffer)
+                }
+                return ProxyGenerationSession(
+                    id: jobID,
+                    request: request,
+                    frameProvider: adapter,
+                    onFrameProgress: onProgress
+                )
+            } catch {
+                return ProxyGenerationSession(
+                    id: jobID,
+                    request: request,
+                    frameProvider: FailingProxySourceFrameProvider(
+                        reason: String(describing: error)
+                    ),
+                    onFrameProgress: onProgress
+                )
+            }
+        }
+    }
+
+    private func startProxyQueueObservation() {
+        proxyObserveTask?.cancel()
+        let queue = proxyGenerationQueue
+        proxyObserveTask = Task { [weak self] in
+            let stream = await queue.snapshotStream()
+            for await snapshots in stream {
+                guard let self else {
+                    return
+                }
+                await MainActor.run {
+                    self.handleProxyJobSnapshots(snapshots)
+                }
+            }
+        }
+    }
+
+    private func handleProxyJobSnapshots(_ snapshots: [ProxyJobSnapshot]) {
+        var progress = proxyGenerationProgress
+        var needsRerender = false
+
+        for snapshot in snapshots {
+            let mediaID = snapshot.mediaID
+            switch snapshot.state {
+            case .pending, .running, .pausedWillRestart:
+                progress[mediaID] = snapshot.progress.fractionCompleted
+                proxyJobsInFlight.insert(mediaID)
+            case .done:
+                progress.removeValue(forKey: mediaID)
+                // Apply terminal outcomes only once per in-flight job (stream re-yields history).
+                guard proxyJobsInFlight.remove(mediaID) != nil else {
+                    continue
+                }
+                if let relative = snapshot.result?.relativePath {
+                    applyProxyState(.ready(relativePath: relative), for: mediaID)
+                    needsRerender = true
+                }
+            case .failed:
+                progress.removeValue(forKey: mediaID)
+                guard proxyJobsInFlight.remove(mediaID) != nil else {
+                    continue
+                }
+                let message = snapshot.failure.map(String.init(describing:))
+                applyProxyState(.failed(message: message), for: mediaID)
+            case .cancelled:
+                progress.removeValue(forKey: mediaID)
+                guard proxyJobsInFlight.remove(mediaID) != nil else {
+                    continue
+                }
+                applyProxyState(.failed(message: "cancelled"), for: mediaID)
+            }
+        }
+
+        proxyGenerationProgress = progress
+        if needsRerender {
+            requestRenderForCurrentFrame()
+        }
+    }
+
+    /// Enqueues real proxy jobs for media reported as needing generation during playback.
+    private func enqueueProxyGeneration(for mediaIDs: Set<UUID>) {
+        guard let project, let packageRoot = projectPackageRootURL else {
+            for mediaID in mediaIDs {
+                proxyGenerationProgress[mediaID] = 0
+            }
+            return
+        }
+
+        for mediaID in mediaIDs {
+            guard !proxyJobsInFlight.contains(mediaID),
+                  let media = project.mediaPool.first(where: { $0.id == mediaID }),
+                  let sourceURL = media.sourceURL,
+                  let frameRate = media.metadata.frameRate,
+                  let originalDims = media.metadata.pixelDimensions
+            else {
+                continue
+            }
+            // Skip media already generating (queue also dedupes pending/running).
+            if case .generating = media.proxyState {
+                proxyJobsInFlight.insert(mediaID)
+                continue
+            }
+
+            let proxyDims = MediaProxyResolutionPolicy.proxyDimensions(for: originalDims)
+            let relativePath = ProxyStorageLayout.relativePath(
+                mediaID: mediaID,
+                contentHash: media.contentHash,
+                resolution: proxyDims
+            )
+            let destinationURL = ProxyStorageLayout.absoluteURL(
+                packageRootURL: packageRoot,
+                relativePath: relativePath
+            )
+            let frameCount: Int64
+            do {
+                let count = try media.metadata.duration.frameIndex(
+                    at: frameRate,
+                    rounding: .towardZero
+                )
+                frameCount = max(1, count)
+            } catch {
+                continue
+            }
+            let colorSpace = Self.exportColorSpace(for: media.metadata.colorSpace)
+
+            do {
+                try ProxyStorageLayout.ensureProxiesDirectory(packageRootURL: packageRoot)
+            } catch {
+                applyProxyState(
+                    .failed(message: "could not create proxies directory: \(error)"),
+                    for: mediaID
+                )
+                continue
+            }
+
+            // Durable proxy lifecycle is regeneratable cache state (ADR-0007), not a creative
+            // edit — mutate via `replaceCurrentProjectPreservingHistory` (undo-exempt) so undo
+            // does not resurrect stale readiness; still autosaved with the document.
+            applyProxyState(.generating, for: mediaID)
+            proxyGenerationProgress[mediaID] = 0
+            proxyJobsInFlight.insert(mediaID)
+
+            let request = ProxyGenerationRequest(
+                mediaID: mediaID,
+                sourceURL: sourceURL,
+                destinationURL: destinationURL,
+                relativePath: relativePath,
+                resolution: proxyDims,
+                frameCount: frameCount,
+                frameRate: frameRate,
+                colorSpace: colorSpace
+            )
+            let job = ProxyGenerationJob(
+                mediaID: mediaID,
+                displayName: media.sourceURL?.lastPathComponent ?? mediaID.uuidString,
+                request: request
+            )
+            let queue = proxyGenerationQueue
+            Task {
+                _ = await queue.enqueue(job)
+            }
+        }
+    }
+
+    /// Applies durable `MediaRef.proxyState` without creating an undo entry (cache/derived state).
+    private func applyProxyState(_ proxyState: MediaProxyState, for mediaID: UUID) {
+        guard let project else {
+            return
+        }
+        // Skip no-op writes to avoid autosave thrash.
+        if let current = project.mediaPool.first(where: { $0.id == mediaID }),
+           current.proxyState == proxyState {
+            return
+        }
+        let updated = project.updatingMediaProxyState(proxyState, for: [mediaID])
+        if var history = editHistory {
+            self.project = history.replaceCurrentProjectPreservingHistory(updated)
+            editHistory = history
+            if projectOpenMode.allowsEditing {
+                scheduleAutosaveCheckpoint(project: updated)
+            }
+        } else {
+            self.project = updated
+        }
+    }
+
+    private static func exportColorSpace(for media: MediaColorSpace) -> ExportColorSpace {
+        switch media {
+        case .displayP3:
+            return .displayP3
+        case .rec709, .sRGB, .rec2020, .unspecified, .unknown:
+            return .rec709
+        }
     }
 
     private func persistActiveSequenceContext() {

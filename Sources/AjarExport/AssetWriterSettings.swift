@@ -45,6 +45,8 @@ enum AssetWriterSettings {
         // Apple's documented high-bit-depth RGB ProRes input (64ARGB) is ordinary-memory backed;
         // it is not an IOSurface/Metal pixel-buffer format. Delivery conversion is CPU-side
         // vImage into this pool (ADR-0019) — Metal compatibility is only requested for 8-bit paths.
+        // ProRes 422 Proxy also takes 32BGRA, but its writer pool is ordinary-memory (no Metal /
+        // IOSurface keys) — matching the high-bit-depth ProRes path avoids pool creation failures.
         if !settings.codec.isProRes {
             attributes[kCVPixelBufferMetalCompatibilityKey as String] = true
             attributes[kCVPixelBufferIOSurfacePropertiesKey as String] = [:]
@@ -89,7 +91,9 @@ enum AssetWriterSettings {
             kCVPixelFormatType_32BGRA
         case .hevc10Bit:
             kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
-        case .proRes422, .proRes422HQ, .proRes4444:
+        case .proRes422, .proRes422HQ, .proRes4444, .proRes422Proxy:
+            // ProRes Proxy accepts several inputs; use the same documented 64ARGB path as other
+            // ProRes profiles so the shared writer pool / delivery packing stay consistent.
             kCVPixelFormatType_64ARGB
         }
     }
@@ -106,6 +110,8 @@ enum AssetWriterSettings {
             .proRes422HQ
         case .proRes4444:
             .proRes4444
+        case .proRes422Proxy:
+            .proRes422Proxy
         }
     }
 
@@ -137,7 +143,7 @@ enum AssetWriterSettings {
             properties[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main_AutoLevel
         case .hevc10Bit:
             properties[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main10_AutoLevel
-        case .proRes422, .proRes422HQ, .proRes4444:
+        case .proRes422, .proRes422HQ, .proRes4444, .proRes422Proxy:
             break
         }
         return properties

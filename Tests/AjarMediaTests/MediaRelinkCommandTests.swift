@@ -299,7 +299,8 @@ func makeMediaRef(
     sourceURL: URL,
     contentHash: ContentHash,
     bookmark: Data? = nil,
-    availability: MediaAvailability = .available
+    availability: MediaAvailability = .available,
+    proxyState: MediaProxyState = .none
 ) throws -> MediaRef {
     MediaRef(
         id: id,
@@ -316,7 +317,8 @@ func makeMediaRef(
             isVariableFrameRate: false,
             conformedFrameRate: nil
         ),
-        availability: availability
+        availability: availability,
+        proxyState: proxyState
     )
 }
 

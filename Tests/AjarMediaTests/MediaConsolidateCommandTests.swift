@@ -122,6 +122,38 @@ final class MediaConsolidateCommandTests: XCTestCase {  // swiftlint:disable:thi
         }
     }
 
+    func testFRMED004ConsolidatePreservesProxyStateWhileRelinkResets() throws {
+        let root = try temporaryDirectory(named: "consolidate-proxy-preserve")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let package = root.appendingPathComponent("Project.ajar", isDirectory: true)
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        let sourceURL = root.appendingPathComponent("clip.mov")
+        let bytes = Data("proxy-preserve-original".utf8)
+        try bytes.write(to: sourceURL)
+        let readyPath = "caches/proxies/clip-proxy.mov"
+        let media = try makeMediaRef(
+            sourceURL: sourceURL,
+            contentHash: ContentHash.sha256(data: bytes),
+            proxyState: .ready(relativePath: readyPath)
+        )
+        let project = try makeProject(media: [media])
+        let result = try makeConsolidateCommand().prepare(
+            project: project,
+            openMode: .editable,
+            projectPackageURL: package
+        )
+        XCTAssertTrue(result.isComplete)
+        let edited = try apply(try XCTUnwrap(result.command), to: project)
+        let consolidated = try XCTUnwrap(edited.mediaPool.first)
+        // Same-bytes consolidate preserves the ready proxy; genuine relink below resets it.
+        XCTAssertEqual(consolidated.proxyState, .ready(relativePath: readyPath))
+        let relinked = consolidated.relinked(to: MediaRelinkCandidate(
+            sourceURL: URL(fileURLWithPath: "/other/source.mov"),
+            contentHash: ContentHash.sha256(data: Data("different".utf8))
+        ))
+        XCTAssertEqual(relinked.proxyState, MediaProxyState.none)
+    }
+
     func testFRMED008ReadOnlyConsolidateRefusesBeforeCreatingMediaDirectory() throws {
         let root = try temporaryDirectory(named: "consolidate-read-only")
         defer { try? FileManager.default.removeItem(at: root) }

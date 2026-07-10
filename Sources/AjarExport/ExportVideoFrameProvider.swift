@@ -13,6 +13,15 @@ public protocol ExportVideoFrameProvider: AnyObject {
     ) async throws
 }
 
+/// Optional audit surface for frame providers that build a render graph per export frame.
+///
+/// ``ExportSession`` records these tiers into ``ExportFrameSourceSelection`` rows so FR-EXP-007
+/// can assert against the **executed** graph (not only a constant policy value).
+public protocol ExportGraphSourceAuditing: AnyObject {
+    /// Media source tiers present in the most recently rendered export graph.
+    var lastRenderedExportSourceTiers: [(mediaID: UUID, tier: ExportMediaSourceTier)] { get }
+}
+
 /// Prepares original-media textures required by one immutable render graph.
 ///
 /// A caller-owned adapter may use AjarMedia to decode originals. Keeping the adapter injected

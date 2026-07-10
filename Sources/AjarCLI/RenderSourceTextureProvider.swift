@@ -37,7 +37,13 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
 
     // Source predecode owns adjacent-frame retention and runtime-offline fallback as one unit.
     // swiftlint:disable:next function_body_length
-    init(graph: RenderGraph, project: Project, device: MTLDevice) async throws {
+    init(
+        graph: RenderGraph,
+        project: Project,
+        device: MTLDevice,
+        packageRootURL: URL? = nil,
+        decodeURLOverride: [UUID: URL] = [:]
+    ) async throws {
         let decoder = try VideoFrameDecoder(device: device)
         var textures: [RenderSourceKey: MTLTexture] = [:]
         var blendEntries: [RenderSourceKey: FrameBlendEntry] = [:]
@@ -46,7 +52,20 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
         var runtimeOfflineMediaIDs = Set<UUID>()
 
         func decodeTexture(from media: MediaRef, at time: RationalTime) async throws -> MTLTexture {
-            let frame = try await decoder.decodeFrame(from: media, at: time)
+            let frame: DecodedFrame
+            if let overrideURL = decodeURLOverride[media.id] {
+                frame = try await decoder.decodeFrame(from: overrideURL, at: time)
+            } else if Self.sourceTierIsProxy(mediaID: media.id, graph: graph),
+                      let relative = media.proxyState.readyRelativePath,
+                      let packageRootURL {
+                let proxyURL = ProxyStorageLayout.absoluteURL(
+                    packageRootURL: packageRootURL,
+                    relativePath: relative
+                )
+                frame = try await decoder.decodeFrame(from: proxyURL, at: time)
+            } else {
+                frame = try await decoder.decodeFrame(from: media, at: time)
+            }
             guard let texture = CVMetalTextureGetTexture(frame.metalTexture) else {
                 throw AjarCLIError.decodedTextureUnavailable(media.id)
             }
@@ -171,6 +190,12 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
             throw AjarCLIError.missingMediaReference(mediaID)
         }
         return media
+    }
+
+    private static func sourceTierIsProxy(mediaID: UUID, graph: RenderGraph) -> Bool {
+        graph.renderSourceNodes().contains { source in
+            source.mediaID == mediaID && source.mediaSourceTier == .proxy
+        }
     }
 
     /// Resolves the FR-SPD-004 adjacent frame pair for a frame-blend source node.
