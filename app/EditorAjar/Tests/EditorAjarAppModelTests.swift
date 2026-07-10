@@ -2,6 +2,7 @@
 
 import AjarAudio
 import AjarCore
+import AjarExport
 import Foundation
 import XCTest
 
@@ -20,6 +21,209 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(model.activeSequence?.videoTracks.count, 2)
         XCTAssertEqual(model.activeSequence?.audioTracks.count, 2)
         XCTAssertGreaterThan(model.durationFrames, 1)
+    }
+
+    func testFREXP003004ExportDialogPresentsPresetsAndValidatesWholeTimeline() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ajar-export-presets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportPresetStoreURL: storeURL
+        )
+
+        model.presentExportDialog()
+        XCTAssertTrue(model.exportDialog.isPresented)
+        XCTAssertGreaterThanOrEqual(model.exportDialog.availablePresets.count, 5)
+        XCTAssertEqual(model.exportDialog.mode, .video)
+        XCTAssertEqual(model.exportDialog.rangeChoice, .wholeTimeline)
+
+        XCTAssertTrue(model.validateExportDialogSelection())
+        XCTAssertEqual(
+            model.exportDialog.statusMessage,
+            "Ready to export video"
+        )
+
+        model.setExportMode(.stillFrame)
+        XCTAssertTrue(model.validateExportDialogSelection())
+
+        model.setExportMode(.audioOnly)
+        model.setAudioOnlyFormat(.wavPCM)
+        XCTAssertTrue(model.validateExportDialogSelection())
+
+        model.dismissExportDialog()
+        XCTAssertFalse(model.exportDialog.isPresented)
+    }
+
+    func testFREXP003CustomPresetsPersistAppSideNotInProject() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ajar-export-presets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportPresetStoreURL: storeURL
+        )
+        let frameRate = try FrameRate(frames: 30)
+        let custom = ExportPreset(
+            name: "Test 480p",
+            isBuiltIn: false,
+            container: .mp4,
+            videoCodec: .h264,
+            resolution: PixelDimensions(width: 854, height: 480),
+            frameRate: frameRate,
+            averageBitRate: 2_500_000,
+            audio: try ExportAudioSettings(
+                codec: .aac,
+                sampleRate: 48_000,
+                channelCount: 2,
+                bitRate: 128_000
+            )
+        )
+        try model.saveCustomExportPreset(custom)
+
+        let reloaded = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportPresetStoreURL: storeURL
+        )
+        XCTAssertTrue(reloaded.exportDialog.availablePresets.contains { $0.id == custom.id })
+        // Project package is untouched — custom presets never appear in project.json fields.
+        XCTAssertEqual(model.project, reloaded.project)
+    }
+
+    func testFREXP004ExportDialogRejectsMissingInOutMarks() {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ajar-export-presets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportPresetStoreURL: storeURL
+        )
+        model.presentExportDialog()
+        model.setExportRangeChoice(.inOutMarks)
+        // No in/out marks set.
+        XCTAssertFalse(model.validateExportDialogSelection())
+        XCTAssertNotNil(model.exportDialog.statusMessage)
+    }
+
+    /// Out mark is inclusive (NLE convention): UI "Range 10-14" exports frames 10…14 inclusive.
+    func testFREXP004InOutMarksExportInclusiveOutFrameFirstAndLast() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ajar-export-presets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportPresetStoreURL: storeURL
+        )
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let frameRate = sequence.timebase
+
+        model.scrub(to: 10)
+        model.setTimelineRangeIn()
+        model.scrub(to: 14)
+        model.setTimelineRangeOut()
+        XCTAssertEqual(model.timelineRangeDescription, "Range 10-14")
+
+        model.setExportRangeChoice(.inOutMarks)
+        let range = try model.exportDialog.resolvedRange(
+            sequence: sequence,
+            selectionInFrame: model.timelineState.selectionInFrame,
+            selectionOutFrame: model.timelineState.selectionOutFrame
+        )
+
+        let firstFrame = try range.start.frameIndex(
+            at: frameRate,
+            rounding: .towardZero
+        )
+        let exclusiveEnd = try range.start.adding(range.duration)
+        let exclusiveEndFrame = try exclusiveEnd.frameIndex(
+            at: frameRate,
+            rounding: .towardZero
+        )
+        let lastFrame = exclusiveEndFrame - 1
+        let frameCount = try range.duration.frameIndex(
+            at: frameRate,
+            rounding: .towardZero
+        )
+
+        XCTAssertEqual(firstFrame, 10, "first exported frame must match inclusive in mark")
+        XCTAssertEqual(lastFrame, 14, "last exported frame must match inclusive out mark")
+        XCTAssertEqual(frameCount, 5, "inclusive [10,14] is 5 frames → half-open [10,15)")
+        XCTAssertEqual(exclusiveEndFrame, 15)
+
+        // Single-frame mark pair is valid under inclusive-out.
+        model.scrub(to: 7)
+        model.setTimelineRangeIn()
+        model.setTimelineRangeOut()
+        XCTAssertEqual(model.timelineRangeDescription, "Range 7-7")
+        let single = try model.exportDialog.resolvedRange(
+            sequence: sequence,
+            selectionInFrame: model.timelineState.selectionInFrame,
+            selectionOutFrame: model.timelineState.selectionOutFrame
+        )
+        let singleCount = try single.duration.frameIndex(
+            at: frameRate,
+            rounding: .towardZero
+        )
+        XCTAssertEqual(singleCount, 1)
+    }
+
+    func testFREXP004StillExportClampsPlayheadAtDurationExclusiveEnd() {
+        // playheadFrame is private(set) and scrub clamps below duration; pin the pure clamp
+        // used by the still-export path when playhead sits on the exclusive end.
+        XCTAssertEqual(
+            EditorAjarAppModel.clampedStillExportFrame(playheadFrame: 90, durationFrames: 90),
+            89
+        )
+        XCTAssertEqual(
+            EditorAjarAppModel.clampedStillExportFrame(playheadFrame: 89, durationFrames: 90),
+            89
+        )
+        XCTAssertEqual(
+            EditorAjarAppModel.clampedStillExportFrame(playheadFrame: 0, durationFrames: 1),
+            0
+        )
+        XCTAssertEqual(
+            EditorAjarAppModel.clampedStillExportFrame(playheadFrame: 5, durationFrames: 0),
+            0
+        )
+    }
+
+    func testFREXP003SaveCustomPresetRecoversFromCorruptStore() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ajar-export-presets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+        // Corrupt JSON that would make loadCustomPresets throw decodingFailed.
+        try Data("{ not valid json".utf8).write(to: storeURL)
+
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportPresetStoreURL: storeURL
+        )
+        let frameRate = try FrameRate(frames: 30)
+        let custom = ExportPreset(
+            name: "Recovered After Corrupt",
+            isBuiltIn: false,
+            container: .mp4,
+            videoCodec: .h264,
+            resolution: PixelDimensions(width: 640, height: 360),
+            frameRate: frameRate,
+            averageBitRate: 1_500_000,
+            audio: try ExportAudioSettings(
+                codec: .aac,
+                sampleRate: 48_000,
+                channelCount: 2,
+                bitRate: 128_000
+            )
+        )
+        // Must not propagate decodingFailed — overwrite corrupt store with the new preset.
+        try model.saveCustomExportPreset(custom)
+        XCTAssertTrue(model.exportDialog.availablePresets.contains { $0.id == custom.id })
+
+        let reloaded = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportPresetStoreURL: storeURL
+        )
+        XCTAssertTrue(reloaded.exportDialog.availablePresets.contains { $0.id == custom.id })
     }
 
     func testFRPLAY001TransportTogglesPlaybackAndFrameStepPauses() {

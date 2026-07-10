@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
+import AjarExport
 import Foundation
 import Metal
 import SwiftUI
@@ -26,6 +27,9 @@ final class EditorAjarAppModel: ObservableObject {
     /// Whether the read-only workspace banner is currently shown.
     @Published private(set) var isReadOnlyBannerVisible = false
 
+    /// Minimal export dialog state (FR-EXP-003/004). Running export is a later FR-EXP-005 queue.
+    @Published private(set) var exportDialog = EditorAjarExportDialogModel()
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
@@ -33,6 +37,7 @@ final class EditorAjarAppModel: ObservableObject {
     private let autosaveCoordinator: EditorAjarAutosaveCoordinator?
     private let autosaveIntervalSeconds: TimeInterval
     private let audioCoordinator: (any EditorAjarAudioCoordinating)?
+    private let exportPresetStore: EditorAjarExportPresetStore
     private var autosaveLoopTask: Task<Void, Never>?
     private var autosaveWriteTask: Task<Void, Never>?
     private var autosaveCommandCount = 0
@@ -45,7 +50,8 @@ final class EditorAjarAppModel: ObservableObject {
     init(
         autosavePackageURL: URL? = nil,
         autosaveIntervalSeconds: TimeInterval = 5.0,
-        audioCoordinator: (any EditorAjarAudioCoordinating)? = nil
+        audioCoordinator: (any EditorAjarAudioCoordinating)? = nil,
+        exportPresetStoreURL: URL? = nil
     ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
         if let autosavePackageURL {
@@ -54,6 +60,9 @@ final class EditorAjarAppModel: ObservableObject {
             autosaveCoordinator = nil
         }
         self.audioCoordinator = audioCoordinator ?? Self.makeAudioCoordinator()
+        exportPresetStore = EditorAjarExportPresetStore(
+            fileURL: exportPresetStoreURL ?? EditorAjarExportPresetStore.defaultFileURL()
+        )
 
         loadMessage = "Loading sample project"
 
@@ -129,7 +138,159 @@ final class EditorAjarAppModel: ObservableObject {
             scheduleAutosaveCheckpoint(project: project)
         }
         startAutosaveLoop()
+        reloadExportPresets()
         requestRenderForCurrentFrame()
+    }
+
+    // MARK: - Export dialog (FR-EXP-003 / FR-EXP-004)
+
+    /// Opens the export dialog with the current preset list.
+    func presentExportDialog() {
+        reloadExportPresets()
+        var dialog = exportDialog
+        dialog.isPresented = true
+        dialog.statusMessage = nil
+        exportDialog = dialog
+    }
+
+    /// Closes the export dialog without starting an export.
+    func dismissExportDialog() {
+        var dialog = exportDialog
+        dialog.isPresented = false
+        dialog.statusMessage = nil
+        exportDialog = dialog
+    }
+
+    func setExportMode(_ mode: EditorAjarExportMode) {
+        var dialog = exportDialog
+        dialog.mode = mode
+        exportDialog = dialog
+    }
+
+    func setExportRangeChoice(_ choice: EditorAjarExportRangeChoice) {
+        var dialog = exportDialog
+        dialog.rangeChoice = choice
+        exportDialog = dialog
+    }
+
+    func setExportPresetID(_ id: UUID) {
+        var dialog = exportDialog
+        dialog.selectedPresetID = id
+        exportDialog = dialog
+    }
+
+    func setStillFormat(_ format: EditorAjarStillFormatChoice) {
+        var dialog = exportDialog
+        dialog.stillFormat = format
+        exportDialog = dialog
+    }
+
+    func setAudioOnlyFormat(_ format: EditorAjarAudioOnlyFormatChoice) {
+        var dialog = exportDialog
+        dialog.audioOnlyFormat = format
+        exportDialog = dialog
+    }
+
+    /// Validates the current dialog selection against the open project (unit-test surface).
+    ///
+    /// Does not write media files; the FR-EXP-005 queue owns background export execution.
+    @discardableResult
+    func validateExportDialogSelection() -> Bool {
+        guard let project, let sequence = activeSequence else {
+            var dialog = exportDialog
+            dialog.statusMessage = "No sequence available to export"
+            exportDialog = dialog
+            return false
+        }
+
+        do {
+            switch exportDialog.mode {
+            case .video:
+                _ = try exportDialog.makeVideoSettings()
+                _ = try exportDialog.resolvedRange(
+                    sequence: sequence,
+                    selectionInFrame: timelineState.selectionInFrame,
+                    selectionOutFrame: timelineState.selectionOutFrame
+                )
+            case .stillFrame:
+                // Still validation requires time ∈ [0, duration). Clamp playhead at the last
+                // valid frame when it sits on durationFrames (exclusive end of the timeline).
+                let stillFrame = Self.clampedStillExportFrame(
+                    playheadFrame: playheadFrame,
+                    durationFrames: durationFrames
+                )
+                let time = try RationalTime.atFrame(stillFrame, frameRate: sequence.timebase)
+                _ = try StillFrameExportRequest(
+                    project: project,
+                    sequenceID: sequence.id,
+                    time: time,
+                    destinationURL: FileManager.default.temporaryDirectory
+                        .appendingPathComponent("validate-still.\(exportDialog.suggestedPathExtension)"),
+                    format: exportDialog.stillFormat.stillFormat
+                )
+            case .audioOnly:
+                _ = try exportDialog.makeAudioOnlySettings(
+                    projectSampleRate: project.settings.audioSampleRate
+                )
+                _ = try exportDialog.resolvedRange(
+                    sequence: sequence,
+                    selectionInFrame: timelineState.selectionInFrame,
+                    selectionOutFrame: timelineState.selectionOutFrame
+                )
+            }
+            var dialog = exportDialog
+            dialog.statusMessage = "Ready to export \(exportDialog.mode.displayName.lowercased())"
+            exportDialog = dialog
+            return true
+        } catch {
+            var dialog = exportDialog
+            dialog.statusMessage = String(describing: error)
+            exportDialog = dialog
+            return false
+        }
+    }
+
+    /// Saves a custom preset app-side (Application Support JSON — not the project package).
+    func saveCustomExportPreset(_ preset: ExportPreset) throws {
+        // Corrupt on-disk JSON must not permanently block saves — recover like
+        // `reloadExportPresets` (empty custom list) and overwrite with the new preset.
+        var customs: [ExportPreset]
+        do {
+            customs = try exportPresetStore.loadCustomPresets()
+        } catch EditorAjarExportPresetStoreError.decodingFailed {
+            customs = []
+        }
+        customs.removeAll { $0.id == preset.id }
+        var stored = preset
+        // Force non-built-in so we never overwrite compiled defaults on disk.
+        stored = ExportPreset(
+            id: preset.id,
+            name: preset.name,
+            isBuiltIn: false,
+            container: preset.container,
+            videoCodec: preset.videoCodec,
+            resolution: preset.resolution,
+            frameRate: preset.frameRate,
+            averageBitRate: preset.averageBitRate,
+            quality: preset.quality,
+            colorSpace: preset.colorSpace,
+            audio: preset.audio
+        )
+        try stored.validate()
+        customs.append(stored)
+        try exportPresetStore.saveCustomPresets(customs)
+        reloadExportPresets()
+    }
+
+    private func reloadExportPresets() {
+        let customs = (try? exportPresetStore.loadCustomPresets()) ?? []
+        var dialog = exportDialog
+        dialog.availablePresets = EditorAjarExportPresetStore.mergedPresets(custom: customs)
+        if dialog.selectedPresetID == nil
+            || !dialog.availablePresets.contains(where: { $0.id == dialog.selectedPresetID }) {
+            dialog.selectedPresetID = dialog.availablePresets.first?.id
+        }
+        exportDialog = dialog
     }
 
     deinit {
@@ -460,6 +621,8 @@ final class EditorAjarAppModel: ObservableObject {
         return activeSequence?.markers.first { $0.id == selectedMarkerID }
     }
 
+    /// Human-readable in/out range. Both marks are **inclusive** frame indices (NLE convention);
+    /// export resolves them to the half-open engine span `[in, out+1)`.
     var timelineRangeDescription: String {
         switch (timelineState.selectionInFrame, timelineState.selectionOutFrame) {
         case (.some(let inFrame), .some(let outFrame)):
@@ -1634,6 +1797,14 @@ final class EditorAjarAppModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Still-export sample frame for a playhead on a half-open timeline `[0, durationFrames)`.
+    ///
+    /// When the playhead sits on the exclusive end (`playheadFrame == durationFrames`), clamps to
+    /// the last valid frame so `StillFrameExportRequest` validation does not throw.
+    static func clampedStillExportFrame(playheadFrame: Int64, durationFrames: Int64) -> Int64 {
+        min(playheadFrame, max(0, durationFrames - 1))
     }
 
     private static func durationFrames(for sequence: Sequence) -> Int64 {

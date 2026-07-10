@@ -33,6 +33,22 @@ struct EditorAjarWorkspaceView: View {
         }
         .background(Color(red: 0.10, green: 0.10, blue: 0.11))
         .foregroundStyle(.white)
+        .sheet(isPresented: exportSheetPresented) {
+            EditorAjarExportDialogView(model: model)
+        }
+    }
+
+    private var exportSheetPresented: Binding<Bool> {
+        Binding(
+            get: { model.exportDialog.isPresented },
+            set: { presented in
+                if presented {
+                    model.presentExportDialog()
+                } else {
+                    model.dismissExportDialog()
+                }
+            }
+        )
     }
 
     private var header: some View {
@@ -43,10 +59,16 @@ struct EditorAjarWorkspaceView: View {
             Text(model.projectSummary)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            Button("Export…") {
+                model.presentExportDialog()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .accessibilityLabel("Open export dialog")
+            .accessibilityIdentifier("Open Export Dialog")
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Editor Ajar, \(model.projectSummary)")
     }
 }

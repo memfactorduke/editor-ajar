@@ -33,6 +33,8 @@ targets:
         product: AjarMedia
       - package: EditorAjarPackage
         product: AjarAudio
+      - package: EditorAjarPackage
+        product: AjarExport
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

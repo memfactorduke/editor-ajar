@@ -50,6 +50,18 @@ public enum ExportError: Error, Equatable, Sendable, CustomStringConvertible {
     /// The requested timeline range is empty, negative, or outside the sequence.
     case invalidRange(TimeRange)
 
+    /// In/out marks form an empty or inverted half-open span (FR-EXP-004).
+    case emptyOrInvertedRange(start: RationalTime, end: RationalTime)
+
+    /// Still-frame export time is outside the sequence timeline (FR-EXP-004).
+    case stillFrameTimeOutOfRange(RationalTime)
+
+    /// Still-frame image encoding failed.
+    case stillFrameWriteFailed(String)
+
+    /// Audio-only export failed before or during container write.
+    case audioOnlyExportFailed(String)
+
     /// The graph delivery space and the writer tag would disagree.
     case colorSpaceMismatch(project: MediaColorSpace, export: ExportColorSpace)
 
@@ -133,6 +145,14 @@ public enum ExportError: Error, Equatable, Sendable, CustomStringConvertible {
             "export sequence \(id) was not found"
         case .invalidRange(let range):
             "invalid export range [\(range.start), +\(range.duration))"
+        case .emptyOrInvertedRange(let start, let end):
+            "export range is empty or inverted [\(start), \(end))"
+        case .stillFrameTimeOutOfRange(let time):
+            "still-frame time \(time) is outside the sequence timeline"
+        case .stillFrameWriteFailed(let reason):
+            "still-frame write failed: \(reason)"
+        case .audioOnlyExportFailed(let reason):
+            "audio-only export failed: \(reason)"
         case .colorSpaceMismatch(let project, let export):
             "render output \(project.rawValue) cannot be tagged as \(export.rawValue)"
         case .missingAudioSourceProvider:
