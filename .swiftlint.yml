@@ -68,4 +68,13 @@ custom_rules:
     regex: "\\bprint\\("
     match_kinds: [identifier]
     message: "Use the Logger; print() is forbidden in the headless core."
-    severity: warning
+    severity: error
+  no_fatalerror_in_core:
+    # NFR-STAB-003: AjarCore must never crash on input. fatalError is a crash; the core
+    # returns typed error values instead. Path-scoped to the headless core (CLAUDE.md
+    # "Never do this"); platform modules may still use it for programmer-error invariants.
+    name: "No fatalError() in AjarCore"
+    regex: "\\bfatalError\\("
+    included: "Sources/AjarCore"
+    message: "fatalError() is forbidden in the headless core; return a typed error (NFR-STAB-003)."
+    severity: error

@@ -1,0 +1,17 @@
+# ThreadSanitizer suppressions for the Editor Ajar concurrency gate (NFR-STAB-004, ADR-0012).
+#
+# The `sanitizers` CI job runs `swift test --sanitize=thread` with `halt_on_error=1`, so the gate
+# genuinely fails on any UNSUPPRESSED data race. Every entry below must document a proven false
+# positive; suppressions are a reviewed commit, never a way to hide a real race.
+#
+# ── Metal command-buffer completion handlers ────────────────────────────────────────────────
+# `MTLCommandBuffer.commit()` happens-before the completed handler Metal invokes on its own
+# worker thread (Metal documents the handler runs after the buffer completes). TSan cannot see
+# Metal.framework's internal synchronization, so it reports the `RenderCompletion` object's
+# construction/commit thread as racing with the first `lock.lock()` inside
+# `RenderCompletion.complete(error:)` on Metal's handler thread. `RenderCompletion`'s own state
+# (`result`, `continuations`) is fully NSLock-guarded — see AjarRender/MetalRenderExecutor.swift —
+# and Metal guarantees the ordering, so this is not a real data race. Surfaces via the
+# disk-frame-cache readback + soak render loop under concurrent GCD workers.
+race:RenderCompletion.complete
+race:RenderCompletion.init

@@ -47,5 +47,17 @@ let benchmarkExpectedRequirementIDs: [String: String] = [
     "typical-stack-1080p-playback-m8-exit": "NFR-PERF-003",
     "title-node-styled-1080p-fr-txt-001": "FR-TXT-001",
     "proxy-playback-heavy-original-fr-med-004": "FR-MED-004",
-    "proxy-playback-heavy-proxy-fr-med-004": "FR-MED-004"
+    "proxy-playback-heavy-proxy-fr-med-004": "FR-MED-004",
+    "export-throughput-1080p30-h264": "NFR-PERF-008",
+    "proxy-generation-throughput-1080p": "NFR-PERF-011"
+]
+
+/// Throughput metrics report ×-real-time (`unit == "x"`) rather than milliseconds, and may emit a
+/// capability-`skipped` row (sentinel value 0) on encoder-less runners. The exact-set test relaxes
+/// its `unit == "ms"` / positive-value checks for exactly these two, but still requires both rows
+/// to be present and correctly requirement-tagged (they encode the metric even when skipped, so
+/// the metric set stays exact).
+let benchmarkThroughputMetricSlugs: Set<String> = [
+    "export-throughput-1080p30-h264",
+    "proxy-generation-throughput-1080p"
 ]

@@ -251,6 +251,35 @@ final class MetalRenderExecutorTests: XCTestCase {
         )
     }
 
+    func testNFRQUAL002DisplayP3RoundTripPreservesKnownPatch() throws {
+        // NFR-QUAL-002: the managed pipeline must round-trip Display-P3 within the same channel
+        // tolerance as the Rec.709 case above. Source, working, and output color spaces are all
+        // Display-P3, so decode → half-float linear working → re-encode preserves the patch with
+        // no gamut conversion (primaries match); this guards the sRGB-transfer/P3-primaries path.
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph(colorSpace: .displayP3)
+        let sourceTexture = try makeTexture(
+            device: device,
+            width: 1,
+            height: 1,
+            bgraPixels: [32, 64, 128, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let frame = try executor.render(
+            graph: graph,
+            output: RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1)),
+            sourceProvider: CountingSourceTextureProvider(texture: sourceTexture)
+        )
+
+        try waitForRender(frame)
+
+        XCTAssertBGRA8(
+            try readBGRA8(texture: frame.texture, device: device),
+            approximatelyEquals: [32, 64, 128, 255],
+            channelTolerance: 1
+        )
+    }
+
     func testFRXFORM004ScreenBlendModeCombinesSourceAndDestination() throws {
         let device = try metalDeviceOrSkip()
         let graph = try makeTwoClipGraph(topTransform: ClipTransform(blendMode: .screen))
@@ -1014,7 +1043,8 @@ private let red: [UInt8] = [0, 0, 255, 255]
 
 private func makeSingleClipGraph(
     transform: ClipTransform = .identity,
-    effects: ClipEffects = .none
+    effects: ClipEffects = .none,
+    colorSpace: MediaColorSpace = .rec709
 ) throws -> RenderGraph {
     let mediaID = try testUUID(TestIDs.media)
     let clipID = try testUUID(TestIDs.clip)
@@ -1027,7 +1057,7 @@ private func makeSingleClipGraph(
             pixelDimensions: PixelDimensions(width: 1, height: 1),
             frameRate: try FrameRate(frames: 24),
             duration: try time(24),
-            colorSpace: .rec709,
+            colorSpace: colorSpace,
             audioChannelLayout: nil,
             isVariableFrameRate: false,
             conformedFrameRate: nil
@@ -1056,7 +1086,7 @@ private func makeSingleClipGraph(
         settings: ProjectSettings(
             frameRate: try FrameRate(frames: 24),
             resolution: PixelDimensions(width: 1, height: 1),
-            colorSpace: .rec709,
+            colorSpace: colorSpace,
             audioSampleRate: 48_000
         ),
         mediaPool: [media],

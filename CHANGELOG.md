@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- test(EXIT): TSan CI gate, fatalError lint, P3 round-trip, export/proxy throughput benchmarks
+  (NFR-STAB-003/004, NFR-QUAL-002, NFR-PERF-008/011) — M9 exit-gate hardening (#221). The
+  `sanitizers` CI job now runs `swift test --sanitize=thread` over the ADR-0012 concurrency
+  surfaces (export queue/session/writer, real-time audio plan handoff, seeded soak loop, executor
+  concurrent-render guard) with `TSAN_OPTIONS=halt_on_error=1` so any unsuppressed data race fails
+  the job; a documented, narrow `.tsan-suppressions.txt` covers the proven Metal completion-handler
+  false positive. SwiftLint now bans `fatalError(` in `Sources/AjarCore` and enforces the
+  no-`print()`-in-core rule at error severity. New `MetalRenderExecutorTests` Display-P3 known-patch
+  round-trip complements the Rec.709 case (same channel tolerance). Two report-only ×-real-time
+  bench metrics: `export-throughput-1080p30-h264` (H.264 1080p30 export through `ExportSession`;
+  capability-skips on encoder-less runners) and `proxy-generation-throughput-1080p` (ProRes-Proxy
+  via `ProxyGenerationSession`).
 - NFR-I18N-001 localization readiness / string externalization (#220): every user-visible string in
   the app target (workspace chrome, sequence tabs, transport, timeline + track controls, canvas
   title overlays + safe-area guides, inspector, marker/transform inspectors, export dialog, export

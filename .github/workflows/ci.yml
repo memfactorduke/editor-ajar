@@ -259,6 +259,42 @@ jobs:
       - name: Benchmark report (NFR-PERF-001/002/005)
         run: scripts/bench.sh
 
-  # ── Forthcoming gates (wired after ROADMAP M2, per docs/TESTING.md §5) ──────────────────────
-  # sanitizers:
-  #   `swift test --sanitize=thread` and `--sanitize=address` (NFR-STAB-004).
+  sanitizers:
+    name: Thread Sanitizer (NFR-STAB-004)
+    runs-on: macos-14
+    needs: [build-test, lint]
+    # TSan instruments + reruns the suite (~5-15x slower). Scoped by --filter to the concurrency
+    # surfaces so the job stays far under budget (local Apple Silicon: ~2 min run; cold build a
+    # few minutes). 30-minute ceiling fails fast on a hang.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      # NFR-STAB-004 / ADR-0012: the concurrency model must run clean under Thread Sanitizer.
+      # `halt_on_error=1` makes an unsuppressed data race FAIL the job — TSan otherwise only prints
+      # warnings and exits 0, which would make this gate green-but-meaningless. The suppressions
+      # file documents proven Metal command-buffer completion-handler false positives (Metal owns
+      # that happens-before; see .tsan-suppressions.txt); every entry is a reviewed commit, never a
+      # way to hide a real race.
+      #
+      # Scope: the ADR-0012 concurrency surfaces — the export queue/session/writer state machine,
+      # the real-time audio plan publish/consume handoff, and the seeded soak loop (RT slot
+      # reclamation, disk-frame-cache churn, edit reducer under concurrent GCD workers), plus the
+      # render executor's concurrent-compound-render synchronization guard. GPU golden / media
+      # decode tests are data-race-irrelevant (Metal/AVFoundation own that ordering) and are
+      # excluded to keep runtime sane.
+      # TODO(NFR-STAB-004): run the FULL suite under TSan on the dedicated reference runner once it
+      # exists (PERFORMANCE §1), where hosted-runner runtime is not a constraint.
+      - name: Thread Sanitizer (concurrency scope)
+        env:
+          TSAN_OPTIONS: "halt_on_error=1 suppressions=${{ github.workspace }}/.tsan-suppressions.txt"
+        run: |
+          swift test --sanitize=thread \
+            --filter "AjarAudioTests|AjarExportTests|SoakCommandTests|ConcurrentCompound"
+
+  # ── Forthcoming gates (per docs/TESTING.md §5) ─────────────────────────────────────────────
+  # Address Sanitizer (`swift test --sanitize=address`, NFR-STAB-004) joins the reference-runner
+  # matrix alongside the full-suite TSan pass noted above.

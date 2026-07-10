@@ -239,9 +239,19 @@ final class AjarCommandTests: XCTestCase {
 
         XCTAssertEqual(Set(results.map(\.metric)), Set(expectedRequirementIDs.keys))
         for result in results {
-            XCTAssertEqual(result.unit, "ms")
-            XCTAssertGreaterThanOrEqual(result.value, 0)
             XCTAssertEqual(result.requirementID, expectedRequirementIDs[result.metric])
+            if benchmarkThroughputMetricSlugs.contains(result.metric) {
+                // Throughput metrics report ×-real-time; a skipped row carries a sentinel 0.
+                XCTAssertEqual(result.unit, "x", result.metric)
+                XCTAssertGreaterThanOrEqual(result.value, 0, result.metric)
+                XCTAssertNil(result.budgetMilliseconds, result.metric)
+                if result.skipped != true {
+                    XCTAssertGreaterThan(result.value, 0, result.metric)
+                }
+            } else {
+                XCTAssertEqual(result.unit, "ms", result.metric)
+                XCTAssertGreaterThanOrEqual(result.value, 0, result.metric)
+            }
         }
         // FR-MED-004 comparison pair is unbudgeted (relative original vs proxy, not a RT gate).
         for metric in [
@@ -286,6 +296,7 @@ private struct BenchmarkReportRow: Decodable {
     let budgetMilliseconds: Double?
     let noiseBandPercent: Double?
     let withinBudget: Bool?
+    let skipped: Bool?
 }
 
 private func requireMetal() throws {

@@ -129,6 +129,15 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// Unbudgeted pair with ``proxyPlaybackHeavyOriginal``; interpret as a ratio, not a gate.
     case proxyPlaybackHeavyProxy = "proxy-playback-heavy-proxy-fr-med-004"
 
+    /// H.264 1080p30 export throughput through the real `ExportSession` (NFR-PERF-008): a
+    /// synthetic timeline exported to disk, reported as ×-real-time (media seconds / wall
+    /// seconds). Capability-skips on encoder-less runners (see ``unit`` / skip handling).
+    case exportThroughput1080p30H264 = "export-throughput-1080p30-h264"
+
+    /// ProRes-Proxy generation throughput at 1080p through the real `ProxyGenerationSession`
+    /// (NFR-PERF-011), reported as ×-real-time. ProRes encodes on CI, so this does not skip.
+    case proxyGenerationThroughput1080p = "proxy-generation-throughput-1080p"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -168,6 +177,21 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "FR-TXT-001"
         case .proxyPlaybackHeavyOriginal, .proxyPlaybackHeavyProxy:
             "FR-MED-004"
+        case .exportThroughput1080p30H264:
+            "NFR-PERF-008"
+        case .proxyGenerationThroughput1080p:
+            "NFR-PERF-011"
+        }
+    }
+
+    /// Unit for this metric's reported value. Throughput metrics report ×-real-time (`"x"`);
+    /// all render/timing metrics report milliseconds (`"ms"`).
+    var unit: String {
+        switch self {
+        case .exportThroughput1080p30H264, .proxyGenerationThroughput1080p:
+            "x"
+        default:
+            "ms"
         }
     }
 
@@ -368,6 +392,12 @@ public struct BenchmarkResult: Codable, Equatable, Sendable {
     /// Whether `value` is within the budget widened by the noise band. `nil` without a budget.
     public let withinBudget: Bool?
 
+    /// `true` when the metric could not run because a required capability was unavailable
+    /// (e.g. no hardware H.264 encoder on a CI VM). Skipped rows carry a sentinel `value` of 0
+    /// and must not be read as a measurement. `nil`/absent for metrics that ran normally, so
+    /// existing report rows are unchanged (optional key omitted on encode).
+    public let skipped: Bool?
+
     /// Creates a benchmark result row.
     public init(
         metric: String,
@@ -376,7 +406,8 @@ public struct BenchmarkResult: Codable, Equatable, Sendable {
         requirementID: String,
         budgetMilliseconds: Double? = nil,
         noiseBandPercent: Double? = nil,
-        withinBudget: Bool? = nil
+        withinBudget: Bool? = nil,
+        skipped: Bool? = nil
     ) {
         self.metric = metric
         self.value = value
@@ -385,5 +416,6 @@ public struct BenchmarkResult: Codable, Equatable, Sendable {
         self.budgetMilliseconds = budgetMilliseconds
         self.noiseBandPercent = noiseBandPercent
         self.withinBudget = withinBudget
+        self.skipped = skipped
     }
 }

@@ -140,12 +140,23 @@ public enum BenchmarkCommand {
         metric: BenchmarkMetric,
         projectURL: URL
     ) async throws -> BenchmarkResult {
+        // Throughput metrics report ×-real-time and own their full result (unit "x", capability
+        // skip), so they bypass the ms-timing + budget path used by every render/timing metric.
+        switch metric {
+        case .exportThroughput1080p30H264:
+            return try await BenchmarkThroughputFixture.measureExportThroughput1080p30H264()
+        case .proxyGenerationThroughput1080p:
+            return try await BenchmarkThroughputFixture.measureProxyGenerationThroughput1080p()
+        default:
+            break
+        }
+
         let value = try await measureValue(metric: metric, projectURL: projectURL)
         let budget = metric.budget
         return BenchmarkResult(
             metric: metric.rawValue,
             value: value,
-            unit: "ms",
+            unit: metric.unit,
             requirementID: metric.requirementID,
             budgetMilliseconds: budget?.targetMilliseconds,
             noiseBandPercent: budget?.noiseBandPercent,
@@ -406,6 +417,11 @@ public enum BenchmarkCommand {
         }
     }
 
+}
+
+extension BenchmarkCommand {
+    // Declared in an extension (out of the primary enum body) so the metric-dispatch surface can
+    // grow without tripping the type_body_length ceiling; the qualified name is unchanged.
     static func medianMilliseconds(
         warmupIterations: Int = 1,
         measuredIterations: Int = 3,

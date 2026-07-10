@@ -31,6 +31,15 @@ hardware, how each target is measured, and how regressions are caught.
 | Idle CPU (paused) | < 3% | sampled over 10 s paused on timeline |
 | Proxy gen (1080p) | ≥ 5× real-time | wall-clock vs. source duration |
 
+**Throughput bench metrics** (`ajar bench`, report-only ×-real-time — unit `"x"`, unbudgeted since
+absolute throughput is hardware-encoder-bound; compared to the SPEC §5 targets on the reference
+machine, not gated on hosted runners):
+
+| Bench metric slug | Requirement | Target | Notes |
+|-------------------|-------------|--------|-------|
+| `export-throughput-1080p30-h264` | NFR-PERF-008 | ≥ 3× | H.264 1080p30 export through the real `ExportSession`; capability-`skipped` (sentinel value 0) on encoder-less runners |
+| `proxy-generation-throughput-1080p` | NFR-PERF-011 | ≥ 5× | ProRes-Proxy generation through `ProxyGenerationSession`; ProRes encodes on CI, never skips |
+
 ## 3. Performance budgeting per frame
 
 At 30 fps the whole decode→composite→present chain has **~33 ms**; we target headroom so the
