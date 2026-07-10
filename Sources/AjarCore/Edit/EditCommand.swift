@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
+// swiftlint:disable type_body_length
 /// A deterministic edit operation applied to an immutable `Project`.
 public enum EditCommand: Codable, Equatable, Sendable {
     /// Adds a clip to an existing track.
@@ -381,6 +382,27 @@ public enum EditCommand: Codable, Equatable, Sendable {
         clipID: UUID
     )
 
+    /// Creates or updates the ADR-0016 §5 video transition pair on the cut after a clip
+    /// (FR-FX-001). Duration is clamped to the available fade-tail source handle; sequence
+    /// duration is never changed. Independent of any audio crossfade on the same cut.
+    case setClipVideoTransition(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        duration: RationalTime,
+        kind: ClipVideoTransitionKind,
+        color: ClipRGBColor? = nil,
+        direction: ClipVideoTransitionDirection? = nil
+    )
+
+    /// Removes both records of the video transition pair owned by a clip's trailing edge
+    /// (FR-FX-001).
+    case removeClipVideoTransition(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID
+    )
+
     /// Breaks a linked A/V clip group so the audio clip can be edited independently.
     case detachClipAudio(sequenceID: UUID, trackID: UUID, clipID: UUID)
 
@@ -449,3 +471,4 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Replaces project-wide settings.
     case setProjectSettings(ProjectSettings)
 }
+// swiftlint:enable type_body_length

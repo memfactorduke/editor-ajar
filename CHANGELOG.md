@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-FX-001 video transitions at cuts (#183 / ADR-0016 §5): cut-edge metadata on clips
+  (`leadingTransition` / `trailingTransition`) mirroring ADR-0015 `ClipAudioCrossfade` —
+  outgoing trailing record owns rendering, incoming leading is the non-rendering mirror;
+  pair agreement on kind/duration/parameters; fade-tail source reads past the out-point so
+  sequence duration never changes. Kinds: `crossDissolve`, `dipToColor`, `fade`, `push`,
+  `slide`, `wipe` (linear + diagonal), `zoom`. Edit commands `setClipVideoTransition` /
+  `removeClipVideoTransition` with handle clamp-to-zero typed rejection and the ADR-0015 §8
+  edit matrix (blade-inside-region rejection, lift/ripple-delete clear, trim/roll clamp or
+  drop). Video transition ⟂ audio crossfade stay independent records (ADR-0016 §6).
+  `schemaMinor` **6** (after minor 3 LUT, 4 title styling, 5 FX batch-2). AjarRender two-input
+  transition fragments with **generated** MSL uniform layouts; linear working space +
+  premultiply-correct blending. Goldens:
+  `transition-{crossDissolve,push,wipe-diagonal,zoom}-{p025,p050,p075}` mid-tone A/B
+  checkerboards — crossDissolve uses tight deltaE 1 / SSIM 0.99 (resample-free per-pixel
+  lerp); push/wipe/zoom keep deltaE 2 / SSIM 0.98 because they resample. Per-family 1080p GPU
+  benchmarks. **UI drag-onto-cut is a follow-up** (model + render + commands ship in this
+  slice).
 - FR-TXT-002 title styling (#185): optional glyph outlines (width/color/miter-round-bevel join),
   deterministic drop shadows (x/y offset, blur, color, opacity), rounded text-run background
   boxes (padding/radius/fill/opacity), and linear gradient glyph fills (start/end color + angle).

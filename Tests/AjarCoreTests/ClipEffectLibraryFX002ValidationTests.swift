@@ -71,10 +71,10 @@ final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
         }
     }
 
-    func testFRFX002SchemaMinorIsFiveAfterBatch2LibraryKinds() {
-        // FR-FX-002 batch 1 claimed minor 2; FR-COL-004 lut (#188) is gate 3;
-        // FR-TXT-002 styling is 4; FR-FX-002 batch 2 (#182) is 5.
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 5)
+    func testFRFX002SchemaMinorIsSixAfterTransitionsAndBatch2() {
+        // 2 = FR-FX-002 batch 1; 3 = FR-COL-004 lut; 4 = FR-TXT-002 styling;
+        // 5 = FR-FX-002 batch 2; 6 = FR-FX-001 video transitions (#183).
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 6)
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 2)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.gaussianBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.boxBlur))

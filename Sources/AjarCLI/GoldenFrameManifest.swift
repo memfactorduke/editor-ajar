@@ -64,7 +64,11 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
                     effectStack: nil,
                     effectStackAnimation: nil,
                     trackOpacity: nil,
-                    trackBlendMode: nil
+                    trackBlendMode: nil,
+                    timelineStartFrame: nil,
+                    sourceFrameCount: nil,
+                    leadingTransition: nil,
+                    trailingTransition: nil
                 )
             ]
         }
@@ -93,9 +97,24 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
     let effectStackAnimation: AnimatableClipEffectStack?
     let trackOpacity: Animatable<RationalValue>?
     let trackBlendMode: ClipBlendMode?
+    /// Timeline start in frames (same rate as synthetic media). When any clip in the
+    /// manifest carries a video transition, all clips share one track and this field
+    /// places them on the timeline (FR-FX-001).
+    let timelineStartFrame: Int64?
+    /// Source range duration in frames. Defaults to `syntheticMedia.frameCount`. Set lower
+    /// than the media frame count to leave a fade-tail handle for FR-FX-001 transitions.
+    let sourceFrameCount: Int64?
+    /// FR-FX-001 leading video transition (mirror).
+    let leadingTransition: ClipVideoTransition?
+    /// FR-FX-001 trailing video transition (render owner).
+    let trailingTransition: ClipVideoTransition?
 
     var isTitleClip: Bool {
         title != nil
+    }
+
+    var hasVideoTransition: Bool {
+        leadingTransition != nil || trailingTransition != nil
     }
 
     func validateSourcePayload(manifestID: String) throws {

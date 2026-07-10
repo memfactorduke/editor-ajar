@@ -251,7 +251,23 @@ extension MetalEffectUniformLayout {
         ]
     )
 
-    /// Every distinct FR-FX-002 / FR-COL-004 uniform block (batch 1, LUT, and batch 2).
+    /// FR-FX-001 two-input video transition (progress + direction + dip color).
+    ///
+    /// `directionCode`: 0 left, 1 right, 2 top, 3 bottom, 4 TL, 5 TR, 6 BL, 7 BR.
+    /// `kindCode`: 0 crossDissolve, 1 dipToColor, 2 fade, 3 push, 4 slide, 5 wipe, 6 zoom.
+    public static let videoTransition = MetalEffectUniformLayout(
+        mslTypeName: "AjarVideoTransitionUniforms",
+        fields: [
+            MetalEffectUniformField(name: "progress", kind: .float),
+            MetalEffectUniformField(name: "kindCode", kind: .float),
+            MetalEffectUniformField(name: "directionCode", kind: .float),
+            MetalEffectUniformField(name: "padding0", kind: .float),
+            MetalEffectUniformField(name: "dipColor", kind: .float4)
+        ]
+    )
+
+    /// Every distinct FR-FX-002 / FR-COL-004 / FR-FX-001 uniform block
+    /// (batch 1, LUT, batch 2, and video transition).
     public static let all: [MetalEffectUniformLayout] = [
         .separableBlur,
         .zoomBlur,
@@ -263,7 +279,8 @@ extension MetalEffectUniformLayout {
         .mosaic,
         .colorAdjust,
         .posterize,
-        .invert
+        .invert,
+        .videoTransition
     ]
 
     /// Concatenated MSL struct declarations for injection into the effect shader source.
@@ -336,6 +353,22 @@ extension MetalEffectUniformLayout {
             .float(0),
             .float3(domainMin),
             .float3(domainMax)
+        ])
+    }
+
+    /// Packs FR-FX-001 video transition uniforms in layout order.
+    public static func packVideoTransition(
+        progress: Float,
+        kindCode: Float,
+        directionCode: Float,
+        dipColor: SIMD4<Float>
+    ) -> [UInt8] {
+        videoTransition.pack(valuesInOrder: [
+            .float(progress),
+            .float(kindCode),
+            .float(directionCode),
+            .float(0),
+            .float4(dipColor)
         ])
     }
 }

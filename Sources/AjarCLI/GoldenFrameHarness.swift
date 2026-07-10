@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import AjarCore
 import Foundation
@@ -288,7 +289,31 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
         clipSpecs: [GoldenFrameClipSpec],
         media: [MediaRef?]
     ) throws -> [Track] {
-        try clipSpecs.indices.map { index in
+        // FR-FX-001: when any clip carries cut-edge transition metadata, place all clips
+        // on one video track at their `timelineStartFrame` so the fade-tail region is live.
+        let usesTransitions = clipSpecs.contains(where: \.hasVideoTransition)
+        if usesTransitions {
+            let items: [TimelineItem] = try clipSpecs.indices.map { index in
+                .clip(
+                    try makeClip(
+                        context: context,
+                        clipSpec: clipSpecs[index],
+                        mediaID: media[index]?.id,
+                        index: index
+                    )
+                )
+            }
+            return [
+                Track(
+                    id: try numberedUUID(318),
+                    kind: .video,
+                    items: items,
+                    opacity: clipSpecs[0].trackOpacity ?? .constant(.one),
+                    blendMode: clipSpecs[0].trackBlendMode ?? .normal
+                )
+            ]
+        }
+        return try clipSpecs.indices.map { index in
             Track(
                 id: try numberedUUID(318 + index),
                 kind: .video,
@@ -392,13 +417,43 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
     ) throws -> Clip {
         let speed = clipSpec.speed ?? .one
         let timeRemap = try clipSpec.timeRemap.map { try $0.clipTimeRemap() }
+        let clipDuration = try clipTimelineDuration(
+            context: context,
+            clipSpec: clipSpec,
+            speed: speed,
+            timeRemap: timeRemap
+        )
+        let timelineStart: RationalTime
+        if let startFrame = clipSpec.timelineStartFrame {
+            timelineStart = try context.frameRate.duration(ofFrames: startFrame)
+        } else {
+            timelineStart = .zero
+        }
+        let sourceDuration: RationalTime
+        if let sourceFrames = clipSpec.sourceFrameCount {
+            sourceDuration = try context.frameRate.duration(ofFrames: sourceFrames)
+        } else if let media = clipSpec.syntheticMedia {
+            sourceDuration = try context.frameRate.duration(ofFrames: Int64(media.frameCount))
+        } else {
+            sourceDuration = context.duration
+        }
+        let resolvedTimelineDuration: RationalTime
+        if clipSpec.sourceFrameCount != nil, timeRemap == nil {
+            // Timeline span matches the declared source window at the clip speed.
+            resolvedTimelineDuration = try Clip.timelineDuration(
+                forSourceDuration: sourceDuration,
+                speed: speed
+            )
+        } else {
+            resolvedTimelineDuration = clipDuration
+        }
         return Clip(
             id: try numberedUUID(118 + index),
             source: try source(for: clipSpec, mediaID: mediaID, index: index),
-            sourceRange: try TimeRange(start: .zero, duration: context.duration),
+            sourceRange: try TimeRange(start: .zero, duration: sourceDuration),
             timelineRange: try TimeRange(
-                start: .zero,
-                duration: timelineDuration(context: context, speed: speed, timeRemap: timeRemap)
+                start: timelineStart,
+                duration: resolvedTimelineDuration
             ),
             kind: .video,
             name: "Golden \(context.manifestID) \(index)",
@@ -408,12 +463,30 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
             effectsAnimation: clipSpec.effectsAnimation,
             effectStack: clipSpec.effectStack ?? .empty,
             effectStackAnimation: clipSpec.effectStackAnimation,
+            leadingTransition: clipSpec.leadingTransition,
+            trailingTransition: clipSpec.trailingTransition,
             speed: speed,
             reverse: clipSpec.reverse ?? false,
             freezeFrame: clipSpec.freezeFrame ?? false,
             timeRemap: timeRemap,
             frameSampling: clipSpec.frameSampling ?? .nearest
         )
+    }
+
+    private static func clipTimelineDuration(
+        context: GoldenFrameBuildContext,
+        clipSpec: GoldenFrameClipSpec,
+        speed: RationalValue,
+        timeRemap: ClipTimeRemap?
+    ) throws -> RationalTime {
+        if let timeRemap {
+            return timeRemap.duration
+        }
+        if let media = clipSpec.syntheticMedia {
+            let sourceDuration = try context.frameRate.duration(ofFrames: Int64(media.frameCount))
+            return try Clip.timelineDuration(forSourceDuration: sourceDuration, speed: speed)
+        }
+        return try timelineDuration(context: context, speed: speed, timeRemap: nil)
     }
 
     private static func makeMediaClip(

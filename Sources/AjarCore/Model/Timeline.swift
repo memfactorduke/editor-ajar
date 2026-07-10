@@ -257,6 +257,19 @@ public struct Clip: Codable, Equatable, Sendable {
     /// Per-clip audio automation and fade metadata.
     public let audioMix: ClipAudioMix
 
+    /// FR-FX-001 video transition into this clip from the previous abutting clip (mirror).
+    ///
+    /// Pair with the previous clip's `trailingTransition` under ADR-0016 §5. Rendering is
+    /// owned by the outgoing trailing record; this leading record is the non-rendering mirror.
+    /// Independent of `audioMix` crossfade records on the same cut (ADR-0016 §6).
+    public let leadingTransition: ClipVideoTransition?
+
+    /// FR-FX-001 video transition from this clip into the next abutting clip (render owner).
+    ///
+    /// Over duration *D* the outgoing source continues past the timeline out-point (fade-tail
+    /// model, ADR-0015 vocabulary / ADR-0016 §5). Sequence duration is unchanged.
+    public let trailingTransition: ClipVideoTransition?
+
     /// Constant-rate playback speed. `1/1` is normal speed; values above one are faster.
     public let speed: RationalValue
 
@@ -289,6 +302,8 @@ public struct Clip: Codable, Equatable, Sendable {
         effectStack: ClipEffectStack = .empty,
         effectStackAnimation: AnimatableClipEffectStack? = nil,
         audioMix: ClipAudioMix = .identity,
+        leadingTransition: ClipVideoTransition? = nil,
+        trailingTransition: ClipVideoTransition? = nil,
         speed: RationalValue = .one,
         reverse: Bool = false,
         freezeFrame: Bool = false,
@@ -309,6 +324,8 @@ public struct Clip: Codable, Equatable, Sendable {
         self.effectStack = effectStack
         self.effectStackAnimation = effectStackAnimation ?? .constant(effectStack)
         self.audioMix = audioMix
+        self.leadingTransition = leadingTransition
+        self.trailingTransition = trailingTransition
         self.speed = speed
         self.reverse = reverse
         self.freezeFrame = freezeFrame
@@ -331,6 +348,8 @@ public struct Clip: Codable, Equatable, Sendable {
         case effectStack
         case effectStackAnimation
         case audioMix
+        case leadingTransition
+        case trailingTransition
         case speed
         case reverse
         case freezeFrame
@@ -371,6 +390,15 @@ public struct Clip: Codable, Equatable, Sendable {
         ) ?? .constant(effectStack)
         audioMix = try container.decodeIfPresent(ClipAudioMix.self, forKey: .audioMix)
             ?? .identity
+        // Absent keys = no transition (legacy projects; ADR-0007 / ADR-0016 §5).
+        leadingTransition = try container.decodeIfPresent(
+            ClipVideoTransition.self,
+            forKey: .leadingTransition
+        )
+        trailingTransition = try container.decodeIfPresent(
+            ClipVideoTransition.self,
+            forKey: .trailingTransition
+        )
         speed = try container.decodeIfPresent(RationalValue.self, forKey: .speed) ?? .one
         reverse = try container.decodeIfPresent(Bool.self, forKey: .reverse) ?? false
         freezeFrame = try container.decodeIfPresent(Bool.self, forKey: .freezeFrame) ?? false
@@ -399,6 +427,8 @@ public struct Clip: Codable, Equatable, Sendable {
         try container.encode(effectStack, forKey: .effectStack)
         try container.encode(effectStackAnimation, forKey: .effectStackAnimation)
         try container.encode(audioMix, forKey: .audioMix)
+        try container.encodeIfPresent(leadingTransition, forKey: .leadingTransition)
+        try container.encodeIfPresent(trailingTransition, forKey: .trailingTransition)
         try container.encode(speed, forKey: .speed)
         try container.encode(reverse, forKey: .reverse)
         try container.encode(freezeFrame, forKey: .freezeFrame)

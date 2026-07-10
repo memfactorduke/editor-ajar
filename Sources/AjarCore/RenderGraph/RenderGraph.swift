@@ -347,6 +347,9 @@ public enum RenderNodeKind: Codable, Equatable, Sendable {
     /// A title generator rasterization request (FR-TXT-001, ADR-0017).
     case title(RenderTitleNode)
 
+    /// A two-input video transition over a fade-tail cut region (FR-FX-001 / ADR-0016 §5).
+    case transition(RenderTransitionNode)
+
     /// The output composite node.
     case composite(RenderCompositeNode)
 }
@@ -501,6 +504,21 @@ enum RenderNodeFactory {
         )
     }
 
+    static func makeTransitionNode(
+        transition: RenderTransitionNode,
+        outgoingSource: RenderNode,
+        incomingSource: RenderNode
+    ) throws -> RenderNode {
+        try makeNode(
+            id: RenderNodeID(
+                rawValue: "transition:\(transition.outgoingClipID.uuidString)"
+            ),
+            kind: .transition(transition),
+            inputIDs: [outgoingSource.id, incomingSource.id],
+            inputHashes: [outgoingSource.contentHash, incomingSource.contentHash]
+        )
+    }
+
     private static func makeNode(
         id: RenderNodeID,
         kind: RenderNodeKind,
@@ -546,6 +564,7 @@ private enum RenderNodeHashKind: Codable {
     case source(RenderSourceNode)
     case compound(RenderCompoundHashNode)
     case title(RenderTitleNode)
+    case transition(RenderTransitionHashNode)
     /// Composite uses a digest-friendly stack payload so LUT tables are not re-encoded
     /// into every content hash (FR-COL-004 / PERFORMANCE §3).
     case composite(RenderCompositeHashNode)
@@ -558,8 +577,49 @@ private enum RenderNodeHashKind: Codable {
             self = .compound(RenderCompoundHashNode(compound))
         case .title(let title):
             self = .title(title)
+        case .transition(let transition):
+            self = .transition(RenderTransitionHashNode(transition))
         case .composite(let composite):
             self = .composite(RenderCompositeHashNode(composite))
+        }
+    }
+}
+
+/// Content-hash form of a transition: stacks carry digests, not full lattices.
+private struct RenderTransitionHashNode: Codable {
+    let outgoingClipID: UUID
+    let incomingClipID: UUID
+    let kind: ClipVideoTransitionKind
+    let progress: RationalValue
+    let color: ClipRGBColor
+    let direction: ClipVideoTransitionDirection
+    let outgoingTransform: ClipTransform
+    let outgoingEffects: ClipEffects
+    let outgoingEffectStack: RenderEffectStackHash?
+    let incomingTransform: ClipTransform
+    let incomingEffects: ClipEffects
+    let incomingEffectStack: RenderEffectStackHash?
+
+    init(_ transition: RenderTransitionNode) {
+        outgoingClipID = transition.outgoingClipID
+        incomingClipID = transition.incomingClipID
+        kind = transition.kind
+        progress = transition.progress
+        color = transition.color
+        direction = transition.direction
+        outgoingTransform = transition.outgoingTransform
+        outgoingEffects = transition.outgoingEffects
+        if let stack = transition.outgoingEffectStack, !stack.nodes.isEmpty {
+            outgoingEffectStack = RenderEffectStackHash(stack)
+        } else {
+            outgoingEffectStack = nil
+        }
+        incomingTransform = transition.incomingTransform
+        incomingEffects = transition.incomingEffects
+        if let stack = transition.incomingEffectStack, !stack.nodes.isEmpty {
+            incomingEffectStack = RenderEffectStackHash(stack)
+        } else {
+            incomingEffectStack = nil
         }
     }
 }

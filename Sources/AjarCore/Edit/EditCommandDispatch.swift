@@ -19,6 +19,7 @@ extension EditReducer {
             .resetClipEffectNode, .resetClipEffectStack,
             .setClipAudioMix, .clearClipAudioMix, .setClipAudioRetimeMode,
             .setClipAudioCrossfade, .removeClipAudioCrossfade,
+            .setClipVideoTransition, .removeClipVideoTransition,
             .detachClipAudio, .replaceClipAudioSource:
             return try applyClipCommand(command, to: project)
         case .insertTitleClip, .setClipTitleSource, .setTitleTextBox, .removeTitleTextBox:

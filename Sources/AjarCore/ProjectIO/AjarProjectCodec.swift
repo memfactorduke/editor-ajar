@@ -175,7 +175,9 @@ public enum AjarProjectCodec {
     /// - `3`: `ClipEffectKind.lut` (FR-COL-004 / #188).
     /// - `4`: FR-TXT-002 title styling (stroke, shadow, background-box, linear-gradient fill) (#185).
     /// - `5`: FR-FX-002 batch 2 (vignette, mirror, mosaic, colorAdjust, posterize, invert) (#182).
-    public static let currentSchemaMinor = 5
+    /// - `6`: FR-FX-001 video transitions (`leadingTransition` / `trailingTransition` on
+    ///   `Clip`, ADR-0016 §5 / #183).
+    public static let currentSchemaMinor = 6
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

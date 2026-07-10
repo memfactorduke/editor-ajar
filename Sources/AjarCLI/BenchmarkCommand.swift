@@ -179,6 +179,9 @@ public enum BenchmarkCommand {
             try await measureEffectNodeMetric(metric)
         case .effectNodeLUTGPU:
             try await BenchmarkLUTMeasurement.measureEffectNodeLUTGPU()
+        case .transitionCrossDissolve1080p, .transitionDipFade1080p,
+            .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
+            try await BenchmarkTransitionFixture.measure(metric: metric)
         default:
             try await measureRetimeMetric(metric)
         }

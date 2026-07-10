@@ -25,7 +25,8 @@ public enum ClipEffectKind: String, Codable, Equatable, Sendable, CaseIterable {
 
     /// Imported `.cube` 1D/3D LUT with keyframable strength (FR-COL-004).
     ///
-    /// Introduced at `schemaMinor` **3** (ADR-0018): minor 2 is FR-FX-002 five kinds (#181).
+    /// Introduced at `schemaMinor` **3** (ADR-0018): minor 2 is FR-FX-002 batch 1 (#181);
+    /// later minors 4–6 cover title styling, FX batch 2, and video transitions.
     case lut
 
     /// Radial edge darkening with configurable falloff (FR-FX-002).

@@ -127,16 +127,14 @@ extension EditReducer {
                 audioTracks: &audioTracks
             )
 
-            // ADR-0015 §8: a move that breaks a cut removes its pair and clears the
-            // partner's mirror on both affected tracks; a move that keeps the partners
-            // abutting preserves the pair.
-            try applyCrossfadeMaintenance(
+            // ADR-0015 §8 / ADR-0016 §5: cut-edge metadata maintenance on both tracks.
+            try applyCutEdgeMaintenance(
                 at: sourceLocation,
                 videoTracks: &videoTracks,
                 audioTracks: &audioTracks,
                 in: project
             )
-            try applyCrossfadeMaintenance(
+            try applyCutEdgeMaintenance(
                 at: destinationLocation,
                 videoTracks: &videoTracks,
                 audioTracks: &audioTracks,
@@ -179,7 +177,7 @@ extension EditReducer {
             )
             // ADR-0015 §8: a trim that pulls an edge off its partner removes the pair;
             // a shrunk-but-still-abutting cut clamps it (zero removes).
-            return try maintainingCrossfades(
+            return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),
                 in: project
             )

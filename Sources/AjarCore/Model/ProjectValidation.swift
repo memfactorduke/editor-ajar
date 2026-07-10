@@ -131,6 +131,14 @@ public enum ProjectValidationError: Equatable, Sendable {
         error: AudioCrossfadeValidationError
     )
 
+    /// A clip video transition violates the ADR-0016 §5 pair or source-handle contract.
+    case invalidClipVideoTransition(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        error: VideoTransitionValidationError
+    )
+
     /// A clip speed is zero or negative.
     case invalidClipSpeed(
         sequenceID: UUID,
@@ -266,6 +274,7 @@ enum ProjectValidator {
             validateTrackCompositing(track, context: context, state: &state)
             validateTrackAudioMix(track, context: context, state: &state)
             validateTrackCrossfades(track, context: context, state: &state)
+            validateTrackVideoTransitions(track, context: context, state: &state)
             validateTrackItems(
                 track.items,
                 context: context,
