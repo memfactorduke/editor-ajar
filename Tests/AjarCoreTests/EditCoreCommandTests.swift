@@ -141,7 +141,7 @@ final class EditReducerCoreEditTests: XCTestCase {
 
     func testFRTL003ReplaceSwapsClipSourceKeepingTimelinePlacement() throws {
         let fixture = try makeEditFixture(seed: 260)
-        let replacementMediaID = try editUUID(260_001)
+        let replacementMediaID = try editUUID(260_901)
         let replacementMedia = try makeEditMediaRef(id: replacementMediaID)
         let project = Project(
             schemaVersion: fixture.project.schemaVersion,

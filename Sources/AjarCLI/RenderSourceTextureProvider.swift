@@ -33,12 +33,17 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
     private let textures: [RenderSourceKey: MTLTexture]
     private let blendEntries: [RenderSourceKey: FrameBlendEntry]
     private let retainedFrames: [DecodedFrame]
+    let runtimeOfflineMediaIDs: Set<UUID>
 
+    // Source predecode owns adjacent-frame retention and runtime-offline fallback as one unit.
+    // swiftlint:disable:next function_body_length
     init(graph: RenderGraph, project: Project, device: MTLDevice) async throws {
         let decoder = try VideoFrameDecoder(device: device)
         var textures: [RenderSourceKey: MTLTexture] = [:]
         var blendEntries: [RenderSourceKey: FrameBlendEntry] = [:]
         var retainedFrames: [DecodedFrame] = []
+        var offlineTextures: [PixelDimensions: MTLTexture] = [:]
+        var runtimeOfflineMediaIDs = Set<UUID>()
 
         func decodeTexture(from media: MediaRef, at time: RationalTime) async throws -> MTLTexture {
             let frame = try await decoder.decodeFrame(from: media, at: time)
@@ -54,30 +59,57 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
             let decodeTime = try Self.decodeTime(for: source, media: media)
             let key = RenderSourceKey(source)
 
+            if source.mediaAvailability == .offline || media.isOffline {
+                textures[key] = try Self.offlineTexture(
+                    source: source,
+                    media: media,
+                    project: project,
+                    device: device,
+                    cache: &offlineTextures
+                )
+                continue
+            }
+
             // This CLI path currently exercises opaque fixtures. Transparent-media import must
             // premultiply decoded colors before handing textures to `MetalRenderExecutor`.
-            if let pair = try Self.frameBlendPair(for: source, media: media, at: decodeTime) {
-                // FR-SPD-004: decode both adjacent frames at their exact frame start times.
-                let earlierTexture = try await decodeTexture(
-                    from: media,
-                    at: pair.earlierFrameTime
-                )
-                blendEntries[key] = FrameBlendEntry(
-                    earlierTexture: earlierTexture,
-                    laterTexture: try await decodeTexture(from: media, at: pair.laterFrameTime),
-                    laterWeight: Float(pair.laterWeight.numerator)
-                        / Float(pair.laterWeight.denominator)
-                )
-                // Keep the earlier frame available for the nearest fallback path.
-                textures[key] = earlierTexture
-            } else {
-                textures[key] = try await decodeTexture(
-                    from: media,
-                    at: try Self.singleFrameDecodeTime(
-                        for: source,
-                        media: media,
-                        decodeTime: decodeTime
+            do {
+                if let pair = try Self.frameBlendPair(for: source, media: media, at: decodeTime) {
+                    // FR-SPD-004: decode both adjacent frames at their exact frame start times.
+                    let earlierTexture = try await decodeTexture(
+                        from: media,
+                        at: pair.earlierFrameTime
                     )
+                    blendEntries[key] = FrameBlendEntry(
+                        earlierTexture: earlierTexture,
+                        laterTexture: try await decodeTexture(
+                            from: media,
+                            at: pair.laterFrameTime
+                        ),
+                        laterWeight: Float(pair.laterWeight.numerator)
+                            / Float(pair.laterWeight.denominator)
+                    )
+                    // Keep the earlier frame available for the nearest fallback path.
+                    textures[key] = earlierTexture
+                } else {
+                    textures[key] = try await decodeTexture(
+                        from: media,
+                        at: try Self.singleFrameDecodeTime(
+                            for: source,
+                            media: media,
+                            decodeTime: decodeTime
+                        )
+                    )
+                }
+            } catch let error as MediaDecodeError where error.indicatesOfflineSource {
+                // The file can disappear after command-level reconciliation but before decode.
+                blendEntries[key] = nil
+                runtimeOfflineMediaIDs.insert(media.id)
+                textures[key] = try Self.offlineTexture(
+                    source: source,
+                    media: media,
+                    project: project,
+                    device: device,
+                    cache: &offlineTextures
                 )
             }
         }
@@ -85,6 +117,28 @@ final class PredecodedSourceTextureProvider: RenderSourceTextureProvider {
         self.textures = textures
         self.blendEntries = blendEntries
         self.retainedFrames = retainedFrames
+        self.runtimeOfflineMediaIDs = runtimeOfflineMediaIDs
+    }
+
+    private static func offlineTexture(
+        source: RenderSourceNode,
+        media: MediaRef,
+        project: Project,
+        device: MTLDevice,
+        cache: inout [PixelDimensions: MTLTexture]
+    ) throws -> MTLTexture {
+        let dimensions = source.offlineSlateDimensions
+            ?? media.metadata.pixelDimensions
+            ?? project.settings.resolution
+        if let texture = cache[dimensions] {
+            return texture
+        }
+        let texture = try OfflineSlateRenderer.makeTexture(
+            device: device,
+            dimensions: dimensions
+        )
+        cache[dimensions] = texture
+        return texture
     }
 
     func texture(for source: RenderSourceNode) throws -> MTLTexture {

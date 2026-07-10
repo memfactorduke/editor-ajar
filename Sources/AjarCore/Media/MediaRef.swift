@@ -11,6 +11,15 @@ public enum MediaAvailability: String, Codable, Hashable, Sendable {
     case offline
 }
 
+/// What the relink workflow should do when a candidate's bytes do not match the stored hash.
+public enum MediaRelinkMismatchPolicy: String, Codable, Hashable, Sendable {
+    /// Return a typed warning without changing the media reference.
+    case warn
+
+    /// Explicitly accept the different bytes and store their new content hash.
+    case override
+}
+
 /// How a relink candidate matched an existing media reference.
 public enum MediaRelinkMatch: String, Codable, Hashable, Sendable {
     /// The content hash matched, so the media can be treated as the same source after a move.
@@ -18,6 +27,9 @@ public enum MediaRelinkMatch: String, Codable, Hashable, Sendable {
 
     /// The original filename matched when no content-hash match was available.
     case filename
+
+    /// The caller explicitly accepted bytes that did not match the stored content hash.
+    case overriddenContentHash
 }
 
 /// A possible replacement source considered by the relink workflow.
@@ -28,11 +40,55 @@ public struct MediaRelinkCandidate: Codable, Hashable, Sendable {
     /// Candidate content hash when available.
     public let contentHash: ContentHash?
 
+    /// Security-scoped bookmark created for the candidate, when available.
+    public let bookmark: Data?
+
     /// Creates a relink candidate.
-    public init(sourceURL: URL, contentHash: ContentHash?) {
+    public init(sourceURL: URL, contentHash: ContentHash?, bookmark: Data? = nil) {
         self.sourceURL = sourceURL
         self.contentHash = contentHash
+        self.bookmark = bookmark
     }
+}
+
+/// Why a relink candidate cannot be accepted without an explicit override.
+public enum MediaRelinkWarningReason: Equatable, Sendable {
+    /// Candidate bytes differ from the hash stored in the project.
+    case contentHashMismatch(expected: ContentHash, actual: ContentHash)
+
+    /// The project has no stored hash with which to verify the candidate.
+    case storedContentHashUnavailable(actual: ContentHash)
+
+    /// The platform layer did not provide a hash for the candidate.
+    case candidateContentHashUnavailable
+}
+
+/// Non-blocking warning returned by a relink evaluation.
+public struct MediaRelinkWarning: Equatable, Sendable {
+    /// Stable media reference being relinked.
+    public let mediaID: UUID
+
+    /// Candidate URL whose bytes require confirmation.
+    public let candidateURL: URL
+
+    /// Typed reason explicit confirmation is required.
+    public let reason: MediaRelinkWarningReason
+
+    /// Creates a relink warning.
+    public init(mediaID: UUID, candidateURL: URL, reason: MediaRelinkWarningReason) {
+        self.mediaID = mediaID
+        self.candidateURL = candidateURL
+        self.reason = reason
+    }
+}
+
+/// Pure `AjarCore` decision for a prepared relink candidate.
+public enum MediaRelinkDecision: Equatable, Sendable {
+    /// The candidate is accepted and the complete replacement reference is ready to edit in.
+    case relinked(MediaRef, match: MediaRelinkMatch)
+
+    /// The candidate needs an explicit hash-mismatch override before it may be accepted.
+    case warning(MediaRelinkWarning)
 }
 
 /// A stable reference to original media in a project.
@@ -58,6 +114,15 @@ public struct MediaRef: Codable, Hashable, Sendable {
     /// Current availability state as last reported by a platform module.
     public let availability: MediaAvailability
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case sourceURL
+        case bookmark
+        case contentHash
+        case metadata
+        case availability
+    }
+
     /// Creates a stable media reference.
     public init(
         id: UUID,
@@ -75,6 +140,32 @@ public struct MediaRef: Codable, Hashable, Sendable {
         self.availability = availability
     }
 
+    /// Decodes legacy references without an availability key as available.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        sourceURL = try container.decodeIfPresent(URL.self, forKey: .sourceURL)
+        bookmark = try container.decodeIfPresent(Data.self, forKey: .bookmark)
+        contentHash = try container.decodeIfPresent(ContentHash.self, forKey: .contentHash)
+        metadata = try container.decode(MediaMetadata.self, forKey: .metadata)
+        availability =
+            try container.decodeIfPresent(
+                MediaAvailability.self,
+                forKey: .availability
+            ) ?? .available
+    }
+
+    /// Encodes all durable media-reference fields.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(sourceURL, forKey: .sourceURL)
+        try container.encodeIfPresent(bookmark, forKey: .bookmark)
+        try container.encodeIfPresent(contentHash, forKey: .contentHash)
+        try container.encode(metadata, forKey: .metadata)
+        try container.encode(availability, forKey: .availability)
+    }
+
     /// Whether the source is currently offline.
     public var isOffline: Bool {
         availability == .offline
@@ -82,8 +173,8 @@ public struct MediaRef: Codable, Hashable, Sendable {
 
     /// Returns the relink match quality for `candidate`, if it can be matched.
     public func relinkMatch(for candidate: MediaRelinkCandidate) -> MediaRelinkMatch? {
-        if let contentHash, candidate.contentHash == contentHash {
-            return .contentHash
+        if let contentHash, let candidateHash = candidate.contentHash {
+            return candidateHash == contentHash ? .contentHash : nil
         }
 
         guard sourceURL?.lastPathComponent == candidate.sourceURL.lastPathComponent else {
@@ -94,14 +185,90 @@ public struct MediaRef: Codable, Hashable, Sendable {
     }
 
     /// Returns a copy updated to point at the candidate source while preserving the stable ID.
+    ///
+    /// Relink deliberately preserves probed timeline metadata, including on an explicit hash
+    /// override. Import owns metadata probing; relink changes where the existing project media is
+    /// read from without silently changing clip duration, frame-rate, or color interpretation.
     public func relinked(to candidate: MediaRelinkCandidate) -> MediaRef {
         MediaRef(
             id: id,
             sourceURL: candidate.sourceURL,
-            bookmark: bookmark,
+            bookmark: candidate.bookmark,
             contentHash: candidate.contentHash ?? contentHash,
             metadata: metadata,
             availability: .available
+        )
+    }
+
+    /// Evaluates a prepared relink candidate without performing platform I/O.
+    public func relinkDecision(
+        for candidate: MediaRelinkCandidate,
+        mismatchPolicy: MediaRelinkMismatchPolicy
+    ) -> MediaRelinkDecision {
+        guard let actualHash = candidate.contentHash else {
+            return .warning(
+                MediaRelinkWarning(
+                    mediaID: id,
+                    candidateURL: candidate.sourceURL,
+                    reason: .candidateContentHashUnavailable
+                )
+            )
+        }
+
+        if let contentHash, contentHash == actualHash {
+            return .relinked(relinked(to: candidate), match: .contentHash)
+        }
+
+        let warningReason: MediaRelinkWarningReason
+        if let contentHash {
+            warningReason = .contentHashMismatch(expected: contentHash, actual: actualHash)
+        } else {
+            warningReason = .storedContentHashUnavailable(actual: actualHash)
+        }
+
+        guard mismatchPolicy == .override else {
+            return .warning(
+                MediaRelinkWarning(
+                    mediaID: id,
+                    candidateURL: candidate.sourceURL,
+                    reason: warningReason
+                )
+            )
+        }
+
+        return .relinked(relinked(to: candidate), match: .overriddenContentHash)
+    }
+
+    /// Returns a copy with a platform-reported availability state.
+    public func withAvailability(_ availability: MediaAvailability) -> MediaRef {
+        MediaRef(
+            id: id,
+            sourceURL: sourceURL,
+            bookmark: bookmark,
+            contentHash: contentHash,
+            metadata: metadata,
+            availability: availability
+        )
+    }
+}
+
+public extension Project {
+    /// Returns a project snapshot with platform-reported availability applied by stable ID.
+    ///
+    /// This is a pure state transition. Filesystem/bookmark probing remains in `AjarMedia`.
+    func updatingMediaAvailability(
+        _ availability: MediaAvailability,
+        for mediaIDs: Set<UUID>
+    ) -> Project {
+        Project(
+            schemaVersion: schemaVersion,
+            schemaMinor: schemaMinor,
+            settings: settings,
+            mediaPool: mediaPool.map { media in
+                mediaIDs.contains(media.id) ? media.withAvailability(availability) : media
+            },
+            sequences: sequences,
+            looks: looks
         )
     }
 }

@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
+/// User-visible reason a prepared media-reference rewrite is entering undo history.
+public enum MediaReferenceEditKind: String, Codable, Equatable, Sendable {
+    /// One media source was relinked explicitly.
+    case relink
+
+    /// Multiple offline sources were matched recursively in a folder.
+    case batchRelink
+
+    /// Referenced originals were copied into the project package.
+    case consolidate
+}
+
 // swiftlint:disable file_length type_body_length
 /// A deterministic edit operation applied to an immutable `Project`.
 public enum EditCommand: Codable, Equatable, Sendable {
@@ -514,5 +526,14 @@ public enum EditCommand: Codable, Equatable, Sendable {
 
     /// Replaces project-wide settings.
     case setProjectSettings(ProjectSettings)
+
+    /// Replaces complete media references after platform I/O has already succeeded.
+    ///
+    /// URLs are never resolved, hashed, bookmarked, or copied by the reducer. Keeping those
+    /// side effects in `AjarMedia` makes redo and crash-journal replay deterministic.
+    case updateMediaReferences(
+        kind: MediaReferenceEditKind,
+        replacements: [MediaRef]
+    )
 }
 // swiftlint:enable file_length type_body_length

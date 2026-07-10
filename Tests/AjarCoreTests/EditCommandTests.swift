@@ -219,6 +219,7 @@ private func makeValidCommandCases(seed: Int) throws -> [EditCommandCase] {
         + (try makeTrackCommandCases(fixture: fixture, addTrackID: addTrackID))
         + makeMarkerCommandCases(fixture: fixture, seed: seed)
         + makeProjectCommandCases(fixture: fixture, seed: seed)
+        + makeMediaReferenceCommandCases(fixture: fixture, seed: seed)
 }
 
 private func makeClipCommandCases(
@@ -893,6 +894,26 @@ private func makeProjectCommandCases(
         EditCommandCase(project: fixture.project, command: .setProjectSettings(settings))
     )
     return cases
+}
+
+private func makeMediaReferenceCommandCases(
+    fixture: EditFixture,
+    seed: Int
+) throws -> [EditCommandCase] {
+    let media = try XCTUnwrap(fixture.project.mediaPool.first)
+    let replacement = media.relinked(
+        to: MediaRelinkCandidate(
+            sourceURL: URL(fileURLWithPath: "/generated/relinked-\(seed).mov"),
+            contentHash: media.contentHash,
+            bookmark: Data([0x21, 0x80])
+        )
+    )
+    return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .updateMediaReferences(kind: .relink, replacements: [replacement])
+        )
+    ]
 }
 
 private func makeUndoRectangleMask(

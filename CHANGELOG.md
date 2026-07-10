@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-MED-007 / FR-MED-008 media recovery (#218): bookmark-first source reconciliation now
+  records a non-blocking typed offline state and playback renders a deterministic text-free
+  patterned slate. Relink recomputes SHA-256, returns a typed mismatch warning until explicitly
+  overridden, and supports recursive filename-plus-hash batch matching. Consolidate copies
+  originals into `.ajar/media/` through same-directory temporary files, reports per-file
+  progress, never changes sources, and returns one undoable reference rewrite (partial copy
+  failures retain completed files with consistent refs); ambiguous duplicate media IDs are
+  rejected before I/O. Media hash/availability now invalidate render-cache identity; schema minor
+  is **10**. The offline golden carries a locally generated
+  provisional reference to be re-established from the reviewed macOS 14 CI artifact per
+  ADR-0017 section 6.
 - FR-EXP-005 background export queue (#216): ordered jobs with a pure
   `ExportJobStateMachine` (`pending` / `running` / `pausedWillRestart` /
   `cancelled` / `failed` / `done`), sequential single-encode `ExportQueue` actor

@@ -158,6 +158,15 @@ public extension EditCommand {
             return "Detach Audio"
         case .setProjectSettings:
             return "Change Project Settings"
+        case .updateMediaReferences(let kind, _):
+            switch kind {
+            case .relink:
+                return "Relink Media"
+            case .batchRelink:
+                return "Batch Relink Media"
+            case .consolidate:
+                return "Consolidate Media"
+            }
         }
     }
 }

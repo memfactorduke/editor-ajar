@@ -42,9 +42,11 @@ final class RenderGraphTests: XCTestCase {
         }
         XCTAssertEqual(composite.workingColorSpace, .rec709)
         XCTAssertEqual(composite.outputColorSpace, .rec709)
-        XCTAssertEqual(composite.inputs, [
-            RenderCompositeInput(sourceNodeID: source.id, transform: clip.transform)
-        ])
+        XCTAssertEqual(
+            composite.inputs,
+            [
+                RenderCompositeInput(sourceNodeID: source.id, transform: clip.transform)
+            ])
     }
 
     func testADR0009RenderGraphCodableRoundTripPreservesHashes() throws {

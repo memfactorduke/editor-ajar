@@ -16,6 +16,12 @@ public enum EditReducerError: Error, Equatable, Sendable {
     /// The command references a missing marker.
     case markerNotFound(sequenceID: UUID, markerID: UUID)
 
+    /// The command references a media ID that is not in the project manifest.
+    case mediaReferenceNotFound(UUID)
+
+    /// A batch media rewrite contains the same stable ID more than once.
+    case duplicateMediaReferenceReplacement(UUID)
+
     /// The command would create duplicate sequence IDs inside the project.
     case duplicateSequenceID(UUID)
 

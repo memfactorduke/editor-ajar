@@ -71,6 +71,8 @@ extension EditReducer {
                 sequences: project.sequences,
                 looks: project.looks
             )
+        case .updateMediaReferences(_, let replacements):
+            return try updateMediaReferences(replacements, in: project)
         }
     }
 }

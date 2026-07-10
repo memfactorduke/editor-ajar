@@ -18,6 +18,7 @@ final class GoldenFixtureManifestDecodeTests: XCTestCase {
         let roots = try fixtureRoots()
         var failures: [String] = []
         var decodedCount = 0
+        var decodedFrameIDs = Set<String>()
 
         for root in roots {
             let manifests = try discoverManifestURLs(under: root)
@@ -30,7 +31,8 @@ final class GoldenFixtureManifestDecodeTests: XCTestCase {
                     if root.lastPathComponent == "golden-audio" {
                         _ = try GoldenAudioManifest.load(from: manifestURL)
                     } else {
-                        _ = try GoldenFrameManifest.load(from: manifestURL)
+                        let manifest = try GoldenFrameManifest.load(from: manifestURL)
+                        decodedFrameIDs.insert(manifest.id)
                     }
                     decodedCount += 1
                 } catch {
@@ -48,6 +50,10 @@ final class GoldenFixtureManifestDecodeTests: XCTestCase {
             """
         )
         XCTAssertGreaterThan(decodedCount, 0)
+        XCTAssertTrue(
+            decodedFrameIDs.contains("media-offline-slate"),
+            "FR-MED-007 offline-slate manifest must remain in the decode walk"
+        )
     }
 
     private func fixtureRoots() throws -> [URL] {
@@ -75,10 +81,12 @@ final class GoldenFixtureManifestDecodeTests: XCTestCase {
     }
 
     private func discoverManifestURLs(under root: URL) throws -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: nil
-        ) else {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: nil
+            )
+        else {
             throw NSError(
                 domain: "GoldenFixtureManifestDecodeTests",
                 code: 1,

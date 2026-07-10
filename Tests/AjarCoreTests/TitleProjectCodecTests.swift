@@ -7,16 +7,22 @@ import XCTest
 
 /// FR-TXT-001 project codec paths: nested legacy decode and title-in-compound round-trip.
 final class TitleProjectCodecTests: XCTestCase {
-    func testFRTXT001NestedLegacyMediaProjectStillDecodesThroughCompoundPath() throws {
+    func testFRMED007FRTXT001NestedLegacyMediaWithoutAvailabilityStillDecodes() throws {
         // Nested compound path: outer sequence holds a compound clip whose inner sequence holds
-        // a media clip with no title keys. This path has regressed when ClipSource grew cases.
+        // a media clip. The legacy media manifest lacks the typed availability key, while the
+        // nested project also lacks title keys. Both must retain their pre-field defaults.
         let fixture = try makeCompoundClipFixture(seed: 8_406)
         let package = try AjarProjectCodec.encodeNewDocument(fixture.project)
         let stripped = try titleProjectJSONWithoutKey("title", in: package.projectJSON)
+        let mediaWithoutAvailability = try titleProjectJSONWithoutKey(
+            "availability",
+            in: package.mediaJSON
+        )
+        let legacyMedia = try jsonSettingSchemaMinor(9, in: mediaWithoutAvailability)
         let loaded = try editableTitleProject(
             from: AjarProjectCodec.decode(
                 projectJSON: stripped,
-                mediaJSON: package.mediaJSON
+                mediaJSON: legacyMedia
             )
         )
         XCTAssertEqual(loaded, fixture.project)
