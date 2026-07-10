@@ -45,8 +45,20 @@ final class EditorAjarUISmokeTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
-    // #210: skipped on CI via EditorAjarCI.xctestplan / scheme SkippedTests (not env gate).
-    // Run locally with: xcodebuild … -testPlan EditorAjarLocal -only-testing:EditorAjarUITests
+    // #210 / NFR-A11Y-001 canvas edit smoke — **local-only**.
+    //
+    // Why not un-gated for CI (honest verdict): this path depends on NSTextView first-responder
+    // handoff, FocusState, and typeKey delivery into a canvas-hosted editor. Even with the
+    // accumulated #187/#210 lessons (role-agnostic descendants(.any), Title menu Cmd-Opt-E,
+    // coordinate-click for non-hittable AX nodes, multi-Esc teardown, explicit -skip-testing
+    // composition in ci.yml), edit/commit still flakes on headless macos-14 runners
+    // (focus never lands, typed text never commits, or later transport tests lose key events).
+    // The durable CI net for labels is `EditorAjarAccessibilityTreeTests` (read-only AX walk).
+    // Guides toggle stays on CI because it is a single coordinate-click + existence check.
+    //
+    // Skip mechanism: EditorAjarCI.xctestplan skippedTests + ci.yml -skip-testing flags
+    // (-only-testing overrides plan skips, so both are required). Run fully with:
+    //   xcodebuild … -testPlan EditorAjarLocal -only-testing:EditorAjarUITests
     func testFRTXT003EditsCanvasTitleWithKeyboardAndUndoRestoresText() throws {
         let app = try XCTUnwrap(launchedApp)
         defer { restoreCanvasTitleUIState(in: app) }
@@ -95,8 +107,18 @@ final class EditorAjarUISmokeTests: XCTestCase {
         waitForElementValue(editedTitle, containing: "Edit me", timeout: 12)
     }
 
-    // #210: skipped on CI via EditorAjarCI.xctestplan / scheme SkippedTests (not env gate).
-    // Run locally with: xcodebuild … -testPlan EditorAjarLocal -only-testing:EditorAjarUITests
+    // #210 / NFR-A11Y-001 canvas drag+nudge smoke — **local-only**.
+    //
+    // Why not un-gated for CI (honest verdict): genuine drag from an overlay title box and
+    // Cmd-Opt-arrow menu nudges both require the canvas box AX node to remain hittable and for
+    // menu key equivalents to reach the app while XCUITest owns the session. On CI the box often
+    // exists but is not reliably hittable; press-then-drag is ignored; value changes time out.
+    // Menu nudges are more stable locally than drag but still race against launch/texture
+    // present. Lessons applied (coordinate paths, role-agnostic queries, teardown hygiene)
+    // improve local yield; they do not make the case merge-gate safe. Label coverage for the
+    // title box is asserted by the read-only AX tree walk instead.
+    //
+    // Skip mechanism: EditorAjarCI.xctestplan + ci.yml -skip-testing (see edit smoke above).
     func testFRTXT003DragsAndKeyboardNudgesCanvasTitleBox() throws {
         let app = try XCTUnwrap(launchedApp)
         defer { restoreCanvasTitleUIState(in: app) }

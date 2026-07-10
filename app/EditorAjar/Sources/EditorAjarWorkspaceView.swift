@@ -372,9 +372,11 @@ private struct CanvasSafeAreaGuidesToggleButton: View {
         .controlSize(.small)
         .padding(8)
         .help(helpText)
+        .keyboardShortcut("g", modifiers: [.command, .option])
         .accessibilityIdentifier("Canvas Safe Area Guides Toggle")
         .accessibilityLabel(accessibilityTitle)
         .accessibilityValue(model.canvasSafeAreaGuidesVisible ? "On" : "Off")
+        .accessibilityHint(helpText)
     }
 
     private var toggleLabel: some View {
@@ -407,6 +409,7 @@ private struct TransportBar: View {
             .keyboardShortcut(.leftArrow, modifiers: [])
             .help("Step Backward")
             .accessibilityLabel("Step Backward")
+            .accessibilityIdentifier("Step Backward")
 
             Button(action: model.togglePlayback) {
                 Label(
@@ -418,6 +421,7 @@ private struct TransportBar: View {
             .keyboardShortcut(.space, modifiers: [])
             .help(model.isPlaying ? "Pause" : "Play")
             .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
+            .accessibilityIdentifier(model.isPlaying ? "Pause" : "Play")
 
             Button(action: model.stepForward) {
                 Label("Step Forward", systemImage: "forward.frame.fill")
@@ -426,6 +430,7 @@ private struct TransportBar: View {
             .keyboardShortcut(.rightArrow, modifiers: [])
             .help("Step Forward")
             .accessibilityLabel("Step Forward")
+            .accessibilityIdentifier("Step Forward")
 
             Text(model.playheadDescription)
                 .font(.system(.body, design: .monospaced))
@@ -448,6 +453,9 @@ private struct TransportBar: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 3)
             .accessibilityLabel("Scrub playhead")
+            .accessibilityIdentifier("Scrub playhead")
+            .accessibilityValue(model.playheadDescription)
+            .accessibilityHint("Adjusts the playhead frame. Left and Right arrows step one frame.")
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
@@ -505,6 +513,7 @@ private struct MarkerInspector: View {
                 .buttonStyle(.borderless)
                 .help("Delete Marker")
                 .accessibilityLabel("Delete Marker")
+                .accessibilityIdentifier("Delete Marker")
             }
 
             TextField(
@@ -516,6 +525,7 @@ private struct MarkerInspector: View {
             )
             .textFieldStyle(.roundedBorder)
             .accessibilityLabel("Marker Name")
+            .accessibilityIdentifier("Marker Name")
 
             Picker(
                 "Marker Color",
@@ -536,6 +546,7 @@ private struct MarkerInspector: View {
             }
             .pickerStyle(.menu)
             .accessibilityLabel("Marker Color")
+            .accessibilityIdentifier("Marker Color")
 
             TextEditor(
                 text: Binding(
@@ -551,6 +562,7 @@ private struct MarkerInspector: View {
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
             )
             .accessibilityLabel("Marker Note")
+            .accessibilityIdentifier("Marker Note")
 
             DetailRow(label: "Position", value: "Frame \(markerFrameDescription(marker))")
         }
@@ -656,9 +668,11 @@ private struct TimelineView: View {
             TimelineToolButton(title: "Zoom Timeline Out", systemImage: "minus.magnifyingglass") {
                 model.zoomTimelineOut()
             }
+            .keyboardShortcut("-", modifiers: [.command])
             TimelineToolButton(title: "Zoom Timeline In", systemImage: "plus.magnifyingglass") {
                 model.zoomTimelineIn()
             }
+            .keyboardShortcut("=", modifiers: [.command])
             TimelineToolButton(
                 title: "Decrease Track Height", systemImage: "arrow.down.to.line.compact"
             ) {
@@ -790,9 +804,12 @@ private struct TimelineRuler: View {
                     )
                 }
         )
-        .accessibilityElement(children: .ignore)
+        // Contain (not ignore): marker buttons must remain individual AX nodes.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Timeline ruler")
         .accessibilityLabel("Timeline ruler")
         .accessibilityValue(model.playheadDescription)
+        .accessibilityHint("Drag to scrub. Markers are separate controls on this ruler.")
         .help("Drag to scrub")
     }
 }
@@ -845,6 +862,7 @@ private struct TimelineToolButton: View {
         .frame(width: 28, height: 24)
         .help(title)
         .accessibilityLabel(title)
+        .accessibilityIdentifier(title)
     }
 }
 
@@ -1344,21 +1362,31 @@ private struct TransformFlipControls: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Toggle(
-                "Horizontal",
+                "Flip Horizontal",
                 isOn: Binding(
                     get: { model.selectedTransformInspector?.transform.flip.horizontal ?? false },
                     set: { model.updateSelectedClipFlip(horizontal: $0) }
                 )
             )
+            .accessibilityLabel("Flip Horizontal")
             .accessibilityIdentifier("Transform Flip Horizontal")
+            .accessibilityValue(
+                (model.selectedTransformInspector?.transform.flip.horizontal ?? false)
+                    ? "On" : "Off"
+            )
             Toggle(
-                "Vertical",
+                "Flip Vertical",
                 isOn: Binding(
                     get: { model.selectedTransformInspector?.transform.flip.vertical ?? false },
                     set: { model.updateSelectedClipFlip(vertical: $0) }
                 )
             )
+            .accessibilityLabel("Flip Vertical")
             .accessibilityIdentifier("Transform Flip Vertical")
+            .accessibilityValue(
+                (model.selectedTransformInspector?.transform.flip.vertical ?? false)
+                    ? "On" : "Off"
+            )
         }
     }
 }
@@ -1429,18 +1457,24 @@ private struct CanvasTransformOverlay: View {
             )
             .accessibilityLabel("Move Transform")
             .accessibilityIdentifier("Program Move Transform")
+            .accessibilityHint("Drag to reposition the selected clip. Numeric fields are in the inspector.")
+            .accessibilityAddTraits(.isButton)
     }
 
     private func transformReadout(
         metrics: CanvasOverlayMetrics, transform: ClipTransform
     ) -> some View {
-        Text(readout(transform))
+        let summary = readout(transform)
+        return Text(summary)
             .font(.caption2.monospacedDigit())
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 4))
             .offset(x: metrics.rect.minX, y: max(0, metrics.rect.minY - 24))
             .accessibilityIdentifier("Program Transform Readout")
+            .accessibilityLabel("Transform readout")
+            .accessibilityValue(summary)
+            .accessibilityAddTraits(.updatesFrequently)
     }
 
     private func transformHandle(
@@ -1471,6 +1505,8 @@ private struct CanvasTransformOverlay: View {
             )
             .accessibilityLabel(title)
             .accessibilityIdentifier("Program \(title)")
+            .accessibilityHint("Drag to adjust. Numeric fields are in the inspector.")
+            .accessibilityAddTraits(.isButton)
     }
 
     private func canvasMetrics(
@@ -1691,6 +1727,7 @@ private struct TrackStateButton: View {
         .frame(width: 28, height: 28)
         .help(title)
         .accessibilityLabel(title)
+        .accessibilityIdentifier(title)
         .accessibilityValue(isOn ? "On" : "Off")
     }
 }

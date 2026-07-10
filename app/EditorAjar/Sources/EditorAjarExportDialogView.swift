@@ -79,6 +79,7 @@ private struct ExportModePicker: View {
             .pickerStyle(.segmented)
             .accessibilityLabel("Export mode")
             .accessibilityIdentifier("Export Mode Picker")
+            .accessibilityValue(model.exportDialog.mode.displayName)
         }
     }
 
@@ -105,7 +106,17 @@ private struct ExportPresetPicker: View {
             }
             .accessibilityLabel("Export preset")
             .accessibilityIdentifier("Export Preset Picker")
+            .accessibilityValue(selectedPresetAccessibilityValue)
         }
+    }
+
+    private var selectedPresetAccessibilityValue: String {
+        guard let id = model.exportDialog.selectedPresetID,
+            let preset = model.exportDialog.availablePresets.first(where: { $0.id == id })
+        else {
+            return "None"
+        }
+        return presetLabel(preset)
     }
 
     private func presetLabel(_ preset: ExportPreset) -> String {
@@ -140,6 +151,7 @@ private struct ExportRangePicker: View {
             .pickerStyle(.segmented)
             .accessibilityLabel("Export range")
             .accessibilityIdentifier("Export Range Picker")
+            .accessibilityValue(model.exportDialog.rangeChoice.displayName)
             Text(model.timelineRangeDescription)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -171,6 +183,7 @@ private struct ExportStillFormatPicker: View {
             .pickerStyle(.segmented)
             .accessibilityLabel("Still frame format")
             .accessibilityIdentifier("Export Still Format Picker")
+            .accessibilityValue(model.exportDialog.stillFormat.displayName)
         }
     }
 
@@ -198,6 +211,7 @@ private struct ExportAudioOnlyFormatPicker: View {
             .pickerStyle(.segmented)
             .accessibilityLabel("Audio-only format")
             .accessibilityIdentifier("Export Audio Format Picker")
+            .accessibilityValue(model.exportDialog.audioOnlyFormat.displayName)
         }
     }
 

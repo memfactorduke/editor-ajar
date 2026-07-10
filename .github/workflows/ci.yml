@@ -166,7 +166,8 @@ jobs:
             echo "::group::UI smoke attempt ${attempt}/${max_attempts}"
             set +e
             # #210: -only-testing overrides plan skippedTests; use -skip-testing for canvas
-            # edit/nudge smokes. Guides toggle stays on.
+            # edit/nudge smokes. Guides toggle + EditorAjarAccessibilityTreeTests (NFR-A11Y-001
+            # read-only AX label walk, #219) stay on.
             xcodebuild test \
               -project app/EditorAjar/EditorAjar.xcodeproj \
               -scheme EditorAjar \
