@@ -75,6 +75,12 @@ jobs:
       - name: SwiftLint
         run: swiftlint --strict
 
+      # NFR-I18N-001: report un-externalized user-visible strings in the app target. Report-only
+      # (continue-on-error) — the check is heuristic and honest about false positives.
+      - name: Hardcoded-string report (NFR-I18N-001, report-only)
+        continue-on-error: true
+        run: bash scripts/check-hardcoded-strings.sh
+
       - name: swift-format (best effort until toolchain pinned)
         run: |
           if command -v swift-format >/dev/null 2>&1; then

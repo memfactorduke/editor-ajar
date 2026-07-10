@@ -61,59 +61,82 @@ struct EditorAjarWorkspaceView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Text("Editor Ajar")
+            Text(AppString.localized("app.name", "Editor Ajar"))
                 .font(.headline)
             Spacer()
             Text(model.projectSummary)
                 .font(.callout)
                 .foregroundStyle(.secondary)
             proxyPlaybackToggle
-            Button("Export…") {
+            Button(AppString.localized("workspace.header.export", "Export…")) {
                 model.presentExportDialog()
             }
             .keyboardShortcut("e", modifiers: [.command, .shift])
-            .accessibilityLabel("Open export dialog")
+            .accessibilityLabel(AppString.localized("menu.export.open.ax", "Open export dialog"))
             .accessibilityIdentifier("Open Export Dialog")
-            Button(model.isExportQueuePanelVisible ? "Hide Exports" : "Exports") {
+            Button(
+                model.isExportQueuePanelVisible
+                    ? AppString.localized("workspace.header.hideExports", "Hide Exports")
+                    : AppString.localized("workspace.header.exports", "Exports")
+            ) {
                 model.toggleExportQueuePanel()
             }
             .buttonStyle(.bordered)
             .keyboardShortcut("e", modifiers: [.command, .control])
-            .help("Show or hide the background export queue")
+            .help(AppString.localized(
+                "workspace.header.exports.help", "Show or hide the background export queue"
+            ))
             .accessibilityLabel(
                 model.isExportQueuePanelVisible
-                    ? "Hide export queue"
-                    : "Show export queue"
+                    ? AppString.localized("workspace.header.hideQueue.ax", "Hide export queue")
+                    : AppString.localized("workspace.header.showQueue.ax", "Show export queue")
             )
             .accessibilityIdentifier("Toggle Export Queue")
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Editor Ajar, \(model.projectSummary)")
+        .accessibilityLabel(
+            AppString.localized("workspace.header.ax", "Editor Ajar, \(model.projectSummary)")
+        )
     }
 
     /// One-click proxy/original playback toggle (FR-MED-004).
     private var proxyPlaybackToggle: some View {
-        Button(model.preferProxyPlayback ? "Proxy" : "Original") {
+        Button(
+            model.preferProxyPlayback
+                ? AppString.localized("workspace.proxyToggle.proxy", "Proxy")
+                : AppString.localized("workspace.proxyToggle.original", "Original")
+        ) {
             model.togglePreferProxyPlayback()
         }
         .buttonStyle(.bordered)
         .keyboardShortcut("p", modifiers: [.command, .option])
         .help(
             model.preferProxyPlayback
-                ? "Playback uses proxy media when ready. Export always uses originals."
-                : "Playback uses original media. Turn on for faster scrubbing of heavy media."
+                ? AppString.localized(
+                    "workspace.proxyToggle.proxy.help",
+                    "Playback uses proxy media when ready. Export always uses originals."
+                )
+                : AppString.localized(
+                    "workspace.proxyToggle.original.help",
+                    "Playback uses original media. Turn on for faster scrubbing of heavy media."
+                )
         )
         .accessibilityLabel(
             model.preferProxyPlayback
-                ? "Proxy playback on"
-                : "Original playback on"
+                ? AppString.localized("workspace.proxyToggle.proxyOn.ax", "Proxy playback on")
+                : AppString.localized("workspace.proxyToggle.originalOn.ax", "Original playback on")
         )
-        .accessibilityHint(
+        .accessibilityHint(AppString.localized(
+            "workspace.proxyToggle.hint",
             "Toggles timeline playback between optimized proxy media and originals. Export always uses originals."
+        ))
+        .accessibilityValue(
+            model.preferProxyPlayback
+                ? AppString.localized("workspace.proxyToggle.proxy", "Proxy")
+                : AppString.localized("workspace.proxyToggle.original", "Original")
         )
-        .accessibilityValue(model.preferProxyPlayback ? "Proxy" : "Original")
         .accessibilityIdentifier("Toggle Proxy Playback")
         .accessibilityAddTraits(.isButton)
     }
@@ -124,7 +147,8 @@ private struct ReadOnlyProjectBanner: View {
     @ObservedObject var model: EditorAjarAppModel
 
     private var message: String {
-        model.readOnlyBannerMessage ?? "This project is open read-only."
+        model.readOnlyBannerMessage
+            ?? AppString.localized("banner.readOnly.fallback", "This project is open read-only.")
     }
 
     var body: some View {
@@ -136,7 +160,7 @@ private struct ReadOnlyProjectBanner: View {
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Read-only project")
+                Text(AppString.localized("banner.readOnly.title", "Read-only project"))
                     .font(.callout.weight(.semibold))
                 Text(message)
                     .font(.caption)
@@ -145,15 +169,20 @@ private struct ReadOnlyProjectBanner: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button("Dismiss") {
+            Button(AppString.localized("banner.readOnly.dismiss", "Dismiss")) {
                 model.dismissReadOnlyBanner()
             }
             .buttonStyle(.bordered)
             .keyboardShortcut(.cancelAction)
-            .help("Dismiss read-only notice")
-            .accessibilityLabel("Dismiss read-only project notice")
+            .help(AppString.localized("banner.readOnly.dismiss.help", "Dismiss read-only notice"))
+            .accessibilityLabel(
+                AppString.localized("banner.readOnly.dismiss.ax", "Dismiss read-only project notice")
+            )
             .accessibilityIdentifier("Dismiss Read-Only Banner")
-            .accessibilityHint("Hides the read-only banner. Editing and saving remain disabled.")
+            .accessibilityHint(AppString.localized(
+                "banner.readOnly.dismiss.hint",
+                "Hides the read-only banner. Editing and saving remain disabled."
+            ))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -163,7 +192,7 @@ private struct ReadOnlyProjectBanner: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Read-Only Project Banner")
-        .accessibilityLabel("Read-only project notice")
+        .accessibilityLabel(AppString.localized("banner.readOnly.notice.ax", "Read-only project notice"))
         .accessibilityValue(message)
         .accessibilityAddTraits(.isStaticText)
     }
@@ -184,30 +213,32 @@ private struct SequenceTabsBar: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("Sequence tabs")
-            .accessibilityLabel("Sequence tabs")
+            .accessibilityLabel(AppString.localized("sequenceTabs.list.ax", "Sequence tabs"))
 
             Button {
                 model.addSequence()
             } label: {
-                Label("New Sequence", systemImage: "plus")
+                Label(AppString.localized("sequenceTabs.new", "New Sequence"), systemImage: "plus")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
             .frame(width: 30, height: 28)
-            .help("New Sequence")
-            .accessibilityLabel("New Sequence")
+            .help(AppString.localized("sequenceTabs.new", "New Sequence"))
+            .accessibilityLabel(AppString.localized("sequenceTabs.new", "New Sequence"))
             .accessibilityIdentifier("New Sequence")
 
             Button {
                 model.closeActiveSequence()
             } label: {
-                Label("Close Sequence", systemImage: "xmark")
-                    .labelStyle(.iconOnly)
+                Label(
+                    AppString.localized("sequenceTabs.close", "Close Sequence"), systemImage: "xmark"
+                )
+                .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
             .frame(width: 30, height: 28)
-            .help("Close Sequence")
-            .accessibilityLabel("Close Sequence")
+            .help(AppString.localized("sequenceTabs.close", "Close Sequence"))
+            .accessibilityLabel(AppString.localized("sequenceTabs.close", "Close Sequence"))
             .accessibilityIdentifier("Close Sequence")
             .disabled(!model.canCloseActiveSequence)
         }
@@ -216,7 +247,7 @@ private struct SequenceTabsBar: View {
         .background(Color(red: 0.12, green: 0.12, blue: 0.13))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Sequence tab bar")
-        .accessibilityLabel("Sequence tab bar")
+        .accessibilityLabel(AppString.localized("sequenceTabs.bar.ax", "Sequence tab bar"))
     }
 }
 
@@ -238,21 +269,28 @@ private struct SequenceTabButton: View {
             }
             .buttonStyle(.plain)
             .help(tab.title)
-            .accessibilityLabel("Sequence tab \(tab.title)")
-            .accessibilityValue(tab.isActive ? "Selected" : "Not selected")
+            .accessibilityLabel(AppString.localized("sequenceTabs.tab.ax", "Sequence tab \(tab.title)"))
+            .accessibilityValue(
+                tab.isActive
+                    ? AppString.localized("state.selected", "Selected")
+                    : AppString.localized("state.notSelected", "Not selected")
+            )
             .accessibilityIdentifier("Sequence tab \(tab.title)")
 
             Button {
                 model.closeSequence(tab.id)
             } label: {
-                Label("Close \(tab.title)", systemImage: "xmark")
-                    .labelStyle(.iconOnly)
-                    .font(.caption2.weight(.semibold))
-                    .frame(width: 20, height: 20)
+                Label(
+                    AppString.localized("sequenceTabs.tab.close", "Close \(tab.title)"),
+                    systemImage: "xmark"
+                )
+                .labelStyle(.iconOnly)
+                .font(.caption2.weight(.semibold))
+                .frame(width: 20, height: 20)
             }
             .buttonStyle(.plain)
-            .help("Close \(tab.title)")
-            .accessibilityLabel("Close \(tab.title)")
+            .help(AppString.localized("sequenceTabs.tab.close", "Close \(tab.title)"))
+            .accessibilityLabel(AppString.localized("sequenceTabs.tab.close", "Close \(tab.title)"))
             .accessibilityIdentifier("Close \(tab.title)")
             .disabled(!tab.canClose)
             .padding(.trailing, 6)
@@ -272,15 +310,21 @@ private struct SequenceTabButton: View {
 private struct LibraryPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PanelTitle("Media")
-            EmptyPanelRow(title: "Project Media", systemImage: "film.stack")
-            EmptyPanelRow(title: "Effects", systemImage: "sparkles")
+            PanelTitle(AppString.localized("library.title", "Media"))
+            EmptyPanelRow(
+                title: AppString.localized("library.projectMedia", "Project Media"),
+                systemImage: "film.stack"
+            )
+            EmptyPanelRow(
+                title: AppString.localized("library.effects", "Effects"),
+                systemImage: "sparkles"
+            )
             Spacer()
         }
         .padding(14)
         .background(Color(red: 0.13, green: 0.13, blue: 0.14))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Media and effects panel")
+        .accessibilityLabel(AppString.localized("library.panel.ax", "Media and effects panel"))
     }
 }
 
@@ -411,14 +455,18 @@ private struct CanvasSafeAreaGuidesToggleButton: View {
 
     private var accessibilityTitle: String {
         model.canvasSafeAreaGuidesVisible
-            ? "Hide Action and Title Safe Guides"
-            : "Show Action and Title Safe Guides"
+            ? AppString.localized("monitor.guides.hide", "Hide Action and Title Safe Guides")
+            : AppString.localized("monitor.guides.show", "Show Action and Title Safe Guides")
     }
 
     private var helpText: String {
         model.canvasSafeAreaGuidesVisible
-            ? "Hide action-safe and title-safe guides"
-            : "Show action-safe and title-safe guides"
+            ? AppString.localized(
+                "monitor.guides.hide.help", "Hide action-safe and title-safe guides"
+            )
+            : AppString.localized(
+                "monitor.guides.show.help", "Show action-safe and title-safe guides"
+            )
     }
 }
 
@@ -429,33 +477,49 @@ private struct TransportBar: View {
         HStack(spacing: 12) {
             Spacer()
             Button(action: model.stepBackward) {
-                Label("Step Backward", systemImage: "backward.frame.fill")
-                    .labelStyle(.iconOnly)
+                Label(
+                    AppString.localized("transport.stepBackward", "Step Backward"),
+                    systemImage: "backward.frame.fill"
+                )
+                .labelStyle(.iconOnly)
             }
             .keyboardShortcut(.leftArrow, modifiers: [])
-            .help("Step Backward")
-            .accessibilityLabel("Step Backward")
+            .help(AppString.localized("transport.stepBackward", "Step Backward"))
+            .accessibilityLabel(AppString.localized("transport.stepBackward", "Step Backward"))
             .accessibilityIdentifier("Step Backward")
 
             Button(action: model.togglePlayback) {
                 Label(
-                    model.isPlaying ? "Pause" : "Play",
+                    model.isPlaying
+                        ? AppString.localized("transport.pause", "Pause")
+                        : AppString.localized("transport.play", "Play"),
                     systemImage: model.isPlaying ? "pause.fill" : "play.fill"
                 )
                 .labelStyle(.iconOnly)
             }
             .keyboardShortcut(.space, modifiers: [])
-            .help(model.isPlaying ? "Pause" : "Play")
-            .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
+            .help(
+                model.isPlaying
+                    ? AppString.localized("transport.pause", "Pause")
+                    : AppString.localized("transport.play", "Play")
+            )
+            .accessibilityLabel(
+                model.isPlaying
+                    ? AppString.localized("transport.pause", "Pause")
+                    : AppString.localized("transport.play", "Play")
+            )
             .accessibilityIdentifier(model.isPlaying ? "Pause" : "Play")
 
             Button(action: model.stepForward) {
-                Label("Step Forward", systemImage: "forward.frame.fill")
-                    .labelStyle(.iconOnly)
+                Label(
+                    AppString.localized("transport.stepForward", "Step Forward"),
+                    systemImage: "forward.frame.fill"
+                )
+                .labelStyle(.iconOnly)
             }
             .keyboardShortcut(.rightArrow, modifiers: [])
-            .help("Step Forward")
-            .accessibilityLabel("Step Forward")
+            .help(AppString.localized("transport.stepForward", "Step Forward"))
+            .accessibilityLabel(AppString.localized("transport.stepForward", "Step Forward"))
             .accessibilityIdentifier("Step Forward")
 
             Text(model.playheadDescription)
@@ -463,7 +527,7 @@ private struct TransportBar: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 96, alignment: .leading)
                 .accessibilityIdentifier("Playhead readout")
-                .accessibilityLabel("Playhead")
+                .accessibilityLabel(AppString.localized("transport.playhead.ax", "Playhead"))
                 .accessibilityValue(model.playheadDescription)
             Spacer()
         }
@@ -478,10 +542,13 @@ private struct TransportBar: View {
             )
             .padding(.horizontal, 24)
             .padding(.bottom, 3)
-            .accessibilityLabel("Scrub playhead")
+            .accessibilityLabel(AppString.localized("transport.scrub.ax", "Scrub playhead"))
             .accessibilityIdentifier("Scrub playhead")
             .accessibilityValue(model.playheadDescription)
-            .accessibilityHint("Adjusts the playhead frame. Left and Right arrows step one frame.")
+            .accessibilityHint(AppString.localized(
+                "transport.scrub.hint",
+                "Adjusts the playhead frame. Left and Right arrows step one frame."
+            ))
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
@@ -490,7 +557,7 @@ private struct TransportBar: View {
         .background(Color(red: 0.11, green: 0.11, blue: 0.12))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Transport controls")
-        .accessibilityLabel("Transport controls")
+        .accessibilityLabel(AppString.localized("transport.controls.ax", "Transport controls"))
     }
 }
 
@@ -499,25 +566,42 @@ private struct InspectorPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PanelTitle("Inspector")
-            DetailRow(label: "Sequence", value: model.activeSequenceName)
-            DetailRow(label: "Frame Rate", value: model.frameRateDescription)
-            DetailRow(label: "State", value: model.isPlaying ? "Playing" : "Paused")
+            PanelTitle(AppString.localized("inspector.title", "Inspector"))
+            DetailRow(
+                label: AppString.localized("inspector.row.sequence", "Sequence"),
+                value: model.activeSequenceName
+            )
+            DetailRow(
+                label: AppString.localized("inspector.row.frameRate", "Frame Rate"),
+                value: model.frameRateDescription
+            )
+            DetailRow(
+                label: AppString.localized("inspector.row.state", "State"),
+                value: model.isPlaying
+                    ? AppString.localized("inspector.state.playing", "Playing")
+                    : AppString.localized("inspector.state.paused", "Paused")
+            )
             Divider()
             if let marker = model.selectedMarker {
                 MarkerInspector(marker: marker, model: model)
             } else if let transformState = model.selectedTransformInspector {
                 TransformInspector(state: transformState, model: model)
             } else {
-                DetailRow(label: "Marker", value: "None selected")
-                DetailRow(label: "Transform", value: "Select one video clip")
+                DetailRow(
+                    label: AppString.localized("inspector.row.marker", "Marker"),
+                    value: AppString.localized("inspector.marker.none", "None selected")
+                )
+                DetailRow(
+                    label: AppString.localized("inspector.row.transform", "Transform"),
+                    value: AppString.localized("inspector.transform.none", "Select one video clip")
+                )
             }
             Spacer()
         }
         .padding(14)
         .background(Color(red: 0.13, green: 0.13, blue: 0.14))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Inspector panel")
+        .accessibilityLabel(AppString.localized("inspector.panel.ax", "Inspector panel"))
     }
 }
 
@@ -528,33 +612,35 @@ private struct MarkerInspector: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Marker", systemImage: "flag.fill")
+                Label(AppString.localized("inspector.marker.heading", "Marker"), systemImage: "flag.fill")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(marker.color.swatchColor)
                 Spacer()
                 Button(role: .destructive, action: model.deleteSelectedMarker) {
-                    Label("Delete Marker", systemImage: "trash")
-                        .labelStyle(.iconOnly)
+                    Label(
+                        AppString.localized("marker.delete", "Delete Marker"), systemImage: "trash"
+                    )
+                    .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.borderless)
-                .help("Delete Marker")
-                .accessibilityLabel("Delete Marker")
+                .help(AppString.localized("marker.delete", "Delete Marker"))
+                .accessibilityLabel(AppString.localized("marker.delete", "Delete Marker"))
                 .accessibilityIdentifier("Delete Marker")
             }
 
             TextField(
-                "Marker Name",
+                AppString.localized("marker.name", "Marker Name"),
                 text: Binding(
                     get: { model.selectedMarker?.name ?? "" },
                     set: { model.updateSelectedMarker(name: $0) }
                 )
             )
             .textFieldStyle(.roundedBorder)
-            .accessibilityLabel("Marker Name")
+            .accessibilityLabel(AppString.localized("marker.name", "Marker Name"))
             .accessibilityIdentifier("Marker Name")
 
             Picker(
-                "Marker Color",
+                AppString.localized("marker.color", "Marker Color"),
                 selection: Binding(
                     get: { model.selectedMarker?.color ?? .blue },
                     set: { model.updateSelectedMarker(color: $0) }
@@ -571,7 +657,7 @@ private struct MarkerInspector: View {
                 }
             }
             .pickerStyle(.menu)
-            .accessibilityLabel("Marker Color")
+            .accessibilityLabel(AppString.localized("marker.color", "Marker Color"))
             .accessibilityIdentifier("Marker Color")
 
             TextEditor(
@@ -587,10 +673,15 @@ private struct MarkerInspector: View {
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
             )
-            .accessibilityLabel("Marker Note")
+            .accessibilityLabel(AppString.localized("marker.note", "Marker Note"))
             .accessibilityIdentifier("Marker Note")
 
-            DetailRow(label: "Position", value: "Frame \(markerFrameDescription(marker))")
+            DetailRow(
+                label: AppString.localized("marker.position", "Position"),
+                value: AppString.localized(
+                    "marker.position.value", "Frame \(markerFrameDescription(marker))"
+                )
+            )
         }
     }
 
@@ -650,9 +741,9 @@ private struct TimelineView: View {
                         .frame(width: timelineWidth, alignment: .leading)
                     }
                     .accessibilityIdentifier("Timeline track lanes")
-                    .accessibilityLabel("Timeline track lanes")
+                    .accessibilityLabel(AppString.localized("timeline.trackLanes.ax", "Timeline track lanes"))
                 } else {
-                    Text("No sequence")
+                    Text(AppString.localized("timeline.noSequence", "No sequence"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -662,76 +753,127 @@ private struct TimelineView: View {
             .background(Color(red: 0.12, green: 0.12, blue: 0.13))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("Timeline")
-            .accessibilityLabel("Timeline")
+            .accessibilityLabel(AppString.localized("timeline.group.ax", "Timeline"))
         }
     }
 
     private func toolbar(availableWidth: Double) -> some View {
         HStack(spacing: 8) {
-            PanelTitle("Timeline")
+            PanelTitle(AppString.localized("timeline.title", "Timeline"))
             Spacer()
-            TimelineToolButton(title: "Add Marker", systemImage: "flag.fill") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.addMarker", "Add Marker"),
+                identifier: "Add Marker",
+                systemImage: "flag.fill"
+            ) {
                 model.addTimelineMarkerAtPlayhead()
             }
             .keyboardShortcut("m", modifiers: [.command, .shift])
-            TimelineToolButton(title: "Previous Marker", systemImage: "arrow.left.to.line") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.previousMarker", "Previous Marker"),
+                identifier: "Previous Marker",
+                systemImage: "arrow.left.to.line"
+            ) {
                 model.jumpToPreviousMarker()
             }
             .keyboardShortcut("[", modifiers: [.command])
-            TimelineToolButton(title: "Next Marker", systemImage: "arrow.right.to.line") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.nextMarker", "Next Marker"),
+                identifier: "Next Marker",
+                systemImage: "arrow.right.to.line"
+            ) {
                 model.jumpToNextMarker()
             }
             .keyboardShortcut("]", modifiers: [.command])
-            TimelineToolButton(title: "Delete Marker", systemImage: "trash") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.deleteMarker", "Delete Marker"),
+                identifier: "Delete Marker",
+                systemImage: "trash"
+            ) {
                 model.deleteSelectedMarker()
             }
             .keyboardShortcut(.delete, modifiers: [.command])
             .disabled(model.selectedMarker == nil)
-            TimelineToolButton(title: "Detach Audio", systemImage: "speaker.slash.fill") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.detachAudio", "Detach Audio"),
+                identifier: "Detach Audio",
+                systemImage: "speaker.slash.fill"
+            ) {
                 model.detachAudioForSelectedClip()
             }
             .disabled(!model.selectedClipIsLinked)
-            TimelineToolButton(title: "Zoom Timeline Out", systemImage: "minus.magnifyingglass") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.zoomOut", "Zoom Timeline Out"),
+                identifier: "Zoom Timeline Out",
+                systemImage: "minus.magnifyingglass"
+            ) {
                 model.zoomTimelineOut()
             }
             .keyboardShortcut("-", modifiers: [.command])
-            TimelineToolButton(title: "Zoom Timeline In", systemImage: "plus.magnifyingglass") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.zoomIn", "Zoom Timeline In"),
+                identifier: "Zoom Timeline In",
+                systemImage: "plus.magnifyingglass"
+            ) {
                 model.zoomTimelineIn()
             }
             .keyboardShortcut("=", modifiers: [.command])
             TimelineToolButton(
-                title: "Decrease Track Height", systemImage: "arrow.down.to.line.compact"
+                title: AppString.localized("timeline.tool.decreaseHeight", "Decrease Track Height"),
+                identifier: "Decrease Track Height",
+                systemImage: "arrow.down.to.line.compact"
             ) {
                 model.zoomTimelineVerticallyOut()
             }
             TimelineToolButton(
-                title: "Increase Track Height", systemImage: "arrow.up.to.line.compact"
+                title: AppString.localized("timeline.tool.increaseHeight", "Increase Track Height"),
+                identifier: "Increase Track Height",
+                systemImage: "arrow.up.to.line.compact"
             ) {
                 model.zoomTimelineVerticallyIn()
             }
-            TimelineToolButton(title: "Fit Timeline", systemImage: "arrow.left.and.right") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.fit", "Fit Timeline"),
+                identifier: "Fit Timeline",
+                systemImage: "arrow.left.and.right"
+            ) {
                 model.fitTimeline(toWidth: availableWidth)
             }
-            TimelineToolButton(title: "Zoom to Selection", systemImage: "selection.pin.in.out") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.zoomToSelection", "Zoom to Selection"),
+                identifier: "Zoom to Selection",
+                systemImage: "selection.pin.in.out"
+            ) {
                 model.zoomTimelineToSelection(toWidth: availableWidth)
             }
             TimelineToolButton(
-                title: "Set Range In", systemImage: "inset.filled.leadinghalf.rectangle"
+                title: AppString.localized("timeline.tool.setRangeIn", "Set Range In"),
+                identifier: "Set Range In",
+                systemImage: "inset.filled.leadinghalf.rectangle"
             ) {
                 model.setTimelineRangeIn()
             }
             .keyboardShortcut("i", modifiers: [])
             TimelineToolButton(
-                title: "Set Range Out", systemImage: "inset.filled.trailinghalf.rectangle"
+                title: AppString.localized("timeline.tool.setRangeOut", "Set Range Out"),
+                identifier: "Set Range Out",
+                systemImage: "inset.filled.trailinghalf.rectangle"
             ) {
                 model.setTimelineRangeOut()
             }
             .keyboardShortcut("o", modifiers: [])
-            TimelineToolButton(title: "Clear Timeline Range", systemImage: "xmark.rectangle") {
+            TimelineToolButton(
+                title: AppString.localized("timeline.tool.clearRange", "Clear Timeline Range"),
+                identifier: "Clear Timeline Range",
+                systemImage: "xmark.rectangle"
+            ) {
                 model.clearTimelineRange()
             }
             TimelineToolButton(
-                title: model.timelineSnappingEnabled ? "Disable Snapping" : "Enable Snapping",
+                title: model.timelineSnappingEnabled
+                    ? AppString.localized("timeline.tool.disableSnapping", "Disable Snapping")
+                    : AppString.localized("timeline.tool.enableSnapping", "Enable Snapping"),
+                identifier: model.timelineSnappingEnabled ? "Disable Snapping" : "Enable Snapping",
                 systemImage: "link"
             ) {
                 model.setTimelineSnappingEnabled(!model.timelineSnappingEnabled)
@@ -743,16 +885,19 @@ private struct TimelineView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             Text(model.timelineRangeDescription)
-            Text("\(model.timelineSelectedClipCount) selected")
+            Text(AppString.localized(
+                "timeline.footer.selectedCount", "\(model.timelineSelectedClipCount) selected"
+            ))
             Spacer()
             Text(model.loadMessage)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
+        .accessibilityLabel(AppString.localized(
+            "timeline.footer.ax",
             "Timeline status, \(model.timelineRangeDescription), \(model.timelineSelectedClipCount) selected"
-        )
+        ))
     }
 
     private func videoRows(in sequence: AjarCore.Sequence) -> [TrackLaneRow] {
@@ -761,7 +906,10 @@ private struct TimelineView: View {
                 name: "V\(index + 1)",
                 kind: .video,
                 track: track,
-                accessibilityLabel: "Video track \(index + 1)"
+                accessibilityLabel: "Video track \(index + 1)",
+                localizedLabel: AppString.localized(
+                    "timeline.track.video", "Video track \(index + 1)"
+                )
             )
         }
     }
@@ -772,7 +920,10 @@ private struct TimelineView: View {
                 name: "A\(index + 1)",
                 kind: .audio,
                 track: track,
-                accessibilityLabel: "Audio track \(index + 1)"
+                accessibilityLabel: "Audio track \(index + 1)",
+                localizedLabel: AppString.localized(
+                    "timeline.track.audio", "Audio track \(index + 1)"
+                )
             )
         }
     }
@@ -792,7 +943,7 @@ private struct TimelineRuler: View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color.white.opacity(0.06))
-            Text("Frame 0")
+            Text(AppString.localized("timeline.ruler.frameZero", "Frame 0"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .offset(x: TimelineLayoutMetrics.trackContentLeadingOffset + 8)
@@ -833,10 +984,12 @@ private struct TimelineRuler: View {
         // Contain (not ignore): marker buttons must remain individual AX nodes.
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Timeline ruler")
-        .accessibilityLabel("Timeline ruler")
+        .accessibilityLabel(AppString.localized("timeline.ruler.ax", "Timeline ruler"))
         .accessibilityValue(model.playheadDescription)
-        .accessibilityHint("Drag to scrub. Markers are separate controls on this ruler.")
-        .help("Drag to scrub")
+        .accessibilityHint(AppString.localized(
+            "timeline.ruler.hint", "Drag to scrub. Markers are separate controls on this ruler."
+        ))
+        .help(AppString.localized("timeline.ruler.help", "Drag to scrub"))
     }
 }
 
@@ -861,21 +1014,31 @@ private struct TimelineMarkerButton: View {
                 )
         }
         .buttonStyle(.plain)
-        .help("\(layout.name), frame \(layout.frame)")
-        .accessibilityLabel("Marker \(layout.name)")
+        .help(AppString.localized("timeline.marker.help", "\(layout.name), frame \(layout.frame)"))
+        .accessibilityLabel(AppString.localized("timeline.marker.ax", "Marker \(layout.name)"))
         .accessibilityValue(accessibilityValue)
         .accessibilityIdentifier("Timeline marker \(layout.markerID.uuidString)")
     }
 
     private var accessibilityValue: String {
-        let note = layout.note.isEmpty ? "No note" : layout.note
-        return
-            "\(isSelected ? "Selected" : "Not selected"), \(layout.color.displayName), frame \(layout.frame), \(note)"
+        let note = layout.note.isEmpty
+            ? AppString.localized("timeline.marker.noNote", "No note")
+            : layout.note
+        let selection = isSelected
+            ? AppString.localized("state.selected", "Selected")
+            : AppString.localized("state.notSelected", "Not selected")
+        return AppString.localized(
+            "timeline.marker.value",
+            "\(selection), \(layout.color.displayName), frame \(layout.frame), \(note)"
+        )
     }
 }
 
 private struct TimelineToolButton: View {
+    /// Localized visible/spoken title (tooltip + VoiceOver label).
     let title: String
+    /// Stable, non-localized identifier queried by UI tests (NFR-I18N-001: identifiers are literal).
+    let identifier: String
     let systemImage: String
     let action: () -> Void
 
@@ -888,7 +1051,7 @@ private struct TimelineToolButton: View {
         .frame(width: 28, height: 24)
         .help(title)
         .accessibilityLabel(title)
-        .accessibilityIdentifier(title)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -896,19 +1059,19 @@ private extension MarkerColor {
     var displayName: String {
         switch self {
         case .gray:
-            return "Gray"
+            return AppString.localized("marker.color.gray", "Gray")
         case .red:
-            return "Red"
+            return AppString.localized("marker.color.red", "Red")
         case .orange:
-            return "Orange"
+            return AppString.localized("marker.color.orange", "Orange")
         case .yellow:
-            return "Yellow"
+            return AppString.localized("marker.color.yellow", "Yellow")
         case .green:
-            return "Green"
+            return AppString.localized("marker.color.green", "Green")
         case .blue:
-            return "Blue"
+            return AppString.localized("marker.color.blue", "Blue")
         case .purple:
-            return "Purple"
+            return AppString.localized("marker.color.purple", "Purple")
         }
     }
 
@@ -936,41 +1099,41 @@ private extension ClipBlendMode {
     var displayName: String {
         switch self {
         case .normal:
-            return "Normal"
+            return AppString.localized("blend.normal", "Normal")
         case .multiply:
-            return "Multiply"
+            return AppString.localized("blend.multiply", "Multiply")
         case .screen:
-            return "Screen"
+            return AppString.localized("blend.screen", "Screen")
         case .overlay:
-            return "Overlay"
+            return AppString.localized("blend.overlay", "Overlay")
         case .add:
-            return "Add"
+            return AppString.localized("blend.add", "Add")
         case .darken:
-            return "Darken"
+            return AppString.localized("blend.darken", "Darken")
         case .lighten:
-            return "Lighten"
+            return AppString.localized("blend.lighten", "Lighten")
         case .colorDodge:
-            return "Color Dodge"
+            return AppString.localized("blend.colorDodge", "Color Dodge")
         case .colorBurn:
-            return "Color Burn"
+            return AppString.localized("blend.colorBurn", "Color Burn")
         case .hardLight:
-            return "Hard Light"
+            return AppString.localized("blend.hardLight", "Hard Light")
         case .softLight:
-            return "Soft Light"
+            return AppString.localized("blend.softLight", "Soft Light")
         case .difference:
-            return "Difference"
+            return AppString.localized("blend.difference", "Difference")
         case .exclusion:
-            return "Exclusion"
+            return AppString.localized("blend.exclusion", "Exclusion")
         case .subtract:
-            return "Subtract"
+            return AppString.localized("blend.subtract", "Subtract")
         case .hue:
-            return "Hue"
+            return AppString.localized("blend.hue", "Hue")
         case .saturation:
-            return "Saturation"
+            return AppString.localized("blend.saturation", "Saturation")
         case .color:
-            return "Color"
+            return AppString.localized("blend.color", "Color")
         case .luminosity:
-            return "Luminosity"
+            return AppString.localized("blend.luminosity", "Luminosity")
         }
     }
 }
@@ -1002,6 +1165,9 @@ private struct TrackLane: View {
                 .accessibilityHidden(true)
             TrackStateButton(
                 title: row.track.enabled
+                    ? AppString.localized("timeline.track.disable", "Disable \(row.localizedLabel)")
+                    : AppString.localized("timeline.track.enable", "Enable \(row.localizedLabel)"),
+                identifier: row.track.enabled
                     ? "Disable \(row.accessibilityLabel)" : "Enable \(row.accessibilityLabel)",
                 systemImage: "power",
                 isOn: row.track.enabled
@@ -1014,6 +1180,9 @@ private struct TrackLane: View {
             }
             TrackStateButton(
                 title: row.track.locked
+                    ? AppString.localized("timeline.track.unlock", "Unlock \(row.localizedLabel)")
+                    : AppString.localized("timeline.track.lock", "Lock \(row.localizedLabel)"),
+                identifier: row.track.locked
                     ? "Unlock \(row.accessibilityLabel)" : "Lock \(row.accessibilityLabel)",
                 systemImage: row.track.locked ? "lock.fill" : "lock.open",
                 isOn: row.track.locked
@@ -1027,6 +1196,9 @@ private struct TrackLane: View {
             if row.kind == .video {
                 TrackStateButton(
                     title: row.track.hidden
+                        ? AppString.localized("timeline.track.show", "Show \(row.localizedLabel)")
+                        : AppString.localized("timeline.track.hide", "Hide \(row.localizedLabel)"),
+                    identifier: row.track.hidden
                         ? "Show \(row.accessibilityLabel)" : "Hide \(row.accessibilityLabel)",
                     systemImage: row.track.hidden ? "eye.slash.fill" : "eye",
                     isOn: !row.track.hidden
@@ -1040,6 +1212,9 @@ private struct TrackLane: View {
             } else {
                 TrackStateButton(
                     title: row.track.muted
+                        ? AppString.localized("timeline.track.unmute", "Unmute \(row.localizedLabel)")
+                        : AppString.localized("timeline.track.mute", "Mute \(row.localizedLabel)"),
+                    identifier: row.track.muted
                         ? "Unmute \(row.accessibilityLabel)" : "Mute \(row.accessibilityLabel)",
                     systemImage: row.track.muted ? "speaker.slash.fill" : "speaker.wave.2",
                     isOn: row.track.muted
@@ -1052,6 +1227,9 @@ private struct TrackLane: View {
                 }
                 TrackStateButton(
                     title: row.track.solo
+                        ? AppString.localized("timeline.track.unsolo", "Unsolo \(row.localizedLabel)")
+                        : AppString.localized("timeline.track.solo", "Solo \(row.localizedLabel)"),
+                    identifier: row.track.solo
                         ? "Unsolo \(row.accessibilityLabel)" : "Solo \(row.accessibilityLabel)",
                     systemImage: row.track.solo ? "headphones.circle.fill" : "headphones",
                     isOn: row.track.solo
@@ -1064,7 +1242,10 @@ private struct TrackLane: View {
                 }
             }
             TrackStateButton(
-                title: "Select all \(row.accessibilityLabel)",
+                title: AppString.localized(
+                    "timeline.track.selectAll", "Select all \(row.localizedLabel)"
+                ),
+                identifier: "Select all \(row.accessibilityLabel)",
                 systemImage: "checkmark.circle",
                 isOn: false
             ) {
@@ -1167,11 +1348,14 @@ private struct TimelineClipBlock: View {
                         isSelected ? Color.white.opacity(0.7) : Color.white.opacity(0.18),
                         lineWidth: 1)
             )
-            .help("\(layout.name), frames \(layout.startFrame)-\(layout.endFrame)")
-            .accessibilityLabel("Clip \(layout.name)")
-            .accessibilityValue(
-                "\(isSelected ? "Selected" : "Not selected"), frames \(layout.startFrame)-\(layout.endFrame)"
-            )
+            .help(AppString.localized(
+                "timeline.clip.help", "\(layout.name), frames \(layout.startFrame)-\(layout.endFrame)"
+            ))
+            .accessibilityLabel(AppString.localized("timeline.clip.ax", "Clip \(layout.name)"))
+            .accessibilityValue(AppString.localized(
+                "timeline.clip.value",
+                "\(selectionState), frames \(layout.startFrame)-\(layout.endFrame)"
+            ))
             .accessibilityIdentifier("Timeline clip \(layout.reference.clipID.uuidString)")
 
             if !keyframeLanes.isEmpty {
@@ -1185,6 +1369,12 @@ private struct TimelineClipBlock: View {
                 )
             }
         }
+    }
+
+    private var selectionState: String {
+        isSelected
+            ? AppString.localized("state.selected", "Selected")
+            : AppString.localized("state.notSelected", "Not selected")
     }
 }
 
@@ -1237,7 +1427,7 @@ private struct TransformInspector: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Transform Inspector")
-        .accessibilityLabel("Transform Inspector")
+        .accessibilityLabel(AppString.localized("inspector.transform.ax", "Transform Inspector"))
     }
 }
 
@@ -1249,7 +1439,7 @@ private struct TransformFieldGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(keyframeParameter.displayName)
+                Text(keyframeParameter.localizedName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -1270,18 +1460,18 @@ private struct TransformNumberField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(field.title)
+            Text(field.localizedTitle)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             TextField(
-                field.title,
+                field.localizedTitle,
                 text: Binding(
                     get: { model.transformFieldValue(field) },
                     set: { model.updateSelectedTransformField(field, rawValue: $0) }
                 )
             )
             .textFieldStyle(.roundedBorder)
-            .accessibilityLabel(field.title)
+            .accessibilityLabel(field.localizedTitle)
             .accessibilityIdentifier(field.accessibilityIdentifier)
         }
     }
@@ -1298,18 +1488,32 @@ private struct TransformKeyframeToggle: View {
         } label: {
             Label(
                 hasKeyframe
-                    ? "Delete \(parameter.displayName) Keyframe"
-                    : "Add \(parameter.displayName) Keyframe",
+                    ? AppString.localized(
+                        "transform.keyframe.delete", "Delete \(parameter.localizedName) Keyframe"
+                    )
+                    : AppString.localized(
+                        "transform.keyframe.add", "Add \(parameter.localizedName) Keyframe"
+                    ),
                 systemImage: hasKeyframe ? "diamond.fill" : "diamond"
             )
             .labelStyle(.iconOnly)
         }
         .buttonStyle(.borderless)
-        .help(hasKeyframe ? "Delete keyframe at playhead" : "Add keyframe at playhead")
+        .help(
+            hasKeyframe
+                ? AppString.localized(
+                    "transform.keyframe.delete.help", "Delete keyframe at playhead"
+                )
+                : AppString.localized("transform.keyframe.add.help", "Add keyframe at playhead")
+        )
         .accessibilityLabel(
             hasKeyframe
-                ? "Delete \(parameter.displayName) Keyframe"
-                : "Add \(parameter.displayName) Keyframe"
+                ? AppString.localized(
+                    "transform.keyframe.delete", "Delete \(parameter.localizedName) Keyframe"
+                )
+                : AppString.localized(
+                    "transform.keyframe.add", "Add \(parameter.localizedName) Keyframe"
+                )
         )
         .accessibilityIdentifier("Transform \(parameter.displayName) Keyframe Toggle")
     }
@@ -1320,7 +1524,7 @@ private struct TransformBlendPicker: View {
 
     var body: some View {
         Picker(
-            "Blend",
+            AppString.localized("transform.blend", "Blend"),
             selection: Binding(
                 get: { model.selectedTransformInspector?.transform.blendMode ?? .normal },
                 set: { model.updateSelectedClipBlendMode($0) }
@@ -1331,7 +1535,7 @@ private struct TransformBlendPicker: View {
             }
         }
         .pickerStyle(.menu)
-        .accessibilityLabel("Blend Mode")
+        .accessibilityLabel(AppString.localized("transform.blendMode.ax", "Blend Mode"))
         .accessibilityIdentifier("Transform Blend Mode")
     }
 }
@@ -1342,24 +1546,24 @@ private struct TrackCompositingInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Track Compositing")
+            Text(AppString.localized("track.compositing", "Track Compositing"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(state.trackName)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             TextField(
-                "Opacity %",
+                AppString.localized("track.opacityPercent", "Opacity %"),
                 text: Binding(
                     get: { model.selectedTrackOpacityPercentValue() },
                     set: { model.updateSelectedTrackOpacityPercent(rawValue: $0) }
                 )
             )
             .textFieldStyle(.roundedBorder)
-            .accessibilityLabel("Track Opacity Percent")
+            .accessibilityLabel(AppString.localized("track.opacityPercent.ax", "Track Opacity Percent"))
             .accessibilityIdentifier("Track Opacity Percent")
             Picker(
-                "Track Blend",
+                AppString.localized("track.blend", "Track Blend"),
                 selection: Binding(
                     get: { model.selectedTrackCompositingInspector?.blendMode ?? .normal },
                     set: { model.updateSelectedTrackBlendMode($0) }
@@ -1370,12 +1574,14 @@ private struct TrackCompositingInspector: View {
                 }
             }
             .pickerStyle(.menu)
-            .accessibilityLabel("Track Blend Mode")
+            .accessibilityLabel(AppString.localized("track.blendMode.ax", "Track Blend Mode"))
             .accessibilityIdentifier("Track Blend Mode")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Track Compositing Inspector")
-        .accessibilityLabel("Track Compositing Inspector")
+        .accessibilityLabel(
+            AppString.localized("track.compositing.ax", "Track Compositing Inspector")
+        )
     }
 }
 
@@ -1384,34 +1590,36 @@ private struct TransformFlipControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Flip")
+            Text(AppString.localized("transform.flip", "Flip"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Toggle(
-                "Flip Horizontal",
+                AppString.localized("transform.flip.horizontal", "Flip Horizontal"),
                 isOn: Binding(
                     get: { model.selectedTransformInspector?.transform.flip.horizontal ?? false },
                     set: { model.updateSelectedClipFlip(horizontal: $0) }
                 )
             )
-            .accessibilityLabel("Flip Horizontal")
+            .accessibilityLabel(AppString.localized("transform.flip.horizontal", "Flip Horizontal"))
             .accessibilityIdentifier("Transform Flip Horizontal")
             .accessibilityValue(
                 (model.selectedTransformInspector?.transform.flip.horizontal ?? false)
-                    ? "On" : "Off"
+                    ? AppString.localized("state.on", "On")
+                    : AppString.localized("state.off", "Off")
             )
             Toggle(
-                "Flip Vertical",
+                AppString.localized("transform.flip.vertical", "Flip Vertical"),
                 isOn: Binding(
                     get: { model.selectedTransformInspector?.transform.flip.vertical ?? false },
                     set: { model.updateSelectedClipFlip(vertical: $0) }
                 )
             )
-            .accessibilityLabel("Flip Vertical")
+            .accessibilityLabel(AppString.localized("transform.flip.vertical", "Flip Vertical"))
             .accessibilityIdentifier("Transform Flip Vertical")
             .accessibilityValue(
                 (model.selectedTransformInspector?.transform.flip.vertical ?? false)
-                    ? "On" : "Off"
+                    ? AppString.localized("state.on", "On")
+                    : AppString.localized("state.off", "Off")
             )
         }
     }
@@ -1429,21 +1637,24 @@ private struct CanvasTransformOverlay: View {
                     transformOutline(metrics: metrics)
                     transformReadout(metrics: metrics, transform: layout.transform)
                     transformHandle(
-                        title: "Scale Transform",
+                        identifier: "Scale Transform",
+                        label: AppString.localized("transform.handle.scale", "Scale Transform"),
                         systemImage: "arrow.up.left.and.arrow.down.right",
                         position: CGPoint(x: metrics.rect.maxX, y: metrics.rect.maxY),
                         handle: .scaleBottomRight,
                         canvasScale: metrics.scale
                     )
                     transformHandle(
-                        title: "Rotate Transform",
+                        identifier: "Rotate Transform",
+                        label: AppString.localized("transform.handle.rotate", "Rotate Transform"),
                         systemImage: "rotate.right",
                         position: CGPoint(x: metrics.rect.midX, y: metrics.rect.minY - 28),
                         handle: .rotate,
                         canvasScale: metrics.scale
                     )
                     transformHandle(
-                        title: "Move Anchor",
+                        identifier: "Move Anchor",
+                        label: AppString.localized("transform.handle.anchor", "Move Anchor"),
                         systemImage: "scope",
                         position: metrics.anchorPoint,
                         handle: .anchor,
@@ -1453,7 +1664,9 @@ private struct CanvasTransformOverlay: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("Program Transform Overlay")
-                .accessibilityLabel("Program Transform Overlay")
+                .accessibilityLabel(
+                    AppString.localized("transform.overlay.ax", "Program Transform Overlay")
+                )
             }
         }
     }
@@ -1481,9 +1694,12 @@ private struct CanvasTransformOverlay: View {
                         )
                     }
             )
-            .accessibilityLabel("Move Transform")
+            .accessibilityLabel(AppString.localized("transform.move.ax", "Move Transform"))
             .accessibilityIdentifier("Program Move Transform")
-            .accessibilityHint("Drag to reposition the selected clip. Numeric fields are in the inspector.")
+            .accessibilityHint(AppString.localized(
+                "transform.move.hint",
+                "Drag to reposition the selected clip. Numeric fields are in the inspector."
+            ))
             .accessibilityAddTraits(.isButton)
     }
 
@@ -1498,13 +1714,14 @@ private struct CanvasTransformOverlay: View {
             .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 4))
             .offset(x: metrics.rect.minX, y: max(0, metrics.rect.minY - 24))
             .accessibilityIdentifier("Program Transform Readout")
-            .accessibilityLabel("Transform readout")
+            .accessibilityLabel(AppString.localized("transform.readout.ax", "Transform readout"))
             .accessibilityValue(summary)
             .accessibilityAddTraits(.updatesFrequently)
     }
 
     private func transformHandle(
-        title: String,
+        identifier: String,
+        label: String,
         systemImage: String,
         position: CGPoint,
         handle: CanvasTransformHandle,
@@ -1529,9 +1746,11 @@ private struct CanvasTransformOverlay: View {
                         )
                     }
             )
-            .accessibilityLabel(title)
-            .accessibilityIdentifier("Program \(title)")
-            .accessibilityHint("Drag to adjust. Numeric fields are in the inspector.")
+            .accessibilityLabel(label)
+            .accessibilityIdentifier("Program \(identifier)")
+            .accessibilityHint(AppString.localized(
+                "transform.handle.hint", "Drag to adjust. Numeric fields are in the inspector."
+            ))
             .accessibilityAddTraits(.isButton)
     }
 
@@ -1601,7 +1820,7 @@ private struct TransformKeyframeLanesView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Transform keyframe lanes")
-        .accessibilityLabel("Transform keyframe lanes")
+        .accessibilityLabel(AppString.localized("transform.keyframeLanes.ax", "Transform keyframe lanes"))
     }
 }
 
@@ -1648,7 +1867,9 @@ private struct TransformKeyframeLaneRow: View {
         }
         .frame(height: 8)
         .accessibilityIdentifier("Transform keyframe lane \(lane.title)")
-        .accessibilityLabel("Transform keyframe lane \(lane.title)")
+        .accessibilityLabel(
+            AppString.localized("transform.keyframeLane.ax", "Transform keyframe lane \(lane.title)")
+        )
     }
 }
 
@@ -1680,9 +1901,13 @@ private struct TransformKeyframeDot: View {
                     moveKeyframe(lane.parameter, point.frame, point.frame + deltaFrames)
                 }
         )
-        .help("\(lane.title) keyframe, frame \(point.frame)")
-        .accessibilityLabel("\(lane.title) keyframe")
-        .accessibilityValue("Frame \(point.frame)")
+        .help(AppString.localized(
+            "transform.keyframeDot.help", "\(lane.title) keyframe, frame \(point.frame)"
+        ))
+        .accessibilityLabel(
+            AppString.localized("transform.keyframeDot.ax", "\(lane.title) keyframe")
+        )
+        .accessibilityValue(AppString.localized("frame.value", "Frame \(point.frame)"))
         .accessibilityIdentifier("Transform \(lane.title) Keyframe \(point.frame)")
     }
 
@@ -1695,11 +1920,14 @@ private struct TrackLaneRow {
     let name: String
     let kind: TrackKind
     let track: Track
+    /// English label; backs stable, non-localized UI-test identifiers (e.g. `Disable Video track 1`).
     let accessibilityLabel: String
+    /// Localized label used for the spoken VoiceOver label (never for identifiers).
+    let localizedLabel: String
 
     var summary: String {
         guard !track.items.isEmpty else {
-            return "Empty"
+            return AppString.localized("timeline.track.summary.empty", "Empty")
         }
         let clipCount = track.items.reduce(0) { count, item in
             if case .clip = item {
@@ -1708,37 +1936,44 @@ private struct TrackLaneRow {
             return count
         }
         if clipCount == 1 {
-            return "1 clip"
+            return AppString.localized("timeline.track.summary.oneClip", "1 clip")
         }
         if clipCount > 1 {
-            return "\(clipCount) clips"
+            return AppString.localized("timeline.track.summary.clips", "\(clipCount) clips")
         }
-        return "\(track.items.count) item"
+        return AppString.localized("timeline.track.summary.items", "\(track.items.count) item")
     }
 
     var fullAccessibilityLabel: String {
         var states: [String] = []
-        states.append(track.enabled ? "enabled" : "disabled")
+        states.append(
+            track.enabled
+                ? AppString.localized("timeline.track.state.enabled", "enabled")
+                : AppString.localized("timeline.track.state.disabled", "disabled")
+        )
         if track.locked {
-            states.append("locked")
+            states.append(AppString.localized("timeline.track.state.locked", "locked"))
         }
         if kind == .video, track.hidden {
-            states.append("hidden")
+            states.append(AppString.localized("timeline.track.state.hidden", "hidden"))
         }
         if kind == .audio {
             if track.muted {
-                states.append("muted")
+                states.append(AppString.localized("timeline.track.state.muted", "muted"))
             }
             if track.solo {
-                states.append("solo")
+                states.append(AppString.localized("timeline.track.state.solo", "solo"))
             }
         }
-        return "\(accessibilityLabel), \(summary), \(states.joined(separator: ", "))"
+        return "\(localizedLabel), \(summary), \(states.joined(separator: ", "))"
     }
 }
 
 private struct TrackStateButton: View {
+    /// Localized visible/spoken title (tooltip + VoiceOver label).
     let title: String
+    /// Stable, non-localized identifier queried by UI tests (NFR-I18N-001: identifiers are literal).
+    let identifier: String
     let systemImage: String
     let isOn: Bool
     let action: () -> Void
@@ -1753,8 +1988,12 @@ private struct TrackStateButton: View {
         .frame(width: 28, height: 28)
         .help(title)
         .accessibilityLabel(title)
-        .accessibilityIdentifier(title)
-        .accessibilityValue(isOn ? "On" : "Off")
+        .accessibilityIdentifier(identifier)
+        .accessibilityValue(
+            isOn
+                ? AppString.localized("state.on", "On")
+                : AppString.localized("state.off", "Off")
+        )
     }
 }
 

@@ -463,7 +463,9 @@ struct CanvasTitleEditingOverlay: View {
     }
 
     private func accessibilityLabel(_ layout: CanvasTitleBoxLayout) -> String {
-        "Title text box \(layout.boxIndex + 1), \(layout.clipName)"
+        AppString.localized(
+            "canvas.titleBox.ax", "Title text box \(layout.boxIndex + 1), \(layout.clipName)"
+        )
     }
 
     private func editorAccessibilityIdentifier(_ reference: CanvasTitleBoxReference) -> String {
@@ -528,7 +530,7 @@ private struct CanvasTitleBoxElement: View {
                     beginEditing()
                 }
             }
-            .accessibilityAction(named: "Edit") {
+            .accessibilityAction(named: Text(AppString.localized("canvas.titleBox.action.edit", "Edit"))) {
                 if layout.isEditable {
                     beginEditing()
                 }
@@ -556,14 +558,21 @@ private struct CanvasTitleBoxElement: View {
     }
 
     private var boxAccessibilityLabel: String {
-        "Title text box \(layout.boxIndex + 1), \(layout.clipName)"
+        AppString.localized(
+            "canvas.titleBox.ax", "Title text box \(layout.boxIndex + 1), \(layout.clipName)"
+        )
     }
 
     private var boxAccessibilityHint: String {
         if layout.isEditable {
-            return "Press Return to edit. Drag or use arrow keys to move."
+            return AppString.localized(
+                "canvas.titleBox.hint.editable",
+                "Press Return to edit. Drag or use arrow keys to move."
+            )
         }
-        return "This title is on a locked track."
+        return AppString.localized(
+            "canvas.titleBox.hint.locked", "This title is on a locked track."
+        )
     }
 
     private func handleReturnKey() -> KeyPress.Result {
@@ -606,8 +615,13 @@ private struct CanvasTitleBoxElement: View {
     }
 
     private var accessibilityValue: String {
-        let text = layout.box.text.isEmpty ? "Empty text" : layout.box.text
-        return "\(text), X \(formatted(layout.box.origin.x)), Y \(formatted(layout.box.origin.y))"
+        let text = layout.box.text.isEmpty
+            ? AppString.localized("canvas.titleBox.emptyText", "Empty text")
+            : layout.box.text
+        return AppString.localized(
+            "canvas.titleBox.value",
+            "\(text), X \(formatted(layout.box.origin.x)), Y \(formatted(layout.box.origin.y))"
+        )
     }
 
     private func formatted(_ value: RationalValue) -> String {
@@ -650,7 +664,9 @@ private struct CanvasSafeAreaGuides: View {
             .allowsHitTesting(false)
             .accessibilityElement(children: .ignore)
             .accessibilityIdentifier("Canvas Safe Area Guides")
-            .accessibilityLabel("Action-safe and title-safe guides")
+            .accessibilityLabel(
+                AppString.localized("canvas.guides.ax", "Action-safe and title-safe guides")
+            )
     }
 
     private var guidesContent: some View {
@@ -658,12 +674,12 @@ private struct CanvasSafeAreaGuides: View {
             guideRectangle(
                 insetFraction: CanvasTitlePositioning.actionSafeInsetFraction,
                 color: .yellow,
-                label: "Action Safe"
+                label: AppString.localized("canvas.guides.actionSafe", "Action Safe")
             )
             guideRectangle(
                 insetFraction: CanvasTitlePositioning.titleSafeInsetFraction,
                 color: .cyan,
-                label: "Title Safe"
+                label: AppString.localized("canvas.guides.titleSafe", "Title Safe")
             )
         }
     }
@@ -803,7 +819,10 @@ private struct CanvasTitleTextEditor: NSViewRepresentable {
         textView.setAccessibilityIdentifier(accessibilityIdentifier)
         textView.setAccessibilityLabel(accessibilityLabel)
         textView.setAccessibilityHelp(
-            "Edit title text. Press Escape or Command-Return to finish. Press Tab for the next title box."
+            AppString.localized(
+                "canvas.titleEditor.help",
+                "Edit title text. Press Escape or Command-Return to finish. Press Tab for the next title box."
+            )
         )
     }
 

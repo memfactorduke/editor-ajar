@@ -39,134 +39,156 @@ struct EditorAjarApp: App {
                 .disabled(!model.canRedo)
                 .accessibilityLabel(model.redoMenuTitle)
             }
-            CommandMenu("Sequences") {
-                Button("New Sequence") {
+            CommandMenu(Text(AppString.localized("menu.sequences.title", "Sequences"))) {
+                Button(AppString.localized("menu.sequences.new", "New Sequence")) {
                     model.addSequence()
                 }
                 .keyboardShortcut("n", modifiers: [.command])
-                .accessibilityLabel("New Sequence")
+                .accessibilityLabel(AppString.localized("menu.sequences.new", "New Sequence"))
 
-                Button("Close Sequence") {
+                Button(AppString.localized("menu.sequences.close", "Close Sequence")) {
                     model.closeActiveSequence()
                 }
                 .keyboardShortcut("w", modifiers: [.command])
                 .disabled(!model.canCloseActiveSequence)
-                .accessibilityLabel("Close Sequence")
+                .accessibilityLabel(AppString.localized("menu.sequences.close", "Close Sequence"))
             }
-            CommandMenu("Markers") {
-                Button("Add Marker") {
+            CommandMenu(Text(AppString.localized("menu.markers.title", "Markers"))) {
+                Button(AppString.localized("menu.markers.add", "Add Marker")) {
                     model.addTimelineMarkerAtPlayhead()
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
-                .accessibilityLabel("Add Marker")
+                .accessibilityLabel(AppString.localized("menu.markers.add", "Add Marker"))
 
-                Button("Previous Marker") {
+                Button(AppString.localized("menu.markers.previous", "Previous Marker")) {
                     model.jumpToPreviousMarker()
                 }
                 .keyboardShortcut("[", modifiers: [.command])
-                .accessibilityLabel("Previous Marker")
+                .accessibilityLabel(AppString.localized("menu.markers.previous", "Previous Marker"))
 
-                Button("Next Marker") {
+                Button(AppString.localized("menu.markers.next", "Next Marker")) {
                     model.jumpToNextMarker()
                 }
                 .keyboardShortcut("]", modifiers: [.command])
-                .accessibilityLabel("Next Marker")
+                .accessibilityLabel(AppString.localized("menu.markers.next", "Next Marker"))
 
-                Button("Delete Marker") {
+                Button(AppString.localized("menu.markers.delete", "Delete Marker")) {
                     model.deleteSelectedMarker()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(model.selectedMarker == nil)
-                .accessibilityLabel("Delete Marker")
+                .accessibilityLabel(AppString.localized("menu.markers.delete", "Delete Marker"))
             }
-            CommandMenu("Clip") {
-                Button("Copy Grade") {
+            CommandMenu(Text(AppString.localized("menu.clip.title", "Clip"))) {
+                Button(AppString.localized("menu.clip.copyGrade", "Copy Grade")) {
                     model.copyGradeFromSelectedClip()
                 }
                 .keyboardShortcut("c", modifiers: [.command, .option])
                 .disabled(!model.canCopyGrade)
-                .accessibilityLabel("Copy Grade from Selected Clip")
+                .accessibilityLabel(
+                    AppString.localized("menu.clip.copyGrade.ax", "Copy Grade from Selected Clip")
+                )
 
-                Button("Paste Grade") {
+                Button(AppString.localized("menu.clip.pasteGrade", "Paste Grade")) {
                     model.pasteGradeToSelectedClip()
                 }
                 .keyboardShortcut("v", modifiers: [.command, .option])
                 .disabled(!model.canPasteGrade)
-                .accessibilityLabel("Paste Grade to Selected Clip")
+                .accessibilityLabel(
+                    AppString.localized("menu.clip.pasteGrade.ax", "Paste Grade to Selected Clip")
+                )
 
                 Divider()
 
-                Button("Save Look") {
+                Button(AppString.localized("menu.clip.saveLook", "Save Look")) {
                     model.saveLookFromSelectedClip()
                 }
                 .keyboardShortcut("l", modifiers: [.command, .option])
                 .disabled(!model.canSaveLook)
-                .accessibilityLabel("Save Look from Selected Clip")
+                .accessibilityLabel(
+                    AppString.localized("menu.clip.saveLook.ax", "Save Look from Selected Clip")
+                )
 
-                Menu("Apply Look") {
+                Menu(AppString.localized("menu.clip.applyLook", "Apply Look")) {
                     ForEach(model.savedLooks, id: \.id) { look in
                         Button(look.name) {
                             model.applyLookToSelectedClip(lookID: look.id)
                         }
-                        .accessibilityLabel("Apply Look \(look.name)")
+                        .accessibilityLabel(
+                            AppString.localized("menu.clip.applyLook.item", "Apply Look \(look.name)")
+                        )
                     }
                 }
                 .disabled(!model.canApplyLook)
-                .accessibilityLabel("Apply Look to Selected Clip")
+                .accessibilityLabel(
+                    AppString.localized("menu.clip.applyLook.ax", "Apply Look to Selected Clip")
+                )
 
                 Divider()
 
-                Button("Detach Audio") {
+                Button(AppString.localized("menu.clip.detachAudio", "Detach Audio")) {
                     model.detachAudioForSelectedClip()
                 }
                 .disabled(!model.selectedClipIsLinked)
-                .accessibilityLabel("Detach Audio from Selected Clip")
+                .accessibilityLabel(
+                    AppString.localized("menu.clip.detachAudio.ax", "Detach Audio from Selected Clip")
+                )
             }
             // FR-TXT-003: menu/keyboard paths for headless UI-smoke (same pattern as Undo).
-            CommandMenu("Title") {
-                Button("Edit Canvas Title") {
+            CommandMenu(Text(AppString.localized("menu.title.title", "Title"))) {
+                Button(AppString.localized("menu.title.edit", "Edit Canvas Title")) {
                     model.editPrimaryCanvasTitleBox()
                 }
                 .keyboardShortcut("e", modifiers: [.command, .option])
                 .disabled(model.primaryCanvasTitleBoxReference == nil)
-                .accessibilityLabel("Edit Canvas Title")
+                .accessibilityLabel(AppString.localized("menu.title.edit", "Edit Canvas Title"))
 
-                Button("Nudge Title Right") {
+                Button(AppString.localized("menu.title.nudgeRight", "Nudge Title Right")) {
                     model.nudgePrimaryCanvasTitleBox(direction: .right, largeStep: true)
                 }
                 .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                 .disabled(model.primaryCanvasTitleBoxReference == nil)
-                .accessibilityLabel("Nudge Canvas Title Right")
+                .accessibilityLabel(
+                    AppString.localized("menu.title.nudgeRight.ax", "Nudge Canvas Title Right")
+                )
 
-                Button("Nudge Title Down") {
+                Button(AppString.localized("menu.title.nudgeDown", "Nudge Title Down")) {
                     model.nudgePrimaryCanvasTitleBox(direction: .down, largeStep: true)
                 }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])
                 .disabled(model.primaryCanvasTitleBoxReference == nil)
-                .accessibilityLabel("Nudge Canvas Title Down")
+                .accessibilityLabel(
+                    AppString.localized("menu.title.nudgeDown.ax", "Nudge Canvas Title Down")
+                )
             }
-            CommandMenu("Export") {
-                Button("Export…") {
+            CommandMenu(Text(AppString.localized("menu.export.title", "Export"))) {
+                Button(AppString.localized("menu.export.open", "Export…")) {
                     model.presentExportDialog()
                 }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
-                .accessibilityLabel("Open export dialog")
+                .accessibilityLabel(AppString.localized("menu.export.open.ax", "Open export dialog"))
 
-                Button("Export Active Sequence") {
+                Button(AppString.localized("menu.export.enqueue", "Export Active Sequence")) {
                     model.enqueueActiveSequenceExport()
                 }
                 // ⌘⇧E is the export dialog; enqueue uses ⌘⌃⇧E to avoid collision.
                 .keyboardShortcut("e", modifiers: [.command, .control, .shift])
-                .accessibilityLabel("Export Active Sequence")
+                .accessibilityLabel(
+                    AppString.localized("menu.export.enqueue", "Export Active Sequence")
+                )
 
-                Button(model.isExportQueuePanelVisible ? "Hide Export Queue" : "Show Export Queue") {
+                Button(
+                    model.isExportQueuePanelVisible
+                        ? AppString.localized("menu.export.hideQueue", "Hide Export Queue")
+                        : AppString.localized("menu.export.showQueue", "Show Export Queue")
+                ) {
                     model.toggleExportQueuePanel()
                 }
                 .keyboardShortcut("e", modifiers: [.command, .control])
                 .accessibilityLabel(
                     model.isExportQueuePanelVisible
-                        ? "Hide Export Queue"
-                        : "Show Export Queue"
+                        ? AppString.localized("menu.export.hideQueue", "Hide Export Queue")
+                        : AppString.localized("menu.export.showQueue", "Show Export Queue")
                 )
             }
         }

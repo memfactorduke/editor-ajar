@@ -88,7 +88,7 @@ final class EditorAjarAppModel: ObservableObject {
             sessionFactory: Self.makeProxySessionFactory()
         )
 
-        loadMessage = "Loading sample project"
+        loadMessage = AppString.localized("status.loadingSampleProject", "Loading sample project")
 
         var initialLoadResult: AjarProjectLoadResult?
         if let autosavePackageURL,
@@ -98,17 +98,19 @@ final class EditorAjarAppModel: ObservableObject {
                 let recovery = try AjarAutosaveStore.recoverProject(from: autosavePackageURL)
                 initialLoadResult = recovery.loadResult
                 autosaveCommandCount = recovery.latestCommandCount
+                let recoveryPrefix = recovery.isComplete
+                    ? AppString.localized("status.recoveredAutosave", "Recovered autosave")
+                    : AppString.localized(
+                        "status.recoveredAutosavePartial", "Recovered autosave to last good state"
+                    )
                 switch recovery.openMode {
                 case .editable:
-                    loadMessage = recovery.isComplete
-                        ? "Recovered autosave"
-                        : "Recovered autosave to last good state"
+                    loadMessage = recoveryPrefix
                 case .readOnly:
                     // Journal was skipped (#193); banner shows the typed reason message.
-                    let recoveryPrefix = recovery.isComplete
-                        ? "Recovered autosave"
-                        : "Recovered autosave to last good state"
-                    loadMessage = "\(recoveryPrefix) (read-only)"
+                    loadMessage = AppString.localized(
+                        "status.recoveredReadOnly", "\(recoveryPrefix) (read-only)"
+                    )
                 }
             } catch {
                 loadMessage = "Autosave recovery unavailable: \(error)"
@@ -119,7 +121,9 @@ final class EditorAjarAppModel: ObservableObject {
             switch Self.makeSampleProject() {
             case .success(let sampleProject):
                 initialLoadResult = .editable(sampleProject)
-                loadMessage = "Sample project loaded"
+                loadMessage = AppString.localized(
+                    "status.sampleProjectLoaded", "Sample project loaded"
+                )
             case .failure(let error):
                 loadMessage = "Sample project unavailable: \(error)"
             }
@@ -148,8 +152,13 @@ final class EditorAjarAppModel: ObservableObject {
         do {
             renderPipeline = try EditorAjarRenderPipeline()
             bindRenderPackageRoot()
-            if project != nil, loadMessage == "Loading sample project" {
-                loadMessage = "Sample project loaded"
+            if project != nil,
+                loadMessage == AppString.localized(
+                    "status.loadingSampleProject", "Loading sample project"
+                ) {
+                loadMessage = AppString.localized(
+                    "status.sampleProjectLoaded", "Sample project loaded"
+                )
             }
         } catch {
             loadMessage = "Metal playback unavailable: \(error)"
@@ -227,7 +236,9 @@ final class EditorAjarAppModel: ObservableObject {
     func validateExportDialogSelection() -> Bool {
         guard let project, let sequence = activeSequence else {
             var dialog = exportDialog
-            dialog.statusMessage = "No sequence available to export"
+            dialog.statusMessage = AppString.localized(
+                "export.status.noSequence", "No sequence available to export"
+            )
             exportDialog = dialog
             return false
         }
@@ -268,7 +279,9 @@ final class EditorAjarAppModel: ObservableObject {
                 )
             }
             var dialog = exportDialog
-            dialog.statusMessage = "Ready to export \(exportDialog.mode.displayName.lowercased())"
+            dialog.statusMessage = AppString.localized(
+                "export.status.ready", "Ready to export \(exportDialog.mode.displayName.lowercased())"
+            )
             exportDialog = dialog
             return true
         } catch {
@@ -387,7 +400,7 @@ final class EditorAjarAppModel: ObservableObject {
         guard isReadOnlyBannerVisible, let reason = projectReadOnlyReason else {
             return nil
         }
-        return reason.message
+        return AppString.readOnlyProjectMessage(for: reason)
     }
 
     /// Save / autosave gate: blocked for read-only opens (FR-PROJ-005 / ADR-0018).
@@ -428,7 +441,9 @@ final class EditorAjarAppModel: ObservableObject {
             // Session-local flip under read-only open (no package rewrite).
             self.project = updated
         }
-        loadMessage = next ? "Proxy playback on" : "Original playback on"
+        loadMessage = next
+            ? AppString.localized("status.proxyPlaybackOn", "Proxy playback on")
+            : AppString.localized("status.originalPlaybackOn", "Original playback on")
         requestRenderForCurrentFrame()
         return true
     }
@@ -535,11 +550,17 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var undoMenuTitle: String {
-        editMenuTitle(prefix: "Undo", command: editHistory?.nextUndoCommand)
+        editMenuTitle(
+            prefix: AppString.localized("menu.edit.undo", "Undo"),
+            command: editHistory?.nextUndoCommand
+        )
     }
 
     var redoMenuTitle: String {
-        editMenuTitle(prefix: "Redo", command: editHistory?.nextRedoCommand)
+        editMenuTitle(
+            prefix: AppString.localized("menu.edit.redo", "Redo"),
+            command: editHistory?.nextRedoCommand
+        )
     }
 
     var activeSequence: Sequence? {
@@ -555,7 +576,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var activeSequenceName: String {
-        activeSequence?.name ?? "No Sequence"
+        activeSequence?.name ?? AppString.localized("sequence.none", "No Sequence")
     }
 
     var sequenceTabs: [SequenceTab] {
@@ -580,13 +601,18 @@ final class EditorAjarAppModel: ObservableObject {
 
     var projectSummary: String {
         guard let project else {
-            return "No project"
+            return AppString.localized("project.summary.none", "No project")
         }
 
         let sequenceCount = project.sequences.count
         let mediaCount = project.mediaPool.count
-        let sequenceLabel = sequenceCount == 1 ? "sequence" : "sequences"
-        return "\(sequenceCount) \(sequenceLabel), \(mediaCount) media items"
+        let sequenceLabel = sequenceCount == 1
+            ? AppString.localized("project.summary.sequence", "sequence")
+            : AppString.localized("project.summary.sequences", "sequences")
+        return AppString.localized(
+            "project.summary",
+            "\(sequenceCount) \(sequenceLabel), \(mediaCount) media items"
+        )
     }
 
     var frameRateDescription: String {
@@ -594,7 +620,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     var playheadDescription: String {
-        "Frame \(playheadFrame)"
+        AppString.localized("frame.value", "Frame \(playheadFrame)")
     }
 
     var timelineSnappingEnabled: Bool {
@@ -811,13 +837,13 @@ final class EditorAjarAppModel: ObservableObject {
         case (.some(let inFrame), .some(let outFrame)):
             let startFrame = min(inFrame, outFrame)
             let endFrame = max(inFrame, outFrame)
-            return "Range \(startFrame)-\(endFrame)"
+            return AppString.localized("timeline.range.inOut", "Range \(startFrame)-\(endFrame)")
         case (.some(let inFrame), .none):
-            return "Range in \(inFrame)"
+            return AppString.localized("timeline.range.in", "Range in \(inFrame)")
         case (.none, .some(let outFrame)):
-            return "Range out \(outFrame)"
+            return AppString.localized("timeline.range.out", "Range out \(outFrame)")
         case (.none, .none):
-            return "No range"
+            return AppString.localized("timeline.range.none", "No range")
         }
     }
 
@@ -1955,7 +1981,7 @@ final class EditorAjarAppModel: ObservableObject {
         renderGeneration += 1
         let generation = renderGeneration
         let frame = playheadFrame
-        loadMessage = "Rendering frame \(frame)"
+        loadMessage = AppString.localized("status.renderingFrame", "Rendering frame \(frame)")
 
         Task { [weak self, project, sequence, renderPipeline, frame, generation] in
             do {
@@ -1979,7 +2005,9 @@ final class EditorAjarAppModel: ObservableObject {
                         )
                     }
                     self?.presentedTexture = renderedFrame.texture
-                    self?.loadMessage = "Rendered \(sequence.name), frame \(frame)"
+                    self?.loadMessage = AppString.localized(
+                        "status.renderedFrame", "Rendered \(sequence.name), frame \(frame)"
+                    )
                 }
             } catch {
                 await MainActor.run {
@@ -2186,7 +2214,7 @@ final class EditorAjarAppModel: ObservableObject {
             return
         }
         hasSurfacedReadOnlyEditRefusal = true
-        loadMessage = reason.message
+        loadMessage = AppString.readOnlyProjectMessage(for: reason)
     }
 
     private func canvasTitleLayout(
@@ -2794,6 +2822,7 @@ enum TransformInspectorField: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    /// English title. Backs the stable, non-localized accessibility identifier (NFR-I18N-001).
     var title: String {
         switch self {
         case .positionX:
@@ -2820,6 +2849,36 @@ enum TransformInspectorField: String, CaseIterable, Identifiable, Sendable {
             return "Crop Right"
         case .cropBottom:
             return "Crop Bottom"
+        }
+    }
+
+    /// Localized title for visible text / VoiceOver labels.
+    var localizedTitle: String {
+        switch self {
+        case .positionX:
+            return AppString.localized("transform.field.positionX", "Position X")
+        case .positionY:
+            return AppString.localized("transform.field.positionY", "Position Y")
+        case .scaleXPercent:
+            return AppString.localized("transform.field.scaleX", "Scale X %")
+        case .scaleYPercent:
+            return AppString.localized("transform.field.scaleY", "Scale Y %")
+        case .anchorX:
+            return AppString.localized("transform.field.anchorX", "Anchor X")
+        case .anchorY:
+            return AppString.localized("transform.field.anchorY", "Anchor Y")
+        case .rotationDegrees:
+            return AppString.localized("transform.field.rotation", "Rotation")
+        case .opacityPercent:
+            return AppString.localized("transform.field.opacity", "Opacity %")
+        case .cropLeft:
+            return AppString.localized("transform.field.cropLeft", "Crop Left")
+        case .cropTop:
+            return AppString.localized("transform.field.cropTop", "Crop Top")
+        case .cropRight:
+            return AppString.localized("transform.field.cropRight", "Crop Right")
+        case .cropBottom:
+            return AppString.localized("transform.field.cropBottom", "Crop Bottom")
         }
     }
 
@@ -3305,6 +3364,7 @@ enum TransformKeyframeLookup {
 }
 
 extension ClipTransformParameter {
+    /// English name. Backs stable, non-localized accessibility identifiers (NFR-I18N-001).
     var displayName: String {
         switch self {
         case .position:
@@ -3319,6 +3379,24 @@ extension ClipTransformParameter {
             return "Opacity"
         case .crop:
             return "Crop"
+        }
+    }
+
+    /// Localized name for visible text / VoiceOver labels.
+    var localizedName: String {
+        switch self {
+        case .position:
+            return AppString.localized("transform.param.position", "Position")
+        case .scale:
+            return AppString.localized("transform.param.scale", "Scale")
+        case .anchorPoint:
+            return AppString.localized("transform.param.anchor", "Anchor")
+        case .rotation:
+            return AppString.localized("transform.param.rotation", "Rotation")
+        case .opacity:
+            return AppString.localized("transform.param.opacity", "Opacity")
+        case .crop:
+            return AppString.localized("transform.param.crop", "Crop")
         }
     }
 }

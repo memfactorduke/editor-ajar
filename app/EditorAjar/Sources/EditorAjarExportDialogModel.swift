@@ -15,11 +15,11 @@ enum EditorAjarExportMode: String, CaseIterable, Equatable, Sendable, Identifiab
     var displayName: String {
         switch self {
         case .video:
-            "Video"
+            AppString.localized("export.mode.video", "Video")
         case .stillFrame:
-            "Still frame"
+            AppString.localized("export.mode.stillFrame", "Still frame")
         case .audioOnly:
-            "Audio only"
+            AppString.localized("export.mode.audioOnly", "Audio only")
         }
     }
 }
@@ -34,9 +34,9 @@ enum EditorAjarExportRangeChoice: String, CaseIterable, Equatable, Sendable, Ide
     var displayName: String {
         switch self {
         case .wholeTimeline:
-            "Whole timeline"
+            AppString.localized("export.range.wholeTimeline", "Whole timeline")
         case .inOutMarks:
-            "In/out range"
+            AppString.localized("export.range.inOut", "In/out range")
         }
     }
 }

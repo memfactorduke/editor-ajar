@@ -15,15 +15,15 @@ struct ExportQueuePanel: View {
                 Text(status)
                     .font(.caption)
                     .foregroundStyle(.orange)
-                    .accessibilityLabel("Export queue status")
+                    .accessibilityLabel(AppString.localized("exportQueue.status.ax", "Export queue status"))
                     .accessibilityValue(status)
             }
             if controller.jobs.isEmpty {
-                Text("No export jobs")
+                Text(AppString.localized("exportQueue.empty", "No export jobs"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel("No export jobs")
+                    .accessibilityLabel(AppString.localized("exportQueue.empty", "No export jobs"))
             } else {
                 jobList
             }
@@ -33,30 +33,34 @@ struct ExportQueuePanel: View {
         .background(Color(red: 0.12, green: 0.12, blue: 0.14))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Export Queue Panel")
-        .accessibilityLabel("Export queue")
+        .accessibilityLabel(AppString.localized("exportQueue.panel.ax", "Export queue"))
     }
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("Export Queue")
+            Text(AppString.localized("exportQueue.title", "Export Queue"))
                 .font(.headline)
             Spacer()
-            Button("Export Sequence") {
+            Button(AppString.localized("exportQueue.enqueue", "Export Sequence")) {
                 model.enqueueActiveSequenceExport()
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut("e", modifiers: [.command, .shift])
-            .help("Enqueue a ProRes export of the active sequence")
-            .accessibilityLabel("Export active sequence")
+            .help(AppString.localized(
+                "exportQueue.enqueue.help", "Enqueue a ProRes export of the active sequence"
+            ))
+            .accessibilityLabel(AppString.localized("exportQueue.enqueue.ax", "Export active sequence"))
             .accessibilityIdentifier("Enqueue Export")
-            .accessibilityHint("Adds a background export job for the current sequence")
+            .accessibilityHint(AppString.localized(
+                "exportQueue.enqueue.hint", "Adds a background export job for the current sequence"
+            ))
 
-            Button("Hide") {
+            Button(AppString.localized("exportQueue.hide", "Hide")) {
                 model.isExportQueuePanelVisible = false
             }
             .buttonStyle(.bordered)
             .keyboardShortcut(.cancelAction)
-            .accessibilityLabel("Hide export queue")
+            .accessibilityLabel(AppString.localized("exportQueue.hide.ax", "Hide export queue"))
             .accessibilityIdentifier("Hide Export Queue")
         }
     }
@@ -74,7 +78,7 @@ struct ExportQueuePanel: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Export Job List")
-        .accessibilityLabel("Export jobs")
+        .accessibilityLabel(AppString.localized("exportQueue.jobList.ax", "Export jobs"))
     }
 }
 
@@ -98,7 +102,9 @@ private struct ExportQueueJobRow: View {
 
             ProgressView(value: job.progress.fractionCompleted)
                 .progressViewStyle(.linear)
-                .accessibilityLabel("Export progress for \(job.displayName)")
+                .accessibilityLabel(AppString.localized(
+                    "exportQueue.job.progress.ax", "Export progress for \(job.displayName)"
+                ))
                 .accessibilityValue(progressValueLabel)
 
             HStack(spacing: 8) {
@@ -114,30 +120,40 @@ private struct ExportQueueJobRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Export Job \(job.id.uuidString)")
-        .accessibilityLabel("Export job \(job.displayName)")
+        .accessibilityLabel(AppString.localized("exportQueue.job.ax", "Export job \(job.displayName)"))
         .accessibilityValue("\(stateLabel), \(progressValueLabel)")
     }
 
     @ViewBuilder
     private var controls: some View {
         if job.state == .running {
-            Button("Pause", action: onPause)
+            Button(AppString.localized("exportQueue.job.pause", "Pause"), action: onPause)
                 .buttonStyle(.bordered)
-                .accessibilityLabel("Pause export \(job.displayName)")
-                .accessibilityHint("Stops encoding; resume restarts from the beginning")
+                .accessibilityLabel(AppString.localized(
+                    "exportQueue.job.pause.ax", "Pause export \(job.displayName)"
+                ))
+                .accessibilityHint(AppString.localized(
+                    "exportQueue.job.pause.hint", "Stops encoding; resume restarts from the beginning"
+                ))
                 .accessibilityIdentifier("Pause Export \(job.id.uuidString)")
         }
         if job.state == .pausedWillRestart {
-            Button("Resume", action: onResume)
+            Button(AppString.localized("exportQueue.job.resume", "Resume"), action: onResume)
                 .buttonStyle(.bordered)
-                .accessibilityLabel("Resume export \(job.displayName)")
-                .accessibilityHint("Restarts this export from frame zero")
+                .accessibilityLabel(AppString.localized(
+                    "exportQueue.job.resume.ax", "Resume export \(job.displayName)"
+                ))
+                .accessibilityHint(AppString.localized(
+                    "exportQueue.job.resume.hint", "Restarts this export from frame zero"
+                ))
                 .accessibilityIdentifier("Resume Export \(job.id.uuidString)")
         }
         if job.state == .pending || job.state == .running || job.state == .pausedWillRestart {
-            Button("Cancel", action: onCancel)
+            Button(AppString.localized("exportQueue.job.cancel", "Cancel"), action: onCancel)
                 .buttonStyle(.bordered)
-                .accessibilityLabel("Cancel export \(job.displayName)")
+                .accessibilityLabel(AppString.localized(
+                    "exportQueue.job.cancel.ax", "Cancel export \(job.displayName)"
+                ))
                 .accessibilityIdentifier("Cancel Export \(job.id.uuidString)")
         }
     }
@@ -145,17 +161,17 @@ private struct ExportQueueJobRow: View {
     private var stateLabel: String {
         switch job.state {
         case .pending:
-            "Pending"
+            AppString.localized("exportQueue.state.pending", "Pending")
         case .running:
-            "Running"
+            AppString.localized("exportQueue.state.running", "Running")
         case .pausedWillRestart:
-            "Paused (will restart)"
+            AppString.localized("exportQueue.state.paused", "Paused (will restart)")
         case .cancelled:
-            "Cancelled"
+            AppString.localized("exportQueue.state.cancelled", "Cancelled")
         case .failed:
-            "Failed"
+            AppString.localized("exportQueue.state.failed", "Failed")
         case .done:
-            "Done"
+            AppString.localized("exportQueue.state.done", "Done")
         }
     }
 
@@ -173,16 +189,20 @@ private struct ExportQueueJobRow: View {
     }
 
     private var progressCaption: String {
-        let frames =
+        let frames = AppString.localized(
+            "exportQueue.job.frames",
             "\(job.progress.framesWritten)/\(job.progress.totalFrames) frames"
+        )
         if let eta = job.progress.estimatedSecondsRemaining {
-            return "\(frames) · ~\(Int(eta.rounded()))s left"
+            return AppString.localized(
+                "exportQueue.job.eta", "\(frames) · ~\(Int(eta.rounded()))s left"
+            )
         }
         return frames
     }
 
     private var progressValueLabel: String {
         let percent = Int((job.progress.fractionCompleted * 100).rounded())
-        return "\(percent) percent"
+        return AppString.localized("exportQueue.job.percent", "\(percent) percent")
     }
 }

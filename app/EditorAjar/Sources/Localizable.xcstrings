@@ -1,0 +1,2844 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "app.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor Ajar"
+          }
+        }
+      }
+    },
+    "banner.readOnly.dismiss": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
+          }
+        }
+      }
+    },
+    "banner.readOnly.dismiss.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss read-only project notice"
+          }
+        }
+      }
+    },
+    "banner.readOnly.dismiss.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss read-only notice"
+          }
+        }
+      }
+    },
+    "banner.readOnly.dismiss.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hides the read-only banner. Editing and saving remain disabled."
+          }
+        }
+      }
+    },
+    "banner.readOnly.fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This project is open read-only."
+          }
+        }
+      }
+    },
+    "banner.readOnly.notice.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read-only project notice"
+          }
+        }
+      }
+    },
+    "banner.readOnly.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read-only project"
+          }
+        }
+      }
+    },
+    "blend.add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        }
+      }
+    },
+    "blend.color": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color"
+          }
+        }
+      }
+    },
+    "blend.colorBurn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color Burn"
+          }
+        }
+      }
+    },
+    "blend.colorDodge": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color Dodge"
+          }
+        }
+      }
+    },
+    "blend.darken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Darken"
+          }
+        }
+      }
+    },
+    "blend.difference": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Difference"
+          }
+        }
+      }
+    },
+    "blend.exclusion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclusion"
+          }
+        }
+      }
+    },
+    "blend.hardLight": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hard Light"
+          }
+        }
+      }
+    },
+    "blend.hue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hue"
+          }
+        }
+      }
+    },
+    "blend.lighten": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lighten"
+          }
+        }
+      }
+    },
+    "blend.luminosity": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luminosity"
+          }
+        }
+      }
+    },
+    "blend.multiply": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multiply"
+          }
+        }
+      }
+    },
+    "blend.normal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
+          }
+        }
+      }
+    },
+    "blend.overlay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overlay"
+          }
+        }
+      }
+    },
+    "blend.saturation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saturation"
+          }
+        }
+      }
+    },
+    "blend.screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen"
+          }
+        }
+      }
+    },
+    "blend.softLight": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soft Light"
+          }
+        }
+      }
+    },
+    "blend.subtract": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtract"
+          }
+        }
+      }
+    },
+    "canvas.guides.actionSafe": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action Safe"
+          }
+        }
+      }
+    },
+    "canvas.guides.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action-safe and title-safe guides"
+          }
+        }
+      }
+    },
+    "canvas.guides.titleSafe": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title Safe"
+          }
+        }
+      }
+    },
+    "canvas.titleBox.action.edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        }
+      }
+    },
+    "canvas.titleBox.emptyText": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empty text"
+          }
+        }
+      }
+    },
+    "canvas.titleBox.hint.editable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press Return to edit. Drag or use arrow keys to move."
+          }
+        }
+      }
+    },
+    "canvas.titleBox.hint.locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This title is on a locked track."
+          }
+        }
+      }
+    },
+    "canvas.titleEditor.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit title text. Press Escape or Command-Return to finish. Press Tab for the next title box."
+          }
+        }
+      }
+    },
+    "export.audioFormat.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio-only format"
+          }
+        }
+      }
+    },
+    "export.dialog.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export dialog"
+          }
+        }
+      }
+    },
+    "export.dialog.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "export.dialog.cancel.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel export"
+          }
+        }
+      }
+    },
+    "export.dialog.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export"
+          }
+        }
+      }
+    },
+    "export.dialog.validate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validate"
+          }
+        }
+      }
+    },
+    "export.dialog.validate.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validate export settings"
+          }
+        }
+      }
+    },
+    "export.mode.audioOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio only"
+          }
+        }
+      }
+    },
+    "export.mode.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export mode"
+          }
+        }
+      }
+    },
+    "export.mode.stillFrame": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still frame"
+          }
+        }
+      }
+    },
+    "export.mode.video": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video"
+          }
+        }
+      }
+    },
+    "export.preset.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export preset"
+          }
+        }
+      }
+    },
+    "export.preset.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
+    "export.range.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export range"
+          }
+        }
+      }
+    },
+    "export.range.inOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In/out range"
+          }
+        }
+      }
+    },
+    "export.range.wholeTimeline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whole timeline"
+          }
+        }
+      }
+    },
+    "export.section.audioFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio format"
+          }
+        }
+      }
+    },
+    "export.section.mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        }
+      }
+    },
+    "export.section.preset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preset"
+          }
+        }
+      }
+    },
+    "export.section.range": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Range"
+          }
+        }
+      }
+    },
+    "export.section.stillFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still format"
+          }
+        }
+      }
+    },
+    "export.status.noSequence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No sequence available to export"
+          }
+        }
+      }
+    },
+    "export.stillFormat.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still frame format"
+          }
+        }
+      }
+    },
+    "exportQueue.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No export jobs"
+          }
+        }
+      }
+    },
+    "exportQueue.enqueue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Sequence"
+          }
+        }
+      }
+    },
+    "exportQueue.enqueue.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export active sequence"
+          }
+        }
+      }
+    },
+    "exportQueue.enqueue.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enqueue a ProRes export of the active sequence"
+          }
+        }
+      }
+    },
+    "exportQueue.enqueue.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adds a background export job for the current sequence"
+          }
+        }
+      }
+    },
+    "exportQueue.hide": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide"
+          }
+        }
+      }
+    },
+    "exportQueue.hide.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide export queue"
+          }
+        }
+      }
+    },
+    "exportQueue.job.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "exportQueue.job.pause": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        }
+      }
+    },
+    "exportQueue.job.pause.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stops encoding; resume restarts from the beginning"
+          }
+        }
+      }
+    },
+    "exportQueue.job.resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume"
+          }
+        }
+      }
+    },
+    "exportQueue.job.resume.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restarts this export from frame zero"
+          }
+        }
+      }
+    },
+    "exportQueue.jobList.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export jobs"
+          }
+        }
+      }
+    },
+    "exportQueue.panel.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export queue"
+          }
+        }
+      }
+    },
+    "exportQueue.state.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelled"
+          }
+        }
+      }
+    },
+    "exportQueue.state.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "exportQueue.state.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
+    "exportQueue.state.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused (will restart)"
+          }
+        }
+      }
+    },
+    "exportQueue.state.pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending"
+          }
+        }
+      }
+    },
+    "exportQueue.state.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
+          }
+        }
+      }
+    },
+    "exportQueue.status.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export queue status"
+          }
+        }
+      }
+    },
+    "exportQueue.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Queue"
+          }
+        }
+      }
+    },
+    "inspector.marker.heading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marker"
+          }
+        }
+      }
+    },
+    "inspector.marker.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None selected"
+          }
+        }
+      }
+    },
+    "inspector.panel.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspector panel"
+          }
+        }
+      }
+    },
+    "inspector.row.frameRate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frame Rate"
+          }
+        }
+      }
+    },
+    "inspector.row.marker": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marker"
+          }
+        }
+      }
+    },
+    "inspector.row.sequence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sequence"
+          }
+        }
+      }
+    },
+    "inspector.row.state": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "State"
+          }
+        }
+      }
+    },
+    "inspector.row.transform": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transform"
+          }
+        }
+      }
+    },
+    "inspector.state.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused"
+          }
+        }
+      }
+    },
+    "inspector.state.playing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playing"
+          }
+        }
+      }
+    },
+    "inspector.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspector"
+          }
+        }
+      }
+    },
+    "inspector.transform.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transform Inspector"
+          }
+        }
+      }
+    },
+    "inspector.transform.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select one video clip"
+          }
+        }
+      }
+    },
+    "library.effects": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effects"
+          }
+        }
+      }
+    },
+    "library.panel.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media and effects panel"
+          }
+        }
+      }
+    },
+    "library.projectMedia": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project Media"
+          }
+        }
+      }
+    },
+    "library.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media"
+          }
+        }
+      }
+    },
+    "marker.color": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marker Color"
+          }
+        }
+      }
+    },
+    "marker.color.blue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
+          }
+        }
+      }
+    },
+    "marker.color.gray": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gray"
+          }
+        }
+      }
+    },
+    "marker.color.green": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green"
+          }
+        }
+      }
+    },
+    "marker.color.orange": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange"
+          }
+        }
+      }
+    },
+    "marker.color.purple": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Purple"
+          }
+        }
+      }
+    },
+    "marker.color.red": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red"
+          }
+        }
+      }
+    },
+    "marker.color.yellow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yellow"
+          }
+        }
+      }
+    },
+    "marker.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Marker"
+          }
+        }
+      }
+    },
+    "marker.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marker Name"
+          }
+        }
+      }
+    },
+    "marker.note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marker Note"
+          }
+        }
+      }
+    },
+    "marker.position": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Position"
+          }
+        }
+      }
+    },
+    "menu.clip.applyLook": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply Look"
+          }
+        }
+      }
+    },
+    "menu.clip.applyLook.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply Look to Selected Clip"
+          }
+        }
+      }
+    },
+    "menu.clip.copyGrade": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Grade"
+          }
+        }
+      }
+    },
+    "menu.clip.copyGrade.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Grade from Selected Clip"
+          }
+        }
+      }
+    },
+    "menu.clip.detachAudio": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detach Audio"
+          }
+        }
+      }
+    },
+    "menu.clip.detachAudio.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detach Audio from Selected Clip"
+          }
+        }
+      }
+    },
+    "menu.clip.pasteGrade": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste Grade"
+          }
+        }
+      }
+    },
+    "menu.clip.pasteGrade.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste Grade to Selected Clip"
+          }
+        }
+      }
+    },
+    "menu.clip.saveLook": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Look"
+          }
+        }
+      }
+    },
+    "menu.clip.saveLook.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Look from Selected Clip"
+          }
+        }
+      }
+    },
+    "menu.clip.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clip"
+          }
+        }
+      }
+    },
+    "menu.edit.redo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redo"
+          }
+        }
+      }
+    },
+    "menu.edit.undo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo"
+          }
+        }
+      }
+    },
+    "menu.export.enqueue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Active Sequence"
+          }
+        }
+      }
+    },
+    "menu.export.hideQueue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Export Queue"
+          }
+        }
+      }
+    },
+    "menu.export.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export…"
+          }
+        }
+      }
+    },
+    "menu.export.open.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open export dialog"
+          }
+        }
+      }
+    },
+    "menu.export.showQueue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Export Queue"
+          }
+        }
+      }
+    },
+    "menu.export.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export"
+          }
+        }
+      }
+    },
+    "menu.markers.add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Marker"
+          }
+        }
+      }
+    },
+    "menu.markers.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Marker"
+          }
+        }
+      }
+    },
+    "menu.markers.next": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Marker"
+          }
+        }
+      }
+    },
+    "menu.markers.previous": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Marker"
+          }
+        }
+      }
+    },
+    "menu.markers.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markers"
+          }
+        }
+      }
+    },
+    "menu.sequences.close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Sequence"
+          }
+        }
+      }
+    },
+    "menu.sequences.new": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Sequence"
+          }
+        }
+      }
+    },
+    "menu.sequences.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sequences"
+          }
+        }
+      }
+    },
+    "menu.title.edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Canvas Title"
+          }
+        }
+      }
+    },
+    "menu.title.nudgeDown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nudge Title Down"
+          }
+        }
+      }
+    },
+    "menu.title.nudgeDown.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nudge Canvas Title Down"
+          }
+        }
+      }
+    },
+    "menu.title.nudgeRight": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nudge Title Right"
+          }
+        }
+      }
+    },
+    "menu.title.nudgeRight.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nudge Canvas Title Right"
+          }
+        }
+      }
+    },
+    "menu.title.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title"
+          }
+        }
+      }
+    },
+    "monitor.guides.hide": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Action and Title Safe Guides"
+          }
+        }
+      }
+    },
+    "monitor.guides.hide.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide action-safe and title-safe guides"
+          }
+        }
+      }
+    },
+    "monitor.guides.show": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Action and Title Safe Guides"
+          }
+        }
+      }
+    },
+    "monitor.guides.show.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show action-safe and title-safe guides"
+          }
+        }
+      }
+    },
+    "project.summary.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No project"
+          }
+        }
+      }
+    },
+    "project.summary.sequence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sequence"
+          }
+        }
+      }
+    },
+    "project.summary.sequences": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sequences"
+          }
+        }
+      }
+    },
+    "sequence.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Sequence"
+          }
+        }
+      }
+    },
+    "sequenceTabs.bar.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sequence tab bar"
+          }
+        }
+      }
+    },
+    "sequenceTabs.close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Sequence"
+          }
+        }
+      }
+    },
+    "sequenceTabs.list.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sequence tabs"
+          }
+        }
+      }
+    },
+    "sequenceTabs.new": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Sequence"
+          }
+        }
+      }
+    },
+    "state.notSelected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not selected"
+          }
+        }
+      }
+    },
+    "state.off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        }
+      }
+    },
+    "state.on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On"
+          }
+        }
+      }
+    },
+    "state.selected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected"
+          }
+        }
+      }
+    },
+    "status.loadingSampleProject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading sample project"
+          }
+        }
+      }
+    },
+    "status.originalPlaybackOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original playback on"
+          }
+        }
+      }
+    },
+    "status.proxyPlaybackOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy playback on"
+          }
+        }
+      }
+    },
+    "status.recoveredAutosave": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered autosave"
+          }
+        }
+      }
+    },
+    "status.recoveredAutosavePartial": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered autosave to last good state"
+          }
+        }
+      }
+    },
+    "status.sampleProjectLoaded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sample project loaded"
+          }
+        }
+      }
+    },
+    "timeline.group.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline"
+          }
+        }
+      }
+    },
+    "timeline.marker.noNote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No note"
+          }
+        }
+      }
+    },
+    "timeline.noSequence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No sequence"
+          }
+        }
+      }
+    },
+    "timeline.range.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No range"
+          }
+        }
+      }
+    },
+    "timeline.ruler.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline ruler"
+          }
+        }
+      }
+    },
+    "timeline.ruler.frameZero": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frame 0"
+          }
+        }
+      }
+    },
+    "timeline.ruler.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to scrub"
+          }
+        }
+      }
+    },
+    "timeline.ruler.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to scrub. Markers are separate controls on this ruler."
+          }
+        }
+      }
+    },
+    "timeline.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline"
+          }
+        }
+      }
+    },
+    "timeline.tool.addMarker": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Marker"
+          }
+        }
+      }
+    },
+    "timeline.tool.clearRange": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Timeline Range"
+          }
+        }
+      }
+    },
+    "timeline.tool.decreaseHeight": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decrease Track Height"
+          }
+        }
+      }
+    },
+    "timeline.tool.deleteMarker": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Marker"
+          }
+        }
+      }
+    },
+    "timeline.tool.detachAudio": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detach Audio"
+          }
+        }
+      }
+    },
+    "timeline.tool.disableSnapping": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disable Snapping"
+          }
+        }
+      }
+    },
+    "timeline.tool.enableSnapping": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Snapping"
+          }
+        }
+      }
+    },
+    "timeline.tool.fit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fit Timeline"
+          }
+        }
+      }
+    },
+    "timeline.tool.increaseHeight": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Increase Track Height"
+          }
+        }
+      }
+    },
+    "timeline.tool.nextMarker": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Marker"
+          }
+        }
+      }
+    },
+    "timeline.tool.previousMarker": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Marker"
+          }
+        }
+      }
+    },
+    "timeline.tool.setRangeIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Range In"
+          }
+        }
+      }
+    },
+    "timeline.tool.setRangeOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Range Out"
+          }
+        }
+      }
+    },
+    "timeline.tool.zoomIn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom Timeline In"
+          }
+        }
+      }
+    },
+    "timeline.tool.zoomOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom Timeline Out"
+          }
+        }
+      }
+    },
+    "timeline.tool.zoomToSelection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom to Selection"
+          }
+        }
+      }
+    },
+    "timeline.track.state.disabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "disabled"
+          }
+        }
+      }
+    },
+    "timeline.track.state.enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "enabled"
+          }
+        }
+      }
+    },
+    "timeline.track.state.hidden": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hidden"
+          }
+        }
+      }
+    },
+    "timeline.track.state.locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "locked"
+          }
+        }
+      }
+    },
+    "timeline.track.state.muted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "muted"
+          }
+        }
+      }
+    },
+    "timeline.track.state.solo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "solo"
+          }
+        }
+      }
+    },
+    "timeline.track.summary.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empty"
+          }
+        }
+      }
+    },
+    "timeline.track.summary.oneClip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 clip"
+          }
+        }
+      }
+    },
+    "timeline.trackLanes.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline track lanes"
+          }
+        }
+      }
+    },
+    "track.blend": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track Blend"
+          }
+        }
+      }
+    },
+    "track.blendMode.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track Blend Mode"
+          }
+        }
+      }
+    },
+    "track.compositing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track Compositing"
+          }
+        }
+      }
+    },
+    "track.compositing.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track Compositing Inspector"
+          }
+        }
+      }
+    },
+    "track.opacityPercent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacity %"
+          }
+        }
+      }
+    },
+    "track.opacityPercent.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track Opacity Percent"
+          }
+        }
+      }
+    },
+    "transform.blend": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blend"
+          }
+        }
+      }
+    },
+    "transform.blendMode.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blend Mode"
+          }
+        }
+      }
+    },
+    "transform.field.anchorX": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anchor X"
+          }
+        }
+      }
+    },
+    "transform.field.anchorY": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anchor Y"
+          }
+        }
+      }
+    },
+    "transform.field.cropBottom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop Bottom"
+          }
+        }
+      }
+    },
+    "transform.field.cropLeft": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop Left"
+          }
+        }
+      }
+    },
+    "transform.field.cropRight": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop Right"
+          }
+        }
+      }
+    },
+    "transform.field.cropTop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop Top"
+          }
+        }
+      }
+    },
+    "transform.field.opacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacity %"
+          }
+        }
+      }
+    },
+    "transform.field.positionX": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Position X"
+          }
+        }
+      }
+    },
+    "transform.field.positionY": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Position Y"
+          }
+        }
+      }
+    },
+    "transform.field.rotation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotation"
+          }
+        }
+      }
+    },
+    "transform.field.scaleX": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scale X %"
+          }
+        }
+      }
+    },
+    "transform.field.scaleY": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scale Y %"
+          }
+        }
+      }
+    },
+    "transform.flip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip"
+          }
+        }
+      }
+    },
+    "transform.flip.horizontal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip Horizontal"
+          }
+        }
+      }
+    },
+    "transform.flip.vertical": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flip Vertical"
+          }
+        }
+      }
+    },
+    "transform.handle.anchor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Anchor"
+          }
+        }
+      }
+    },
+    "transform.handle.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to adjust. Numeric fields are in the inspector."
+          }
+        }
+      }
+    },
+    "transform.handle.rotate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate Transform"
+          }
+        }
+      }
+    },
+    "transform.handle.scale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scale Transform"
+          }
+        }
+      }
+    },
+    "transform.keyframe.add.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add keyframe at playhead"
+          }
+        }
+      }
+    },
+    "transform.keyframe.delete.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete keyframe at playhead"
+          }
+        }
+      }
+    },
+    "transform.keyframeLanes.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transform keyframe lanes"
+          }
+        }
+      }
+    },
+    "transform.move.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Transform"
+          }
+        }
+      }
+    },
+    "transform.move.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to reposition the selected clip. Numeric fields are in the inspector."
+          }
+        }
+      }
+    },
+    "transform.overlay.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Program Transform Overlay"
+          }
+        }
+      }
+    },
+    "transform.param.anchor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anchor"
+          }
+        }
+      }
+    },
+    "transform.param.crop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crop"
+          }
+        }
+      }
+    },
+    "transform.param.opacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacity"
+          }
+        }
+      }
+    },
+    "transform.param.position": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Position"
+          }
+        }
+      }
+    },
+    "transform.param.rotation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotation"
+          }
+        }
+      }
+    },
+    "transform.param.scale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scale"
+          }
+        }
+      }
+    },
+    "transform.readout.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transform readout"
+          }
+        }
+      }
+    },
+    "transport.controls.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport controls"
+          }
+        }
+      }
+    },
+    "transport.pause": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        }
+      }
+    },
+    "transport.play": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play"
+          }
+        }
+      }
+    },
+    "transport.playhead.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playhead"
+          }
+        }
+      }
+    },
+    "transport.scrub.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrub playhead"
+          }
+        }
+      }
+    },
+    "transport.scrub.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adjusts the playhead frame. Left and Right arrows step one frame."
+          }
+        }
+      }
+    },
+    "transport.stepBackward": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step Backward"
+          }
+        }
+      }
+    },
+    "transport.stepForward": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step Forward"
+          }
+        }
+      }
+    },
+    "workspace.header.export": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export…"
+          }
+        }
+      }
+    },
+    "workspace.header.exports": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exports"
+          }
+        }
+      }
+    },
+    "workspace.header.exports.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show or hide the background export queue"
+          }
+        }
+      }
+    },
+    "workspace.header.hideExports": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Exports"
+          }
+        }
+      }
+    },
+    "workspace.header.hideQueue.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide export queue"
+          }
+        }
+      }
+    },
+    "workspace.header.showQueue.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show export queue"
+          }
+        }
+      }
+    },
+    "workspace.proxyToggle.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggles timeline playback between optimized proxy media and originals. Export always uses originals."
+          }
+        }
+      }
+    },
+    "workspace.proxyToggle.original": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        }
+      }
+    },
+    "workspace.proxyToggle.original.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback uses original media. Turn on for faster scrubbing of heavy media."
+          }
+        }
+      }
+    },
+    "workspace.proxyToggle.originalOn.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original playback on"
+          }
+        }
+      }
+    },
+    "workspace.proxyToggle.proxy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy"
+          }
+        }
+      }
+    },
+    "workspace.proxyToggle.proxy.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback uses proxy media when ready. Export always uses originals."
+          }
+        }
+      }
+    },
+    "workspace.proxyToggle.proxyOn.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy playback on"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

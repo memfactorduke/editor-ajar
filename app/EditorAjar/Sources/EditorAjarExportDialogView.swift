@@ -11,7 +11,7 @@ struct EditorAjarExportDialogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Export")
+            Text(AppString.localized("export.dialog.title", "Export"))
                 .font(.title2.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
 
@@ -33,30 +33,34 @@ struct EditorAjarExportDialogView: View {
                 Text(status)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("Export status: \(status)")
+                    .accessibilityLabel(
+                        AppString.localized("export.dialog.status.ax", "Export status: \(status)")
+                    )
             }
 
             HStack {
                 Spacer()
-                Button("Cancel") {
+                Button(AppString.localized("export.dialog.cancel", "Cancel")) {
                     model.dismissExportDialog()
                 }
                 .keyboardShortcut(.cancelAction)
-                .accessibilityLabel("Cancel export")
+                .accessibilityLabel(AppString.localized("export.dialog.cancel.ax", "Cancel export"))
                 .accessibilityIdentifier("Export Dialog Cancel")
 
-                Button("Validate") {
+                Button(AppString.localized("export.dialog.validate", "Validate")) {
                     _ = model.validateExportDialogSelection()
                 }
                 .keyboardShortcut(.defaultAction)
-                .accessibilityLabel("Validate export settings")
+                .accessibilityLabel(
+                    AppString.localized("export.dialog.validate.ax", "Validate export settings")
+                )
                 .accessibilityIdentifier("Export Dialog Validate")
             }
         }
         .padding(20)
         .frame(minWidth: 420)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Export dialog")
+        .accessibilityLabel(AppString.localized("export.dialog.ax", "Export dialog"))
         .accessibilityIdentifier("Export Dialog")
     }
 }
@@ -68,16 +72,16 @@ private struct ExportModePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Mode")
+            Text(AppString.localized("export.section.mode", "Mode"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Picker("Export mode", selection: modeBinding) {
+            Picker(AppString.localized("export.mode.ax", "Export mode"), selection: modeBinding) {
                 ForEach(EditorAjarExportMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
-            .accessibilityLabel("Export mode")
+            .accessibilityLabel(AppString.localized("export.mode.ax", "Export mode"))
             .accessibilityIdentifier("Export Mode Picker")
             .accessibilityValue(model.exportDialog.mode.displayName)
         }
@@ -96,15 +100,15 @@ private struct ExportPresetPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Preset")
+            Text(AppString.localized("export.section.preset", "Preset"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Picker("Export preset", selection: presetBinding) {
+            Picker(AppString.localized("export.preset.ax", "Export preset"), selection: presetBinding) {
                 ForEach(model.exportDialog.availablePresets) { preset in
                     Text(presetLabel(preset)).tag(Optional(preset.id))
                 }
             }
-            .accessibilityLabel("Export preset")
+            .accessibilityLabel(AppString.localized("export.preset.ax", "Export preset"))
             .accessibilityIdentifier("Export Preset Picker")
             .accessibilityValue(selectedPresetAccessibilityValue)
         }
@@ -114,13 +118,15 @@ private struct ExportPresetPicker: View {
         guard let id = model.exportDialog.selectedPresetID,
             let preset = model.exportDialog.availablePresets.first(where: { $0.id == id })
         else {
-            return "None"
+            return AppString.localized("export.preset.none", "None")
         }
         return presetLabel(preset)
     }
 
     private func presetLabel(_ preset: ExportPreset) -> String {
-        preset.isBuiltIn ? preset.name : "\(preset.name) (Custom)"
+        preset.isBuiltIn
+            ? preset.name
+            : AppString.localized("export.preset.custom", "\(preset.name) (Custom)")
     }
 
     private var presetBinding: Binding<UUID?> {
@@ -140,22 +146,24 @@ private struct ExportRangePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Range")
+            Text(AppString.localized("export.section.range", "Range"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Picker("Export range", selection: rangeBinding) {
+            Picker(AppString.localized("export.range.ax", "Export range"), selection: rangeBinding) {
                 ForEach(EditorAjarExportRangeChoice.allCases) { choice in
                     Text(choice.displayName).tag(choice)
                 }
             }
             .pickerStyle(.segmented)
-            .accessibilityLabel("Export range")
+            .accessibilityLabel(AppString.localized("export.range.ax", "Export range"))
             .accessibilityIdentifier("Export Range Picker")
             .accessibilityValue(model.exportDialog.rangeChoice.displayName)
             Text(model.timelineRangeDescription)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .accessibilityLabel("Timeline range: \(model.timelineRangeDescription)")
+                .accessibilityLabel(AppString.localized(
+                    "export.range.timeline.ax", "Timeline range: \(model.timelineRangeDescription)"
+                ))
         }
     }
 
@@ -172,16 +180,19 @@ private struct ExportStillFormatPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Still format")
+            Text(AppString.localized("export.section.stillFormat", "Still format"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Picker("Still format", selection: formatBinding) {
+            Picker(
+                AppString.localized("export.section.stillFormat", "Still format"),
+                selection: formatBinding
+            ) {
                 ForEach(EditorAjarStillFormatChoice.allCases) { format in
                     Text(format.displayName).tag(format)
                 }
             }
             .pickerStyle(.segmented)
-            .accessibilityLabel("Still frame format")
+            .accessibilityLabel(AppString.localized("export.stillFormat.ax", "Still frame format"))
             .accessibilityIdentifier("Export Still Format Picker")
             .accessibilityValue(model.exportDialog.stillFormat.displayName)
         }
@@ -200,16 +211,19 @@ private struct ExportAudioOnlyFormatPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Audio format")
+            Text(AppString.localized("export.section.audioFormat", "Audio format"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Picker("Audio-only format", selection: formatBinding) {
+            Picker(
+                AppString.localized("export.audioFormat.ax", "Audio-only format"),
+                selection: formatBinding
+            ) {
                 ForEach(EditorAjarAudioOnlyFormatChoice.allCases) { format in
                     Text(format.displayName).tag(format)
                 }
             }
             .pickerStyle(.segmented)
-            .accessibilityLabel("Audio-only format")
+            .accessibilityLabel(AppString.localized("export.audioFormat.ax", "Audio-only format"))
             .accessibilityIdentifier("Export Audio Format Picker")
             .accessibilityValue(model.exportDialog.audioOnlyFormat.displayName)
         }
