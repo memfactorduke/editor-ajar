@@ -193,7 +193,8 @@ public enum BenchmarkCommand {
     }
 
     private static func measureSingleFrameRenderSeek(projectURL: URL) async throws -> Double {
-        let project = try ProjectPackageIO.loadProject(from: projectURL)
+        // Bench reads only — higher-minor (read-only) packages are allowed.
+        let project = try ProjectPackageIO.loadProject(from: projectURL).project
         guard let sequence = project.sequences.first else {
             throw AjarCLIError.missingSequence
         }
@@ -222,13 +223,14 @@ public enum BenchmarkCommand {
 
     private static func measureProjectOpen(projectURL: URL) async throws -> Double {
         try await medianMilliseconds {
-            let project = try ProjectPackageIO.loadProject(from: projectURL)
+            let project = try ProjectPackageIO.loadProject(from: projectURL).project
             _ = project.mediaPool.count + project.sequences.count
         }
     }
 
     private static func measureMultiLayerTransformPlayback(projectURL: URL) async throws -> Double {
-        let project = try ProjectPackageIO.loadProject(from: projectURL)
+        // Bench reads only — higher-minor (read-only) packages are allowed.
+        let project = try ProjectPackageIO.loadProject(from: projectURL).project
         guard let sequence = multiLayerTransformSequence(in: project) else {
             throw AjarCLIError.missingSequence
         }

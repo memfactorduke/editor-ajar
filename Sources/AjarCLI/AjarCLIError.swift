@@ -14,6 +14,9 @@ public enum AjarCLIError: Error, Equatable, Sendable, CustomStringConvertible {
     /// A `.ajar` package did not contain a valid editable/read-only project.
     case projectLoadFailed(String)
 
+    /// A CLI write path refused to resave a read-only (higher-minor) project (FR-PROJ-005).
+    case projectWriteBlockedReadOnly(reason: AjarProjectReadOnlyReason)
+
     /// The project contains no sequence to render.
     case missingSequence
 
@@ -50,6 +53,8 @@ public enum AjarCLIError: Error, Equatable, Sendable, CustomStringConvertible {
             "missing file: \(path)"
         case .projectLoadFailed(let message):
             "project load failed: \(message)"
+        case .projectWriteBlockedReadOnly(let reason):
+            "project write refused (read-only): \(reason.message)"
         case .missingSequence:
             "project contains no sequences"
         case .missingMediaReference(let mediaID):

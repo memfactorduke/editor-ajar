@@ -27,7 +27,8 @@ final class BenchmarkDiskCacheFixture {
     let renderTime: RationalTime
 
     init(projectURL: URL, device: MTLDevice) async throws {
-        project = try ProjectPackageIO.loadProject(from: projectURL)
+        // Bench fixture reads only — higher-minor (read-only) packages are allowed.
+        project = try ProjectPackageIO.loadProject(from: projectURL).project
         guard let sequence = project.sequences.first else {
             throw AjarCLIError.missingSequence
         }

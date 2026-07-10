@@ -57,7 +57,8 @@ public struct RenderAudioResult: Equatable, Sendable {
 public enum RenderAudioCommand {
     /// Loads, mixes, and writes one exact audio range.
     public static func render(options: RenderAudioOptions) throws -> RenderAudioResult {
-        let project = try ProjectPackageIO.loadProject(from: options.projectURL)
+        // Render is non-destructive: higher-minor (read-only) projects are allowed.
+        let project = try ProjectPackageIO.loadProject(from: options.projectURL).project
         guard let sequence = project.sequences.first else {
             throw AjarCLIError.missingSequence
         }

@@ -126,7 +126,8 @@ public struct RenderFrameResult: Equatable, Sendable {
 public enum RenderFrameCommand {
     /// Loads, renders, reads back, and writes one PNG frame.
     public static func render(options: RenderFrameOptions) async throws -> RenderFrameResult {
-        let project = try ProjectPackageIO.loadProject(from: options.projectURL)
+        // Render is non-destructive: higher-minor (read-only) projects are allowed.
+        let project = try ProjectPackageIO.loadProject(from: options.projectURL).project
         guard let sequence = project.sequences.first else {
             throw AjarCLIError.missingSequence
         }
