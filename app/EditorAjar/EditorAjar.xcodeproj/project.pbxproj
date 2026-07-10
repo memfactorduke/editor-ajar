@@ -18,8 +18,10 @@
 		5FD25C168A644F1D7D7D373C /* ProgramMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */; };
 		63D76714CAA834902EE03BC5 /* CanvasTitleEditingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */; };
 		6653EE21E97F97F4A1337738 /* EditorAjarDisplayLinkDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */; };
+		76992C808148BFDD103AC033 /* ExportQueuePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1208F41DB2872AAFEB4908DE /* ExportQueuePanel.swift */; };
 		7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */; };
 		859809191F61E0E85C7B4D8E /* EditorAjarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */; };
+		A34A4BEDBC84D704C0891449 /* EditorAjarExportQueueController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E765A9F0A9CAED2B6A7198 /* EditorAjarExportQueueController.swift */; };
 		AB2A1C41DEC38DAA0002963C /* AjarAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A01CC1757C5405C05674F732 /* AjarAudio */; };
 		B93198D47AC9EF9B34D6FC7A /* EditorAjarPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */; };
 		D557662377F941720635621B /* EditorAjarExportPresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B397BCAB3E49B3E54D1706 /* EditorAjarExportPresetStore.swift */; };
@@ -27,6 +29,7 @@
 		E056E9938F510F165A587C82 /* EditorAjarRenderPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */; };
 		E06DD6EA42B16AF32C5F5EDA /* EditorAjarLiveAudioCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */; };
 		F6D10E1573E2C5428D7006DE /* EditorAjarExportDialogModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DAA8F76C2C44C8920890DB3 /* EditorAjarExportDialogModel.swift */; };
+		FF92728078D2828BEA1E8C21 /* EditorAjarExportQueueAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,7 +50,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		07E765A9F0A9CAED2B6A7198 /* EditorAjarExportQueueController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportQueueController.swift; sourceTree = "<group>"; };
 		0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarSampleProjectFactory.swift; sourceTree = "<group>"; };
+		1208F41DB2872AAFEB4908DE /* ExportQueuePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportQueuePanel.swift; sourceTree = "<group>"; };
 		15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarApp.swift; sourceTree = "<group>"; };
 		1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasTitleEditingOverlay.swift; sourceTree = "<group>"; };
 		1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDisplayLinkDriver.swift; sourceTree = "<group>"; };
@@ -60,12 +65,13 @@
 		88FEA85E5F58004FD8DD75BE /* EditorAjarExportDialogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportDialogView.swift; sourceTree = "<group>"; };
 		8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarRenderPipeline.swift; sourceTree = "<group>"; };
 		A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModelTests.swift; sourceTree = "<group>"; };
+		A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportQueueAppModelTests.swift; sourceTree = "<group>"; };
 		B7B397BCAB3E49B3E54D1706 /* EditorAjarExportPresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportPresetStore.swift; sourceTree = "<group>"; };
 		D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramMetalView.swift; sourceTree = "<group>"; };
 		DAF934E19339DC9EEF4DB2EE /* EditorAjarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarPlaybackController.swift; sourceTree = "<group>"; };
-		EC3BBF3F9D04E0AC6094E018 /* editor-ajar-wt-215 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar-wt-215"; path = ../..; sourceTree = SOURCE_ROOT; };
 		F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModel.swift; sourceTree = "<group>"; };
+		F96850E69751346CC17DAE1D /* editor-ajar-wt-216 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar"; path = ../..; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +94,7 @@
 			isa = PBXGroup;
 			children = (
 				A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */,
+				A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -123,11 +130,13 @@
 				7DAA8F76C2C44C8920890DB3 /* EditorAjarExportDialogModel.swift */,
 				88FEA85E5F58004FD8DD75BE /* EditorAjarExportDialogView.swift */,
 				B7B397BCAB3E49B3E54D1706 /* EditorAjarExportPresetStore.swift */,
+				07E765A9F0A9CAED2B6A7198 /* EditorAjarExportQueueController.swift */,
 				4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */,
 				E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */,
 				8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */,
 				0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */,
 				7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */,
+				1208F41DB2872AAFEB4908DE /* ExportQueuePanel.swift */,
 				D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */,
 			);
 			path = Sources;
@@ -136,7 +145,7 @@
 		E2F1B1AE384DA4CD60EEA89F /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				EC3BBF3F9D04E0AC6094E018 /* editor-ajar-wt-215 */,
+				F96850E69751346CC17DAE1D /* editor-ajar-wt-216 */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -268,11 +277,13 @@
 				F6D10E1573E2C5428D7006DE /* EditorAjarExportDialogModel.swift in Sources */,
 				3D7AF3B32C664C68DFEDD2D5 /* EditorAjarExportDialogView.swift in Sources */,
 				D557662377F941720635621B /* EditorAjarExportPresetStore.swift in Sources */,
+				A34A4BEDBC84D704C0891449 /* EditorAjarExportQueueController.swift in Sources */,
 				E06DD6EA42B16AF32C5F5EDA /* EditorAjarLiveAudioCoordinator.swift in Sources */,
 				B93198D47AC9EF9B34D6FC7A /* EditorAjarPlaybackController.swift in Sources */,
 				E056E9938F510F165A587C82 /* EditorAjarRenderPipeline.swift in Sources */,
 				7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */,
 				27AC5FC45DA5EF355A9DB6A4 /* EditorAjarWorkspaceView.swift in Sources */,
+				76992C808148BFDD103AC033 /* ExportQueuePanel.swift in Sources */,
 				5FD25C168A644F1D7D7D373C /* ProgramMetalView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -290,6 +301,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5F81FCEB82A63EC85F3996A6 /* EditorAjarAppModelTests.swift in Sources */,
+				FF92728078D2828BEA1E8C21 /* EditorAjarExportQueueAppModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

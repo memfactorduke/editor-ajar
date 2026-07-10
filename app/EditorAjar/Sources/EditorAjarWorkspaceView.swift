@@ -30,6 +30,14 @@ struct EditorAjarWorkspaceView: View {
             Divider()
             TimelineView(model: model)
                 .frame(height: 250)
+            if model.isExportQueuePanelVisible {
+                Divider()
+                ExportQueuePanel(
+                    model: model,
+                    controller: model.exportQueueController
+                )
+                .frame(height: 180)
+            }
         }
         .background(Color(red: 0.10, green: 0.10, blue: 0.11))
         .foregroundStyle(.white)
@@ -65,6 +73,18 @@ struct EditorAjarWorkspaceView: View {
             .keyboardShortcut("e", modifiers: [.command, .shift])
             .accessibilityLabel("Open export dialog")
             .accessibilityIdentifier("Open Export Dialog")
+            Button(model.isExportQueuePanelVisible ? "Hide Exports" : "Exports") {
+                model.toggleExportQueuePanel()
+            }
+            .buttonStyle(.bordered)
+            .keyboardShortcut("e", modifiers: [.command, .control])
+            .help("Show or hide the background export queue")
+            .accessibilityLabel(
+                model.isExportQueuePanelVisible
+                    ? "Hide export queue"
+                    : "Show export queue"
+            )
+            .accessibilityIdentifier("Toggle Export Queue")
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
