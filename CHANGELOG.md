@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- NFR-A11Y-001 full accessibility audit + keyboard control (#219): every interactive app
+  surface (workspace chrome, sequence tabs, transport, timeline, canvas title overlays,
+  inspector, export dialog, export queue, read-only banner) carries VoiceOver labels/values
+  and stable identifiers; transport/edit basics gain documented shortcuts (including
+  `⌘=`/`⌘-` timeline zoom and `⌥⌘G` safe-area guides). Living checklist in
+  `docs/ACCESSIBILITY.md` (per-surface tables + tab order). Durable CI regression net:
+  `EditorAjarAccessibilityTreeTests` launches the app and **read-only** walks interactive
+  AX roles, failing with identifier + role + frame for any empty label. Canvas edit/nudge
+  XCUITests remain local-only (#210) with expanded rationale; guides toggle stays on CI.
 - FR-EXP-007 export determinism + golden round-trip (#214): `ajar golden-export` harness exports a
   small title fixture through `ExportSession`, decodes containers, and compares to the render-path
   delivery BGRA with codec bands (ProRes near-lossless must pass on CI; H.264/HEVC lossy +

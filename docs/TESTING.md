@@ -19,7 +19,7 @@ watching every diff. If it's not tested, it's not done.
 | **Fuzz** | importers + project loader against malformed/truncated input (NFR-STAB-006) | nightly + corpus on PR | min |
 | **Soak** | seeded edit+render loop for leaks/stability, §8 (NFR-STAB-005) | short: every PR · full 1-hour: pre-release | ~3 min / 1 h |
 | **Sanitizers** | Thread + Address Sanitizer on unit/integration (NFR-STAB-004) | every PR | min |
-| **UI smoke** | app launches, opens a project, plays, exports (XCUITest, minimal) | every PR | min |
+| **UI smoke** | app launches, opens a project, plays; **AX tree walk** asserts every interactive role has a VoiceOver label (NFR-A11Y-001); canvas edit/nudge smokes are local-only (#210) | every PR | min |
 
 ## 2. Golden-frame testing (the core visual gate)
 

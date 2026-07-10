@@ -44,34 +44,40 @@ struct EditorAjarApp: App {
                     model.addSequence()
                 }
                 .keyboardShortcut("n", modifiers: [.command])
+                .accessibilityLabel("New Sequence")
 
                 Button("Close Sequence") {
                     model.closeActiveSequence()
                 }
                 .keyboardShortcut("w", modifiers: [.command])
                 .disabled(!model.canCloseActiveSequence)
+                .accessibilityLabel("Close Sequence")
             }
             CommandMenu("Markers") {
                 Button("Add Marker") {
                     model.addTimelineMarkerAtPlayhead()
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
+                .accessibilityLabel("Add Marker")
 
                 Button("Previous Marker") {
                     model.jumpToPreviousMarker()
                 }
                 .keyboardShortcut("[", modifiers: [.command])
+                .accessibilityLabel("Previous Marker")
 
                 Button("Next Marker") {
                     model.jumpToNextMarker()
                 }
                 .keyboardShortcut("]", modifiers: [.command])
+                .accessibilityLabel("Next Marker")
 
                 Button("Delete Marker") {
                     model.deleteSelectedMarker()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
                 .disabled(model.selectedMarker == nil)
+                .accessibilityLabel("Delete Marker")
             }
             CommandMenu("Clip") {
                 Button("Copy Grade") {
@@ -114,6 +120,7 @@ struct EditorAjarApp: App {
                     model.detachAudioForSelectedClip()
                 }
                 .disabled(!model.selectedClipIsLinked)
+                .accessibilityLabel("Detach Audio from Selected Clip")
             }
             // FR-TXT-003: menu/keyboard paths for headless UI-smoke (same pattern as Undo).
             CommandMenu("Title") {

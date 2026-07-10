@@ -53,7 +53,10 @@ CI) skips flaky canvas edit/nudge cases (#210) but keeps the safe-area guides to
 - Step backward / step forward buttons: move one frame, render that frame, and pause playback.
 - Scrub slider: moves the playhead to the selected frame and renders it (FR-PLAY-003).
 - Keyboard: space toggles play/pause; left/right arrows step by one frame.
-- Accessibility: transport controls and panels are VoiceOver-labelled for NFR-A11Y-001.
+- Accessibility: all interactive controls are VoiceOver-labelled for NFR-A11Y-001. See
+  `docs/ACCESSIBILITY.md` for the living surface → control → shortcut → AX label checklist.
+  CI runs a read-only accessibility-tree walk (`EditorAjarAccessibilityTreeTests`) that
+  fails if any launch-visible interactive role lacks a label.
 
 ## Canvas title controls (FR-TXT-003)
 
