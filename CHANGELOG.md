@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- NFR-I18N-001 localization readiness / string externalization (#220): every user-visible string in
+  the app target (workspace chrome, sequence tabs, transport, timeline + track controls, canvas
+  title overlays + safe-area guides, inspector, marker/transform inspectors, export dialog, export
+  queue, read-only banner, menus, and status copy) now resolves through a central `AppString`
+  catalog accessor backed by a base-English **String Catalog** (`app/EditorAjar/Sources/
+  Localizable.xcstrings`) with stable, per-surface keys (e.g. `workspace.header.export`,
+  `exportQueue.panel.ax`). Accessibility **identifiers stay non-localized literals** — where a
+  control previously used one string for both its label and its identifier
+  (`TimelineToolButton`, `TrackStateButton`, transform handles, transform fields/params), the
+  identifier is now a separate English literal so `EditorAjarAccessibilityTreeTests`, the UI-smoke
+  suite, and canvas tests keep querying stable identifiers while the spoken/visible text localizes.
+  A report-only CI guard (`scripts/check-hardcoded-strings.sh`, wired into the lint job with
+  `continue-on-error`) flags newly-added un-externalized copy. New `EditorAjarLocalizationTests`
+  cover catalog presence, representative key resolution, key-echo fall-through, and the core→app
+  mapping.
+- Core purity boundary for user-facing copy (NFR-I18N-001, ADR-0005/0011): `AjarCore` stays
+  platform-pure and returns **typed values**; the app maps them to catalog keys in
+  `AppString` (e.g. `AjarProjectReadOnlyReason.newerSchemaMinor` → localized banner/refusal copy)
+  rather than adding any localization machinery to the core. **CLI output stays developer-facing
+  English by design**: `AjarCLIError` continues to use `AjarProjectReadOnlyReason.message` (the
+  core's English string), and transient app diagnostics that embed raw `\(error)` dumps
+  (autosave/recovery/render failures) are intentionally left un-localized. Format acronyms
+  (PNG/JPEG/WAV/M4A) and persisted default document names (`Sequence N`, `Look N`) are document
+  data, not UI chrome, and are likewise left as-is.
 - FR-MED-004 proxy / optimized media pipeline (#217): **working** end-to-end app path — background
   ProRes 422 Proxy generation on a dedicated `ProxyGenerationQueue` (does not block user
   `ExportQueue` encodes) driven from playback when proxies are missing/stale, package-relative
