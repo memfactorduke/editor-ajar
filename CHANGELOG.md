@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc1] - 2026-07-10
+
 ### Added
 - test(EXIT): TSan CI gate, fatalError lint, P3 round-trip, export/proxy throughput benchmarks
   (NFR-STAB-003/004, NFR-QUAL-002, NFR-PERF-008/011) — M9 exit-gate hardening (#221). The

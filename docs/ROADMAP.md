@@ -117,7 +117,7 @@ styled-title metric, and typical-stack 1080p30 benchmark coverage. Titles, anima
 transitions, the core effects stack/library, curves, LUTs, and reusable looks now satisfy the M8
 deliverables and exit gates.
 
-## M9 — Delivery, proxies & 1.0 hardening *(started)*
+## M9 — Delivery, proxies & 1.0 hardening *(complete — v1.0.0-rc1)*
 
 **Goal:** ship-quality export and the full performance/stability bar.
 **Delivers:** export H.264/HEVC/ProRes via hardware encode, presets, ranges, stills, audio-only
@@ -128,11 +128,15 @@ toggle (FR-MED-004); relink/consolidate polish (FR-MED-007/008); full accessibil
 the reference machine; crash-free + soak targets met; release candidate.
 **Depends on:** all prior.
 
-**Current status:** M9 started with #213 / ADR-0019: the new `AjarExport` module implements the
-FR-EXP-001/002 engine, typed settings, deterministic sequential render-graph pulls, offline-mixed
-audio, color-tagged H.264/HEVC/ProRes output, and an atomic cancel-safe session lifecycle. Presets,
-range-selection UI/stills/audio-only, the FR-EXP-005 queue, proxies, and the remaining 1.0
-hardening stay in later M9 slices.
+**Current status: COMPLETE (2026-07-10, v1.0.0-rc1).** All M9 deliverables landed: export engine +
+ADR-0019 (#213), presets/ranges/stills/audio-only (#215), background export queue (#216),
+determinism/export-golden CI gate incl. a render-cache aliasing fix it flushed out (#214), proxy
+pipeline with tier-safe caching (#217), relink/offline/consolidate (#218), accessibility audit +
+AX-tree CI net (#219, resolves #210), string externalization (#220), and exit hardening (#230:
+TSan CI gate, fatalError lint, P3 round-trip, export 3.07x / proxy-gen 21.6x throughput
+benchmarks). NFR §5 audit, acceptance evidence (1-hour soak: 20,069 iterations, +3.5 MiB), and
+accepted-posture notes are recorded on #221. Reference-machine benchmark gating remains deferred
+per PERFORMANCE.md §4 (CI benchmarks stay report-only).
 
 ---
 
