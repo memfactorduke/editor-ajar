@@ -10,12 +10,14 @@ import simd
 ///
 /// Missing or failed pipelines surface as typed `MetalRenderError` values — never traps.
 final class MetalClipEffectStackRegistry {
-    private let device: MTLDevice
+    let device: MTLDevice
     private let library: MTLLibrary
     private var pipelineStates: [String: MTLRenderPipelineState] = [:]
     /// GPU LUT textures keyed by ``CubeLUTTable/contentDigest``.
     private var lutTextureCache: [String: MTLTexture] = [:]
-    private let lock = NSLock()
+    /// GPU curves ramp textures keyed by ``ClipCurvesEffectParameters/rampContentDigest``.
+    var curvesRampTextureCache: [String: MTLTexture] = [:]
+    let lock = NSLock()
 
     init(device: MTLDevice, library: MTLLibrary) {
         self.device = device
@@ -162,6 +164,8 @@ final class MetalClipEffectStackRegistry {
             return "ajar_posterize_fragment"
         case .invert:
             return "ajar_invert_fragment"
+        case .curves:
+            return "ajar_curves_fragment"
         }
     }
     // swiftlint:enable cyclomatic_complexity
@@ -368,7 +372,33 @@ enum MetalClipEffectStackEncoder {
             return try applyPosterize(parameters, to: sourceTexture, context: context)
         case .invert:
             return try applyInvert(to: sourceTexture, context: context)
+        case .curves(let parameters):
+            return try applyCurves(parameters, to: sourceTexture, context: context)
         }
+    }
+
+    private static func applyCurves(
+        _ parameters: ClipCurvesEffectParameters,
+        to sourceTexture: MTLTexture,
+        context: MetalEffectEncodeContext
+    ) throws -> (texture: MTLTexture, intermediates: [MTLTexture]) {
+        let strength = clamp01(Float(parameters.strength.doubleValue))
+        // Strength 0 or structural identity → bit-identical passthrough (no GPU pass).
+        guard strength > 0.001, !parameters.isStructuralIdentityCurves else {
+            return (sourceTexture, [])
+        }
+        // Invalid curves: skip rather than trap (NFR-STAB-003).
+        for curve in [parameters.rgb, parameters.red, parameters.green, parameters.blue] {
+            if case .failure = curve.validated() {
+                return (sourceTexture, [])
+            }
+        }
+        return try encodeCurves(
+            parameters: parameters,
+            strength: strength,
+            to: sourceTexture,
+            context: context
+        )
     }
 
     private static func applyLUT(

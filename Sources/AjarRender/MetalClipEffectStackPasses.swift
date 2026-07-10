@@ -153,6 +153,37 @@ extension MetalClipEffectStackEncoder {
         return (output, blurred.intermediates + [output])
     }
 
+    /// FR-COL-002: apply color curves via registry fragment + digest-cached ramp texture.
+    static func encodeCurves(
+        parameters: ClipCurvesEffectParameters,
+        strength: Float,
+        to sourceTexture: MTLTexture,
+        context: MetalEffectEncodeContext
+    ) throws -> (texture: MTLTexture, intermediates: [MTLTexture]) {
+        let output = try context.makeTexture(
+            sourceTexture.pixelFormat,
+            sourceTexture.width,
+            sourceTexture.height
+        )
+        let fragmentName = try context.registry.fragmentFunctionName(for: .curves)
+        let pipeline = try context.registry.pipelineState(
+            fragmentFunctionName: fragmentName,
+            pixelFormat: output.pixelFormat
+        )
+        let rampTexture = try context.registry.curvesRampTexture(for: parameters)
+        try encodeFullscreen(
+            pipeline: pipeline,
+            destination: output,
+            textures: [sourceTexture, rampTexture],
+            uniformBytes: MetalEffectUniformLayout.packCurves(
+                strength: strength,
+                rampSize: Float(ColorCurveLimits.rampSampleCount)
+            ),
+            context: context
+        )
+        return (output, [output])
+    }
+
     /// FR-COL-004: apply one LUT node via registry fragment + digest-cached LUT texture.
     static func encodeLUT(
         table: CubeLUTTable,

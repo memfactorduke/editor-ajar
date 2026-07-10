@@ -90,4 +90,20 @@ extension MetalRenderExecutor {
             ).texture
         }
     }
+
+    /// Kernel-level FR-COL-002 curves hook with a prebuilt parameter payload (tests only).
+    func encodeCurvesKernelForTests(
+        parameters: ClipCurvesEffectParameters,
+        strength: Float,
+        source: MTLTexture
+    ) throws -> [UInt8] {
+        try runEffectKernelForTests(source: source) { context in
+            try MetalClipEffectStackEncoder.encodeCurves(
+                parameters: parameters,
+                strength: strength,
+                to: source,
+                context: context
+            ).texture
+        }
+    }
 }

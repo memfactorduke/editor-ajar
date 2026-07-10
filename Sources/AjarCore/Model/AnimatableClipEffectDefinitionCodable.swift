@@ -54,9 +54,24 @@ extension AnimatableClipEffectDefinition {
                 forKey: .parameters
             )
             self = .lut(parameters)
-        case .vignette, .mirror, .mosaic, .colorAdjust, .posterize, .invert:
-            self = try Self.decodeBatch2(kind: kind, from: container)
+        case .curves, .vignette, .mirror, .mosaic, .colorAdjust, .posterize, .invert:
+            self = try Self.decodeBatch2OrCurves(kind: kind, from: container)
         }
+    }
+
+    private static func decodeBatch2OrCurves(
+        kind: ClipEffectKind,
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> AnimatableClipEffectDefinition {
+        if kind == .curves {
+            return .curves(
+                try container.decodeIfPresent(
+                    AnimatableClipCurvesSettings.self,
+                    forKey: .parameters
+                ) ?? .identity
+            )
+        }
+        return try decodeBatch2(kind: kind, from: container)
     }
 
     private static func decodeBatch2(
@@ -142,6 +157,8 @@ extension AnimatableClipEffectDefinition {
         case .posterize(let parameters):
             try container.encode(parameters, forKey: .parameters)
         case .invert(let parameters):
+            try container.encode(parameters, forKey: .parameters)
+        case .curves(let parameters):
             try container.encode(parameters, forKey: .parameters)
         }
     }

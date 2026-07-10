@@ -43,6 +43,13 @@ extension ClipEffectDefinition {
         case .lut:
             let parameters = try container.decode(ClipLUTEffectParameters.self, forKey: .parameters)
             self = .lut(parameters)
+        case .curves:
+            self = .curves(
+                try container.decodeIfPresent(
+                    ClipCurvesEffectParameters.self,
+                    forKey: .parameters
+                ) ?? .identity
+            )
         case .vignette, .mirror, .mosaic, .colorAdjust, .posterize, .invert:
             self = try Self.decodeBatch2(kind: kind, from: container)
         }
@@ -119,6 +126,8 @@ extension ClipEffectDefinition {
         case .posterize(let parameters):
             try container.encode(parameters, forKey: .parameters)
         case .invert(let parameters):
+            try container.encode(parameters, forKey: .parameters)
+        case .curves(let parameters):
             try container.encode(parameters, forKey: .parameters)
         }
     }

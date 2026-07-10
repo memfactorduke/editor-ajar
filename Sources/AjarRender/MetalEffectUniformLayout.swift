@@ -266,8 +266,19 @@ extension MetalEffectUniformLayout {
         ]
     )
 
-    /// Every distinct FR-FX-002 / FR-COL-004 / FR-FX-001 uniform block
-    /// (batch 1, LUT, batch 2, and video transition).
+    /// FR-COL-002 color curves (strength; 256-entry RGBA ramp at texture(1)).
+    public static let curves = MetalEffectUniformLayout(
+        mslTypeName: "AjarCurvesUniforms",
+        fields: [
+            MetalEffectUniformField(name: "strength", kind: .float),
+            MetalEffectUniformField(name: "rampSize", kind: .float),
+            MetalEffectUniformField(name: "padding0", kind: .float),
+            MetalEffectUniformField(name: "padding1", kind: .float)
+        ]
+    )
+
+    /// Every distinct FR-FX-002 / FR-COL-004 / FR-COL-002 / FR-FX-001 uniform block
+    /// (batch 1, LUT, batch 2, curves, and video transition).
     public static let all: [MetalEffectUniformLayout] = [
         .separableBlur,
         .zoomBlur,
@@ -280,6 +291,7 @@ extension MetalEffectUniformLayout {
         .colorAdjust,
         .posterize,
         .invert,
+        .curves,
         .videoTransition
     ]
 
@@ -369,6 +381,16 @@ extension MetalEffectUniformLayout {
             .float(directionCode),
             .float(0),
             .float4(dipColor)
+        ])
+    }
+
+    /// Packs FR-COL-002 curves uniforms in layout order.
+    public static func packCurves(strength: Float, rampSize: Float) -> [UInt8] {
+        curves.pack(valuesInOrder: [
+            .float(strength),
+            .float(rampSize),
+            .float(0),
+            .float(0)
         ])
     }
 }

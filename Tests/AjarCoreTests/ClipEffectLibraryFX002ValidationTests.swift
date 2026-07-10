@@ -71,10 +71,12 @@ final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
         }
     }
 
-    func testFRFX002SchemaMinorIsSixAfterTransitionsAndBatch2() {
+    func testFRFX002SchemaMinorIsEightAfterCurves() {
         // 2 = FR-FX-002 batch 1; 3 = FR-COL-004 lut; 4 = FR-TXT-002 styling;
-        // 5 = FR-FX-002 batch 2; 6 = FR-FX-001 video transitions (#183).
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 7)
+        // 5 = FR-FX-002 batch 2; 6 = FR-FX-001 video transitions (#183);
+        // 7 = FR-TXT-004 title revealFraction / presets (#186);
+        // 8 = FR-COL-002 curves (#189; renumbered after #186 claimed 7).
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 8)
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 2)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.gaussianBlur))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.boxBlur))
@@ -88,8 +90,9 @@ final class ClipEffectLibraryFX002ValidationTests: XCTestCase {
         XCTAssertTrue(ClipEffectKind.allCases.contains(.colorAdjust))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.posterize))
         XCTAssertTrue(ClipEffectKind.allCases.contains(.invert))
-        // placeholder + batch1 (5) + lut + batch2 (6) = 13
-        XCTAssertEqual(ClipEffectKind.allCases.count, 13)
+        XCTAssertTrue(ClipEffectKind.allCases.contains(.curves))
+        // placeholder + batch1 (5) + lut + batch2 (6) + curves = 14
+        XCTAssertEqual(ClipEffectKind.allCases.count, 14)
     }
 
     func testFRFX002StaticAnimationParityCoversLibraryKinds() throws {

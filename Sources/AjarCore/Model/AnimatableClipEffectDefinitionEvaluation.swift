@@ -31,6 +31,8 @@ extension AnimatableClipEffectDefinition {
             .posterize(parameters.value(at: time))
         case .invert(let parameters):
             .invert(parameters.value(at: time))
+        case .curves(let parameters):
+            .curves(parameters.value(at: time))
         }
     }
     // swiftlint:enable cyclomatic_complexity
@@ -64,6 +66,8 @@ extension AnimatableClipEffectDefinition {
             .posterize(parameters.baseParameters)
         case .invert(let parameters):
             .invert(parameters.baseParameters)
+        case .curves(let parameters):
+            .curves(parameters.baseParameters)
         }
     }
 }

@@ -20,7 +20,7 @@ final class AjarProjectVideoTransitionCodecTests: XCTestCase {
             )
         )
         XCTAssertEqual(loaded.schemaMinor, AjarProjectCodec.currentSchemaMinor)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 7)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 8)
         let outgoing = try videoTransitionTrackClip(
             VideoTransitionFixtureID.outgoingClip(),
             in: loaded

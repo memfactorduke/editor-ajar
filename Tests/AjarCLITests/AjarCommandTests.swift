@@ -265,6 +265,7 @@ final class AjarCommandTests: XCTestCase {
             "effect-node-color-adjust-1080p-fr-fx-002": "FR-FX-002",
             "effect-node-posterize-1080p-fr-fx-002": "FR-FX-002",
             "effect-node-invert-1080p-fr-fx-002": "FR-FX-002",
+            "effect-node-curves-gpu-fr-col-002": "FR-COL-002",
             "transition-cross-dissolve-1080p-fr-fx-001": "FR-FX-001",
             "transition-dip-fade-1080p-fr-fx-001": "FR-FX-001",
             "transition-push-slide-1080p-fr-fx-001": "FR-FX-001",

@@ -305,7 +305,7 @@ final class ClipLUTEffectTests: XCTestCase {
         // ADR-0018: LUT gate is minor 3. Current build is 6 after FR-TXT-002 (4),
         // FR-FX-002 batch 2 (5), and FR-FX-001 transitions (6).
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 3)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 7)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 8)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.lut))
     }
 }

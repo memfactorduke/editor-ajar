@@ -79,6 +79,29 @@ extension AnimatableClipEffectDefinition {
             )
         case .invert(let parameters):
             return (.invert(parameters), .invert(parameters))
+        case .curves(let parameters):
+            // Curves constant; only strength keyframes blade (FR-COL-002 M8).
+            let strength = try parameters.strength.bladed(at: cut)
+            return (
+                .curves(
+                    AnimatableClipCurvesSettings(
+                        rgb: parameters.rgb,
+                        red: parameters.red,
+                        green: parameters.green,
+                        blue: parameters.blue,
+                        strength: strength.left
+                    )
+                ),
+                .curves(
+                    AnimatableClipCurvesSettings(
+                        rgb: parameters.rgb,
+                        red: parameters.red,
+                        green: parameters.green,
+                        blue: parameters.blue,
+                        strength: strength.right
+                    )
+                )
+            )
         }
     }
 

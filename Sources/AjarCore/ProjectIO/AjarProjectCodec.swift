@@ -178,7 +178,9 @@ public enum AjarProjectCodec {
     /// - `6`: FR-FX-001 video transitions (`leadingTransition` / `trailingTransition` on
     ///   `Clip`, ADR-0016 §5 / #183).
     /// - `7`: FR-TXT-004 title `revealFraction` keyframable typewriter reveal (#186).
-    public static let currentSchemaMinor = 7
+    /// - `8`: `ClipEffectKind.curves` (FR-COL-002 RGB master + R/G/B, #189). Minor 7 was
+    ///   claimed by #186 title presets; this branch renumbered from the 7/8 race.
+    public static let currentSchemaMinor = 8
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

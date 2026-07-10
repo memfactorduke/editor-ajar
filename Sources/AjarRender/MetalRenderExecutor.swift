@@ -489,6 +489,7 @@ public final class MetalRenderExecutor {
             shaderSource
             + MetalClipEffectStackShaders.source
             + MetalClipEffectBatch2Shaders.source
+            + MetalClipEffectCurvesShaders.source
             + MetalVideoTransitionShaders.source
         let fingerprint = ContentHash.sha256(data: Data(combinedSource.utf8)).digest
         let key = "\(ObjectIdentifier(device as AnyObject))-\(fingerprint)"

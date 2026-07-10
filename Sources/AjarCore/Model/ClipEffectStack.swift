@@ -392,6 +392,12 @@ public enum ClipEffectStackValidationError: Equatable, Sendable {
     /// Posterize levels are outside 2...256.
     case posterizeLevelsOutOfRange(RationalValue)
 
+    /// A curves strength is outside the normalized 0...1 range (FR-COL-002).
+    case curvesStrengthOutOfRange(RationalValue)
+
+    /// One of the RGB/master curves failed validation (FR-COL-002).
+    case curvesInvalid(channel: ColorCurveChannel, error: ColorCurveValidationError)
+
     /// A set-parameter edit changed the node's kind.
     case effectNodeKindMismatch(
         nodeID: UUID,

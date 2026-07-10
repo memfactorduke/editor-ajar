@@ -69,6 +69,8 @@ enum ClipEffectStackValidator {
             ClipEffectBatch2Validator.appendPosterizeErrors(parameters, to: &errors)
         case .invert:
             break
+        case .curves(let parameters):
+            ClipCurvesValidator.appendErrors(parameters, to: &errors)
         }
     }
 
@@ -104,6 +106,8 @@ enum ClipEffectStackValidator {
             ClipEffectBatch2Validator.appendAnimatablePosterizeErrors(parameters, to: &errors)
         case .invert:
             break
+        case .curves(let parameters):
+            ClipCurvesValidator.appendAnimatableErrors(parameters, to: &errors)
         }
     }
 

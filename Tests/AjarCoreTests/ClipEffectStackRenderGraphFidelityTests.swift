@@ -74,7 +74,22 @@ private struct KindDefinition {
 }
 
 private func nonIdentityDefinitionsByKind() throws -> [KindDefinition] {
-    try batch1DefinitionsByKind() + batch2DefinitionsByKind()
+    try batch1DefinitionsByKind() + batch2DefinitionsByKind() + curvesDefinitionsByKind()
+}
+
+private func curvesDefinitionsByKind() throws -> [KindDefinition] {
+    [
+        KindDefinition(
+            kind: .curves,
+            definition: .curves(
+                ClipCurvesEffectParameters(
+                    rgb: .rgbSCurve,
+                    red: .redLift,
+                    strength: .one
+                )
+            )
+        )
+    ]
 }
 
 private func batch1DefinitionsByKind() throws -> [KindDefinition] {

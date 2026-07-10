@@ -54,8 +54,8 @@ final class MetalEffectUniformLayoutTests: XCTestCase {
             XCTAssertGreaterThan(layout.byteCount, 0, layout.mslTypeName)
             XCTAssertEqual(layout.fieldByteOffsets.count, layout.fields.count)
         }
-        // batch1 (4 unique) + lut + batch2 (6) + videoTransition = 12
-        XCTAssertEqual(MetalEffectUniformLayout.all.count, 12)
+        // batch1 (4 unique) + lut + batch2 (6) + curves + videoTransition = 13
+        XCTAssertEqual(MetalEffectUniformLayout.all.count, 13)
     }
 
     func testFRFX002Batch2LayoutsAndPackHelpersUseGeneratedFieldOrder() {
