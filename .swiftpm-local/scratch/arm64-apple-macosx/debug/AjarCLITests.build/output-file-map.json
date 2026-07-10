@@ -1,0 +1,54 @@
+{
+  "": {
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/primary.swiftdeps"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarCLITests/AjarCommandTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/AjarCommandTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/AjarCommandTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/AjarCommandTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/AjarCommandTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/AjarCommandTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarCLITests/BenchmarkEffectNodeBatch2Tests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkEffectNodeBatch2Tests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkEffectNodeBatch2Tests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkEffectNodeBatch2Tests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkEffectNodeBatch2Tests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkEffectNodeBatch2Tests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarCLITests/BenchmarkRetimeCommandTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkRetimeCommandTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkRetimeCommandTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkRetimeCommandTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkRetimeCommandTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/BenchmarkRetimeCommandTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarCLITests/FrameBlendRenderCommandTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/FrameBlendRenderCommandTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/FrameBlendRenderCommandTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/FrameBlendRenderCommandTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/FrameBlendRenderCommandTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/FrameBlendRenderCommandTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarCLITests/GoldenFixtureManifestDecodeTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/GoldenFixtureManifestDecodeTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/GoldenFixtureManifestDecodeTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/GoldenFixtureManifestDecodeTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/GoldenFixtureManifestDecodeTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/GoldenFixtureManifestDecodeTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarCLITests/SoakCommandTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SoakCommandTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SoakCommandTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SoakCommandTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SoakCommandTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SoakCommandTests.dia"
+  },
+  "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/Tests/AjarCLITests/SyntheticCheckerboardPatternTests.swift": {
+    "dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SyntheticCheckerboardPatternTests.d",
+    "object": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SyntheticCheckerboardPatternTests.swift.o",
+    "swiftmodule": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SyntheticCheckerboardPatternTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SyntheticCheckerboardPatternTests.swiftdeps",
+    "diagnostics": "/Users/memfactor/Desktop/misc_repos/editor-ajar-wt-186/.swiftpm-local/scratch/arm64-apple-macosx/debug/AjarCLITests.build/SyntheticCheckerboardPatternTests.dia"
+  }
+}

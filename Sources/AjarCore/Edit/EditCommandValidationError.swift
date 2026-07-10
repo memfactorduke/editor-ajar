@@ -235,4 +235,14 @@ public enum EditCommandValidationError: Equatable, Sendable {
 
     /// A title text box edit referenced a missing box ID.
     case titleTextBoxNotFound(clipID: UUID, boxID: UUID)
+
+    /// Title animation preset duration must be strictly positive (FR-TXT-004).
+    case titleAnimationPresetNonPositiveDuration(clipID: UUID, duration: RationalTime)
+
+    /// Title animation preset duration exceeds the clip's timeline duration (FR-TXT-004).
+    case titleAnimationPresetDurationExceedsClip(
+        clipID: UUID,
+        duration: RationalTime,
+        clipDuration: RationalTime
+    )
 }

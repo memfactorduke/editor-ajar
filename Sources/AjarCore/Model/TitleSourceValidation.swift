@@ -5,6 +5,14 @@ import Foundation
 extension TitleSource {
     /// Returns the first typed validation error, or `nil` when the source is valid.
     public func validate() -> TitleSourceValidationError? {
+        if let error = revealFractionError(revealFraction.base) {
+            return error
+        }
+        for keyframe in revealFraction.keyframes {
+            if let error = revealFractionError(keyframe.value) {
+                return error
+            }
+        }
         var seenIDs = Set<UUID>()
         for box in boxes {
             if !seenIDs.insert(box.id).inserted {
@@ -13,6 +21,13 @@ extension TitleSource {
             if let error = validationError(for: box) {
                 return error
             }
+        }
+        return nil
+    }
+
+    private func revealFractionError(_ value: RationalValue) -> TitleSourceValidationError? {
+        if value.doubleValue < 0 || value.doubleValue > 1 {
+            return .revealFractionOutOfRange(value: value)
         }
         return nil
     }

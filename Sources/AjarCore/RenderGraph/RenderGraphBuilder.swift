@@ -421,9 +421,12 @@ public enum RenderGraphBuilder {
                 nestingDepth: nestingDepth
             )
         case .title(let title):
+            // Evaluate revealFraction at the graph time so typewriter frames hash distinctly
+            // (FR-TXT-004 / ADR-0009). The full keyframed model lives on the clip; the node
+            // carries a constant snapshot for cache identity + rasterization.
             return try RenderNodeFactory.makeTitleNode(
                 clipID: clip.id,
-                title: title,
+                title: title.evaluated(at: time),
                 colorSpace: project.settings.colorSpace
             )
         }

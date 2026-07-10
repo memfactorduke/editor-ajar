@@ -22,7 +22,8 @@ extension EditReducer {
             .setClipVideoTransition, .removeClipVideoTransition,
             .detachClipAudio, .replaceClipAudioSource:
             return try applyClipCommand(command, to: project)
-        case .insertTitleClip, .setClipTitleSource, .setTitleTextBox, .removeTitleTextBox:
+        case .insertTitleClip, .setClipTitleSource, .setTitleTextBox, .removeTitleTextBox,
+            .applyTitleAnimationPreset:
             return try applyTitleClipCommand(command, to: project)
         case .setTrackState, .setTrackCompositing, .setTrackAudioMix, .clearTrackAudioMix:
             return try applyTrackCommand(command, to: project)

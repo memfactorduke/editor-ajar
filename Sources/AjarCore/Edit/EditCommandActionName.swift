@@ -118,6 +118,8 @@ public extension EditCommand {
             return "Set Title Text Box"
         case .removeTitleTextBox:
             return "Remove Title Text Box"
+        case .applyTitleAnimationPreset:
+            return "Apply Title Animation"
         case .addTrack:
             return "Add Track"
         case .removeTrack:
