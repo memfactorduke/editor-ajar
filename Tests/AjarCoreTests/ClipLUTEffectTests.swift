@@ -302,9 +302,10 @@ final class ClipLUTEffectTests: XCTestCase {
     }
 
     func testFRCOL004SchemaMinorIsTwoForLUTKind() {
-        // ADR-0018: new kind bumps minor. If another kind PR claims 2 first, rebase to next.
-        // Minor 2 = FR-FX-002 five kinds; minor 3 = FR-COL-004 lut.
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 3)
+        // ADR-0018: new kind bumps minor. LUT gate is minor 3 (FR-FX-002 claimed 2).
+        // Current build may be higher after later additive fields (FR-TXT-002 → 4).
+        XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 3)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 4)
         XCTAssertTrue(ClipEffectKind.allCases.contains(.lut))
     }
 }

@@ -47,7 +47,7 @@ public enum TitleFontWeight: String, Codable, Equatable, Sendable {
     case black
 }
 
-/// Typed validation failures for title model values (FR-TXT-001, NFR-STAB-003).
+/// Typed validation failures for title model values (FR-TXT-001/002, NFR-STAB-003).
 public enum TitleSourceValidationError: Error, Equatable, Sendable, CustomStringConvertible {
     /// Font family string is empty or whitespace-only.
     case emptyFontFamily
@@ -60,6 +60,52 @@ public enum TitleSourceValidationError: Error, Equatable, Sendable, CustomString
 
     /// Leading is outside the supported range (points of additional line spacing; zero uses font default).
     case leadingOutOfRange(value: RationalValue, minimum: RationalValue, maximum: RationalValue)
+
+    /// Stroke width is outside the supported range (canvas points).
+    case strokeWidthOutOfRange(
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
+    /// A drop-shadow offset is outside the supported signed range (canvas points).
+    case dropShadowOffsetOutOfRange(
+        axis: TitleShadowOffsetAxis,
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
+    /// Drop-shadow blur radius is outside the supported range (canvas points).
+    case dropShadowBlurRadiusOutOfRange(
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
+    /// A title styling opacity is outside normalized 0...1.
+    case styleOpacityOutOfRange(component: TitleStyleOpacityComponent, value: RationalValue)
+
+    /// Background padding is outside the supported range (canvas points).
+    case backgroundPaddingOutOfRange(
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
+    /// Background corner radius is outside the supported range (canvas points).
+    case backgroundCornerRadiusOutOfRange(
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
+
+    /// Linear-gradient angle is outside the supported range (degrees).
+    case gradientAngleOutOfRange(
+        value: RationalValue,
+        minimum: RationalValue,
+        maximum: RationalValue
+    )
 
     /// Color channel is outside normalized 0...1.
     case colorChannelOutOfRange(channel: ClipColorChannel, value: RationalValue)
@@ -87,6 +133,34 @@ public enum TitleSourceValidationError: Error, Equatable, Sendable, CustomString
             "title leading \(value.numerator)/\(value.denominator) outside "
                 + "\(minimum.numerator)/\(minimum.denominator)..."
                 + "\(maximum.numerator)/\(maximum.denominator)"
+        case .strokeWidthOutOfRange(let value, let minimum, let maximum):
+            "title stroke width \(value.numerator)/\(value.denominator) outside "
+                + "\(minimum.numerator)/\(minimum.denominator)..."
+                + "\(maximum.numerator)/\(maximum.denominator)"
+        case .dropShadowOffsetOutOfRange(let axis, let value, let minimum, let maximum):
+            "title drop-shadow \(axis.rawValue) offset "
+                + "\(value.numerator)/\(value.denominator) outside "
+                + "\(minimum.numerator)/\(minimum.denominator)..."
+                + "\(maximum.numerator)/\(maximum.denominator)"
+        case .dropShadowBlurRadiusOutOfRange(let value, let minimum, let maximum):
+            "title drop-shadow blur \(value.numerator)/\(value.denominator) outside "
+                + "\(minimum.numerator)/\(minimum.denominator)..."
+                + "\(maximum.numerator)/\(maximum.denominator)"
+        case .styleOpacityOutOfRange(let component, let value):
+            "title \(component.rawValue) opacity "
+                + "\(value.numerator)/\(value.denominator) outside 0...1"
+        case .backgroundPaddingOutOfRange(let value, let minimum, let maximum):
+            "title background padding \(value.numerator)/\(value.denominator) outside "
+                + "\(minimum.numerator)/\(minimum.denominator)..."
+                + "\(maximum.numerator)/\(maximum.denominator)"
+        case .backgroundCornerRadiusOutOfRange(let value, let minimum, let maximum):
+            "title background corner radius \(value.numerator)/\(value.denominator) outside "
+                + "\(minimum.numerator)/\(minimum.denominator)..."
+                + "\(maximum.numerator)/\(maximum.denominator)"
+        case .gradientAngleOutOfRange(let value, let minimum, let maximum):
+            "title gradient angle \(value.numerator)/\(value.denominator) outside "
+                + "\(minimum.numerator)/\(minimum.denominator)..."
+                + "\(maximum.numerator)/\(maximum.denominator)"
         case .colorChannelOutOfRange(let channel, let value):
             "title color \(channel.rawValue) \(value.numerator)/\(value.denominator) outside 0...1"
         case .nonPositiveBoxSize(let width, let height):
@@ -98,7 +172,7 @@ public enum TitleSourceValidationError: Error, Equatable, Sendable, CustomString
     }
 }
 
-/// Styled run parameters for one title text box (FR-TXT-001).
+/// Styled run parameters for one title text box (FR-TXT-001/002).
 public struct TitleTextStyle: Codable, Equatable, Sendable {
     /// Requested font family name (Core Text family or PostScript name at rasterization).
     public let fontFamily: String
@@ -121,6 +195,15 @@ public struct TitleTextStyle: Codable, Equatable, Sendable {
     /// Horizontal alignment inside the box.
     public let alignment: TitleTextAlignment
 
+    /// Optional glyph outline. `nil` preserves the legacy fill-only rendering path.
+    public let stroke: TitleStrokeStyle?
+
+    /// Optional text drop shadow.
+    public let dropShadow: TitleDropShadowStyle?
+
+    /// Optional linear glyph fill. When present, it takes precedence over solid `color`.
+    public let gradientFill: TitleLinearGradientFill?
+
     /// Default style: Helvetica 48 pt regular white, flush left (ADR-0017).
     public static let `default` = TitleTextStyle(
         fontFamily: TitleSource.deterministicFontFamily,
@@ -129,7 +212,10 @@ public struct TitleTextStyle: Codable, Equatable, Sendable {
         color: ClipRGBColor(red: .one, green: .one, blue: .one),
         tracking: .zero,
         leading: .zero,
-        alignment: .left
+        alignment: .left,
+        stroke: nil,
+        dropShadow: nil,
+        gradientFill: nil
     )
 
     /// Creates a text style.
@@ -140,7 +226,10 @@ public struct TitleTextStyle: Codable, Equatable, Sendable {
         color: ClipRGBColor = ClipRGBColor(red: .one, green: .one, blue: .one),
         tracking: RationalValue = .zero,
         leading: RationalValue = .zero,
-        alignment: TitleTextAlignment = .left
+        alignment: TitleTextAlignment = .left,
+        stroke: TitleStrokeStyle? = nil,
+        dropShadow: TitleDropShadowStyle? = nil,
+        gradientFill: TitleLinearGradientFill? = nil
     ) {
         self.fontFamily = fontFamily
         self.fontSize = fontSize
@@ -149,6 +238,9 @@ public struct TitleTextStyle: Codable, Equatable, Sendable {
         self.tracking = tracking
         self.leading = leading
         self.alignment = alignment
+        self.stroke = stroke
+        self.dropShadow = dropShadow
+        self.gradientFill = gradientFill
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -159,6 +251,9 @@ public struct TitleTextStyle: Codable, Equatable, Sendable {
         case tracking
         case leading
         case alignment
+        case stroke
+        case dropShadow
+        case gradientFill
     }
 
     /// Decodes with defaults for absent keys so legacy partial payloads stay loadable.
@@ -181,10 +276,14 @@ public struct TitleTextStyle: Codable, Equatable, Sendable {
         alignment =
             try container.decodeIfPresent(TitleTextAlignment.self, forKey: .alignment)
             ?? .left
+        stroke = try container.decodeIfPresent(TitleStrokeStyle.self, forKey: .stroke)
+        dropShadow = try container.decodeIfPresent(TitleDropShadowStyle.self, forKey: .dropShadow)
+        gradientFill =
+            try container.decodeIfPresent(TitleLinearGradientFill.self, forKey: .gradientFill)
     }
 }
 
-/// One positioned text box on a title generator (FR-TXT-001).
+/// One positioned text box on a title generator (FR-TXT-001/002).
 public struct TitleTextBox: Codable, Equatable, Sendable {
     /// Stable box ID for edit targeting.
     public let id: UUID
@@ -201,8 +300,11 @@ public struct TitleTextBox: Codable, Equatable, Sendable {
     /// Frame height in canvas units (must be positive).
     public let height: RationalValue
 
-    /// Style applied to the whole box in v1 (multi-run styles land with FR-TXT-002).
+    /// Style applied to the whole box in v1.
     public let style: TitleTextStyle
+
+    /// Optional background drawn around the rendered text-run bounds.
+    public let backgroundBox: TitleBackgroundBoxStyle?
 
     /// Creates a text box.
     public init(
@@ -211,7 +313,8 @@ public struct TitleTextBox: Codable, Equatable, Sendable {
         origin: CanvasPoint,
         width: RationalValue,
         height: RationalValue,
-        style: TitleTextStyle = .default
+        style: TitleTextStyle = .default,
+        backgroundBox: TitleBackgroundBoxStyle? = nil
     ) {
         self.id = id
         self.text = text
@@ -219,6 +322,7 @@ public struct TitleTextBox: Codable, Equatable, Sendable {
         self.width = width
         self.height = height
         self.style = style
+        self.backgroundBox = backgroundBox
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -228,6 +332,7 @@ public struct TitleTextBox: Codable, Equatable, Sendable {
         case width
         case height
         case style
+        case backgroundBox
     }
 
     /// Decodes with style defaults for absent keys.
@@ -243,10 +348,12 @@ public struct TitleTextBox: Codable, Equatable, Sendable {
             try container.decodeIfPresent(RationalValue.self, forKey: .height)
             ?? RationalValue(100)
         style = try container.decodeIfPresent(TitleTextStyle.self, forKey: .style) ?? .default
+        backgroundBox =
+            try container.decodeIfPresent(TitleBackgroundBoxStyle.self, forKey: .backgroundBox)
     }
 }
 
-/// Generator payload for a title clip (FR-TXT-001, ADR-0017).
+/// Generator payload for a title clip (FR-TXT-001/002, ADR-0017).
 public struct TitleSource: Codable, Equatable, Sendable {
     /// PostScript / family name pinned for goldens and missing-font fallback (ADR-0017).
     public static let deterministicFontFamily = "Helvetica"
@@ -269,6 +376,33 @@ public struct TitleSource: Codable, Equatable, Sendable {
     /// Maximum supported additional leading in points.
     public static let maximumLeading = RationalValue(500)
 
+    /// Minimum supported stroke width in canvas points.
+    public static let minimumStrokeWidth = RationalValue.zero
+
+    /// Maximum supported stroke width in canvas points.
+    public static let maximumStrokeWidth = RationalValue(100)
+
+    /// Minimum supported signed drop-shadow offset in canvas points.
+    public static let minimumDropShadowOffset = RationalValue(-1_000)
+
+    /// Maximum supported signed drop-shadow offset in canvas points.
+    public static let maximumDropShadowOffset = RationalValue(1_000)
+
+    /// Maximum supported drop-shadow blur radius in canvas points.
+    public static let maximumDropShadowBlurRadius = RationalValue(500)
+
+    /// Maximum supported background padding in canvas points.
+    public static let maximumBackgroundPadding = RationalValue(500)
+
+    /// Maximum supported background corner radius in canvas points.
+    public static let maximumBackgroundCornerRadius = RationalValue(500)
+
+    /// Minimum supported linear-gradient angle in degrees.
+    public static let minimumGradientAngle = RationalValue(-360)
+
+    /// Maximum supported linear-gradient angle in degrees.
+    public static let maximumGradientAngle = RationalValue(360)
+
     /// Ordered text boxes, bottom-to-top paint order (later boxes draw on top).
     public let boxes: [TitleTextBox]
 
@@ -287,20 +421,6 @@ public struct TitleSource: Codable, Equatable, Sendable {
         boxes = try container.decodeIfPresent([TitleTextBox].self, forKey: .boxes) ?? []
     }
 
-    /// Returns the first typed validation error, or `nil` when the source is valid.
-    public func validate() -> TitleSourceValidationError? {
-        var seenIDs = Set<UUID>()
-        for box in boxes {
-            if !seenIDs.insert(box.id).inserted {
-                return .duplicateTextBoxID(box.id)
-            }
-            if let error = validate(box: box) {
-                return error
-            }
-        }
-        return nil
-    }
-
     /// Returns a copy with `box` replacing the matching ID, or appended when new.
     public func replacing(box: TitleTextBox) -> TitleSource {
         var next = boxes
@@ -315,71 +435,5 @@ public struct TitleSource: Codable, Equatable, Sendable {
     /// Returns a copy without the box with `boxID`.
     public func removingBox(id boxID: UUID) -> TitleSource {
         TitleSource(boxes: boxes.filter { $0.id != boxID })
-    }
-
-    private func validate(box: TitleTextBox) -> TitleSourceValidationError? {
-        let family = box.style.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
-        if family.isEmpty {
-            return .emptyFontFamily
-        }
-        if box.width.numerator <= 0 || box.height.numerator <= 0 {
-            return .nonPositiveBoxSize(width: box.width, height: box.height)
-        }
-        if let error = rangeError(
-            box.style.fontSize,
-            minimum: Self.minimumFontSize,
-            maximum: Self.maximumFontSize,
-            as: { .fontSizeOutOfRange(value: $0, minimum: $1, maximum: $2) }
-        ) {
-            return error
-        }
-        if let error = rangeError(
-            box.style.tracking,
-            minimum: Self.minimumTracking,
-            maximum: Self.maximumTracking,
-            as: { .trackingOutOfRange(value: $0, minimum: $1, maximum: $2) }
-        ) {
-            return error
-        }
-        if let error = rangeError(
-            box.style.leading,
-            minimum: Self.minimumLeading,
-            maximum: Self.maximumLeading,
-            as: { .leadingOutOfRange(value: $0, minimum: $1, maximum: $2) }
-        ) {
-            return error
-        }
-        if let error = colorChannelError(box.style.color.red, channel: .red) {
-            return error
-        }
-        if let error = colorChannelError(box.style.color.green, channel: .green) {
-            return error
-        }
-        if let error = colorChannelError(box.style.color.blue, channel: .blue) {
-            return error
-        }
-        return nil
-    }
-
-    private func rangeError(
-        _ value: RationalValue,
-        minimum: RationalValue,
-        maximum: RationalValue,
-        as make: (RationalValue, RationalValue, RationalValue) -> TitleSourceValidationError
-    ) -> TitleSourceValidationError? {
-        if value.doubleValue < minimum.doubleValue || value.doubleValue > maximum.doubleValue {
-            return make(value, minimum, maximum)
-        }
-        return nil
-    }
-
-    private func colorChannelError(
-        _ value: RationalValue,
-        channel: ClipColorChannel
-    ) -> TitleSourceValidationError? {
-        if value.doubleValue < 0 || value.doubleValue > 1 {
-            return .colorChannelOutOfRange(channel: channel, value: value)
-        }
-        return nil
     }
 }

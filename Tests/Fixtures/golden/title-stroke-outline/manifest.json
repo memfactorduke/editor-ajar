@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "title-stroke-outline",
+  "requirements": ["FR-TXT-002", "ADR-0017", "ADR-0009", "TESTING-2", "ADR-0011", "NFR-QUAL-001"],
+  "frame": "0/24",
+  "referencePNG": "reference.png",
+  "outputDimensions": {"width": 160, "height": 64},
+  "clips": [
+    {
+      "syntheticMedia": {
+        "width": 160, "height": 64, "frameRate": 24, "frameCount": 1,
+        "bgra": [24, 24, 24, 255]
+      }
+    },
+    {
+      "title": {
+        "boxes": [{
+          "id": "00000000-0000-0000-0000-00000000C101",
+          "text": "OUTLINE",
+          "origin": {"x": {"numerator": 8, "denominator": 1}, "y": {"numerator": 8, "denominator": 1}},
+          "width": {"numerator": 144, "denominator": 1},
+          "height": {"numerator": 48, "denominator": 1},
+          "style": {
+            "fontFamily": "Helvetica",
+            "fontSize": {"numerator": 28, "denominator": 1},
+            "fontWeight": "bold",
+            "color": {
+              "red": {"numerator": 1, "denominator": 1},
+              "green": {"numerator": 1, "denominator": 1},
+              "blue": {"numerator": 1, "denominator": 1}
+            },
+            "alignment": "center",
+            "stroke": {
+              "width": {"numerator": 3, "denominator": 1},
+              "color": {
+                "red": {"numerator": 0, "denominator": 1},
+                "green": {"numerator": 0, "denominator": 1},
+                "blue": {"numerator": 0, "denominator": 1}
+              },
+              "join": "round"
+            }
+          }
+        }]
+      }
+    }
+  ],
+  "tolerance": {"maximumDeltaE": 1, "minimumSSIM": 0.99, "maximumAlphaDelta": 1}
+}

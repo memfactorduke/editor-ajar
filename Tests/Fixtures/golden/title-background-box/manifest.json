@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "title-background-box",
+  "requirements": ["FR-TXT-002", "ADR-0017", "ADR-0009", "TESTING-2", "ADR-0011", "NFR-QUAL-001"],
+  "frame": "0/24",
+  "referencePNG": "reference.png",
+  "outputDimensions": {"width": 160, "height": 64},
+  "clips": [
+    {
+      "syntheticMedia": {
+        "width": 160, "height": 64, "frameRate": 24, "frameCount": 1,
+        "bgra": [28, 28, 28, 255]
+      }
+    },
+    {
+      "title": {
+        "boxes": [{
+          "id": "00000000-0000-0000-0000-00000000C103",
+          "text": "BOX",
+          "origin": {"x": {"numerator": 8, "denominator": 1}, "y": {"numerator": 8, "denominator": 1}},
+          "width": {"numerator": 144, "denominator": 1},
+          "height": {"numerator": 48, "denominator": 1},
+          "style": {
+            "fontFamily": "Helvetica",
+            "fontSize": {"numerator": 28, "denominator": 1},
+            "fontWeight": "bold",
+            "color": {
+              "red": {"numerator": 1, "denominator": 1},
+              "green": {"numerator": 1, "denominator": 1},
+              "blue": {"numerator": 1, "denominator": 1}
+            },
+            "alignment": "center"
+          },
+          "backgroundBox": {
+            "padding": {"numerator": 6, "denominator": 1},
+            "cornerRadius": {"numerator": 7, "denominator": 1},
+            "fillColor": {
+              "red": {"numerator": 0, "denominator": 1},
+              "green": {"numerator": 2, "denominator": 5},
+              "blue": {"numerator": 1, "denominator": 1}
+            },
+            "opacity": {"numerator": 4, "denominator": 5}
+          }
+        }]
+      }
+    }
+  ],
+  "tolerance": {"maximumDeltaE": 1, "minimumSSIM": 0.99, "maximumAlphaDelta": 1}
+}
