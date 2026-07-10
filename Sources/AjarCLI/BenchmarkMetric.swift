@@ -120,6 +120,15 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
     /// gradient fill + background box, rasterized (CPU CoreText) and composited over media.
     case titleNodeStyled1080p = "title-node-styled-1080p-fr-txt-001"
 
+    /// Heavy multi-layer timeline playback using **original** media (FR-MED-004 comparison
+    /// baseline). Unbudgeted: measures graph build + predecode + GPU composite for relative
+    /// proxy-vs-original comparison, not a gated real-time frame budget.
+    case proxyPlaybackHeavyOriginal = "proxy-playback-heavy-original-fr-med-004"
+
+    /// Heavy multi-layer timeline playback using **proxy** media (FR-MED-004 comparison).
+    /// Unbudgeted pair with ``proxyPlaybackHeavyOriginal``; interpret as a ratio, not a gate.
+    case proxyPlaybackHeavyProxy = "proxy-playback-heavy-proxy-fr-med-004"
+
     var requirementID: String {
         switch self {
         case .singleFrameRenderSeekLatency:
@@ -157,6 +166,8 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
             "FR-FX-001"
         case .titleNodeStyled1080p:
             "FR-TXT-001"
+        case .proxyPlaybackHeavyOriginal, .proxyPlaybackHeavyProxy:
+            "FR-MED-004"
         }
     }
 
@@ -226,6 +237,11 @@ public enum BenchmarkMetric: String, CaseIterable, Sendable {
         case .titleNodeStyled1080p:
             // Full 1080p styled title: CPU CoreText raster + upload + composite (see budget).
             .titleNodeGPU
+        case .proxyPlaybackHeavyOriginal, .proxyPlaybackHeavyProxy:
+            // Comparison-only metrics (not gated). Absolute cost includes synthetic ProRes
+            // predecode + multi-layer composite and is not a 30 fps budget candidate; use the
+            // pair for relative proxy benefit, not `withinBudget` CI gates.
+            nil
         default:
             nil
         }
@@ -320,7 +336,8 @@ extension BenchmarkMetric {
             .effectNodeColorAdjust1080p, .effectNodePosterize1080p, .effectNodeInvert1080p,
             .transitionCrossDissolve1080p, .transitionDipFade1080p,
             .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p,
-            .typicalStack1080pPlaybackM8Exit, .titleNodeStyled1080p:
+            .typicalStack1080pPlaybackM8Exit, .titleNodeStyled1080p,
+            .proxyPlaybackHeavyOriginal, .proxyPlaybackHeavyProxy:
             true
         default:
             false

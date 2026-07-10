@@ -153,6 +153,8 @@ public enum BenchmarkCommand {
         )
     }
 
+    // Metric dispatch spans the full suite; complexity tracks case count, not nesting.
+    // swiftlint:disable:next cyclomatic_complexity
     private static func measureValue(
         metric: BenchmarkMetric,
         projectURL: URL
@@ -185,6 +187,8 @@ public enum BenchmarkCommand {
             try await BenchmarkTransitionFixture.measure(metric: metric)
         case .typicalStack1080pPlaybackM8Exit, .titleNodeStyled1080p:
             try await measureM8CreativeMetric(metric)
+        case .proxyPlaybackHeavyOriginal, .proxyPlaybackHeavyProxy:
+            try await BenchmarkProxyPlaybackFixture.measure(metric: metric)
         default:
             try await measureRetimeMetric(metric)
         }

@@ -8,7 +8,12 @@ import Foundation
 import Metal
 
 /// Sequential export frame provider backed by the same immutable render graph as playback.
-public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider {
+///
+/// Export graphs are built **original-only** (`proxyFileExists` always false) so
+/// `preferProxyPlayback` never bakes `.proxy` tiers into export content hashes (ADR-0019 /
+/// FR-EXP-007). Per-frame observed tiers are exposed for the session audit trail.
+public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider,
+    ExportGraphSourceAuditing {
     private let project: Project
     private let sequence: Sequence
     private let videoSettings: ExportVideoSettings
@@ -16,6 +21,16 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider {
     private let executor: MetalRenderExecutor
     private let device: MTLDevice
     private let readbackQueue: MTLCommandQueue
+    private let lock = NSLock()
+    private var lastRenderedExportSourceTiersStorage:
+        [(mediaID: UUID, tier: ExportMediaSourceTier)] = []
+
+    /// Source tiers observed in the most recently rendered export graph (FR-EXP-007).
+    public var lastRenderedExportSourceTiers: [(mediaID: UUID, tier: ExportMediaSourceTier)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return lastRenderedExportSourceTiersStorage
+    }
 
     /// Creates a provider with the default Metal device.
     public convenience init(
@@ -87,7 +102,25 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider {
         at timelineTime: RationalTime,
         into pixelBuffer: CVPixelBuffer
     ) async throws {
-        let graph = try buildRenderGraph(for: sequence, at: timelineTime, in: project)
+        // ADR-0019 / FR-EXP-007: export never selects proxy files, even when the project
+        // prefers proxy playback and a ready proxy is on disk.
+        let graph = try buildRenderGraph(
+            for: sequence,
+            at: timelineTime,
+            in: project,
+            proxyFileExists: { _ in false }
+        )
+        let observedTiers = Self.sourceTiers(in: graph)
+        if observedTiers.contains(where: { $0.tier == .proxy }) {
+            throw ExportError.frameRenderFailed(
+                frameIndex: 0,
+                reason: "export graph selected proxy media (FR-EXP-007 / ADR-0019)"
+            )
+        }
+        lock.lock()
+        lastRenderedExportSourceTiersStorage = observedTiers
+        lock.unlock()
+
         try await sourceProvider.prepare(graph: graph)
         let frame = try executor.render(
             graph: graph,
@@ -130,6 +163,16 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider {
         let width: Int
         let height: Int
         let bytesPerRow: Int
+    }
+
+    private static func sourceTiers(
+        in graph: RenderGraph
+    ) -> [(mediaID: UUID, tier: ExportMediaSourceTier)] {
+        graph.exportSourceNodes().map { source in
+            let tier: ExportMediaSourceTier =
+                source.mediaSourceTier == .proxy ? .proxy : .original
+            return (mediaID: source.mediaID, tier: tier)
+        }
     }
 
     private func convertReadback(
@@ -253,5 +296,22 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider {
         } else {
             continuation.resume()
         }
+    }
+}
+
+private extension RenderGraph {
+    func exportSourceNodes() -> [RenderSourceNode] {
+        var sources: [RenderSourceNode] = []
+        for node in nodes {
+            switch node.kind {
+            case .source(let source):
+                sources.append(source)
+            case .compound(let compound):
+                sources.append(contentsOf: compound.graph.exportSourceNodes())
+            case .title, .transition, .composite:
+                continue
+            }
+        }
+        return sources
     }
 }

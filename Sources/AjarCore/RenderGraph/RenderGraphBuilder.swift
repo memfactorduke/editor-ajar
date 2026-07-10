@@ -64,19 +64,30 @@ public enum RenderGraphBuilder {
     public static let maximumCompoundNestingDepth = 16
 
     /// Builds a render graph for `sequence` at `time` using project media references.
+    ///
+    /// - Parameter proxyFileExists: Platform probe for ready proxy files by media id
+    ///   (FR-MED-004). Defaults to assuming ready proxies exist so pure unit tests need no FS.
     public static func build(
         for sequence: Sequence,
         at time: RationalTime,
-        in project: Project
+        in project: Project,
+        proxyFileExists: @escaping @Sendable (UUID) -> Bool = { _ in true }
     ) throws -> RenderGraph {
-        try build(for: sequence, at: time, in: project, nestingDepth: 0)
+        try build(
+            for: sequence,
+            at: time,
+            in: project,
+            nestingDepth: 0,
+            proxyFileExists: proxyFileExists
+        )
     }
 
     private static func build(
         for sequence: Sequence,
         at time: RationalTime,
         in project: Project,
-        nestingDepth: Int
+        nestingDepth: Int,
+        proxyFileExists: @escaping @Sendable (UUID) -> Bool
     ) throws -> RenderGraph {
         let layers = try activeTrackLayers(in: sequence, at: time)
         guard !layers.isEmpty else {
@@ -87,7 +98,8 @@ public enum RenderGraphBuilder {
             for: layers,
             at: time,
             in: project,
-            nestingDepth: nestingDepth
+            nestingDepth: nestingDepth,
+            proxyFileExists: proxyFileExists
         )
     }
 
@@ -233,7 +245,8 @@ public enum RenderGraphBuilder {
         for layers: [TrackLayer],
         at time: RationalTime,
         in project: Project,
-        nestingDepth: Int
+        nestingDepth: Int,
+        proxyFileExists: @escaping @Sendable (UUID) -> Bool
     ) throws -> RenderGraph {
         var nodes: [RenderNode] = []
         var compositeInputs: [RenderCompositeNodeInput] = []
@@ -245,7 +258,8 @@ public enum RenderGraphBuilder {
                     for: candidate.clip,
                     at: time,
                     in: project,
-                    nestingDepth: nestingDepth
+                    nestingDepth: nestingDepth,
+                    proxyFileExists: proxyFileExists
                 )
                 nodes.append(source)
                 compositeInputs.append(compositeInput(for: candidate, source: source, at: time))
@@ -255,7 +269,8 @@ public enum RenderGraphBuilder {
                     incoming: incoming,
                     at: time,
                     in: project,
-                    nestingDepth: nestingDepth
+                    nestingDepth: nestingDepth,
+                    proxyFileExists: proxyFileExists
                 )
                 nodes.append(contentsOf: built.nodes)
                 compositeInputs.append(built.compositeInput)
@@ -288,13 +303,14 @@ public enum RenderGraphBuilder {
         )
     }
 
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable:next function_body_length function_parameter_count
     private static func transitionLayer(
         outgoing: ActiveClipCandidate,
         incoming: ActiveClipCandidate,
         at time: RationalTime,
         in project: Project,
-        nestingDepth: Int
+        nestingDepth: Int,
+        proxyFileExists: @escaping @Sendable (UUID) -> Bool
     ) throws -> (nodes: [RenderNode], compositeInput: RenderCompositeNodeInput) {
         guard let trailing = outgoing.clip.trailingTransition else {
             // Unreachable when resolveTrackLayer only emits pairs with a trailing record.
@@ -302,7 +318,8 @@ public enum RenderGraphBuilder {
                 for: incoming.clip,
                 at: time,
                 in: project,
-                nestingDepth: nestingDepth
+                nestingDepth: nestingDepth,
+                proxyFileExists: proxyFileExists
             )
             return (
                 [source],
@@ -314,13 +331,15 @@ public enum RenderGraphBuilder {
             for: outgoing.clip,
             at: time,
             in: project,
-            nestingDepth: nestingDepth
+            nestingDepth: nestingDepth,
+            proxyFileExists: proxyFileExists
         )
         let incomingSource = try sourceNode(
             for: incoming.clip,
             at: time,
             in: project,
-            nestingDepth: nestingDepth
+            nestingDepth: nestingDepth,
+            proxyFileExists: proxyFileExists
         )
 
         let progress = try transitionProgress(
@@ -407,18 +426,26 @@ public enum RenderGraphBuilder {
         for clip: Clip,
         at time: RationalTime,
         in project: Project,
-        nestingDepth: Int
+        nestingDepth: Int,
+        proxyFileExists: @escaping @Sendable (UUID) -> Bool
     ) throws -> RenderNode {
         switch clip.source {
         case .media(let mediaID):
-            return try mediaSourceNode(mediaID: mediaID, clip: clip, at: time, in: project)
+            return try mediaSourceNode(
+                mediaID: mediaID,
+                clip: clip,
+                at: time,
+                in: project,
+                proxyFileExists: proxyFileExists
+            )
         case .sequence(let sequenceID):
             return try compoundSourceNode(
                 sequenceID: sequenceID,
                 clip: clip,
                 at: time,
                 in: project,
-                nestingDepth: nestingDepth
+                nestingDepth: nestingDepth,
+                proxyFileExists: proxyFileExists
             )
         case .title(let title):
             // Evaluate revealFraction at the graph time so typewriter frames hash distinctly
@@ -436,7 +463,8 @@ public enum RenderGraphBuilder {
         mediaID: UUID,
         clip: Clip,
         at time: RationalTime,
-        in project: Project
+        in project: Project,
+        proxyFileExists: @escaping @Sendable (UUID) -> Bool
     ) throws -> RenderNode {
         guard let media = project.mediaPool.first(where: { media in media.id == mediaID }) else {
             throw RenderGraphBuildError.missingMediaReference(clipID: clip.id, mediaID: mediaID)
@@ -445,6 +473,13 @@ public enum RenderGraphBuilder {
         // Fade-tail: `sourceTime(at:)` continues linearly past the timeline out-point using
         // the same constant-rate mapping as audio (ADR-0015 §2 / ADR-0016 §5).
         let sourceTime = try mapTimelineTime(time, toSourceTimeFor: clip)
+        let decision = MediaProxyPlaybackResolver.resolve(
+            preferProxy: project.settings.preferProxyPlayback,
+            proxyState: media.proxyState,
+            proxyFileExists: proxyFileExists(mediaID)
+        )
+        // Fold only `.proxy` into identity; original stays nil so pre-FR-MED-004 hashes match.
+        let mediaSourceTier: MediaSourceTier? = decision.tier == .proxy ? .proxy : nil
         return try RenderNodeFactory.makeSourceNode(
             RenderSourceNodeSpec(
                 mediaID: mediaID,
@@ -460,7 +495,8 @@ public enum RenderGraphBuilder {
                 mediaContentHash: media.contentHash,
                 mediaAvailability: media.availability,
                 offlineSlateDimensions: media.metadata.pixelDimensions
-                    ?? project.settings.resolution
+                    ?? project.settings.resolution,
+                mediaSourceTier: mediaSourceTier
             )
         )
     }
@@ -473,12 +509,14 @@ public enum RenderGraphBuilder {
         clip.frameSampling == .nearest ? nil : clip.frameSampling
     }
 
+    // swiftlint:disable:next function_parameter_count
     private static func compoundSourceNode(
         sequenceID: UUID,
         clip: Clip,
         at time: RationalTime,
         in project: Project,
-        nestingDepth: Int
+        nestingDepth: Int,
+        proxyFileExists: @escaping @Sendable (UUID) -> Bool
     ) throws -> RenderNode {
         guard nestingDepth < maximumCompoundNestingDepth else {
             throw RenderGraphBuildError.maximumCompoundNestingDepthExceeded(
@@ -506,7 +544,8 @@ public enum RenderGraphBuilder {
             for: sequence,
             at: sequenceTime,
             in: project,
-            nestingDepth: nestingDepth + 1
+            nestingDepth: nestingDepth + 1,
+            proxyFileExists: proxyFileExists
         )
         return try RenderNodeFactory.makeCompoundNode(
             RenderCompoundNodeSpec(
@@ -563,10 +602,19 @@ public enum RenderGraphBuilder {
 // swiftlint:enable type_body_length
 
 /// Builds a render graph for `sequence` at `time` using project media references.
+///
+/// - Parameter proxyFileExists: Platform probe for ready proxy files (FR-MED-004). Defaults to
+///   assuming ready proxies exist.
 public func buildRenderGraph(
     for sequence: Sequence,
     at time: RationalTime,
-    in project: Project
+    in project: Project,
+    proxyFileExists: @escaping @Sendable (UUID) -> Bool = { _ in true }
 ) throws -> RenderGraph {
-    try RenderGraphBuilder.build(for: sequence, at: time, in: project)
+    try RenderGraphBuilder.build(
+        for: sequence,
+        at: time,
+        in: project,
+        proxyFileExists: proxyFileExists
+    )
 }

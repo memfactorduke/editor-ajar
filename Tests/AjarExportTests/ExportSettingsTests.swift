@@ -217,7 +217,8 @@ final class ExportSettingsTests: XCTestCase {
             (.hevc10Bit, .hevc),
             (.proRes422, .proRes422),
             (.proRes422HQ, .proRes422HQ),
-            (.proRes4444, .proRes4444)
+            (.proRes4444, .proRes4444),
+            (.proRes422Proxy, .proRes422Proxy)
         ]
 
         for (codec, expectedType) in expected {

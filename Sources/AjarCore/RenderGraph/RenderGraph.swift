@@ -155,6 +155,8 @@ struct RenderSourceNodeSpec {
     let mediaContentHash: ContentHash?
     let mediaAvailability: MediaAvailability?
     let offlineSlateDimensions: PixelDimensions?
+    /// Playback source tier for cache identity (FR-MED-004). `nil` means original.
+    let mediaSourceTier: MediaSourceTier?
 }
 
 /// Resolved media source parameters for a source render node.
@@ -207,6 +209,13 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
     /// Optional for backward-compatible decoding of render graphs created before FR-MED-007.
     public let offlineSlateDimensions: PixelDimensions?
 
+    /// Playback media tier folded into render-cache keys (FR-MED-004).
+    ///
+    /// `nil` means original and keeps pre-proxy source-node content hashes byte-identical.
+    /// `.proxy` is required when the graph will decode a proxy file so RAM/disk caches never
+    /// serve the wrong tier.
+    public let mediaSourceTier: MediaSourceTier?
+
     /// Creates resolved source node parameters.
     public init(
         mediaID: UUID,
@@ -221,7 +230,8 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         colorSpace: MediaColorSpace = .rec709,
         mediaContentHash: ContentHash? = nil,
         mediaAvailability: MediaAvailability? = nil,
-        offlineSlateDimensions: PixelDimensions? = nil
+        offlineSlateDimensions: PixelDimensions? = nil,
+        mediaSourceTier: MediaSourceTier? = nil
     ) {
         self.mediaID = mediaID
         self.clipID = clipID
@@ -236,6 +246,12 @@ public struct RenderSourceNode: Codable, Equatable, Sendable {
         self.mediaContentHash = mediaContentHash
         self.mediaAvailability = mediaAvailability
         self.offlineSlateDimensions = offlineSlateDimensions
+        // Normalize original → nil so default/original graphs keep pre-FR-MED-004 hashes.
+        if let mediaSourceTier, mediaSourceTier != .original {
+            self.mediaSourceTier = mediaSourceTier
+        } else {
+            self.mediaSourceTier = nil
+        }
     }
 }
 
@@ -450,7 +466,8 @@ enum RenderNodeFactory {
                 colorSpace: spec.colorSpace,
                 mediaContentHash: spec.mediaContentHash,
                 mediaAvailability: spec.mediaAvailability,
-                offlineSlateDimensions: spec.offlineSlateDimensions
+                offlineSlateDimensions: spec.offlineSlateDimensions,
+                mediaSourceTier: spec.mediaSourceTier
             )
         )
         return try makeNode(

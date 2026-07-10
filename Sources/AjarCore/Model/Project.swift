@@ -100,16 +100,66 @@ public struct ProjectSettings: Codable, Equatable, Sendable {
     /// Audio sample rate in hertz.
     public let audioSampleRate: Int
 
+    /// Whether playback prefers proxy media when a ready proxy exists (FR-MED-004).
+    ///
+    /// **Persists** in `project.json` (schemaMinor 11). Justification: this is a
+    /// project-session creative preference for heavy media — reopening the same package should
+    /// keep proxy mode so the editor stays interactive without re-toggling. It is not a
+    /// machine-global chrome setting. Export ignores this flag (FR-EXP-007).
+    public let preferProxyPlayback: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case frameRate
+        case resolution
+        case colorSpace
+        case audioSampleRate
+        case preferProxyPlayback
+    }
+
     /// Creates project-wide settings.
     public init(
         frameRate: FrameRate,
         resolution: PixelDimensions,
         colorSpace: MediaColorSpace,
-        audioSampleRate: Int
+        audioSampleRate: Int,
+        preferProxyPlayback: Bool = false
     ) {
         self.frameRate = frameRate
         self.resolution = resolution
         self.colorSpace = colorSpace
         self.audioSampleRate = audioSampleRate
+        self.preferProxyPlayback = preferProxyPlayback
+    }
+
+    /// Decodes settings; absent `preferProxyPlayback` defaults to `false` (nested legacy).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        frameRate = try container.decode(FrameRate.self, forKey: .frameRate)
+        resolution = try container.decode(PixelDimensions.self, forKey: .resolution)
+        colorSpace = try container.decode(MediaColorSpace.self, forKey: .colorSpace)
+        audioSampleRate = try container.decode(Int.self, forKey: .audioSampleRate)
+        preferProxyPlayback =
+            try container.decodeIfPresent(Bool.self, forKey: .preferProxyPlayback) ?? false
+    }
+
+    /// Encodes all settings fields including the proxy playback preference.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(frameRate, forKey: .frameRate)
+        try container.encode(resolution, forKey: .resolution)
+        try container.encode(colorSpace, forKey: .colorSpace)
+        try container.encode(audioSampleRate, forKey: .audioSampleRate)
+        try container.encode(preferProxyPlayback, forKey: .preferProxyPlayback)
+    }
+
+    /// Returns a copy with the proxy playback preference updated.
+    public func withPreferProxyPlayback(_ preferProxyPlayback: Bool) -> ProjectSettings {
+        ProjectSettings(
+            frameRate: frameRate,
+            resolution: resolution,
+            colorSpace: colorSpace,
+            audioSampleRate: audioSampleRate,
+            preferProxyPlayback: preferProxyPlayback
+        )
     }
 }

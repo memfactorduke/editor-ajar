@@ -410,7 +410,9 @@ public struct MediaConsolidateCommand {
     ) throws -> MediaRef {
         do {
             let bookmark = try bookmarkStore.createBookmark(for: destinationURL)
-            return resolved.relinked(
+            // Consolidate is a same-bytes package copy (hash-validated). Preserve proxyState so
+            // ready proxies remain valid; genuine relink still resets via `MediaRef.relinked`.
+            return resolved.consolidated(
                 to: MediaRelinkCandidate(
                     sourceURL: destinationURL,
                     contentHash: contentHash,

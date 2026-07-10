@@ -141,12 +141,17 @@ public struct MediaReferenceResolver {
         guard exists, !isDirectory.boolValue, fileManager.isReadableFile(atPath: url.path) else {
             return nil
         }
+        // Resolution re-points the SAME media identity at its located file; it is not a genuine
+        // relink to new bytes. `relinked(to:)` resets `proxyState` (FR-MED-004), so preserve the
+        // durable proxy cache state here — otherwise reconcile-on-open would wipe every ready
+        // proxy. Playback still re-probes the proxy file (path encodes the content hash), so a
+        // truly changed source simply falls back and re-generates.
         return media.relinked(
             to: MediaRelinkCandidate(
                 sourceURL: url,
                 contentHash: media.contentHash,
                 bookmark: bookmark()
             )
-        )
+        ).withProxyState(media.proxyState)
     }
 }

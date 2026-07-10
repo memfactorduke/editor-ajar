@@ -176,6 +176,18 @@ public struct EditHistory: Equatable, Sendable {
         return currentProject
     }
 
+    /// Replaces the live project snapshot without creating an undo entry.
+    ///
+    /// Used for non-timeline session preferences (e.g. FR-MED-004 proxy playback toggle) that
+    /// should persist with the document but not pollute the edit stack. Undo/redo entries keep
+    /// their recorded project values; undoing after a preference flip may restore the prior
+    /// preference value captured in that entry — acceptable for playback prefs.
+    @discardableResult
+    public mutating func replaceCurrentProjectPreservingHistory(_ project: Project) -> Project {
+        currentProject = project
+        return currentProject
+    }
+
     /// Merges bookmark/offline resolution into every undo snapshot without creating an undo step.
     ///
     /// Only a reference still equal to `expected` apart from availability is replaced. A

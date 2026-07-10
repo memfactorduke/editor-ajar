@@ -34,6 +34,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Zoom timeline in / out | `⌘=` / `⌘-` | Timeline toolbar |
 | Open export dialog | `⇧⌘E` | Header + Export menu |
 | Toggle export queue | `⌃⌘E` | Header + Export menu |
+| Toggle proxy / original playback | `⌥⌘P` | Header (FR-MED-004) |
 | Enqueue active sequence export | `⌃⇧⌘E` | Export menu / queue panel |
 | Edit canvas title | `⌥⌘E` | Title menu (primary visible box) |
 | Nudge canvas title right / down | `⌥⌘→` / `⌥⌘↓` | Title menu (large step) |
@@ -73,6 +74,7 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 | Header group | — | `Editor Ajar, {project summary}` | — |
 | Export… | `⇧⌘E` | Open export dialog | id: `Open Export Dialog` |
 | Exports / Hide Exports | `⌃⌘E` | Show export queue / Hide export queue | id: `Toggle Export Queue` |
+| Proxy / Original playback | `⌥⌘P` | Proxy playback on / Original playback on | id: `Toggle Proxy Playback`; value `Proxy`/`Original`; hint: export always uses originals (FR-MED-004) |
 
 ---
 
@@ -235,7 +237,21 @@ Toggled with `⌃⌘E`; empty list is the default when opened.
 
 ---
 
-## 11. Relink / consolidate (#218)
+## 11. Proxy playback (FR-MED-004)
+
+- The header toggle is the working one-click proxy/original switch: it persists on the
+  project, re-renders the program monitor, and selects ready proxies on the playback decode
+  path when generation has completed.
+- Missing or stale proxies fall back to originals and enqueue real background generation
+  (`ProxyGenerationQueue` + ProRes 422 Proxy under `caches/proxies/`); progress is
+  session-only in the model.
+- VoiceOver announces the current mode via label + value; the hint states that export always
+  uses originals regardless of the toggle.
+- Media-pool status row UI is deferred: the library panel is a placeholder with no per-item
+  list to attach none/generating/ready/failed labels to (state is durable on `MediaRef` and
+  becomes visible once a media list lands).
+
+## 12. Relink / consolidate (#218)
 
 **No dedicated interactive app chrome yet.** FR-MED-007/008 recovery is implemented in
 `AjarMedia` / app model (bookmark reconcile, offline slate, relink + consolidate commands).
@@ -250,7 +266,7 @@ When UI lands, require:
 
 ---
 
-## 12. Menus (not in window AX tree walk)
+## 13. Menus (not in window AX tree walk)
 
 Menu commands still get `accessibilityLabel` for completeness; they are not walked by the
 launch-time tree test.

@@ -183,7 +183,9 @@ public enum AjarProjectCodec {
     /// - `9`: project-persisted color-grade looks (`Project.looks`, FR-COL-007 / #190).
     /// - `10`: media relink/consolidate edit-journal commands and persisted offline workflow
     ///   (`FR-MED-007`, `FR-MED-008`, #218).
-    public static let currentSchemaMinor = 10
+    /// - `11`: proxy / optimized media pipeline fields — `MediaRef.proxyState`,
+    ///   `ProjectSettings.preferProxyPlayback` (FR-MED-004 / #217).
+    public static let currentSchemaMinor = 11
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

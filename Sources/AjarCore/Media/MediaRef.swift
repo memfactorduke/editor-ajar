@@ -114,6 +114,9 @@ public struct MediaRef: Codable, Hashable, Sendable {
     /// Current availability state as last reported by a platform module.
     public let availability: MediaAvailability
 
+    /// Durable proxy lifecycle state (FR-MED-004). Generation progress is not stored here.
+    public let proxyState: MediaProxyState
+
     private enum CodingKeys: String, CodingKey {
         case id
         case sourceURL
@@ -121,6 +124,7 @@ public struct MediaRef: Codable, Hashable, Sendable {
         case contentHash
         case metadata
         case availability
+        case proxyState
     }
 
     /// Creates a stable media reference.
@@ -130,7 +134,8 @@ public struct MediaRef: Codable, Hashable, Sendable {
         bookmark: Data? = nil,
         contentHash: ContentHash?,
         metadata: MediaMetadata,
-        availability: MediaAvailability = .available
+        availability: MediaAvailability = .available,
+        proxyState: MediaProxyState = .none
     ) {
         self.id = id
         self.sourceURL = sourceURL
@@ -138,9 +143,10 @@ public struct MediaRef: Codable, Hashable, Sendable {
         self.contentHash = contentHash
         self.metadata = metadata
         self.availability = availability
+        self.proxyState = proxyState
     }
 
-    /// Decodes legacy references without an availability key as available.
+    /// Decodes legacy references without availability / proxy keys as available / none.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -153,6 +159,8 @@ public struct MediaRef: Codable, Hashable, Sendable {
                 MediaAvailability.self,
                 forKey: .availability
             ) ?? .available
+        proxyState =
+            try container.decodeIfPresent(MediaProxyState.self, forKey: .proxyState) ?? .none
     }
 
     /// Encodes all durable media-reference fields.
@@ -164,6 +172,7 @@ public struct MediaRef: Codable, Hashable, Sendable {
         try container.encodeIfPresent(contentHash, forKey: .contentHash)
         try container.encode(metadata, forKey: .metadata)
         try container.encode(availability, forKey: .availability)
+        try container.encode(proxyState, forKey: .proxyState)
     }
 
     /// Whether the source is currently offline.
@@ -190,13 +199,33 @@ public struct MediaRef: Codable, Hashable, Sendable {
     /// override. Import owns metadata probing; relink changes where the existing project media is
     /// read from without silently changing clip duration, frame-rate, or color interpretation.
     public func relinked(to candidate: MediaRelinkCandidate) -> MediaRef {
+        // Relink invalidates any prior proxy of the old bytes; reset to `.none` so generation
+        // re-runs against the new source (FR-MED-004 / FR-MED-007).
         MediaRef(
             id: id,
             sourceURL: candidate.sourceURL,
             bookmark: candidate.bookmark,
             contentHash: candidate.contentHash ?? contentHash,
             metadata: metadata,
-            availability: .available
+            availability: .available,
+            proxyState: .none
+        )
+    }
+
+    /// Returns a copy pointing at a same-bytes consolidated package-media destination.
+    ///
+    /// Unlike ``relinked(to:)``, **preserves** `proxyState`: consolidate copies hash-validated
+    /// byte-identical media into `.ajar/media/`, so an existing ready proxy remains valid
+    /// (FR-MED-004 / FR-MED-008). Genuine relink of different bytes still uses ``relinked(to:)``.
+    public func consolidated(to candidate: MediaRelinkCandidate) -> MediaRef {
+        MediaRef(
+            id: id,
+            sourceURL: candidate.sourceURL,
+            bookmark: candidate.bookmark,
+            contentHash: candidate.contentHash ?? contentHash,
+            metadata: metadata,
+            availability: .available,
+            proxyState: proxyState
         )
     }
 
@@ -247,7 +276,21 @@ public struct MediaRef: Codable, Hashable, Sendable {
             bookmark: bookmark,
             contentHash: contentHash,
             metadata: metadata,
-            availability: availability
+            availability: availability,
+            proxyState: proxyState
+        )
+    }
+
+    /// Returns a copy with an updated durable proxy lifecycle state (FR-MED-004).
+    public func withProxyState(_ proxyState: MediaProxyState) -> MediaRef {
+        MediaRef(
+            id: id,
+            sourceURL: sourceURL,
+            bookmark: bookmark,
+            contentHash: contentHash,
+            metadata: metadata,
+            availability: availability,
+            proxyState: proxyState
         )
     }
 }
@@ -267,6 +310,35 @@ public extension Project {
             mediaPool: mediaPool.map { media in
                 mediaIDs.contains(media.id) ? media.withAvailability(availability) : media
             },
+            sequences: sequences,
+            looks: looks
+        )
+    }
+
+    /// Returns a project snapshot with durable proxy state applied by stable ID (FR-MED-004).
+    func updatingMediaProxyState(
+        _ proxyState: MediaProxyState,
+        for mediaIDs: Set<UUID>
+    ) -> Project {
+        Project(
+            schemaVersion: schemaVersion,
+            schemaMinor: schemaMinor,
+            settings: settings,
+            mediaPool: mediaPool.map { media in
+                mediaIDs.contains(media.id) ? media.withProxyState(proxyState) : media
+            },
+            sequences: sequences,
+            looks: looks
+        )
+    }
+
+    /// Returns a project snapshot with the project-level proxy playback preference set.
+    func updatingPreferProxyPlayback(_ preferProxyPlayback: Bool) -> Project {
+        Project(
+            schemaVersion: schemaVersion,
+            schemaMinor: schemaMinor,
+            settings: settings.withPreferProxyPlayback(preferProxyPlayback),
+            mediaPool: mediaPool,
             sequences: sequences,
             looks: looks
         )

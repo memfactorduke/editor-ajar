@@ -64,16 +64,16 @@ module and does not satisfy this contract (FR-EXP-007).
 
 ### Proxy exclusion audit hook (FR-EXP-007 / FR-MED-004)
 
-`ExportSession` carries an `ExportSourceSelectionPolicy` (production default:
-`alwaysOriginal`) and records per-frame `ExportFrameSourceSelection` rows while writing. Each row
-is the resolved `ExportMediaSourceTier` (`.original` / `.proxy`) for a media-pool or media-backed
-clip id. Golden-export and unit tests assert every recorded tier is `.original`.
+`ExportSession` records per-frame `ExportFrameSourceSelection` rows while writing. Production
+`RenderGraphExportFrameProvider` builds graphs with `proxyFileExists {_ in false}` and exposes
+executed source-node tiers via `ExportGraphSourceAuditing`; the session prefers those observed
+tiers (falling back to `ExportSourceSelectionPolicy.alwaysOriginal` for stub providers). Golden-
+export and unit tests assert every recorded tier is `.original`.
 
 This is intentionally an **audit / assertion surface**, not a second media stack: source decode
-remains injected via `ExportRenderSourceProvider`. When FR-MED-004 proxy generation lands
-(issue #217), playback may select proxy files, but export adapters must keep resolving
-`.original` through this policy (extend `resolvedTier(for:)` rather than inventing a parallel
-hook). The session does not import `AjarMedia` and does not open proxy URLs itself.
+remains injected via `ExportRenderSourceProvider`. Playback may select proxy files (FR-MED-004 /
+#217), but export graphs stay structurally original-only even when `preferProxyPlayback` is on.
+The session does not import `AjarMedia` and does not open proxy URLs itself.
 
 ### Codecs, containers, and pixel formats
 

@@ -12,6 +12,8 @@ final class EditorAjarRenderPipeline {
     private let decoder: VideoFrameDecoder
     private let executor: MetalRenderExecutor
     private let offlineSlateCache: AppOfflineSlateTextureCache
+    /// Optional `.ajar` package root for resolving `caches/proxies/` paths (FR-MED-004).
+    var packageRootURL: URL?
 
     init() throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -29,19 +31,44 @@ final class EditorAjarRenderPipeline {
         frame: Int64
     ) async throws -> EditorAjarRenderedFrame {
         let time = try RationalTime.atFrame(frame, frameRate: sequence.timebase)
-        var graph = try buildRenderGraph(for: sequence, at: time, in: project)
+        let packageRoot = packageRootURL
+        let proxyFileExists: @Sendable (UUID) -> Bool = { mediaID in
+            guard let media = project.mediaPool.first(where: { $0.id == mediaID }),
+                  let relative = media.proxyState.readyRelativePath,
+                  let packageRoot
+            else {
+                return false
+            }
+            let url = ProxyStorageLayout.absoluteURL(
+                packageRootURL: packageRoot,
+                relativePath: relative
+            )
+            return FileManager.default.isReadableFile(atPath: url.path)
+        }
+        var graph = try buildRenderGraph(
+            for: sequence,
+            at: time,
+            in: project,
+            proxyFileExists: proxyFileExists
+        )
         let sourceProvider = try await AppSourceTextureProvider(
             graph: graph,
             project: project,
             decoder: decoder,
-            offlineSlateCache: offlineSlateCache
+            offlineSlateCache: offlineSlateCache,
+            packageRootURL: packageRoot
         )
         if !sourceProvider.runtimeOfflineMediaIDs.isEmpty {
             let runtimeProject = project.updatingMediaAvailability(
                 .offline,
                 for: sourceProvider.runtimeOfflineMediaIDs
             )
-            graph = try buildRenderGraph(for: sequence, at: time, in: runtimeProject)
+            graph = try buildRenderGraph(
+                for: sequence,
+                at: time,
+                in: runtimeProject,
+                proxyFileExists: proxyFileExists
+            )
         }
         let renderedFrame = try executor.render(
             graph: graph,
@@ -52,7 +79,8 @@ final class EditorAjarRenderPipeline {
         try await renderedFrame.waitForCompletion()
         return EditorAjarRenderedFrame(
             texture: renderedFrame.texture,
-            runtimeOfflineMediaIDs: sourceProvider.runtimeOfflineMediaIDs
+            runtimeOfflineMediaIDs: sourceProvider.runtimeOfflineMediaIDs,
+            mediaIDsNeedingProxyGeneration: sourceProvider.mediaIDsNeedingProxyGeneration
         )
     }
 }
@@ -60,6 +88,7 @@ final class EditorAjarRenderPipeline {
 struct EditorAjarRenderedFrame {
     let texture: MTLTexture
     let runtimeOfflineMediaIDs: Set<UUID>
+    let mediaIDsNeedingProxyGeneration: Set<UUID>
 }
 
 private struct AppSourceTextureKey: Hashable {
@@ -78,16 +107,19 @@ private final class AppSourceTextureProvider: RenderSourceTextureProvider {
     private let textures: [AppSourceTextureKey: MTLTexture]
     private let retainedFrames: [DecodedFrame]
     let runtimeOfflineMediaIDs: Set<UUID>
+    let mediaIDsNeedingProxyGeneration: Set<UUID>
 
     init(
         graph: RenderGraph,
         project: Project,
         decoder: VideoFrameDecoder,
-        offlineSlateCache: AppOfflineSlateTextureCache
+        offlineSlateCache: AppOfflineSlateTextureCache,
+        packageRootURL: URL?
     ) async throws {
         var textures: [AppSourceTextureKey: MTLTexture] = [:]
         var retainedFrames: [DecodedFrame] = []
         var runtimeOfflineMediaIDs = Set<UUID>()
+        var mediaIDsNeedingProxyGeneration = Set<UUID>()
 
         for source in graph.renderSourceNodes() {
             let media = try Self.media(for: source.mediaID, in: project)
@@ -99,8 +131,34 @@ private final class AppSourceTextureProvider: RenderSourceTextureProvider {
                 )
                 continue
             }
+
+            // Re-enqueue signal uses an independent existence probe (may disagree with the
+            // graph when the file disappeared after graph build). Decode tier follows the
+            // graph node so content-hash and decode stay aligned (no cross-session cache
+            // poisoning if a stale probe disagrees with `source.mediaSourceTier`).
+            let proxyExists = Self.proxyFileExists(media: media, packageRootURL: packageRootURL)
+            let decision = MediaProxyPlaybackResolver.resolve(
+                preferProxy: project.settings.preferProxyPlayback,
+                proxyState: media.proxyState,
+                proxyFileExists: proxyExists
+            )
+            if decision.shouldReenqueueGeneration {
+                mediaIDsNeedingProxyGeneration.insert(media.id)
+            }
+
             do {
-                let frame = try await decoder.decodeFrame(from: media, at: source.sourceTime)
+                let frame: DecodedFrame
+                if source.mediaSourceTier == .proxy,
+                   let relative = media.proxyState.readyRelativePath,
+                   let packageRootURL {
+                    let proxyURL = ProxyStorageLayout.absoluteURL(
+                        packageRootURL: packageRootURL,
+                        relativePath: relative
+                    )
+                    frame = try await decoder.decodeFrame(from: proxyURL, at: source.sourceTime)
+                } else {
+                    frame = try await decoder.decodeFrame(from: media, at: source.sourceTime)
+                }
                 guard let texture = CVMetalTextureGetTexture(frame.metalTexture) else {
                     throw EditorAjarRenderError.decodedTextureUnavailable(source.mediaID)
                 }
@@ -120,6 +178,7 @@ private final class AppSourceTextureProvider: RenderSourceTextureProvider {
         self.textures = textures
         self.retainedFrames = retainedFrames
         self.runtimeOfflineMediaIDs = runtimeOfflineMediaIDs
+        self.mediaIDsNeedingProxyGeneration = mediaIDsNeedingProxyGeneration
     }
 
     func texture(for source: RenderSourceNode) throws -> MTLTexture {
@@ -136,6 +195,19 @@ private final class AppSourceTextureProvider: RenderSourceTextureProvider {
             throw EditorAjarRenderError.missingMedia(mediaID)
         }
         return media
+    }
+
+    private static func proxyFileExists(media: MediaRef, packageRootURL: URL?) -> Bool {
+        guard let relative = media.proxyState.readyRelativePath,
+              let packageRootURL
+        else {
+            return false
+        }
+        let url = ProxyStorageLayout.absoluteURL(
+            packageRootURL: packageRootURL,
+            relativePath: relative
+        )
+        return FileManager.default.isReadableFile(atPath: url.path)
     }
 }
 

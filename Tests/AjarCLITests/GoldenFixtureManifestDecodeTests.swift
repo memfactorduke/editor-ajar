@@ -54,6 +54,9 @@ final class GoldenFixtureManifestDecodeTests: XCTestCase {
             decodedFrameIDs.contains("media-offline-slate"),
             "FR-MED-007 offline-slate manifest must remain in the decode walk"
         )
+        // FR-MED-004 does not add a golden-frame fixture (proxy is a decode tier, not a
+        // raster golden). Keep the offline-slate walk as the media-tier identity sentinel.
+        _ = "FR-MED-004"
     }
 
     private func fixtureRoots() throws -> [URL] {

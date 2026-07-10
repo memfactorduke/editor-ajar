@@ -31,6 +31,9 @@ public enum ExportVideoCodec: String, Codable, CaseIterable, Equatable, Sendable
 
     /// Apple ProRes 4444, preserving alpha.
     case proRes4444
+
+    /// Apple ProRes 422 Proxy — optimized media / proxy generation (FR-MED-004).
+    case proRes422Proxy
 }
 
 /// Audio codecs supported by the v1 export engine (FR-EXP-002).
