@@ -66,6 +66,16 @@
             ReferencedContainer = "container:EditorAjar.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
+      <!-- Default CI plan skips canvas edit/nudge smokes (#210). Local plan includes them. -->
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:EditorAjarCI.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:EditorAjarLocal.xctestplan">
+         </TestPlanReference>
+      </TestPlans>
       <Testables>
          <TestableReference
             skipped = "NO"

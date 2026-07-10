@@ -166,17 +166,69 @@ private struct LibraryPanel: View {
 private struct ProgramMonitor: View {
     @ObservedObject var model: EditorAjarAppModel
 
-    /// Stable AX name used by UI-smoke (`otherElements[…]`). Identifier + label must match.
-    private var programMonitorAccessibilityName: String {
-        "Program monitor showing \(model.activeSequenceName)"
-    }
-
     var body: some View {
         VStack(spacing: 12) {
-            // Hosting container always present; AX anchor does not wait on first frame.
-            monitorStage
-                .padding(.horizontal, 24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                ProgramMetalView(device: model.metalDevice, texture: model.presentedTexture)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .accessibilityHidden(true)
+                    .overlay {
+                        CanvasTitleEditingOverlay(model: model)
+                    }
+                    .overlay {
+                        CanvasTransformOverlay(model: model)
+                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .aspectRatio(model.canvasAspectRatio, contentMode: .fit)
+                    .overlay(alignment: .topTrailing) {
+                        Button {
+                            model.toggleCanvasSafeAreaGuides()
+                        } label: {
+                            Label(
+                                model.canvasSafeAreaGuidesVisible
+                                    ? "Hide Action and Title Safe Guides"
+                                    : "Show Action and Title Safe Guides",
+                                systemImage: "rectangle.inset.filled"
+                            )
+                            .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .padding(8)
+                        .help(
+                            model.canvasSafeAreaGuidesVisible
+                                ? "Hide action-safe and title-safe guides"
+                                : "Show action-safe and title-safe guides"
+                        )
+                        .accessibilityIdentifier("Canvas Safe Area Guides Toggle")
+                        .accessibilityLabel(
+                            model.canvasSafeAreaGuidesVisible
+                                ? "Hide Action and Title Safe Guides"
+                                : "Show Action and Title Safe Guides"
+                        )
+                        .accessibilityValue(
+                            model.canvasSafeAreaGuidesVisible ? "On" : "Off"
+                        )
+                    }
+
+                if model.presentedTexture == nil {
+                    VStack(spacing: 6) {
+                        Text(model.activeSequenceName)
+                            .font(.title3.weight(.semibold))
+                        Text(model.loadMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Program monitor showing \(model.activeSequenceName)")
 
             VStack(spacing: 4) {
                 HStack {
@@ -199,103 +251,6 @@ private struct ProgramMonitor: View {
         }
         .padding(.vertical, 18)
         .background(Color(red: 0.08, green: 0.08, blue: 0.09))
-    }
-
-    private var monitorStage: some View {
-        ZStack {
-            programCanvasLayers
-                .aspectRatio(model.canvasAspectRatio, contentMode: .fit)
-                .overlay(alignment: .topTrailing) {
-                    CanvasSafeAreaGuidesToggleButton(model: model)
-                }
-
-            if model.presentedTexture == nil {
-                VStack(spacing: 6) {
-                    Text(model.activeSequenceName)
-                        .font(.title3.weight(.semibold))
-                    Text(model.loadMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityHidden(true)
-            }
-
-            // Dedicated AX host (surfaces as Image + identifier). UI-smoke matches by
-            // identifier via descendants(.any), not otherElements role.
-            programMonitorAccessibilityAnchor
-        }
-    }
-
-    /// Render-independent AX node for `Program monitor showing …`.
-    private var programMonitorAccessibilityAnchor: some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityElement(children: .ignore)
-            .accessibilityIdentifier(programMonitorAccessibilityName)
-            .accessibilityLabel(programMonitorAccessibilityName)
-            .accessibilityAddTraits(.isImage)
-            .allowsHitTesting(false)
-            .accessibilitySortPriority(1_000)
-    }
-
-    /// Metal + chrome + FR-TXT/XFORM overlays as layered siblings (hit-test order preserved).
-    private var programCanvasLayers: some View {
-        ZStack {
-            programCanvasBase
-            CanvasTransformOverlay(model: model)
-            // Title boxes above transform chrome so FR-TXT-003 keeps hit-testing.
-            CanvasTitleEditingOverlay(model: model)
-            programCanvasBorder
-        }
-    }
-
-    private var programCanvasBase: some View {
-        ProgramMetalView(device: model.metalDevice, texture: model.presentedTexture)
-            .background(Color.black)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .accessibilityHidden(true)
-    }
-
-    private var programCanvasBorder: some View {
-        RoundedRectangle(cornerRadius: 6)
-            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-}
-
-/// FR-TXT-003 action-safe / title-safe guide toggle (app overlay only).
-private struct CanvasSafeAreaGuidesToggleButton: View {
-    @ObservedObject var model: EditorAjarAppModel
-
-    var body: some View {
-        Button(action: model.toggleCanvasSafeAreaGuides) {
-            toggleLabel
-                .labelStyle(.iconOnly)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.small)
-        .padding(8)
-        .help(helpText)
-        .accessibilityIdentifier("Canvas Safe Area Guides Toggle")
-        .accessibilityLabel(accessibilityTitle)
-        .accessibilityValue(model.canvasSafeAreaGuidesVisible ? "On" : "Off")
-    }
-
-    private var toggleLabel: some View {
-        Label(accessibilityTitle, systemImage: "rectangle.inset.filled")
-    }
-
-    private var accessibilityTitle: String {
-        model.canvasSafeAreaGuidesVisible
-            ? "Hide Action and Title Safe Guides"
-            : "Show Action and Title Safe Guides"
-    }
-
-    private var helpText: String {
-        model.canvasSafeAreaGuidesVisible
-            ? "Hide action-safe and title-safe guides"
-            : "Show action-safe and title-safe guides"
     }
 }
 
@@ -463,10 +418,10 @@ private struct MarkerInspector: View {
 
     private func markerFrameDescription(_ marker: Marker) -> String {
         guard let sequence = model.activeSequence,
-            let frame = try? marker.time.frameIndex(
+              let frame = try? marker.time.frameIndex(
                 at: sequence.timebase,
                 rounding: .nearestOrAwayFromZero
-            )
+              )
         else {
             return "--"
         }
@@ -486,8 +441,7 @@ private struct TimelineView: View {
             let timelineContentWidth = model.timelineContentWidth(
                 minimumWidth: availableContentWidth
             )
-            let timelineWidth =
-                TimelineLayoutMetrics.trackContentLeadingOffset + timelineContentWidth
+            let timelineWidth = TimelineLayoutMetrics.trackContentLeadingOffset + timelineContentWidth
             VStack(alignment: .leading, spacing: 10) {
                 toolbar(availableWidth: availableContentWidth)
                 if let sequence = model.activeSequence {
@@ -564,14 +518,10 @@ private struct TimelineView: View {
             TimelineToolButton(title: "Zoom Timeline In", systemImage: "plus.magnifyingglass") {
                 model.zoomTimelineIn()
             }
-            TimelineToolButton(
-                title: "Decrease Track Height", systemImage: "arrow.down.to.line.compact"
-            ) {
+            TimelineToolButton(title: "Decrease Track Height", systemImage: "arrow.down.to.line.compact") {
                 model.zoomTimelineVerticallyOut()
             }
-            TimelineToolButton(
-                title: "Increase Track Height", systemImage: "arrow.up.to.line.compact"
-            ) {
+            TimelineToolButton(title: "Increase Track Height", systemImage: "arrow.up.to.line.compact") {
                 model.zoomTimelineVerticallyIn()
             }
             TimelineToolButton(title: "Fit Timeline", systemImage: "arrow.left.and.right") {
@@ -580,15 +530,11 @@ private struct TimelineView: View {
             TimelineToolButton(title: "Zoom to Selection", systemImage: "selection.pin.in.out") {
                 model.zoomTimelineToSelection(toWidth: availableWidth)
             }
-            TimelineToolButton(
-                title: "Set Range In", systemImage: "inset.filled.leadinghalf.rectangle"
-            ) {
+            TimelineToolButton(title: "Set Range In", systemImage: "inset.filled.leadinghalf.rectangle") {
                 model.setTimelineRangeIn()
             }
             .keyboardShortcut("i", modifiers: [])
-            TimelineToolButton(
-                title: "Set Range Out", systemImage: "inset.filled.trailinghalf.rectangle"
-            ) {
+            TimelineToolButton(title: "Set Range Out", systemImage: "inset.filled.trailinghalf.rectangle") {
                 model.setTimelineRangeOut()
             }
             .keyboardShortcut("o", modifiers: [])
@@ -690,8 +636,7 @@ private struct TimelineRuler: View {
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
                     model.scrubTimeline(
-                        xPosition: value.location.x
-                            - TimelineLayoutMetrics.trackContentLeadingOffset
+                        xPosition: value.location.x - TimelineLayoutMetrics.trackContentLeadingOffset
                     )
                 }
         )
@@ -731,8 +676,7 @@ private struct TimelineMarkerButton: View {
 
     private var accessibilityValue: String {
         let note = layout.note.isEmpty ? "No note" : layout.note
-        return
-            "\(isSelected ? "Selected" : "Not selected"), \(layout.color.displayName), frame \(layout.frame), \(note)"
+        return "\(isSelected ? "Selected" : "Not selected"), \(layout.color.displayName), frame \(layout.frame), \(note)"
     }
 }
 
@@ -862,8 +806,7 @@ private struct TrackLane: View {
                 .frame(width: 34)
                 .accessibilityHidden(true)
             TrackStateButton(
-                title: row.track.enabled
-                    ? "Disable \(row.accessibilityLabel)" : "Enable \(row.accessibilityLabel)",
+                title: row.track.enabled ? "Disable \(row.accessibilityLabel)" : "Enable \(row.accessibilityLabel)",
                 systemImage: "power",
                 isOn: row.track.enabled
             ) {
@@ -874,8 +817,7 @@ private struct TrackLane: View {
                 )
             }
             TrackStateButton(
-                title: row.track.locked
-                    ? "Unlock \(row.accessibilityLabel)" : "Lock \(row.accessibilityLabel)",
+                title: row.track.locked ? "Unlock \(row.accessibilityLabel)" : "Lock \(row.accessibilityLabel)",
                 systemImage: row.track.locked ? "lock.fill" : "lock.open",
                 isOn: row.track.locked
             ) {
@@ -887,8 +829,7 @@ private struct TrackLane: View {
             }
             if row.kind == .video {
                 TrackStateButton(
-                    title: row.track.hidden
-                        ? "Show \(row.accessibilityLabel)" : "Hide \(row.accessibilityLabel)",
+                    title: row.track.hidden ? "Show \(row.accessibilityLabel)" : "Hide \(row.accessibilityLabel)",
                     systemImage: row.track.hidden ? "eye.slash.fill" : "eye",
                     isOn: !row.track.hidden
                 ) {
@@ -900,8 +841,7 @@ private struct TrackLane: View {
                 }
             } else {
                 TrackStateButton(
-                    title: row.track.muted
-                        ? "Unmute \(row.accessibilityLabel)" : "Mute \(row.accessibilityLabel)",
+                    title: row.track.muted ? "Unmute \(row.accessibilityLabel)" : "Mute \(row.accessibilityLabel)",
                     systemImage: row.track.muted ? "speaker.slash.fill" : "speaker.wave.2",
                     isOn: row.track.muted
                 ) {
@@ -912,8 +852,7 @@ private struct TrackLane: View {
                     )
                 }
                 TrackStateButton(
-                    title: row.track.solo
-                        ? "Unsolo \(row.accessibilityLabel)" : "Solo \(row.accessibilityLabel)",
+                    title: row.track.solo ? "Unsolo \(row.accessibilityLabel)" : "Solo \(row.accessibilityLabel)",
                     systemImage: row.track.solo ? "headphones.circle.fill" : "headphones",
                     isOn: row.track.solo
                 ) {
@@ -976,14 +915,12 @@ private struct TrackLane: View {
                 .frame(width: 2)
                 .offset(x: model.timelineXPosition(for: model.playheadFrame))
         }
-        .frame(
-            width: max(1, timelineContentWidth), height: max(24, model.timelineState.laneHeight - 8)
-        )
+        .frame(width: max(1, timelineContentWidth), height: max(24, model.timelineState.laneHeight - 8))
     }
 
     private func transformKeyframeLanes(for layout: TimelineClipLayout) -> [TransformKeyframeLane] {
         guard row.kind == .video,
-            model.selectedTransformClipReference == layout.reference
+              model.selectedTransformClipReference == layout.reference
         else {
             return []
         }
@@ -1024,9 +961,7 @@ private struct TimelineClipBlock: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
-                    .stroke(
-                        isSelected ? Color.white.opacity(0.7) : Color.white.opacity(0.18),
-                        lineWidth: 1)
+                    .stroke(isSelected ? Color.white.opacity(0.7) : Color.white.opacity(0.18), lineWidth: 1)
             )
             .help("\(layout.name), frames \(layout.startFrame)-\(layout.endFrame)")
             .accessibilityLabel("Clip \(layout.name)")
@@ -1158,9 +1093,7 @@ private struct TransformKeyframeToggle: View {
             model.toggleSelectedTransformKeyframe(parameter)
         } label: {
             Label(
-                hasKeyframe
-                    ? "Delete \(parameter.displayName) Keyframe"
-                    : "Add \(parameter.displayName) Keyframe",
+                hasKeyframe ? "Delete \(parameter.displayName) Keyframe" : "Add \(parameter.displayName) Keyframe",
                 systemImage: hasKeyframe ? "diamond.fill" : "diamond"
             )
             .labelStyle(.iconOnly)
@@ -1168,9 +1101,7 @@ private struct TransformKeyframeToggle: View {
         .buttonStyle(.borderless)
         .help(hasKeyframe ? "Delete keyframe at playhead" : "Add keyframe at playhead")
         .accessibilityLabel(
-            hasKeyframe
-                ? "Delete \(parameter.displayName) Keyframe"
-                : "Add \(parameter.displayName) Keyframe"
+            hasKeyframe ? "Delete \(parameter.displayName) Keyframe" : "Add \(parameter.displayName) Keyframe"
         )
         .accessibilityIdentifier("Transform \(parameter.displayName) Keyframe Toggle")
     }
@@ -1336,9 +1267,7 @@ private struct CanvasTransformOverlay: View {
             .accessibilityIdentifier("Program Move Transform")
     }
 
-    private func transformReadout(
-        metrics: CanvasOverlayMetrics, transform: ClipTransform
-    ) -> some View {
+    private func transformReadout(metrics: CanvasOverlayMetrics, transform: ClipTransform) -> some View {
         Text(readout(transform))
             .font(.caption2.monospacedDigit())
             .padding(.horizontal, 6)
@@ -1378,9 +1307,7 @@ private struct CanvasTransformOverlay: View {
             .accessibilityIdentifier("Program \(title)")
     }
 
-    private func canvasMetrics(
-        layout: CanvasClipTransformLayout, size: CGSize
-    ) -> CanvasOverlayMetrics {
+    private func canvasMetrics(layout: CanvasClipTransformLayout, size: CGSize) -> CanvasOverlayMetrics {
         let canvasWidth = max(1.0, Double(layout.canvasSize.width))
         let canvasHeight = max(1.0, Double(layout.canvasSize.height))
         let scale = min(size.width / canvasWidth, size.height / canvasHeight)
@@ -1388,16 +1315,12 @@ private struct CanvasTransformOverlay: View {
             x: (size.width - (canvasWidth * scale)) / 2.0,
             y: (size.height - (canvasHeight * scale)) / 2.0
         )
-        let xPosition =
-            origin.x
+        let xPosition = origin.x
             + ((layout.transform.position.x.doubleValue * scale) + movePreview.width)
-        let yPosition =
-            origin.y
+        let yPosition = origin.y
             + ((layout.transform.position.y.doubleValue * scale) + movePreview.height)
-        let width = max(
-            8, Double(layout.clipSize.width) * layout.transform.scale.x.doubleValue * scale)
-        let height = max(
-            8, Double(layout.clipSize.height) * layout.transform.scale.y.doubleValue * scale)
+        let width = max(8, Double(layout.clipSize.width) * layout.transform.scale.x.doubleValue * scale)
+        let height = max(8, Double(layout.clipSize.height) * layout.transform.scale.y.doubleValue * scale)
         let rect = CGRect(x: xPosition, y: yPosition, width: width, height: height)
         let anchorPoint = CGPoint(
             x: origin.x + (layout.transform.anchorPoint.x.doubleValue * scale),
@@ -1481,11 +1404,9 @@ private struct TransformKeyframeLaneRow: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
-                        let frame =
-                            layout.startFrame
+                        let frame = layout.startFrame
                             + Int64((value.location.x / max(1.0, pixelsPerFrame)).rounded())
-                        addKeyframe(
-                            lane.parameter, min(max(layout.startFrame, frame), layout.endFrame - 1))
+                        addKeyframe(lane.parameter, min(max(layout.startFrame, frame), layout.endFrame - 1))
                     }
             )
         }
@@ -1518,8 +1439,7 @@ private struct TransformKeyframeDot: View {
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onEnded { value in
-                    let deltaFrames = Int64(
-                        (value.translation.width / max(1.0, pixelsPerFrame)).rounded())
+                    let deltaFrames = Int64((value.translation.width / max(1.0, pixelsPerFrame)).rounded())
                     moveKeyframe(lane.parameter, point.frame, point.frame + deltaFrames)
                 }
         )

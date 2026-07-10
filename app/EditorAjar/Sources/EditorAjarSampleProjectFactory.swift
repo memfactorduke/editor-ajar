@@ -24,11 +24,16 @@ enum EditorAjarSampleProjectFactory {
         )
 
         let duration = try frameRate.duration(ofFrames: frameCount)
+        // Canvas title occupies the head of V2 so FR-TXT-003 is visible at playhead 0.
+        // Tail of V2 stays free so FR-COL-007 grade-target fixtures can abut without overlap.
+        let titleFrameCount: Int64 = 60
+        let titleDuration = try frameRate.duration(ofFrames: titleFrameCount)
         let mediaID = try uuid("00000000-0000-0000-0000-000000000025")
         let audioMediaID = try uuid("00000000-0000-0000-0000-000000000026")
         let clipID = try uuid("00000000-0000-0000-0000-000000000125")
         let audioClipID = try uuid("00000000-0000-0000-0000-000000000126")
         let linkGroupID = try uuid("00000000-0000-0000-0000-000000000127")
+        let titleClipID = try uuid("00000000-0000-0000-0000-000000000128")
         let media = MediaRef(
             id: mediaID,
             sourceURL: mediaURL,
@@ -77,6 +82,32 @@ enum EditorAjarSampleProjectFactory {
             name: "Sample Playback Audio",
             linkGroupID: linkGroupID
         )
+        let title = TitleSource(boxes: [
+            TitleTextBox(
+                id: try uuid("00000000-0000-0000-0000-000000000129"),
+                text: "Edit me",
+                origin: CanvasPoint(x: RationalValue(70), y: RationalValue(50)),
+                width: RationalValue(180),
+                height: RationalValue(36),
+                style: TitleTextStyle(fontSize: RationalValue(22), fontWeight: .semibold)
+            ),
+            TitleTextBox(
+                id: try uuid("00000000-0000-0000-0000-000000000130"),
+                text: "Second box",
+                origin: CanvasPoint(x: RationalValue(80), y: RationalValue(105)),
+                width: RationalValue(160),
+                height: RationalValue(30),
+                style: TitleTextStyle(fontSize: RationalValue(16))
+            )
+        ])
+        let titleClip = Clip(
+            id: titleClipID,
+            source: .title(title),
+            sourceRange: try TimeRange(start: .zero, duration: titleDuration),
+            timelineRange: try TimeRange(start: .zero, duration: titleDuration),
+            kind: .video,
+            name: "Sample Canvas Title"
+        )
         let sequence = Sequence(
             id: try uuid("00000000-0000-0000-0000-000000000225"),
             name: "Sample Playback Sequence",
@@ -89,7 +120,8 @@ enum EditorAjarSampleProjectFactory {
                 Track(
                     id: try uuid("00000000-0000-0000-0000-000000000326"),
                     kind: .video,
-                    items: [],
+                    // Title [0, 60). Frames [60, 90) free for grade paste-target clips.
+                    items: [.clip(titleClip)],
                     enabled: true,
                     hidden: false
                 )

@@ -1,0 +1,41 @@
+{
+  "configurations" : [
+    {
+      "id" : "A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:EditorAjar.xcodeproj",
+      "identifier" : "781D625050DFF9CEE38EF3D4",
+      "name" : "EditorAjar"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:EditorAjar.xcodeproj",
+        "identifier" : "80A4C7B5D915B3036EADD118",
+        "name" : "EditorAjarTests"
+      }
+    },
+    {
+      "parallelizable" : false,
+      "skippedTests" : [
+        "EditorAjarUISmokeTests\/testFRTXT003DragsAndKeyboardNudgesCanvasTitleBox",
+        "EditorAjarUISmokeTests\/testFRTXT003EditsCanvasTitleWithKeyboardAndUndoRestoresText"
+      ],
+      "target" : {
+        "containerPath" : "container:EditorAjar.xcodeproj",
+        "identifier" : "D0482A94769ACB971C8F5AFE",
+        "name" : "EditorAjarUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

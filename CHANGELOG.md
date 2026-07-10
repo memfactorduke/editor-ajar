@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the next edit (#198).
 
 ### Added
+- FR-TXT-003 on-canvas title editing and positioning (#187): visible title boxes use a positioned
+  system `NSTextView` for caret, selection, marked-text/IME input, and live model updates through
+  undoable `setTitleTextBox` commands (one coalesced undo step per text-focus session). Boxes drag
+  with action-safe/title-safe edge and canvas-center snapping; focused boxes nudge by 1 canvas unit
+  with arrows or 10 with Shift-arrows, and Tab/Shift-Tab moves between boxes. VoiceOver exposes
+  stable box/editor labels, and an app-only 90% action-safe / 80% title-safe guide toggle is proven
+  absent from the project and render-graph hash. The existing macOS UI-smoke target covers edit,
+  keyboard entry/exit and box traversal, undo restoration, drag/nudge, and guide visibility.
 - FR-COL-007 per-clip grades and project looks (#190, M8 scope): a grade is the ordered
   `colorAdjust` / `curves` / `lut` / `posterize` / `invert` subset of a clip's FR-FX-003 stack.
   Undoable copy-grade edits replace only those nodes with fresh IDs across tracks and compound-

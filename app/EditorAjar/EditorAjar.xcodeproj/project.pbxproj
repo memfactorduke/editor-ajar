@@ -15,6 +15,7 @@
 		4B37B435C4E09BC2B3D1C844 /* AjarCore in Frameworks */ = {isa = PBXBuildFile; productRef = 85C3D209033711447AA4FAA9 /* AjarCore */; };
 		5F81FCEB82A63EC85F3996A6 /* EditorAjarAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */; };
 		5FD25C168A644F1D7D7D373C /* ProgramMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */; };
+		63D76714CAA834902EE03BC5 /* CanvasTitleEditingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */; };
 		6653EE21E97F97F4A1337738 /* EditorAjarDisplayLinkDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */; };
 		7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */; };
 		859809191F61E0E85C7B4D8E /* EditorAjarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */; };
@@ -44,6 +45,7 @@
 /* Begin PBXFileReference section */
 		0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarSampleProjectFactory.swift; sourceTree = "<group>"; };
 		15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarApp.swift; sourceTree = "<group>"; };
+		1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasTitleEditingOverlay.swift; sourceTree = "<group>"; };
 		1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDisplayLinkDriver.swift; sourceTree = "<group>"; };
 		4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarLiveAudioCoordinator.swift; sourceTree = "<group>"; };
 		49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarUISmokeTests.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 		6F7022CEA1657A2876E1F698 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */,
 				15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */,
 				F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */,
 				1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */,
@@ -246,6 +249,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				63D76714CAA834902EE03BC5 /* CanvasTitleEditingOverlay.swift in Sources */,
 				859809191F61E0E85C7B4D8E /* EditorAjarApp.swift in Sources */,
 				3A246BF62A10B5DED981A4E7 /* EditorAjarAppModel.swift in Sources */,
 				6653EE21E97F97F4A1337738 /* EditorAjarDisplayLinkDriver.swift in Sources */,

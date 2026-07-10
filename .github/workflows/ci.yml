@@ -160,12 +160,17 @@ jobs:
 
             echo "::group::UI smoke attempt ${attempt}/${max_attempts}"
             set +e
+            # #210: -only-testing overrides plan skippedTests; use -skip-testing for canvas
+            # edit/nudge smokes. Guides toggle stays on.
             xcodebuild test \
               -project app/EditorAjar/EditorAjar.xcodeproj \
               -scheme EditorAjar \
+              -testPlan EditorAjarCI \
               -destination 'platform=macOS' \
               -derivedDataPath /tmp/editor-ajar-app-derived \
               -only-testing:EditorAjarUITests \
+              -skip-testing:EditorAjarUITests/EditorAjarUISmokeTests/testFRTXT003DragsAndKeyboardNudgesCanvasTitleBox \
+              -skip-testing:EditorAjarUITests/EditorAjarUISmokeTests/testFRTXT003EditsCanvasTitleWithKeyboardAndUndoRestoresText \
               -test-timeouts-enabled YES \
               -default-test-execution-time-allowance 60 \
               -maximum-test-execution-time-allowance 120 \
@@ -197,6 +202,16 @@ jobs:
             echo "::warning::UI smoke launch/bootstrap flake on attempt ${attempt}; retrying."
             sleep 5
           done
+
+      - name: Upload UI smoke xcresults
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-xcresults
+          path: |
+            /tmp/editor-ajar-ui-smoke-*.xcresult
+            /tmp/editor-ajar-app-tests.xcresult
+          if-no-files-found: ignore
 
   soak:
     name: Soak (short, NFR-STAB-005)

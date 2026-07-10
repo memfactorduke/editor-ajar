@@ -24,6 +24,9 @@ public enum EditHistoryError: Error, Equatable, Sendable {
     /// Replaying a redo command did not reproduce the recorded post-command project.
     case redoDiverged(command: EditCommand)
 
+    /// A final-state command could not replace the previous undo entry deterministically.
+    case coalescedReplayDiverged(command: EditCommand)
+
     /// The session was opened read-only (newer schema minor); edits are refused (FR-PROJ-005).
     case projectOpenedReadOnly(reason: AjarProjectReadOnlyReason)
 }
@@ -93,6 +96,43 @@ public struct EditHistory: Equatable, Sendable {
         let before = currentProject
         let after = try EditReducer.apply(command, to: before)
         undoEntries.append(EditLogEntry(command: command, before: before, after: after))
+        redoEntries.removeAll(keepingCapacity: true)
+        currentProject = after
+        return after
+    }
+
+    /// Applies a final-state command while replacing the newest undo entry.
+    ///
+    /// Interactive controls use this after their first live update so a continuous gesture or
+    /// text-input session remains one undo step while every intermediate value still passes
+    /// through an `EditCommand`. The command must describe the complete final state: replaying it
+    /// directly against the previous entry's `before` snapshot has to reproduce the new project.
+    /// A divergent incremental command is rejected rather than creating an unsafe undo record.
+    @discardableResult
+    public mutating func applyCoalescingWithPrevious(_ command: EditCommand) throws -> Project {
+        if case .readOnly(let reason) = openMode {
+            throw EditHistoryError.projectOpenedReadOnly(reason: reason)
+        }
+
+        guard let previous = undoEntries.last else {
+            return try apply(command)
+        }
+
+        let after = try EditReducer.apply(command, to: currentProject)
+        let replayed = try EditReducer.apply(command, to: previous.before)
+        guard replayed == after else {
+            throw EditHistoryError.coalescedReplayDiverged(command: command)
+        }
+
+        if after == previous.before {
+            undoEntries.removeLast()
+        } else {
+            undoEntries[undoEntries.count - 1] = EditLogEntry(
+                command: command,
+                before: previous.before,
+                after: after
+            )
+        }
         redoEntries.removeAll(keepingCapacity: true)
         currentProject = after
         return after
