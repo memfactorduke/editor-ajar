@@ -215,31 +215,3 @@ private func makeVideoToolboxAppendError(
         userInfo: [NSUnderlyingErrorKey: videoToolboxError]
     )
 }
-
-private extension ExportError {
-    func isHardwareEncoderUnavailable(for codec: ExportVideoCodec) -> Bool {
-        guard codec.requiresHardwareEncoder else {
-            return false
-        }
-        switch self {
-        case .encoderRefused(let refusedCodec, _):
-            return refusedCodec == codec
-        case .appendRefused(.video, _, let underlyingError):
-            return underlyingError?.isVideoToolboxEncoderUnavailable == true
-        default:
-            return false
-        }
-    }
-}
-
-private extension NSError {
-    var isVideoToolboxEncoderUnavailable: Bool {
-        guard domain == AVFoundationErrorDomain,
-            code == AVError.Code.unknown.rawValue,
-            let underlyingError = userInfo[NSUnderlyingErrorKey] as? NSError,
-            underlyingError.domain == NSOSStatusErrorDomain else {
-            return false
-        }
-        return (-12_906 ... -12_902).contains(underlyingError.code)
-    }
-}

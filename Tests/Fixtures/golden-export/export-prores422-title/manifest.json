@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "export-prores422-title",
+  "requirements": ["FR-EXP-007", "ADR-0019"],
+  "mode": "movie",
+  "codec": "proRes422",
+  "container": "mov",
+  "frameCount": 12,
+  "width": 64,
+  "height": 64,
+  "includeAudio": false
+}

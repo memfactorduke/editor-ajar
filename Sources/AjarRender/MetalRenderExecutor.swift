@@ -855,11 +855,22 @@ public final class MetalRenderExecutor {
         guard width > 0, height > 0 else {
             throw MetalRenderError.outputTextureCreationFailed(width: width, height: height)
         }
-        return try makeReusableTexture(
+        // Dedicated allocation — never share the intermediate texture pool with content-hash
+        // cache entries. Cached outputs live across sequential `render` calls (static titles
+        // hash-identical for every export frame); pool reuse of a still-cached output can
+        // clear/composite into a texture that later cache hits still return.
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: output.pixelFormat,
             width: width,
-            height: height
+            height: height,
+            mipmapped: false
         )
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .private
+        guard let texture = device.makeTexture(descriptor: descriptor) else {
+            throw MetalRenderError.outputTextureCreationFailed(width: width, height: height)
+        }
+        return texture
     }
 
     private func makeCommandBuffer() throws -> MTLCommandBuffer {

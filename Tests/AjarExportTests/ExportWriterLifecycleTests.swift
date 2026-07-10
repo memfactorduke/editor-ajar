@@ -250,4 +250,45 @@ final class ExportWriterLifecycleTests: XCTestCase {
         XCTAssertEqual(result.videoFrameCount, 3)
         XCTAssertEqual(writer.finishedAt, CMTime(value: 1, timescale: 10))
     }
+
+    /// FR-EXP-007: last pending frame must be appended before finish; PTS and endTime aligned.
+    ///
+    /// Reproduces the golden-export last-frame shape headlessly via the stub writer: N appends,
+    /// last PTS == (N-1)/fps, finish endTime == N/fps on the presentation-time timescale, and
+    /// no append after finish.
+    func testFREXP007LastPendingFrameIsAppendedBeforeFinishWithAlignedEndTime() async throws {
+        let frameCount: Int64 = 12
+        let frameRate = try FrameRate(frames: 30)
+        let fixture = try LifecycleFixture(frameCount: frameCount, frameRate: frameRate)
+        let writer = LifecycleWriter(outputURL: fixture.destinationURL)
+        // Force not-ready polls so the pending-frame path is exercised before accepting.
+        writer.videoNotReadyPollsRemaining = 2
+        let session = fixture.session(frameProvider: LifecycleFrameProvider()) { _, _ in writer }
+
+        let result = try await session.run()
+
+        XCTAssertEqual(result.videoFrameCount, frameCount)
+        XCTAssertEqual(writer.appendedVideoCount, Int(frameCount))
+        XCTAssertEqual(writer.appendedVideoPresentationTimes.count, Int(frameCount))
+        let lastPTS = try XCTUnwrap(writer.appendedVideoPresentationTimes.last)
+        XCTAssertEqual(lastPTS, CMTime(value: frameCount - 1, timescale: 30))
+        XCTAssertEqual(writer.finishedAt, CMTime(value: frameCount, timescale: 30))
+        XCTAssertFalse(writer.appendedVideoAfterFinish)
+        XCTAssertTrue(writer.didFinish)
+        // Exclusive end is after the last sample PTS (non-zero last-sample duration).
+        XCTAssertTrue(CMTimeCompare(lastPTS, try XCTUnwrap(writer.finishedAt)) < 0)
+    }
+
+    func testFREXP007FrameAlignedEndTimeUsesPresentationTimescale() throws {
+        let frameRate = try FrameRate(frames: 30)
+        let duration = try frameRate.duration(ofFrames: 12)
+        // RationalTime normalizes 12/30 → 2/5; endTime must still stamp timescale 30.
+        XCTAssertEqual(duration.value, 2)
+        XCTAssertEqual(duration.timescale, 5)
+        let end = try ExportTimeMapping.endTime(for: duration, frameRate: frameRate)
+        XCTAssertEqual(end, CMTime(value: 12, timescale: 30))
+        let lastPTS = try ExportTimeMapping.presentationTime(forFrame: 11, frameRate: frameRate)
+        XCTAssertEqual(lastPTS, CMTime(value: 11, timescale: 30))
+        XCTAssertTrue(CMTimeCompare(lastPTS, end) < 0)
+    }
 }

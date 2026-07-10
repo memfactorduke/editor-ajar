@@ -58,6 +58,12 @@ public enum AjarCommand {
                     standardOutput: standardOutput,
                     standardError: standardError
                 )
+            case "golden-export":
+                return try await runGoldenExport(
+                    arguments: arguments,
+                    standardOutput: standardOutput,
+                    standardError: standardError
+                )
             case "bench":
                 return try await runBench(
                     arguments: arguments,
@@ -138,6 +144,31 @@ public enum AjarCommand {
         )
     }
 
+    private static func runGoldenExport(
+        arguments: [String],
+        standardOutput: any AjarTextOutput,
+        standardError: any AjarTextOutput
+    ) async throws -> Int32 {
+        let options = try GoldenExportOptions.parse(Array(arguments.dropFirst()))
+        let summary = try await GoldenExportHarness.run(
+            options: options,
+            standardOutput: standardOutput
+        )
+        if summary.skipCount > 0 {
+            standardOutput.writeLine(
+                "golden-export skips: \(summary.skipCount) (hardware encoder unavailable)"
+            )
+        }
+        // Theater gate: all-skip / empty suite must not exit 0 (passCount==0 && failureCount==0).
+        return goldenExitCode(
+            label: "golden-export",
+            passCount: summary.passCount,
+            failureCount: summary.failureCount,
+            standardOutput: standardOutput,
+            standardError: standardError
+        )
+    }
+
     private static func runBench(
         arguments: [String],
         standardOutput: any AjarTextOutput,
@@ -171,13 +202,23 @@ public enum AjarCommand {
         return 0
     }
 
-    private static func goldenExitCode(
+    /// Maps golden harness counters to a process exit code (FR-EXP-007 theater gate included).
+    ///
+    /// Package-visible for unit tests; CLI entry points call this after each golden suite.
+    static func goldenExitCode(
         label: String,
         passCount: Int,
         failureCount: Int,
         standardOutput: any AjarTextOutput,
         standardError: any AjarTextOutput
     ) -> Int32 {
+        // Theater-gate: a run with nothing verified (all-skip / empty) must not look green.
+        if passCount == 0, failureCount == 0 {
+            standardError.writeLine(
+                "\(label) failed: zero verified work (passCount=0 failureCount=0)"
+            )
+            return 1
+        }
         if failureCount == 0 {
             standardOutput.writeLine("\(label) passed: \(passCount) passed")
             return 0
@@ -196,6 +237,7 @@ public enum AjarCommand {
               --duration <value|value/timescale> <project.ajar> -o <out.wav>
           ajar golden [Tests/Fixtures/golden | manifest.json]
           ajar golden-audio [Tests/Fixtures/golden-audio | manifest.json]
+          ajar golden-export [Tests/Fixtures/golden-export | manifest.json]
           ajar bench <all|metric> [project.ajar] [--enforce-budgets]
           ajar soak [--iterations <n>] [--duration-seconds <s>] [--seed <n|0xN>]
               [--warmup-iterations <n>] [--growth-band-mb <MiB>]

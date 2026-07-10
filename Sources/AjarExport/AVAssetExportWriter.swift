@@ -227,9 +227,11 @@ final class AVAssetExportWriter: ExportWriting, @unchecked Sendable {
                     continuation.resume()
                     return
                 }
-                self.writer.endSession(atSourceTime: endTime)
+                // markAsFinished before endSession matches AudioOnlyExport and Apple's sample
+                // ordering; endSession then trims to the exact rational duration (ADR-0019).
                 self.videoInput.markAsFinished()
                 self.audioInput?.markAsFinished()
+                self.writer.endSession(atSourceTime: endTime)
                 self.writer.finishWriting {
                     continuation.resume()
                 }

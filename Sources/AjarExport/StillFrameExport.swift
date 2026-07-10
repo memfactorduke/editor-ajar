@@ -178,6 +178,26 @@ public enum StillFrameExporter {
         }
     }
 
+    /// Decodes a still PNG/JPEG into tightly packed BGRA8 using the delivery color space.
+    ///
+    /// Used by FR-EXP-007 still golden: bit-exact compare against ``renderDeliveryBGRA``.
+    ///
+    /// **Bit-exact contract:** holds only for **fully-opaque** delivery buffers. Decode draws
+    /// through a premultiplied-alpha CGContext (`premultipliedFirst` + little-endian → BGRA),
+    /// while the export expectation is a raw packed copy of the delivery pixel buffer. Partial
+    /// coverage / non-opaque alpha can diverge between those paths even when the PNG is lossless.
+    public static func decodeStillBGRA8(
+        from url: URL,
+        colorSpace: ExportColorSpace
+    ) throws -> ExportDecodedBGRAFrame {
+        let decoded = try StillFrameImageWriter.decodeBGRA8(from: url, colorSpace: colorSpace)
+        return ExportDecodedBGRAFrame(
+            width: decoded.width,
+            height: decoded.height,
+            bgra8: decoded.bytes
+        )
+    }
+
     /// Renders one frame into a 32BGRA pixel buffer without writing a file (tests / diagnostics).
     public static func renderDeliveryBGRA(
         request: StillFrameExportRequest,
@@ -280,6 +300,10 @@ enum StillFrameImageWriter {
     ///
     /// `colorSpace` must match the delivery space used when the still was written (ADR-0019
     /// color-tag rule) so Core Graphics does not convert through DeviceRGB / sRGB.
+    ///
+    /// **Bit-exact contract:** holds only for fully-opaque delivery buffers. This path draws
+    /// through a premultiplied-alpha CGContext; the export expectation is a raw packed copy of
+    /// the delivery buffer. Non-opaque coverage can diverge even when the PNG container is lossless.
     static func decodeBGRA8(
         from url: URL,
         colorSpace: ExportColorSpace

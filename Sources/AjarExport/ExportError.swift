@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
+import AVFoundation
 import Foundation
 
 /// Media stream associated with an export writer failure.
@@ -198,6 +199,43 @@ public enum ExportError: Error, Equatable, Sendable, CustomStringConvertible {
         case .invalidSessionState(let state):
             "export session cannot start from \(state.rawValue)"
         }
+    }
+}
+
+extension ExportError {
+    /// Whether this failure is a capability-gated hardware encoder refusal for `codec`.
+    ///
+    /// Matches the ExportEngineSmokeTests pattern used on CI VMs that lack a free H.264/HEVC
+    /// session: typed `.encoderRefused` for the same codec, or `.appendRefused(.video, …)` whose
+    /// underlying `NSError` is `AVFoundationErrorDomain` / `AVError.unknown` wrapping
+    /// `NSOSStatusErrorDomain` status codes **-12902...-12906** (VideoToolbox encoder unavailable).
+    /// ProRes does not require the hardware encoder flag and never matches.
+    public func isHardwareEncoderUnavailable(for codec: ExportVideoCodec) -> Bool {
+        guard codec.requiresHardwareEncoder else {
+            return false
+        }
+        switch self {
+        case .encoderRefused(let refusedCodec, _):
+            return refusedCodec == codec
+        case .appendRefused(.video, _, let underlyingError):
+            return underlyingError?.isVideoToolboxEncoderUnavailable == true
+        default:
+            return false
+        }
+    }
+}
+
+private extension NSError {
+    /// Outer AVFoundation unknown wrapping VT encoder-unavailable OSStatus (-12902...-12906).
+    var isVideoToolboxEncoderUnavailable: Bool {
+        guard domain == AVFoundationErrorDomain,
+            code == AVError.Code.unknown.rawValue,
+            let underlyingError = userInfo[NSUnderlyingErrorKey] as? NSError,
+            underlyingError.domain == NSOSStatusErrorDomain
+        else {
+            return false
+        }
+        return (-12_906 ... -12_902).contains(underlyingError.code)
     }
 }
 

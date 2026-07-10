@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "export-still-png",
+  "requirements": ["FR-EXP-007", "FR-EXP-004", "ADR-0019"],
+  "mode": "stillPNG",
+  "frameCount": 1,
+  "width": 64,
+  "height": 64,
+  "includeAudio": false
+}

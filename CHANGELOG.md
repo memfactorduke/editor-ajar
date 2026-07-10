@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-EXP-007 export determinism + golden round-trip (#214): `ajar golden-export` harness exports a
+  small title fixture through `ExportSession`, decodes containers, and compares to the render-path
+  delivery BGRA with codec bands (ProRes near-lossless must pass on CI; H.264/HEVC lossy +
+  hardware-encoder capability skip; still PNG bit-exact). Determinism tests hash **decoded**
+  pixels/PCM across two exports. `ExportSourceSelectionPolicy` + per-frame audit rows are the
+  proxy-exclusion hook for FR-MED-004 (#217). CI golden-frame job runs
+  `Export golden (FR-EXP-007)`.
 - FR-MED-007 / FR-MED-008 media recovery (#218): bookmark-first source reconciliation now
   records a non-blocking typed offline state and playback renders a deterministic text-free
   patterned slate. Relink recomputes SHA-256, returns a typed mismatch warning until explicitly

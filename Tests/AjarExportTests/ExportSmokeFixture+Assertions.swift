@@ -218,24 +218,3 @@ extension ExportSmokeFixture {
         return InMemoryAudioSourceProvider(sources: [mediaID: source])
     }
 }
-
-enum SourceLessExportError: Error {
-    case unexpectedMediaSource
-}
-
-final class SourceLessExportProvider: ExportRenderSourceProvider {
-    func prepare(graph: RenderGraph) async throws {
-        if graph.nodes.contains(where: { node in
-            if case .source = node.kind {
-                return true
-            }
-            return false
-        }) {
-            throw SourceLessExportError.unexpectedMediaSource
-        }
-    }
-
-    func texture(for _: RenderSourceNode) throws -> MTLTexture {
-        throw SourceLessExportError.unexpectedMediaSource
-    }
-}
