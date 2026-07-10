@@ -183,6 +183,8 @@ public enum BenchmarkCommand {
         case .transitionCrossDissolve1080p, .transitionDipFade1080p,
             .transitionPushSlide1080p, .transitionWipe1080p, .transitionZoom1080p:
             try await BenchmarkTransitionFixture.measure(metric: metric)
+        case .typicalStack1080pPlaybackM8Exit, .titleNodeStyled1080p:
+            try await measureM8CreativeMetric(metric)
         default:
             try await measureRetimeMetric(metric)
         }

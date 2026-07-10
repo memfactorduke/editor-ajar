@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "transition-slide-p050",
+  "requirements": [
+    "FR-FX-001",
+    "FR-FX-007",
+    "ADR-0016",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "frame": "10/24",
+  "referencePNG": "reference.png",
+  "outputDimensions": {
+    "width": 64,
+    "height": 64
+  },
+  "clips": [
+    {
+      "syntheticMedia": {
+        "bgra": [
+          96,
+          112,
+          128,
+          255
+        ],
+        "frameCount": 16,
+        "frameRate": 24,
+        "width": 64,
+        "height": 64,
+        "checkerboard": {
+          "cellSize": 8,
+          "colorABGRA": [
+            96,
+            112,
+            128,
+            255
+          ],
+          "colorBBGRA": [
+            112,
+            128,
+            144,
+            255
+          ]
+        }
+      },
+      "timelineStartFrame": 0,
+      "sourceFrameCount": 8,
+      "trailingTransition": {
+        "partnerClipID": "00000000-0000-0000-0000-000000000119",
+        "duration": {
+          "value": 4,
+          "timescale": 24
+        },
+        "kind": "slide",
+        "direction": "right"
+      }
+    },
+    {
+      "syntheticMedia": {
+        "bgra": [
+          128,
+          112,
+          96,
+          255
+        ],
+        "frameCount": 16,
+        "frameRate": 24,
+        "width": 64,
+        "height": 64,
+        "checkerboard": {
+          "cellSize": 8,
+          "colorABGRA": [
+            128,
+            112,
+            96,
+            255
+          ],
+          "colorBBGRA": [
+            144,
+            128,
+            112,
+            255
+          ]
+        }
+      },
+      "timelineStartFrame": 8,
+      "sourceFrameCount": 8,
+      "leadingTransition": {
+        "partnerClipID": "00000000-0000-0000-0000-000000000118",
+        "duration": {
+          "value": 4,
+          "timescale": 24
+        },
+        "kind": "slide",
+        "direction": "right"
+      }
+    }
+  ],
+  "tolerance": {
+    "maximumAlphaDelta": 1,
+    "maximumDeltaE": 2,
+    "minimumSSIM": 0.98
+  },
+  "comment": "slide mid-progress (p=0.5), direction right — resampling transition like push/wipe/zoom (deltaE 2 / SSIM 0.98). reference.png is a VALID solid-gray CI-establishment placeholder (ADR-0017 §6)."
+}
