@@ -356,7 +356,9 @@ extension EditReducer {
                 duration: clip.timelineRange.duration
             )
             var items = track.items
-            items.append(.clip(copying(clip, timelineRange: timelineRange)))
+            items.append(
+                .clip(try relocating(clip, timelineRange: timelineRange))
+            )
             return copying(track, items: sortedItems(items))
         }
     }
@@ -423,7 +425,10 @@ extension EditReducer {
         switch item {
         case .clip(let clip):
             return .clip(
-                copying(clip, timelineRange: try offsetRange(clip.timelineRange, by: duration))
+                try relocating(
+                    clip,
+                    timelineRange: try offsetRange(clip.timelineRange, by: duration)
+                )
             )
         case .gap(let range):
             return .gap(try offsetRange(range, by: duration))

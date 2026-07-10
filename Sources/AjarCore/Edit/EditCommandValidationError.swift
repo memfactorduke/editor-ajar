@@ -24,6 +24,13 @@ public enum CompoundClipDecomposeAttribute: String, Equatable, Sendable {
 
     /// An FR-SPD-002 keyframed time-remap curve on the compound clip or a nested clip.
     case timeRemap
+
+    /// Keyframed track-level automation (opacity / audioGain / audioPan) on a nested track.
+    ///
+    /// Nested track automation has nowhere to merge onto the parent (the parent track keeps its
+    /// own curve), so decompose rejects keyframed nested-track automation rather than dropping
+    /// or double-applying it. Constant (non-keyframed) automation is allowed.
+    case trackAutomation
 }
 
 /// Typed validation failures for semantic edit operations.

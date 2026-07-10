@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Animation keyframes no longer freeze or fire at the wrong sequence time after a clip is
+  body-moved. Keyframes store **absolute** sequence times (same model as `Animatable.bladed(at:)`),
+  but move / make-compound / decompose / ripple previously copied animation containers unchanged
+  when `timelineRange` shifted. A single rebase rule at the edit-command placement layer
+  (`EditReducer.relocating` / `remappingAnimationTimes` / `remappingTrackAutomationTimes`) now
+  shifts every keyframe by the timeline-start delta on move, maps into the compound inner
+  timebase on collapse (clips **and** track opacity/gain/pan), and inverse-maps (including
+  compound speed) on decompose. Applied to all animation families: transform, audioMix gain/pan,
+  effect stack (every kind's animatable params), legacy effects, title `revealFraction`, and
+  track-level automation. Decompose rejects keyframed nested-track automation (nowhere to
+  merge). Blade is unchanged. No schema change — nested-legacy projects rebase behaviorally on
+  the next edit (#198).
+
 ### Added
 - FR-COL-007 per-clip grades and project looks (#190, M8 scope): a grade is the ordered
   `colorAdjust` / `curves` / `lut` / `posterize` / `invert` subset of a clip's FR-FX-003 stack.

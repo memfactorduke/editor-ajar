@@ -131,6 +131,10 @@ extension EditReducer {
         return participation
     }
 
+    static func items(_ items: [TimelineItem], overlap range: TimeRange) throws -> Bool {
+        try items.contains { try rangesIntersect($0.timelineRange, range) }
+    }
+
     static func splitCompoundSelectionMarkers(
         in sequence: Sequence,
         selectedReferences: Set<ClipReference>,

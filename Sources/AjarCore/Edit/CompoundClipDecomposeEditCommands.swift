@@ -65,6 +65,10 @@ extension EditReducer {
     ) throws -> Project {
         try replacingSequence(in: project, sequenceID: edit.sequenceID) { parentSequence in
             let target = try validatedDecomposeTarget(edit, in: parentSequence)
+            try validateDecomposableNestedTrackAutomation(
+                in: targetSequence,
+                compoundClipID: target.compoundClip.id
+            )
             var videoTracks = parentSequence.videoTracks
             var audioTracks = parentSequence.audioTracks
 

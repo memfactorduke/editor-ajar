@@ -266,6 +266,28 @@ public struct Animatable<
         return .valid
     }
 
+    /// Rebuilds keyframes by mapping each absolute keyframe time through `transform`.
+    ///
+    /// The transform must be strictly order-preserving (e.g. pure translation, or positive
+    /// constant-rate speed mapping) so the sorted-time invariant still holds. Edit commands
+    /// that body-move a clip or track apply this once via `EditReducer.relocating` /
+    /// `remappingAnimationTimes` / `remappingTrackAutomationTimes`.
+    public func mappingKeyframeTimes(
+        _ transform: (RationalTime) throws -> RationalTime
+    ) throws -> Animatable<Value> {
+        guard !keyframes.isEmpty else {
+            return self
+        }
+        let mapped = try keyframes.map { keyframe in
+            Keyframe(
+                time: try transform(keyframe.time),
+                value: keyframe.value,
+                interpolation: keyframe.interpolation
+            )
+        }
+        return try Animatable(base: base, keyframes: mapped)
+    }
+
     /// Evaluates the parameter at an exact timeline time.
     public func value(at time: RationalTime) -> Value {
         guard let first = keyframes.first else {

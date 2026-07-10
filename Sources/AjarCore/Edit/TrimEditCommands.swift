@@ -381,7 +381,8 @@ extension EditReducer {
             }
 
             items[previousIndex] = try adjustingItemEnd(previous, end: edit.timelineRange.start)
-            items[index] = .clip(copying(clip, timelineRange: edit.timelineRange))
+            // Slide body-moves the middle clip; neighbor edges are trims (no animation rebase).
+            items[index] = .clip(try relocating(clip, timelineRange: edit.timelineRange))
             items[nextIndex] = try adjustingItemStart(next, start: newEnd)
             return try maintainingCutEdgeMetadata(
                 copying(track, items: sortedItems(items)),

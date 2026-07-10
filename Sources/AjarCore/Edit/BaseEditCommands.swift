@@ -112,7 +112,7 @@ extension EditReducer {
                 audioTracks: &audioTracks
             )
 
-            let movedClip = copying(clip, timelineRange: edit.timelineRange)
+            let movedClip = try relocating(clip, timelineRange: edit.timelineRange)
             let destinationTrack = track(
                 at: destinationLocation,
                 videoTracks: videoTracks,
