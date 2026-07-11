@@ -3,10 +3,11 @@
 import AjarCore
 import Foundation
 
-/// Inspector surface shown when a single video clip is selected (FR-COL-001 / FR-XFORM).
+/// Inspector surface shown when a single clip is selected (FR-COL-001 / FR-XFORM / FR-AUD-001).
 enum ClipInspectorTab: String, CaseIterable, Identifiable, Sendable {
     case transform
     case color
+    case audio
 
     var id: String { rawValue }
 
@@ -16,6 +17,8 @@ enum ClipInspectorTab: String, CaseIterable, Identifiable, Sendable {
             return AppString.localized("inspector.tab.transform", "Transform")
         case .color:
             return AppString.localized("inspector.tab.color", "Color")
+        case .audio:
+            return AppString.localized("inspector.tab.audio", "Audio")
         }
     }
 
@@ -25,6 +28,8 @@ enum ClipInspectorTab: String, CaseIterable, Identifiable, Sendable {
             return "Inspector Tab Transform"
         case .color:
             return "Inspector Tab Color"
+        case .audio:
+            return "Inspector Tab Audio"
         }
     }
 }

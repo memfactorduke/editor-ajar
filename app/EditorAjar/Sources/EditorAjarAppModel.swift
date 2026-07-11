@@ -105,6 +105,16 @@ final class EditorAjarAppModel: ObservableObject {
     /// Whether the FR-EXP-005 export queue panel is visible.
     @Published var isExportQueuePanelVisible = false
 
+    /// Whether the FR-AUD-003 mixer panel is visible (session chrome; ⌥⌘M).
+    @Published private(set) var isMixerPanelVisible = false
+
+    /// Session-only master monitoring gain (linear). Not project schema — applied off-RT when
+    /// preparing live plans and reflected in the mixer master fader (FR-AUD-003).
+    @Published private(set) var masterGainLinear: Double = AudioMixUISupport.defaultMasterGainLinear
+
+    /// Latest off-RT mixer meter snapshot (nil until first measure).
+    @Published private(set) var mixerMeterSnapshot: MixerMeterSnapshot?
+
     /// Background export queue bridge (FR-EXP-005). Observe this for job list updates.
     let exportQueueController: EditorAjarExportQueueController
 
@@ -232,6 +242,15 @@ final class EditorAjarAppModel: ObservableObject {
     private var hasSurfacedReadOnlyEditRefusal = false
     /// One-shot authorization set only after the user confirms Discard in native document chrome.
     private var mayDiscardChangesForNextReplacement = false
+    /// Active continuous fader/pan/fade gesture for one-undo coalescing.
+    private var audioMixGestureKey: AudioMixGestureKey?
+    /// Offline meter publisher (never touches the RT audio callback).
+    private lazy var mixerMeterPublisher = EditorAjarMixerMeterPublisher { [weak self] snapshot in
+        self?.mixerMeterSnapshot = snapshot
+    }
+    /// Accumulates display-link delta for ~30 Hz live meter refresh while playing (FR-AUD-003).
+    private var mixerMeterPlaybackRefreshAccumulator: Double = 0
+    private static let mixerMeterPlaybackRefreshIntervalSeconds: Double = 1.0 / 30.0
 
     /// Coalesce continuous primary color slider gestures into one undo step.
     var colorCorrectionCoalesceActive = false
@@ -1133,6 +1152,15 @@ final class EditorAjarAppModel: ObservableObject {
     /// Shows or hides the background export queue panel (FR-EXP-005).
     func toggleExportQueuePanel() {
         isExportQueuePanelVisible.toggle()
+    }
+
+    /// Shows or hides the FR-AUD-003 mixer panel (⌥⌘M).
+    func toggleMixerPanel() {
+        isMixerPanelVisible.toggle()
+        if isMixerPanelVisible {
+            refreshMixerMeters()
+            ensureTimelineAudioWaveforms()
+        }
     }
 
     /// Whether playback prefers proxy media when ready (FR-MED-004).
@@ -3048,6 +3076,414 @@ final class EditorAjarAppModel: ObservableObject {
                 )
             )
         )
+        refreshMixerMeters()
+    }
+
+    // MARK: - Audio mix UI (FR-AUD-001 / FR-AUD-002 / FR-AUD-003)
+
+    /// Track-level gain fader (undoable `setTrackAudioMix`).
+    @discardableResult
+    func setTrackGainDB(
+        sequenceID: UUID,
+        trackID: UUID,
+        gainDB: Double,
+        gesturePhase: AudioMixGesturePhase
+    ) -> Bool {
+        let gain = AudioMixUISupport.linearGain(fromDB: gainDB)
+        return applyAudioMixEdit(
+            .setTrackAudioMix(
+                sequenceID: sequenceID,
+                trackID: trackID,
+                audio: TrackAudioMixPatch(gain: .constant(gain))
+            ),
+            gestureKey: .trackGain(trackID),
+            gesturePhase: gesturePhase
+        )
+    }
+
+    /// Track-level pan (undoable `setTrackAudioMix`).
+    @discardableResult
+    func setTrackPan(
+        sequenceID: UUID,
+        trackID: UUID,
+        pan: Double,
+        gesturePhase: AudioMixGesturePhase
+    ) -> Bool {
+        let clamped = min(
+            AudioMixLimits.maximumPan.doubleValue,
+            max(AudioMixLimits.minimumPan.doubleValue, pan)
+        )
+        return applyAudioMixEdit(
+            .setTrackAudioMix(
+                sequenceID: sequenceID,
+                trackID: trackID,
+                audio: TrackAudioMixPatch(pan: .constant(RationalValue.approximating(clamped)))
+            ),
+            gestureKey: .trackPan(trackID),
+            gesturePhase: gesturePhase
+        )
+    }
+
+    /// Session master monitoring gain. Not project-persisted; one undo stack is not used — the
+    /// control is monitoring-only. Gesture phase is accepted for UI symmetry with track faders.
+    @discardableResult
+    func setMasterGainDB(_ gainDB: Double, gesturePhase: AudioMixGesturePhase) -> Bool {
+        let linear = AudioMixUISupport.linearGain(fromDB: gainDB).doubleValue
+        masterGainLinear = linear
+        if let coordinator = audioCoordinator as? EditorAjarLiveAudioCoordinator {
+            coordinator.setMasterGainLinear(linear)
+        }
+        // Re-publish when playing so the new gain is in the prepared plan (off-RT).
+        publishAudioPlanForCurrentFrame()
+        ensureAudioPlanForPlayback()
+        // Master is monitoring-only (no project edit → no updateProject), so refresh meters here.
+        if isMixerPanelVisible {
+            refreshMixerMeters()
+        }
+        _ = gesturePhase
+        return true
+    }
+
+    /// Whether the single selected clip is an audio clip with mix inspector state.
+    var selectedAudioClipInspector: SelectedAudioClipInspectorState? {
+        guard let selectedClip, selectedClip.kind == .audio else {
+            return nil
+        }
+        return SelectedAudioClipInspectorState(clipName: selectedClip.name, audioMix: selectedClip.audioMix)
+    }
+
+    var selectedClipHasTrailingCrossfade: Bool {
+        selectedClip?.audioMix.trailingCrossfade != nil
+    }
+
+    var canAddCrossfadeAfterSelectedAudioClip: Bool {
+        guard isProjectEditable,
+              let sequence = activeSequence,
+              let reference = selectedClipReference,
+              let clip = selectedClip,
+              clip.kind == .audio,
+              let track = sequence.audioTracks.first(where: { $0.id == reference.trackID })
+        else {
+            return false
+        }
+        return Self.clipHasAbuttingNextClip(clipID: clip.id, on: track)
+    }
+
+    @discardableResult
+    func setSelectedClipAudioGain(_ gain: RationalValue, gesturePhase: AudioMixGesturePhase) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedClipReference,
+              let clip = selectedClip,
+              clip.kind == .audio
+        else {
+            return false
+        }
+        let mix = ClipAudioMix(
+            gain: .constant(gain),
+            pan: clip.audioMix.pan,
+            fadeIn: clip.audioMix.fadeIn,
+            fadeOut: clip.audioMix.fadeOut,
+            leadingCrossfade: clip.audioMix.leadingCrossfade,
+            trailingCrossfade: clip.audioMix.trailingCrossfade,
+            retimeMode: clip.audioMix.retimeMode
+        )
+        return applyAudioMixEdit(
+            .setClipAudioMix(
+                sequenceID: sequenceID,
+                trackID: reference.trackID,
+                clipID: reference.clipID,
+                audioMix: mix
+            ),
+            gestureKey: .clipGain(reference.clipID),
+            gesturePhase: gesturePhase
+        )
+    }
+
+    @discardableResult
+    func setSelectedClipAudioPan(_ pan: RationalValue, gesturePhase: AudioMixGesturePhase) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedClipReference,
+              let clip = selectedClip,
+              clip.kind == .audio
+        else {
+            return false
+        }
+        let mix = ClipAudioMix(
+            gain: clip.audioMix.gain,
+            pan: .constant(pan),
+            fadeIn: clip.audioMix.fadeIn,
+            fadeOut: clip.audioMix.fadeOut,
+            leadingCrossfade: clip.audioMix.leadingCrossfade,
+            trailingCrossfade: clip.audioMix.trailingCrossfade,
+            retimeMode: clip.audioMix.retimeMode
+        )
+        return applyAudioMixEdit(
+            .setClipAudioMix(
+                sequenceID: sequenceID,
+                trackID: reference.trackID,
+                clipID: reference.clipID,
+                audioMix: mix
+            ),
+            gestureKey: .clipPan(reference.clipID),
+            gesturePhase: gesturePhase
+        )
+    }
+
+    @discardableResult
+    func setSelectedClipFadeInSeconds(
+        _ seconds: Double,
+        gesturePhase: AudioMixGesturePhase
+    ) -> Bool {
+        guard let sequence = activeSequence,
+              let duration = AudioMixUISupport.duration(seconds: seconds, timebase: sequence.timebase)
+        else {
+            return false
+        }
+        return setSelectedClipFade(edge: .fadeIn, duration: duration, gesturePhase: gesturePhase)
+    }
+
+    @discardableResult
+    func setSelectedClipFadeOutSeconds(
+        _ seconds: Double,
+        gesturePhase: AudioMixGesturePhase
+    ) -> Bool {
+        guard let sequence = activeSequence,
+              let duration = AudioMixUISupport.duration(seconds: seconds, timebase: sequence.timebase)
+        else {
+            return false
+        }
+        return setSelectedClipFade(edge: .fadeOut, duration: duration, gesturePhase: gesturePhase)
+    }
+
+    /// Sets fade-in or fade-out duration on the selected audio clip (undoable).
+    @discardableResult
+    func setSelectedClipFade(
+        edge: ClipAudioFadeEdge,
+        duration: RationalTime,
+        gesturePhase: AudioMixGesturePhase
+    ) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedClipReference,
+              let clip = selectedClip,
+              clip.kind == .audio
+        else {
+            return false
+        }
+        let fade = ClipAudioFade(duration: duration, curve: .linear)
+        let mix: ClipAudioMix
+        switch edge {
+        case .fadeIn:
+            mix = ClipAudioMix(
+                gain: clip.audioMix.gain,
+                pan: clip.audioMix.pan,
+                fadeIn: fade,
+                fadeOut: clip.audioMix.fadeOut,
+                leadingCrossfade: clip.audioMix.leadingCrossfade,
+                trailingCrossfade: clip.audioMix.trailingCrossfade,
+                retimeMode: clip.audioMix.retimeMode
+            )
+        case .fadeOut:
+            mix = ClipAudioMix(
+                gain: clip.audioMix.gain,
+                pan: clip.audioMix.pan,
+                fadeIn: clip.audioMix.fadeIn,
+                fadeOut: fade,
+                leadingCrossfade: clip.audioMix.leadingCrossfade,
+                trailingCrossfade: clip.audioMix.trailingCrossfade,
+                retimeMode: clip.audioMix.retimeMode
+            )
+        case .leadingCrossfade, .trailingCrossfade:
+            return false
+        }
+        let key: AudioMixGestureKey =
+            edge == .fadeIn ? .clipFadeIn(reference.clipID) : .clipFadeOut(reference.clipID)
+        return applyAudioMixEdit(
+            .setClipAudioMix(
+                sequenceID: sequenceID,
+                trackID: reference.trackID,
+                clipID: reference.clipID,
+                audioMix: mix
+            ),
+            gestureKey: key,
+            gesturePhase: gesturePhase
+        )
+    }
+
+    /// Applies a default-duration crossfade on the cut after the selected audio clip.
+    @discardableResult
+    func addCrossfadeAfterSelectedAudioClip() -> Bool {
+        guard let sequence = activeSequence,
+              let reference = selectedClipReference,
+              selectedClip?.kind == .audio
+        else {
+            return false
+        }
+        let duration = AudioMixUISupport.defaultCrossfadeDuration(timebase: sequence.timebase)
+        return applyEdit(
+            .setClipAudioCrossfade(
+                sequenceID: sequence.id,
+                trackID: reference.trackID,
+                clipID: reference.clipID,
+                duration: duration,
+                curve: nil
+            )
+        )
+    }
+
+    @discardableResult
+    func removeCrossfadeFromSelectedAudioClip() -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedClipReference
+        else {
+            return false
+        }
+        return applyEdit(
+            .removeClipAudioCrossfade(
+                sequenceID: sequenceID,
+                trackID: reference.trackID,
+                clipID: reference.clipID
+            )
+        )
+    }
+
+    /// Applies a default fade-in on the selected audio clip (menu path).
+    @discardableResult
+    func applyDefaultFadeInToSelectedAudioClip() -> Bool {
+        guard let sequence = activeSequence else {
+            return false
+        }
+        return setSelectedClipFade(
+            edge: .fadeIn,
+            duration: AudioMixUISupport.defaultFadeDuration(timebase: sequence.timebase),
+            gesturePhase: .discrete
+        )
+    }
+
+    /// Applies a default fade-out on the selected audio clip (menu path).
+    @discardableResult
+    func applyDefaultFadeOutToSelectedAudioClip() -> Bool {
+        guard let sequence = activeSequence else {
+            return false
+        }
+        return setSelectedClipFade(
+            edge: .fadeOut,
+            duration: AudioMixUISupport.defaultFadeDuration(timebase: sequence.timebase),
+            gesturePhase: .discrete
+        )
+    }
+
+    /// Offline meter refresh for the mixer panel (never on the RT audio thread).
+    func refreshMixerMeters() {
+        guard isMixerPanelVisible,
+              let project,
+              let sequence = activeSequence
+        else {
+            return
+        }
+        do {
+            let provider = try EditorAjarProjectAudioSourceProvider(
+                project: project,
+                sequence: sequence,
+                range: try TimeRange(
+                    start: RationalTime.atFrame(max(0, playheadFrame), frameRate: sequence.timebase),
+                    duration: sequence.timebase.duration(ofFrames: 4)
+                )
+            )
+            mixerMeterPublisher.requestMeter(
+                project: project,
+                sequence: sequence,
+                playheadFrame: playheadFrame,
+                sourceProvider: provider,
+                masterGainLinear: masterGainLinear
+            )
+        } catch {
+            // Silent: meters are best-effort chrome; typed mix edits still work.
+        }
+    }
+
+    /// Ensures waveform summaries for media referenced by audio clips are loading (non-blocking).
+    func ensureTimelineAudioWaveforms() {
+        guard let project, let sequence = activeSequence else {
+            return
+        }
+        var mediaIDs = Set<UUID>()
+        for track in sequence.audioTracks {
+            for item in track.items {
+                guard case .clip(let clip) = item,
+                      case .media(let mediaID) = clip.source
+                else {
+                    continue
+                }
+                mediaIDs.insert(mediaID)
+            }
+        }
+        for mediaID in mediaIDs where mediaWaveformSummary[mediaID] == nil {
+            requestMediaPreview(forID: mediaID)
+        }
+    }
+
+    /// Waveform summary already decoded for a media id (timeline reuse of #235 cache).
+    func waveformSummary(forMediaID mediaID: UUID) -> AudioWaveformSummary? {
+        mediaWaveformSummary[mediaID]
+    }
+
+    /// Test seam: meter publisher uses the off-RT analysis queue label.
+    var mixerMeterPublishesOffRealtimePath: Bool {
+        mixerMeterPublisher.publishesOnOffRealtimePath
+    }
+
+    /// Test seam: monotonic meter request generation (advances on each `requestMeter` / `cancel`).
+    var mixerMeterRequestGenerationForTesting: Int {
+        mixerMeterPublisher.generation
+    }
+
+    /// Test seam: drive the display-link path without a real CVDisplayLink.
+    func simulateDisplayLinkTickForTesting(_ deltaSeconds: Double) {
+        displayLinkTick(deltaSeconds)
+    }
+
+    private func applyAudioMixEdit(
+        _ command: EditCommand,
+        gestureKey: AudioMixGestureKey,
+        gesturePhase: AudioMixGesturePhase
+    ) -> Bool {
+        let coalesce: Bool
+        switch gesturePhase {
+        case .discrete:
+            audioMixGestureKey = nil
+            coalesce = false
+        case .began:
+            audioMixGestureKey = gestureKey
+            coalesce = false
+        case .changed:
+            coalesce = audioMixGestureKey == gestureKey
+            audioMixGestureKey = gestureKey
+        case .ended:
+            coalesce = audioMixGestureKey == gestureKey
+            audioMixGestureKey = nil
+        }
+        // Meter refresh is owned by `updateProject` when the panel is visible — do not call
+        // `refreshMixerMeters` here or each edit schedules two analysis jobs.
+        return applyEdit(command, coalescingWithPrevious: coalesce)
+    }
+
+    private static func clipHasAbuttingNextClip(clipID: UUID, on track: Track) -> Bool {
+        guard let index = track.items.firstIndex(where: {
+            if case .clip(let clip) = $0 { return clip.id == clipID }
+            return false
+        }),
+            case .clip(let outgoing) = track.items[index]
+        else {
+            return false
+        }
+        let next = track.items.index(after: index)
+        guard next < track.items.endIndex, case .clip(let incoming) = track.items[next] else {
+            return false
+        }
+        guard let end = try? outgoing.timelineRange.end() else {
+            return false
+        }
+        return end == incoming.timelineRange.start
     }
 
     @discardableResult
@@ -3301,6 +3737,10 @@ final class EditorAjarAppModel: ObservableObject {
         mediaThumbnailData = [:]
         mediaWaveformSummary = [:]
         mediaPreviewCache = nil
+        mixerMeterSnapshot = nil
+        mixerMeterPublisher.cancel()
+        masterGainLinear = AudioMixUISupport.defaultMasterGainLinear
+        audioMixGestureKey = nil
         renderGeneration += 1
         isPlaying = false
         project = loadResult.project
@@ -3453,13 +3893,36 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func displayLinkTick(_ deltaSeconds: Double) {
-        guard isPlaying, playbackController?.advance(by: deltaSeconds) == true else {
+        guard isPlaying else {
             return
         }
 
-        syncPlayheadFromController()
-        ensureAudioPlanForPlayback()
-        requestRenderForCurrentFrame()
+        if playbackController?.advance(by: deltaSeconds) == true {
+            syncPlayheadFromController()
+            ensureAudioPlanForPlayback()
+            requestRenderForCurrentFrame()
+        }
+
+        // FR-AUD-003: live meters while playing with the mixer panel open (~30 Hz, off-RT).
+        // Generation-guarded publisher drops stale work; RT audio callback is never entered.
+        refreshMixerMetersDuringPlaybackIfNeeded(deltaSeconds: deltaSeconds)
+    }
+
+    private func refreshMixerMetersDuringPlaybackIfNeeded(deltaSeconds: Double) {
+        guard isPlaying, isMixerPanelVisible, deltaSeconds > 0 else {
+            return
+        }
+        mixerMeterPlaybackRefreshAccumulator += deltaSeconds
+        guard mixerMeterPlaybackRefreshAccumulator >= Self.mixerMeterPlaybackRefreshIntervalSeconds
+        else {
+            return
+        }
+        // Keep residual so a slightly late tick still tracks ~30 Hz rather than resetting hard.
+        mixerMeterPlaybackRefreshAccumulator = min(
+            mixerMeterPlaybackRefreshAccumulator - Self.mixerMeterPlaybackRefreshIntervalSeconds,
+            Self.mixerMeterPlaybackRefreshIntervalSeconds
+        )
+        refreshMixerMeters()
     }
 
     private func syncPlayheadFromController() {
@@ -3926,6 +4389,10 @@ final class EditorAjarAppModel: ObservableObject {
         }
         requestRenderForCurrentFrame()
         ensureAudioPlanForPlayback()
+        ensureTimelineAudioWaveforms()
+        if isMixerPanelVisible {
+            refreshMixerMeters()
+        }
     }
 
     /// Assigns or clears `EditorAjarRenderPipeline.packageRootURL` from the open package.
@@ -4314,7 +4781,7 @@ final class EditorAjarAppModel: ObservableObject {
         }
     }
 
-    private func requestMediaPreview(forID mediaID: UUID) {
+    func requestMediaPreview(forID mediaID: UUID) {
         guard let media = project?.mediaPool.first(where: { $0.id == mediaID }) else { return }
         Task { await requestMediaPreview(for: media) }
     }
@@ -4872,6 +5339,11 @@ private extension Clip {
 struct SelectedTransformInspectorState: Equatable, Sendable {
     let clipName: String
     let transform: ClipTransform
+}
+
+struct SelectedAudioClipInspectorState: Equatable, Sendable {
+    let clipName: String
+    let audioMix: ClipAudioMix
 }
 
 struct SelectedTrackCompositingInspectorState: Equatable, Sendable {
@@ -5488,6 +5960,16 @@ struct TimelineClipLayout: Equatable, Sendable {
     let endFrame: Int64
     let xPosition: Double
     let width: Double
+    /// Track kind for the clip (audio clips show waveforms / fade handles).
+    let kind: TrackKind
+    /// Media-backed source id when present (waveform cache key).
+    let mediaID: UUID?
+    /// Fade-in duration in frames (audio clips).
+    let fadeInFrames: Int64
+    /// Fade-out duration in frames (audio clips).
+    let fadeOutFrames: Int64
+    /// Whether this clip owns a trailing audio crossfade.
+    let hasTrailingCrossfade: Bool
 
     var durationFrames: Int64 {
         max(0, endFrame - startFrame)
@@ -5603,13 +6085,32 @@ enum TimelineInteraction {
             }
 
             let durationFrames = max(1, endFrame - startFrame)
+            let mediaID: UUID?
+            if case .media(let id) = clip.source {
+                mediaID = id
+            } else {
+                mediaID = nil
+            }
+            let fadeInFrames = (try? clip.audioMix.fadeIn.duration.frameIndex(
+                at: frameRate,
+                rounding: .up
+            )) ?? 0
+            let fadeOutFrames = (try? clip.audioMix.fadeOut.duration.frameIndex(
+                at: frameRate,
+                rounding: .up
+            )) ?? 0
             return TimelineClipLayout(
                 reference: TimelineClipReference(trackID: track.id, clipID: clip.id),
                 name: clip.name,
                 startFrame: startFrame,
                 endFrame: endFrame,
                 xPosition: xPosition(frame: startFrame, pixelsPerFrame: pixelsPerFrame),
-                width: Double(durationFrames) * pixelsPerFrame
+                width: Double(durationFrames) * pixelsPerFrame,
+                kind: clip.kind,
+                mediaID: mediaID,
+                fadeInFrames: max(0, fadeInFrames),
+                fadeOutFrames: max(0, fadeOutFrames),
+                hasTrailingCrossfade: clip.audioMix.trailingCrossfade != nil
             )
         }
     }
