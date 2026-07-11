@@ -56,7 +56,7 @@ final class EditorAjarLocalizationTests: XCTestCase {
             "import.summary.empty": "No media files were found in the selection.",
             "import.failure.projectUpdate.reason": "The open project rejected the import batch.",
             "import.failure.unsupportedFormat":
-                "This format is not supported by the native importer. The FFmpeg import fallback is not available in this build.",
+                "This format could not be converted into working media.",
             "library.panel.ax":
                 "Media and effects panel. Drop media files or folders here to import.",
             "marker.color.red": "Red",

@@ -133,13 +133,25 @@
         }
       }
     },
+    "import.failure.ffmpegUnavailable": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@" } } }
+    },
+    "import.failure.ffmpegFailed": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "FFmpeg could not convert this file (exit %lld): %@" } } }
+    },
+    "import.failure.transcodeCancelled": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The transcode was cancelled." } } }
+    },
     "import.failure.unsupportedFormat": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This format is not supported by the native importer. The FFmpeg import fallback is not available in this build."
+            "value": "This format could not be converted into working media."
           }
         }
       }
@@ -165,6 +177,14 @@
           }
         }
       }
+    },
+    "import.progress.transcoding": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Transcoding media…" } } }
+    },
+    "import.progress.transcoding.file": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Transcoding %@…" } } }
     },
     "import.picker.failed": {
       "extractionState": "manual",
@@ -330,6 +350,14 @@
           }
         }
       }
+    },
+    "import.summary.transcoded": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Transcoded" } } }
+    },
+    "import.summary.transcoded.detail": {
+      "extractionState": "manual",
+      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Detected %@; converted to ProRes 422 + PCM in %@ seconds" } } }
     },
     "import.summary.row.ax": {
       "extractionState": "manual",

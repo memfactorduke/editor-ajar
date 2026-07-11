@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// swiftlint:disable file_length
+// The actor intentionally owns the complete batch contract; prepareFile keeps all typed exits
+// together so cancellation and partial-batch behavior remain auditable.
+// swiftlint:disable file_length type_body_length function_body_length function_parameter_count
+// swiftlint:disable cyclomatic_complexity
 
 import AjarCore
 import Foundation
@@ -11,6 +14,9 @@ public enum MediaImportProgressPhase: String, Equatable, Sendable {
 
     /// Discovered files are being probed, hashed, and bookmarked.
     case importing
+
+    /// An unsupported source is being converted at the import boundary.
+    case transcoding
 }
 
 /// Session-only progress for one import batch (FR-MED-001).
@@ -27,17 +33,22 @@ public struct MediaImportProgress: Equatable, Sendable {
     /// File currently being imported, if any.
     public let currentFileURL: URL?
 
+    /// Per-file FFmpeg completion when the phase is `transcoding`.
+    public let currentFileFraction: Double?
+
     /// Creates a progress snapshot.
     public init(
         phase: MediaImportProgressPhase,
         completedUnitCount: Int,
         totalUnitCount: Int,
-        currentFileURL: URL? = nil
+        currentFileURL: URL? = nil,
+        currentFileFraction: Double? = nil
     ) {
         self.phase = phase
         self.completedUnitCount = completedUnitCount
         self.totalUnitCount = totalUnitCount
         self.currentFileURL = currentFileURL
+        self.currentFileFraction = currentFileFraction
     }
 
     /// Normalized completion for a determinate progress indicator.
@@ -60,8 +71,17 @@ public enum MediaImportError: Error, Equatable, Sendable, CustomStringConvertibl
     /// Recursive folder enumeration failed.
     case folderEnumerationFailed(url: URL, reason: String)
 
-    /// AVFoundation/ImageIO cannot open the format and no FFmpeg fallback exists in this build.
+    /// AVFoundation/ImageIO and the configured fallback cannot open the format.
     case unsupportedFormat(URL)
+
+    /// A supported FFmpeg system binary was not installed.
+    case ffmpegUnavailable(url: URL, guidance: String)
+
+    /// FFmpeg failed while converting a source.
+    case ffmpegFailed(url: URL, exitCode: Int32, stderrTail: String)
+
+    /// FFmpeg was terminated because import was cancelled.
+    case transcodeCancelled(URL)
 
     /// Native media probing failed for a supported-looking source.
     case probingFailed(url: URL, reason: String)
@@ -87,7 +107,13 @@ public enum MediaImportError: Error, Equatable, Sendable, CustomStringConvertibl
         case .folderEnumerationFailed(let url, let reason):
             "could not scan \(url.lastPathComponent): \(reason)"
         case .unsupportedFormat(let url):
-            "unsupported format (FFmpeg import fallback is not available): \(url.lastPathComponent)"
+            "unsupported format: \(url.lastPathComponent)"
+        case .ffmpegUnavailable(let url, let guidance):
+            "FFmpeg is unavailable for \(url.lastPathComponent). \(guidance)"
+        case .ffmpegFailed(let url, let exitCode, let stderrTail):
+            "FFmpeg failed for \(url.lastPathComponent) (exit \(exitCode)): \(stderrTail)"
+        case .transcodeCancelled(let url):
+            "transcode cancelled: \(url.lastPathComponent)"
         case .probingFailed(let url, let reason):
             "could not inspect \(url.lastPathComponent): \(reason)"
         case .conformRateUnavailable(let url):
@@ -160,6 +186,30 @@ public struct ConformedVariableFrameRateItem: Equatable, Sendable {
     }
 }
 
+/// One unsupported source converted to an edit-quality native working movie.
+public struct TranscodedMediaImportItem: Equatable, Sendable {
+    public let sourceURL: URL
+    public let detectedCodec: String
+    public let elapsedSeconds: Double
+
+    public init(sourceURL: URL, detectedCodec: String, elapsedSeconds: Double) {
+        self.sourceURL = sourceURL
+        self.detectedCodec = detectedCodec
+        self.elapsedSeconds = elapsedSeconds
+    }
+}
+
+/// One import that reused a previously published fallback working movie.
+public struct ReusedTranscodeMediaImportItem: Equatable, Sendable {
+    public let sourceURL: URL
+    public let detail: String
+
+    public init(sourceURL: URL, detail: String = "Reused existing working transcode") {
+        self.sourceURL = sourceURL
+        self.detail = detail
+    }
+}
+
 /// One failed file/folder selection.
 public struct FailedMediaImportItem: Equatable, Sendable {
     /// Source that failed.
@@ -186,6 +236,12 @@ public struct MediaImportSummary: Equatable, Sendable {
     /// Imported VFR files and their chosen stable timebases.
     public let vfrConformed: [ConformedVariableFrameRateItem]
 
+    /// Files converted through the FFmpeg import fallback.
+    public let transcoded: [TranscodedMediaImportItem]
+
+    /// Imports that reused existing output and therefore are not counted as new transcodes.
+    public let reusedExistingTranscodes: [ReusedTranscodeMediaImportItem]
+
     /// Files/folders that could not be imported.
     public let failed: [FailedMediaImportItem]
 
@@ -194,11 +250,15 @@ public struct MediaImportSummary: Equatable, Sendable {
         imported: [ImportedMediaItem] = [],
         skippedDuplicates: [SkippedDuplicateMediaItem] = [],
         vfrConformed: [ConformedVariableFrameRateItem] = [],
+        transcoded: [TranscodedMediaImportItem] = [],
+        reusedExistingTranscodes: [ReusedTranscodeMediaImportItem] = [],
         failed: [FailedMediaImportItem] = []
     ) {
         self.imported = imported
         self.skippedDuplicates = skippedDuplicates
         self.vfrConformed = vfrConformed
+        self.transcoded = transcoded
+        self.reusedExistingTranscodes = reusedExistingTranscodes
         self.failed = failed
     }
 
@@ -207,6 +267,8 @@ public struct MediaImportSummary: Equatable, Sendable {
         imported.isEmpty
             && skippedDuplicates.isEmpty
             && vfrConformed.isEmpty
+            && transcoded.isEmpty
+            && reusedExistingTranscodes.isEmpty
             && failed.isEmpty
     }
 }
@@ -300,6 +362,7 @@ public actor MediaImportPipeline {
     private let probe: any MediaProbing
     private let hasher: any MediaFileHashing
     private let bookmarkStore: any MediaBookmarkStore
+    private let ffmpegTranscoder: any FFmpegImportTranscoding
     private let fileManager: FileManager
     private let makeMediaID: @Sendable () -> UUID
 
@@ -309,6 +372,7 @@ public actor MediaImportPipeline {
             probe: AVFoundationMediaProbe(),
             hasher: SHA256MediaFileHasher(),
             bookmarkStore: SecurityScopedMediaBookmarkStore()
+            , ffmpegTranscoder: SystemFFmpegImportTranscoder()
         )
     }
 
@@ -317,12 +381,14 @@ public actor MediaImportPipeline {
         probe: any MediaProbing,
         hasher: any MediaFileHashing,
         bookmarkStore: any MediaBookmarkStore,
+        ffmpegTranscoder: any FFmpegImportTranscoding = SystemFFmpegImportTranscoder(),
         fileManager: FileManager = .default,
         makeMediaID: @escaping @Sendable () -> UUID = { UUID() }
     ) {
         self.probe = probe
         self.hasher = hasher
         self.bookmarkStore = bookmarkStore
+        self.ffmpegTranscoder = ffmpegTranscoder
         self.fileManager = fileManager
         self.makeMediaID = makeMediaID
     }
@@ -341,6 +407,7 @@ public actor MediaImportPipeline {
     public func prepareImport(
         from selectedURLs: [URL],
         existingMedia: [MediaRef],
+        projectPackageURL: URL? = nil,
         progress: ProgressHandler? = nil
     ) async -> PreparedMediaImportBatch {
         let scopedURLs = selectedURLs.map { url in
@@ -390,7 +457,11 @@ public actor MediaImportPipeline {
             )
             let result = await prepareFile(
                 fileURL,
-                referenceByHash: accumulator.referenceByHash
+                referenceByHash: accumulator.referenceByHash,
+                projectPackageURL: projectPackageURL,
+                progress: progress,
+                completedUnitCount: index,
+                totalUnitCount: total
             )
             accumulator.record(result, sourceURL: fileURL)
             await progress?(
@@ -406,25 +477,12 @@ public actor MediaImportPipeline {
 
     private func prepareFile(
         _ fileURL: URL,
-        referenceByHash: [ContentHash: MediaRef]
+        referenceByHash: [ContentHash: MediaRef],
+        projectPackageURL: URL?,
+        progress: ProgressHandler?,
+        completedUnitCount: Int,
+        totalUnitCount: Int
     ) async -> PreparedFileResult {
-        let probed: MediaProbeResult
-        switch await probeResult(for: fileURL) {
-        case .success(let result):
-            probed = result
-        case .failure(let error):
-            return failedResult(for: fileURL, error: error)
-        }
-
-        guard let metadata = MediaFrameRateConformer.conform(probed) else {
-            return .failed(
-                FailedMediaImportItem(
-                    sourceURL: fileURL,
-                    error: .conformRateUnavailable(fileURL)
-                )
-            )
-        }
-
         let contentHash: ContentHash
         switch contentHashResult(for: fileURL) {
         case .success(let hash):
@@ -443,8 +501,71 @@ public actor MediaImportPipeline {
             )
         }
 
+        var playableURL = fileURL
+        var transcodeResult: FFmpegTranscodeResult?
+        let probed: MediaProbeResult
+        switch await probeResult(for: fileURL) {
+        case .success(let result):
+            probed = result
+        case .failure(.unsupportedFormat):
+            guard let projectPackageURL else {
+                return failedResult(
+                    for: fileURL,
+                    error: .ffmpegUnavailable(
+                        url: fileURL,
+                        guidance: SystemFFmpegImportTranscoder.installGuidance
+                    )
+                )
+            }
+            do {
+                let result = try await ffmpegTranscoder.transcode(
+                    sourceURL: fileURL,
+                    originalHash: contentHash,
+                    projectPackageURL: projectPackageURL,
+                    progress: { fraction in
+                        await progress?(
+                            MediaImportProgress(
+                                phase: .transcoding,
+                                completedUnitCount: completedUnitCount,
+                                totalUnitCount: totalUnitCount,
+                                currentFileURL: fileURL,
+                                currentFileFraction: fraction
+                            )
+                        )
+                    }
+                )
+                playableURL = result.outputURL
+                transcodeResult = result
+                switch await probeResult(for: playableURL) {
+                case .success(let nativeResult): probed = nativeResult
+                case .failure(let error):
+                    // A discarded batch or failed re-probe can leave an orphan in transcodes/.
+                    // Re-import self-heals by reusing it; a proactive orphan sweep is future work.
+                    return failedResult(for: fileURL, error: error)
+                }
+            } catch let error as FFmpegTranscodeError {
+                return failedResult(for: fileURL, error: map(error, sourceURL: fileURL))
+            } catch {
+                return failedResult(
+                    for: fileURL,
+                    error: .probingFailed(url: fileURL, reason: String(describing: error))
+                )
+            }
+        case .failure(let error):
+            return failedResult(for: fileURL, error: error)
+        }
+
+        guard let metadata = MediaFrameRateConformer.conform(probed) else {
+            return .failed(
+                FailedMediaImportItem(
+                    sourceURL: fileURL,
+                    error: .conformRateUnavailable(fileURL)
+                )
+            )
+        }
+
         let bookmark: Data
-        switch bookmarkResult(for: fileURL) {
+        switch bookmarkResult(for: playableURL) {
         case .success(let data):
             bookmark = data
         case .failure(let error):
@@ -453,12 +574,48 @@ public actor MediaImportPipeline {
 
         let reference = MediaRef(
             id: makeMediaID(),
-            sourceURL: fileURL,
+            sourceURL: playableURL,
             bookmark: bookmark,
             contentHash: contentHash,
-            metadata: metadata
+            metadata: metadata,
+            transcodeProvenance: transcodeResult.map { _ in
+                MediaTranscodeProvenance(
+                    originalSourceURL: fileURL,
+                    originalContentHash: contentHash
+                )
+            }
         )
-        return .imported(ImportedMediaItem(sourceURL: fileURL, mediaReference: reference))
+        return .imported(
+            ImportedMediaItem(sourceURL: fileURL, mediaReference: reference),
+            transcodeResult.flatMap {
+                guard !$0.reusedExistingTranscode else { return nil }
+                return TranscodedMediaImportItem(
+                    sourceURL: fileURL,
+                    detectedCodec: $0.detectedCodec,
+                    elapsedSeconds: $0.elapsedSeconds
+                )
+            },
+            transcodeResult.flatMap {
+                $0.reusedExistingTranscode
+                    ? ReusedTranscodeMediaImportItem(sourceURL: fileURL)
+                    : nil
+            }
+        )
+    }
+
+    private func map(_ error: FFmpegTranscodeError, sourceURL: URL) -> MediaImportError {
+        switch error {
+        case .ffmpegUnavailable(let guidance):
+            return .ffmpegUnavailable(url: sourceURL, guidance: guidance)
+        case .ffmpegFailed(let exitCode, let stderrTail):
+            return .ffmpegFailed(url: sourceURL, exitCode: exitCode, stderrTail: stderrTail)
+        case .transcodeCancelled:
+            return .transcodeCancelled(sourceURL)
+        case .transcodeTimedOut(let reason):
+            return .probingFailed(url: sourceURL, reason: "FFmpeg timed out: \(reason)")
+        case .transactionFailed(let reason):
+            return .probingFailed(url: sourceURL, reason: reason)
+        }
     }
 
     private func probeResult(
@@ -610,7 +767,7 @@ public actor MediaImportPipeline {
 }
 
 private enum PreparedFileResult {
-    case imported(ImportedMediaItem)
+    case imported(ImportedMediaItem, TranscodedMediaImportItem?, ReusedTranscodeMediaImportItem?)
     case duplicate(SkippedDuplicateMediaItem)
     case failed(FailedMediaImportItem)
 }
@@ -624,6 +781,8 @@ private struct MediaImportAccumulator {
     private(set) var imported: [ImportedMediaItem] = []
     private(set) var skipped: [SkippedDuplicateMediaItem] = []
     private(set) var conformed: [ConformedVariableFrameRateItem] = []
+    private(set) var transcoded: [TranscodedMediaImportItem] = []
+    private(set) var reusedTranscodes: [ReusedTranscodeMediaImportItem] = []
     private(set) var failed: [FailedMediaImportItem]
     private(set) var referenceByHash: [ContentHash: MediaRef]
 
@@ -639,8 +798,10 @@ private struct MediaImportAccumulator {
 
     mutating func record(_ result: PreparedFileResult, sourceURL: URL) {
         switch result {
-        case .imported(let item):
+        case .imported(let item, let transcode, let reused):
             imported.append(item)
+            if let transcode { transcoded.append(transcode) }
+            if let reused { reusedTranscodes.append(reused) }
             if let hash = item.mediaReference.contentHash {
                 referenceByHash[hash] = item.mediaReference
             }
@@ -657,6 +818,8 @@ private struct MediaImportAccumulator {
             imported: imported,
             skippedDuplicates: skipped,
             vfrConformed: conformed,
+            transcoded: transcoded,
+            reusedExistingTranscodes: reusedTranscodes,
             failed: failed
         )
         let command = imported.isEmpty
@@ -683,4 +846,5 @@ private struct MediaImportAccumulator {
     }
 }
 
-// swiftlint:enable file_length
+// swiftlint:enable type_body_length function_body_length function_parameter_count
+// swiftlint:enable cyclomatic_complexity

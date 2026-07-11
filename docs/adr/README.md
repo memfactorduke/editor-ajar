@@ -33,3 +33,6 @@ silently editing code against an Accepted ADR.
 
 To add one: copy `0000-adr-template.md` to the next number, fill it in, set status, and add a row
 here.
+
+Amendments are indexed in-place: ADR-0003 records the system-installed FFmpeg posture and
+ADR-0007 records durable fallback-transcode package storage (2026-07-11).

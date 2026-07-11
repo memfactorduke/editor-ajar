@@ -21,6 +21,7 @@ single document in Finder):
 MyProject.ajar/
   project.json        # versioned, canonical-key-order JSON: the document (diff-friendly)
   media.json          # MediaRef manifest: stable UUID + bookmark/URL + content hash + metadata
+  transcodes/         # durable import-boundary ProRes 422 + PCM working media
   caches/             # proxies + render cache (machine-local; NOT part of project identity)
   versions/           # rolling save snapshots (keep N)
   thumbnails/         # cached thumbnails/waveforms
@@ -35,6 +36,19 @@ MyProject.ajar/
   project in an older build is read-only with a clear message (FR-PROJ-005).
 - Save is **atomic** (write-to-temp + rename); auto-save + a command journal back crash recovery
   (NFR-STAB-002).
+
+## Amendment — 2026-07-11: fallback-transcode storage
+
+Import-boundary fallback movies live in the package's top-level `transcodes/` directory, named
+`<original-sha256>-prores422.mov`. They are durable working media, not disposable cache entries,
+so they do not belong in `caches/`. `MediaRef.sourceURL` points to the native working movie while
+optional provenance retains the original URL and original SHA-256; `contentHash` also remains the
+original hash so re-import deduplicates before doing transcode work. Publication is a same-folder
+temporary-file rename, and cancellation removes the temporary output.
+
+This additive `MediaRef` provenance shape advances ADR-0018 `schemaMinor` from 12 to 13. Legacy
+references decode with no provenance (nested optional/default decode), and current encoding writes
+the nested value only for fallback-transcoded sources.
 
 ## Consequences
 

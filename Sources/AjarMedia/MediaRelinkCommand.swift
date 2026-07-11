@@ -25,6 +25,9 @@ public enum MediaRelinkCommandError: Error, Equatable, Sendable {
 
     /// Recursive folder enumeration could not be started.
     case folderEnumerationFailed(URL)
+
+    /// The matched original needs FFmpeg before it can become a playable relink target.
+    case retranscodeFailed(FFmpegTranscodeError)
 }
 
 /// Result of preparing one undoable relink edit.
@@ -64,12 +67,14 @@ public struct MediaRelinkCommand {
     private let hasher: any MediaFileHashing
     private let bookmarkStore: any MediaBookmarkStore
     private let fileManager: FileManager
+    private let ffmpegTranscoder: any FFmpegImportTranscoding
 
     /// Creates the production relink command.
     public init() {
         self.init(
             hasher: SHA256MediaFileHasher(),
             bookmarkStore: SecurityScopedMediaBookmarkStore(),
+            ffmpegTranscoder: SystemFFmpegImportTranscoder(),
             fileManager: .default
         )
     }
@@ -78,10 +83,12 @@ public struct MediaRelinkCommand {
     public init(
         hasher: any MediaFileHashing,
         bookmarkStore: any MediaBookmarkStore,
+        ffmpegTranscoder: any FFmpegImportTranscoding = SystemFFmpegImportTranscoder(),
         fileManager: FileManager = .default
     ) {
         self.hasher = hasher
         self.bookmarkStore = bookmarkStore
+        self.ffmpegTranscoder = ffmpegTranscoder
         self.fileManager = fileManager
     }
 
@@ -94,8 +101,9 @@ public struct MediaRelinkCommand {
         mediaReferenceID: UUID,
         newFileURL: URL,
         in project: Project,
+        projectPackageURL: URL? = nil,
         mismatchPolicy: MediaRelinkMismatchPolicy
-    ) throws -> MediaRelinkPreparation {
+    ) async throws -> MediaRelinkPreparation {
         let matches = project.mediaPool.filter { $0.id == mediaReferenceID }
         guard let media = matches.first else {
             throw MediaRelinkCommandError.mediaReferenceNotFound(mediaReferenceID)
@@ -137,10 +145,68 @@ public struct MediaRelinkCommand {
                 )
             case .warning(let warning):
                 return .warning(warning)
+            case .matchedOriginalRequiresTranscode:
+                return try await prepareRetranscodedRelink(
+                    media: media,
+                    originalURL: newFileURL,
+                    originalHash: contentHash,
+                    projectPackageURL: projectPackageURL
+                )
             }
+        case .matchedOriginalRequiresTranscode:
+            return try await prepareRetranscodedRelink(
+                media: media,
+                originalURL: newFileURL,
+                originalHash: contentHash,
+                projectPackageURL: projectPackageURL
+            )
         case .warning(let warning):
             return .warning(warning)
         }
+    }
+
+    private func prepareRetranscodedRelink(
+        media: MediaRef,
+        originalURL: URL,
+        originalHash: ContentHash,
+        projectPackageURL: URL?
+    ) async throws -> MediaRelinkPreparation {
+        let packageURL = projectPackageURL
+            ?? media.sourceURL?.deletingLastPathComponent().deletingLastPathComponent()
+        guard let packageURL else {
+            throw MediaRelinkCommandError.retranscodeFailed(
+                .transactionFailed(reason: "project package URL is unavailable")
+            )
+        }
+        let result: FFmpegTranscodeResult
+        do {
+            result = try await ffmpegTranscoder.transcode(
+                sourceURL: originalURL,
+                originalHash: originalHash,
+                projectPackageURL: packageURL,
+                progress: { _ in }
+            )
+        } catch let error as FFmpegTranscodeError {
+            throw MediaRelinkCommandError.retranscodeFailed(error)
+        }
+        let bookmark = try preparedBookmark(at: result.outputURL)
+        let replacement = MediaRef(
+            id: media.id,
+            sourceURL: result.outputURL,
+            bookmark: bookmark,
+            contentHash: originalHash,
+            metadata: media.metadata,
+            availability: .available,
+            proxyState: .none,
+            transcodeProvenance: MediaTranscodeProvenance(
+                originalSourceURL: originalURL,
+                originalContentHash: originalHash
+            )
+        )
+        return .ready(
+            command: .updateMediaReferences(kind: .relink, replacements: [replacement]),
+            match: .contentHash
+        )
     }
 
     /// Recursively matches offline references whose last-known filename **and** hash both match.
@@ -190,6 +256,12 @@ public struct MediaRelinkCommand {
     ) throws -> PreparedBatchRelinks {
         var prepared = PreparedBatchRelinks()
         for media in offline {
+            // Batch relink cannot synchronously rebuild fallback working media. Leave these
+            // unresolved for the single-item relink flow, which safely re-runs FFmpeg first.
+            guard media.transcodeProvenance == nil else {
+                prepared.unresolvedIDs.append(media.id)
+                continue
+            }
             guard
                 let filename = media.sourceURL?.lastPathComponent,
                 let storedHash = media.contentHash,

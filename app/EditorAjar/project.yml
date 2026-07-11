@@ -8,6 +8,7 @@ options:
 packages:
   EditorAjarPackage:
     path: ../..
+    group: editor-ajar
 settings:
   base:
     CLANG_ANALYZER_NONNULL: YES

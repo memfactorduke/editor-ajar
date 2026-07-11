@@ -170,6 +170,59 @@ final class MediaRefTests: XCTestCase {
         XCTAssertEqual(media.bookmark, bookmark)
     }
 
+    func testFRMED003TranscodeProvenanceRoundTripsAndLegacyDefaultsNil() throws {
+        let originalURL = URL(fileURLWithPath: "/original/legacy.mkv")
+        let originalHash = ContentHash.sha256(data: Data("legacy bytes".utf8))
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: URL(fileURLWithPath: "/Project.ajar/transcodes/working.mov"),
+            contentHash: originalHash,
+            metadata: try makeMetadata(),
+            transcodeProvenance: MediaTranscodeProvenance(
+                originalSourceURL: originalURL,
+                originalContentHash: originalHash
+            )
+        )
+        let encoded = try JSONEncoder().encode(media)
+        let decoded = try JSONDecoder().decode(MediaRef.self, from: encoded)
+        XCTAssertEqual(decoded.transcodeProvenance, media.transcodeProvenance)
+        XCTAssertEqual(
+            media.withAvailability(.offline).transcodeProvenance,
+            media.transcodeProvenance
+        )
+        XCTAssertEqual(media.withProxyState(.none).transcodeProvenance, media.transcodeProvenance)
+
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "transcodeProvenance")
+        let legacy = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        XCTAssertNil(try JSONDecoder().decode(MediaRef.self, from: legacy).transcodeProvenance)
+    }
+
+    func testFRMED007TranscodedOriginalMatchRequiresTranscodeInsteadOfDirectRelink() throws {
+        let hash = ContentHash.sha256(data: Data("original".utf8))
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: URL(fileURLWithPath: "/Project.ajar/transcodes/working.mov"),
+            contentHash: hash,
+            metadata: try makeMetadata(),
+            transcodeProvenance: MediaTranscodeProvenance(
+                originalSourceURL: URL(fileURLWithPath: "/old/original.mkv"),
+                originalContentHash: hash
+            )
+        )
+        let candidate = MediaRelinkCandidate(
+            sourceURL: URL(fileURLWithPath: "/moved/original.mkv"),
+            contentHash: hash
+        )
+
+        XCTAssertEqual(
+            media.relinkDecision(for: candidate, mismatchPolicy: .warn),
+            .matchedOriginalRequiresTranscode(candidate)
+        )
+    }
+
     func testContentHashSHA256IsStableForKnownBytes() throws {
         let hash = ContentHash.sha256(data: Data("abc".utf8))
 
