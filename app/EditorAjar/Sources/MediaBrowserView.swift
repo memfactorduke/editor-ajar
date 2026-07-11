@@ -24,7 +24,7 @@ struct LibraryPanel: View {
             searchAndFilters
             if media.isEmpty { emptyState } else { results }
             Divider()
-            EmptyPanelRow(title: AppString.localized("library.effects", "Effects"), systemImage: "sparkles")
+            EffectsLibrarySection(model: model)
         }
         .padding(10)
         .background(Color(red: 0.13, green: 0.13, blue: 0.14))

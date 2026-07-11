@@ -503,6 +503,36 @@ struct EditorAjarApp: App {
 
                 Divider()
 
+                Menu(AppString.localized("menu.clip.transition", "Transition")) {
+                    ForEach(ClipVideoTransitionKind.allCases, id: \.self) { kind in
+                        Button(kind.localizedDisplayName) {
+                            _ = model.applyVideoTransitionToSelectedCut(kind: kind)
+                        }
+                        .disabled(!model.canApplyVideoTransition)
+                        .accessibilityLabel(
+                            AppString.localized(
+                                "menu.clip.transition.apply.ax",
+                                "Apply \(kind.localizedDisplayName) Transition"
+                            )
+                        )
+                    }
+                    Divider()
+                    Button(AppString.localized("menu.clip.transition.remove", "Remove Transition")) {
+                        _ = model.removeVideoTransitionFromSelectedCut()
+                    }
+                    .disabled(!model.canRemoveVideoTransition)
+                    .accessibilityLabel(
+                        AppString.localized(
+                            "menu.clip.transition.remove.ax",
+                            "Remove Transition from Selected Cut"
+                        )
+                    )
+                }
+                .disabled(!model.isProjectEditable || model.selectedClip?.kind != .video)
+                .accessibilityLabel(
+                    AppString.localized("menu.clip.transition.ax", "Video Transition")
+                )
+
                 Button(AppString.localized("menu.clip.detachAudio", "Detach Audio")) {
                     model.detachAudioForSelectedClip()
                 }

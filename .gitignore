@@ -29,6 +29,7 @@ Icon?
 *.log
 *.profraw
 .swiftlint-cache/
+.tmp/
 fastlane/report.xml
 fastlane/Preview.html
 
