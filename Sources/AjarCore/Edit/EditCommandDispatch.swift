@@ -76,6 +76,24 @@ extension EditReducer {
             return try addMediaReferences(additions, to: project)
         case .updateMediaReferences(_, let replacements):
             return try updateMediaReferences(replacements, in: project)
+        case .transaction(let commands):
+            return try applyTransaction(commands, to: project)
         }
+    }
+
+    /// Applies an ordered transaction of sub-commands as one atomic step (FR-TL-005 / #240).
+    ///
+    /// Each sub-command threads through the unchecked pipeline so the outer `apply` runs one
+    /// central validation over the final project. Any sub-command that throws a typed error
+    /// aborts the whole transaction, leaving the input project unchanged (NFR-STAB-003).
+    static func applyTransaction(
+        _ commands: [EditCommand],
+        to project: Project
+    ) throws -> Project {
+        var result = project
+        for command in commands {
+            result = try applyUnchecked(command, to: result)
+        }
+        return result
     }
 }

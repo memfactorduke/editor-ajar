@@ -187,7 +187,10 @@ public enum AjarProjectCodec {
     ///   `ProjectSettings.preferProxyPlayback` (FR-MED-004 / #217).
     /// - `12`: undoable `EditCommand.addMediaReferences` import batches (FR-MED-001 / #234).
     /// - `13`: fallback-transcode original-source provenance (FR-MED-003 / #238).
-    public static let currentSchemaMinor = 13
+    /// - `14`: atomic `EditCommand.transaction` edit-journal records for single-undo timeline
+    ///   gestures — linked A/V blade, multi-clip delete/lift/paste, multi-selection move
+    ///   (FR-TL-004 / FR-TL-005 / FR-TL-009 / #240).
+    public static let currentSchemaMinor = 14
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-TL-003/004/005/009 timeline editing gestures (#240): the blade tool now splits at the exact
+  pointer position (not the playhead); a linked A/V clip blades, moves, and is deleted together as
+  one undo step; multi-selection move shifts the whole selection (with linked partners following)
+  and refuses atomically when it would overlap; multi-clip ripple-delete / lift / paste each apply
+  as a single undo step; and three-point editing fits a media-browser selection into the timeline
+  in/out marks as an insert or overwrite (`⇧F9` / `⇧F10`, Clip menu). These multi-command gestures
+  are grouped by a new atomic, journal-persisted `EditCommand.transaction` (schemaMinor 13 → 14,
+  ADR-0018) that replays deterministically and keeps one gesture to one undo step. New app-model
+  and core tests assert undo symmetry and single-undo-step grouping across the gesture matrix.
+  Review hardening: timeline clipboard/delete and plain-key shortcuts are inert (and their menu
+  items disabled) while any text field or the canvas title editor has keyboard focus, so ⌘X or
+  ⌫ while typing can never delete timeline content; a trim-handle drag never doubles as a clip
+  move; and pasted clips receive fresh link groups (pasted A/V pairs stay linked to each other,
+  never to their source clips).
+
 - docs(ADR): v1 scope deferrals (#247).
 
 - FR-MED-005/009 real media browser (#235): searchable/filterable list and grid media-pool

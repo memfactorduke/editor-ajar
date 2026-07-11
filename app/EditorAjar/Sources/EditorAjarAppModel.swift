@@ -62,6 +62,12 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var presentedTexture: MTLTexture?
     @Published private(set) var loadMessage: String
     @Published private(set) var timelineState = TimelineInteractionState()
+    @Published private(set) var timelineHasFocus = false
+    @Published private(set) var selectedMediaIDs: Set<UUID> = []
+    @Published private(set) var timelineTool: TimelineTool = .selection
+    @Published private(set) var timelineGestureFeedback: String?
+    @Published private(set) var timelineSnapIndicatorFrame: Int64?
+    @Published private(set) var selectedTimelineTrackID: UUID?
     @Published private(set) var activeSequenceID: UUID?
     @Published private(set) var copiedGradeSource: ProjectClipReference?
     @Published private(set) var canvasSafeAreaGuidesVisible = false
@@ -71,6 +77,20 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var isLoopRangeEnabled = false
     @Published private(set) var selectedCanvasTitleBoxReference: CanvasTitleBoxReference?
     @Published private(set) var editingCanvasTitleBoxReference: CanvasTitleBoxReference?
+
+    /// Identities of text fields that currently hold keyboard focus (#240 review).
+    ///
+    /// A set (not a Bool) so focus moving directly between two fields — where SwiftUI may report
+    /// the new field's gain before the old field's loss — never leaves the flag incorrectly clear.
+    @Published private(set) var focusedTextEditorIDs: Set<UUID> = []
+
+    /// Whether any text editor (inspector/search field or the canvas title editor) is active.
+    ///
+    /// While true, timeline gestures with plain-key or clipboard shortcuts are inert and their
+    /// menu items disabled, so typing can never blade, trim, cut, or delete timeline content.
+    var isTextEditingActive: Bool {
+        !focusedTextEditorIDs.isEmpty || editingCanvasTitleBoxReference != nil
+    }
 
     /// Session open mode from the load / recovery path (ADR-0018 / FR-PROJ-005).
     @Published private(set) var projectOpenMode: AjarProjectOpenMode = .editable
@@ -152,6 +172,7 @@ final class EditorAjarAppModel: ObservableObject {
     private var renderGeneration = 0
     private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
     private var canvasTitleEditingUndoBaseline: Int?
+    private var timelineClipboard: [TimelineClipboardItem] = []
     /// Surfaces the read-only edit refusal message once per session (not per-command spam).
     private var hasSurfacedReadOnlyEditRefusal = false
     /// One-shot authorization set only after the user confirms Discard in native document chrome.
@@ -1768,6 +1789,49 @@ final class EditorAjarAppModel: ObservableObject {
         persistActiveSequenceContext()
     }
 
+    func focusTimeline() {
+        timelineHasFocus = true
+    }
+
+    func selectTimelineTrack(_ trackID: UUID) {
+        selectedTimelineTrackID = trackID
+        timelineHasFocus = true
+    }
+
+    func blurTimeline() {
+        timelineHasFocus = false
+    }
+
+    /// Records a text field gaining or losing keyboard focus (#240 review, finding 1).
+    ///
+    /// Gaining focus blurs the timeline so destructive clipboard/delete commands refuse while
+    /// typing; losing focus does not restore timeline focus — the next timeline interaction
+    /// (clip click, track selection, blade toggle) reclaims it explicitly via `focusTimeline()`.
+    func textEditorFocusChanged(id: UUID, isFocused: Bool) {
+        if isFocused {
+            focusedTextEditorIDs.insert(id)
+            timelineHasFocus = false
+        } else {
+            focusedTextEditorIDs.remove(id)
+        }
+    }
+
+    func setSelectedMediaIDs(_ ids: Set<UUID>) {
+        selectedMediaIDs = ids
+        timelineHasFocus = false
+    }
+
+    func toggleBladeTool() {
+        guard !isTextEditingActive else { return }
+        timelineTool = timelineTool == .blade ? .selection : .blade
+        timelineHasFocus = true
+    }
+
+    func cancelTimelineGesture() {
+        timelineGestureFeedback = nil
+        timelineSnapIndicatorFrame = nil
+    }
+
     @discardableResult
     func copyGradeFromSelectedClip() -> Bool {
         guard canCopyGrade,
@@ -2207,7 +2271,9 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func deleteSelectedMarker() {
-        guard let sequenceID = activeSequence?.id,
+        // ⌘⌫ deletes to line start in a text field; never delete the marker being renamed.
+        guard !isTextEditingActive,
+              let sequenceID = activeSequence?.id,
               let markerID = timelineState.selectedMarkerID
         else {
             return
@@ -2259,6 +2325,7 @@ final class EditorAjarAppModel: ObservableObject {
     @discardableResult
     func moveSelectedClip(
         toStartFrame startFrame: Int64,
+        destinationTrackID: UUID? = nil,
         linkedClipEditMode: LinkedClipEditMode = .linked
     ) -> Bool {
         guard let sequence = activeSequence,
@@ -2278,11 +2345,422 @@ final class EditorAjarAppModel: ObservableObject {
                 sequenceID: sequence.id,
                 sourceTrackID: selectedClipReference.trackID,
                 clipID: selectedClipReference.clipID,
-                destinationTrackID: selectedClipReference.trackID,
+                destinationTrackID: destinationTrackID ?? selectedClipReference.trackID,
                 timelineRange: timelineRange,
                 linkedClipEditMode: linkedClipEditMode
             )
         )
+    }
+
+    /// Moves the entire timeline selection horizontally by `deltaFrames` in one undo step (#240).
+    ///
+    /// Extends single-clip move to multi-selection (FR-TL-007): every selected clip shifts by the
+    /// same delta, and when `linkedClipEditMode` is `.linked` each selected clip's unselected A/V
+    /// partners follow. The full set is deduplicated so a selected linked pair is never moved
+    /// twice, and the moves apply as one atomic transaction — the reducer's central validation
+    /// refuses the whole gesture with a typed error if the result would overlap clips, leaving the
+    /// project unchanged. Vertical track changes remain a single-clip affordance.
+    @discardableResult
+    func moveSelectedClips(
+        byFrames deltaFrames: Int64,
+        linkedClipEditMode: LinkedClipEditMode = .linked
+    ) -> Bool {
+        guard deltaFrames != 0, let sequence = activeSequence else { return false }
+        let selected = timelineState.selectedClips
+        guard !selected.isEmpty else { return false }
+
+        var references: [TimelineClipReference] = []
+        var seen: Set<TimelineClipReference> = []
+        func include(_ reference: TimelineClipReference) {
+            if seen.insert(reference).inserted {
+                references.append(reference)
+            }
+        }
+        for reference in selected.sorted(by: { $0.clipID.uuidString < $1.clipID.uuidString }) {
+            include(reference)
+            if linkedClipEditMode == .linked {
+                for partner in linkedPartnerReferences(of: reference) {
+                    include(partner)
+                }
+            }
+        }
+
+        var commands: [EditCommand] = []
+        for reference in references {
+            guard let clip = Self.clip(reference, in: sequence),
+                  let startFrame = try? clip.timelineRange.start.frameIndex(
+                    at: sequence.timebase,
+                    rounding: .nearestOrAwayFromZero
+                  ),
+                  let start = try? RationalTime.atFrame(
+                    max(0, startFrame + deltaFrames),
+                    frameRate: sequence.timebase
+                  ),
+                  let timelineRange = try? TimeRange(
+                    start: start,
+                    duration: clip.timelineRange.duration
+                  )
+            else {
+                return false
+            }
+            commands.append(.moveClip(
+                sequenceID: sequence.id,
+                sourceTrackID: reference.trackID,
+                clipID: reference.clipID,
+                destinationTrackID: reference.trackID,
+                timelineRange: timelineRange,
+                linkedClipEditMode: .unlinked
+            ))
+        }
+        return applyEditGroup(commands)
+    }
+
+    func previewTimelineGesture(frame: Int64, snapped: Bool) {
+        timelineGestureFeedback = AppString.localized(
+            "timeline.gesture.feedback", "Frame \(frame)"
+        )
+        timelineSnapIndicatorFrame = snapped ? frame : nil
+    }
+
+    func compatibleTrackID(for reference: TimelineClipReference, verticalLaneOffset: Int) -> UUID? {
+        guard let sequence = activeSequence,
+              let source = (sequence.videoTracks + sequence.audioTracks).first(where: { $0.id == reference.trackID })
+        else { return nil }
+        let tracks = source.kind == .video ? sequence.videoTracks : sequence.audioTracks
+        guard let index = tracks.firstIndex(where: { $0.id == source.id }) else { return nil }
+        let destination = min(max(0, index + verticalLaneOffset), tracks.count - 1)
+        return tracks[destination].locked ? nil : tracks[destination].id
+    }
+
+    @discardableResult
+    func rippleTrimSelectedClip(edge: TimelineTrimEdge, toFrame frame: Int64,
+                                linkedClipEditMode: LinkedClipEditMode = .linked) -> Bool {
+        guard let sequence = activeSequence, let reference = selectedClipReference,
+              let clip = selectedClip else { return false }
+        let startFrame = (try? clip.timelineRange.start.frameIndex(at: sequence.timebase, rounding: .nearestOrAwayFromZero)) ?? 0
+        let endFrame = (try? clip.timelineRange.end().frameIndex(at: sequence.timebase, rounding: .nearestOrAwayFromZero)) ?? startFrame + 1
+        let sourceStartFrame = (try? clip.sourceRange.start.frameIndex(at: sequence.timebase, rounding: .nearestOrAwayFromZero)) ?? 0
+        let newStart = edge == .leading ? min(frame, endFrame - 1) : startFrame
+        let newEnd = edge == .trailing ? max(frame, startFrame + 1) : endFrame
+        let sourceStart = edge == .leading ? sourceStartFrame + (newStart - startFrame) : sourceStartFrame
+        guard let sourceTime = try? RationalTime.atFrame(sourceStart, frameRate: sequence.timebase),
+              let timelineTime = try? RationalTime.atFrame(newStart, frameRate: sequence.timebase),
+              let duration = try? sequence.timebase.duration(ofFrames: newEnd - newStart),
+              let sourceRange = try? TimeRange(start: sourceTime, duration: duration),
+              let timelineRange = try? TimeRange(start: timelineTime, duration: duration)
+        else { return false }
+        return applyEdit(.rippleTrimClip(sequenceID: sequence.id, trackID: reference.trackID,
+                                         clipID: reference.clipID, sourceRange: sourceRange,
+                                         timelineRange: timelineRange,
+                                         linkedClipEditMode: linkedClipEditMode))
+    }
+
+    @discardableResult
+    func rollSelectedClip(edge: TimelineTrimEdge, toFrame frame: Int64) -> Bool {
+        guard let sequence = activeSequence, let reference = selectedClipReference,
+              let track = (sequence.videoTracks + sequence.audioTracks).first(where: { $0.id == reference.trackID })
+        else { return false }
+        let clips = track.items.compactMap { item -> Clip? in guard case .clip(let clip) = item else { return nil }; return clip }
+        guard let index = clips.firstIndex(where: { $0.id == reference.clipID }) else { return false }
+        let leftIndex = edge == .leading ? index - 1 : index
+        let rightIndex = leftIndex + 1
+        guard clips.indices.contains(leftIndex), clips.indices.contains(rightIndex),
+              let time = try? RationalTime.atFrame(frame, frameRate: sequence.timebase)
+        else { return false }
+        return applyEdit(.rollEdit(sequenceID: sequence.id, trackID: track.id,
+                                   leftClipID: clips[leftIndex].id,
+                                   rightClipID: clips[rightIndex].id, editTime: time))
+    }
+
+    @discardableResult
+    func trimSelectedClipToPlayhead(edge: TimelineTrimEdge) -> Bool {
+        guard !isTextEditingActive else { return false }
+        return rippleTrimSelectedClip(edge: edge, toFrame: playheadFrame)
+    }
+
+    @discardableResult
+    func slipSelectedClip(byFrames delta: Int64) -> Bool {
+        guard !isTextEditingActive else { return false }
+        guard let sequence = activeSequence, let reference = selectedClipReference,
+              let clip = selectedClip,
+              let sourceFrame = try? clip.sourceRange.start.frameIndex(at: sequence.timebase, rounding: .nearestOrAwayFromZero),
+              let sourceStart = try? RationalTime.atFrame(max(0, sourceFrame + delta), frameRate: sequence.timebase),
+              let range = try? TimeRange(start: sourceStart, duration: clip.sourceRange.duration)
+        else { return false }
+        return applyEdit(.slipClip(sequenceID: sequence.id, trackID: reference.trackID,
+                                   clipID: reference.clipID, sourceRange: range))
+    }
+
+    @discardableResult
+    func slideSelectedClip(byFrames delta: Int64) -> Bool {
+        guard !isTextEditingActive else { return false }
+        guard let sequence = activeSequence, let reference = selectedClipReference,
+              let clip = selectedClip,
+              let startFrame = try? clip.timelineRange.start.frameIndex(at: sequence.timebase, rounding: .nearestOrAwayFromZero),
+              let start = try? RationalTime.atFrame(max(0, startFrame + delta), frameRate: sequence.timebase),
+              let range = try? TimeRange(start: start, duration: clip.timelineRange.duration)
+        else { return false }
+        return applyEdit(.slideClip(sequenceID: sequence.id, trackID: reference.trackID,
+                                    clipID: reference.clipID, timelineRange: range))
+    }
+
+    func snappedTimelineFrame(_ proposedFrame: Int64, momentarilyDisabled: Bool) -> Int64 {
+        guard timelineState.snappingEnabled, !momentarilyDisabled, let sequence = activeSequence
+        else { return max(0, proposedFrame) }
+        return TimelineInteraction.snappedFrame(
+            proposedFrame: max(0, proposedFrame),
+            targets: TimelineInteraction.snapTargets(in: sequence, playheadFrame: playheadFrame),
+            toleranceFrames: timelineState.snapToleranceFrames
+        )
+    }
+
+    @discardableResult
+    func bladeSelectedClipAtPlayhead() -> Bool {
+        guard !isTextEditingActive, let reference = selectedClipReference else { return false }
+        return bladeClip(reference: reference, atFrame: playheadFrame)
+    }
+
+    /// Blades a clip at the timeline x-coordinate under the pointer (FR-TL-004, #240).
+    ///
+    /// The blade tool splits at the exact click position, not the playhead: the local x is mapped
+    /// to a timeline frame through the current zoom before the split.
+    @discardableResult
+    func bladeClip(reference: TimelineClipReference, atTimelineX x: Double) -> Bool {
+        let pixelsPerFrame = max(1, timelineState.pixelsPerFrame)
+        let frame = Int64((max(0, x) / pixelsPerFrame).rounded())
+        return bladeClip(reference: reference, atFrame: frame)
+    }
+
+    @discardableResult
+    func bladeClip(reference: TimelineClipReference, atFrame frame: Int64) -> Bool {
+        guard let sequence = activeSequence,
+              let time = try? RationalTime.atFrame(frame, frameRate: sequence.timebase)
+        else { return false }
+        // A linked A/V clip blades together with its partners in one undo step (#240): the same
+        // timeline cut is applied to every partner that spans it, atomically.
+        var commands: [EditCommand] = [
+            .bladeClip(
+                sequenceID: sequence.id,
+                trackID: reference.trackID,
+                clipID: reference.clipID,
+                atTime: time,
+                rightClipID: UUID()
+            )
+        ]
+        for partner in linkedPartnerReferences(of: reference) {
+            guard let clip = Self.clip(partner, in: sequence),
+                  let end = try? clip.timelineRange.end(),
+                  clip.timelineRange.start < time, time < end
+            else {
+                continue
+            }
+            commands.append(.bladeClip(
+                sequenceID: sequence.id,
+                trackID: partner.trackID,
+                clipID: partner.clipID,
+                atTime: time,
+                rightClipID: UUID()
+            ))
+        }
+        return applyEditGroup(commands)
+    }
+
+    @discardableResult
+    func rippleDeleteSelection() -> Bool {
+        applyDestructiveSelectionEdit(ripple: true)
+    }
+
+    @discardableResult
+    func liftSelection() -> Bool {
+        applyDestructiveSelectionEdit(ripple: false)
+    }
+
+    private func applyDestructiveSelectionEdit(ripple: Bool) -> Bool {
+        guard timelineHasFocus, !isTextEditingActive, let sequence = activeSequence else { return false }
+        let references = timelineState.selectedClips.sorted { $0.clipID.uuidString < $1.clipID.uuidString }
+        guard !references.isEmpty else { return false }
+        // One undo step per gesture (#240): a multi-clip delete/lift is one atomic transaction.
+        let commands = references.map { reference -> EditCommand in
+            ripple
+                ? .rippleDeleteClip(sequenceID: sequence.id, trackID: reference.trackID, clipID: reference.clipID)
+                : .liftClip(sequenceID: sequence.id, trackID: reference.trackID, clipID: reference.clipID)
+        }
+        let changed = applyEditGroup(commands)
+        if changed {
+            timelineState.selectedClips = []
+            timelineState.selectionAnchor = nil
+        }
+        return changed
+    }
+
+    @discardableResult
+    func copyTimelineClips() -> Bool {
+        guard timelineHasFocus, !isTextEditingActive, let sequence = activeSequence else { return false }
+        let copied = timelineState.selectedClips.compactMap { reference -> TimelineClipboardItem? in
+            guard let track = (sequence.videoTracks + sequence.audioTracks).first(where: { $0.id == reference.trackID }),
+                  let clip = track.items.compactMap({ item -> Clip? in
+                      guard case .clip(let clip) = item else { return nil }
+                      return clip.id == reference.clipID ? clip : nil
+                  }).first
+            else { return nil }
+            return TimelineClipboardItem(sourceTrackID: track.id, clip: clip)
+        }
+        guard !copied.isEmpty else { return false }
+        timelineClipboard = copied
+        return true
+    }
+
+    @discardableResult
+    func cutTimelineClips() -> Bool {
+        guard copyTimelineClips() else { return false }
+        return liftSelection()
+    }
+
+    @discardableResult
+    func pasteTimelineClips() -> Bool {
+        guard timelineHasFocus, !isTextEditingActive,
+              let sequence = activeSequence, !timelineClipboard.isEmpty,
+              let earliest = timelineClipboard.map(\.clip.timelineRange.start).min()
+        else { return false }
+        guard let target = try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)
+        else { return false }
+        // Pasted copies never keep source link groups (#240 review, finding 5): a pasted A/V
+        // pair gets one fresh shared group so it stays linked to itself, not to the originals;
+        // a lone pasted member of a group is unlinked.
+        var pastedGroupMemberCounts: [UUID: Int] = [:]
+        for item in timelineClipboard {
+            if let group = item.clip.linkGroupID {
+                pastedGroupMemberCounts[group, default: 0] += 1
+            }
+        }
+        var remappedLinkGroups: [UUID: UUID] = [:]
+        for (group, memberCount) in pastedGroupMemberCounts where memberCount >= 2 {
+            remappedLinkGroups[group] = UUID()
+        }
+        // One undo step per gesture (#240): pasting every clipboard item is one atomic transaction.
+        var commands: [EditCommand] = []
+        for item in timelineClipboard {
+            let tracks = item.clip.kind == .video ? sequence.videoTracks : sequence.audioTracks
+            guard let track = tracks.first(where: { $0.id == item.sourceTrackID && !$0.locked })
+                    ?? tracks.first(where: { !$0.locked }),
+                  let offset = try? item.clip.timelineRange.start.subtracting(earliest),
+                  let start = try? target.adding(offset),
+                  let range = try? TimeRange(start: start, duration: item.clip.timelineRange.duration)
+            else { continue }
+            let clip = item.clip.copyingForTimeline(
+                id: UUID(),
+                timelineRange: range,
+                linkGroupID: item.clip.linkGroupID.flatMap { remappedLinkGroups[$0] }
+            )
+            commands.append(.insertClip(sequenceID: sequence.id, trackID: track.id, clip: clip))
+        }
+        return applyEditGroup(commands)
+    }
+
+    func selectForwardFromPlayhead() {
+        guard !isTextEditingActive, let sequence = activeSequence else { return }
+        let selected = (sequence.videoTracks + sequence.audioTracks).flatMap { track in
+            TimelineInteraction.clipLayouts(for: track, frameRate: sequence.timebase, pixelsPerFrame: 1)
+                .filter { $0.startFrame >= playheadFrame }
+                .map(\.reference)
+        }
+        timelineState.selectedClips = Set(selected)
+        timelineState.selectionAnchor = selected.first
+        timelineHasFocus = true
+        persistActiveSequenceContext()
+    }
+
+    @discardableResult
+    func addTrack(kind: TrackKind) -> Bool {
+        guard let sequence = activeSequence else { return false }
+        return applyEdit(.addTrack(sequenceID: sequence.id, track: Track(id: UUID(), kind: kind, items: [])))
+    }
+
+    @discardableResult
+    func removeSelectedEmptyTrack() -> Bool {
+        guard let sequence = activeSequence, let trackID = selectedTimelineTrackID,
+              let track = (sequence.videoTracks + sequence.audioTracks).first(where: { $0.id == trackID }),
+              track.items.isEmpty
+        else { return false }
+        let removed = applyEdit(.removeTrack(sequenceID: sequence.id, trackID: trackID))
+        if removed { selectedTimelineTrackID = nil }
+        return removed
+    }
+
+    @discardableResult
+    func editSelectedMedia(_ mode: TimelineMediaEditMode) -> Bool {
+        guard !isTextEditingActive, let mediaID = selectedMediaIDs.first else { return false }
+        switch mode {
+        case .insert: return insertMediaOnTimeline(mediaID: mediaID)
+        case .overwrite: return placeMediaOnTimeline(mediaID: mediaID, overwrite: true, append: false)
+        case .append: return placeMediaOnTimeline(mediaID: mediaID, overwrite: false, append: true)
+        case .replace:
+            guard let sequence = activeSequence, let reference = selectedClipReference,
+                  let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+                  let sourceRange = try? TimeRange(start: .zero, duration: media.metadata.duration)
+            else { return false }
+            return applyEdit(.replaceClipSource(sequenceID: sequence.id, trackID: reference.trackID, clipID: reference.clipID, source: .media(id: mediaID), sourceRange: sourceRange))
+        }
+    }
+
+    /// Whether a three-point edit can run now: both timeline marks and a browser selection exist.
+    var canPerformThreePointEdit: Bool {
+        guard isProjectEditable,
+              !isTextEditingActive,
+              let inFrame = timelineState.selectionInFrame,
+              let outFrame = timelineState.selectionOutFrame,
+              outFrame > inFrame,
+              let mediaID = selectedMediaIDs.first,
+              let media = project?.mediaPool.first(where: { $0.id == mediaID })
+        else {
+            return false
+        }
+        return !media.isOffline
+    }
+
+    /// Fits the browser selection into the marked timeline range as a three-point edit (FR-TL-003).
+    ///
+    /// With in/out marks set and a media-browser selection, the marked span supplies the timeline
+    /// start and the duration; the source is taken from the selection's start. `mode` chooses an
+    /// insert (ripple later items) or overwrite fit. Refuses (returns `false`) when marks or a
+    /// selection are missing, the marks are empty/inverted, or the marked span exceeds the media's
+    /// available source.
+    @discardableResult
+    func performThreePointEdit(mode: ThreePointEditMode) -> Bool {
+        guard !isTextEditingActive,
+              let sequence = activeSequence,
+              let inFrame = timelineState.selectionInFrame,
+              let outFrame = timelineState.selectionOutFrame,
+              outFrame > inFrame,
+              let mediaID = selectedMediaIDs.first,
+              let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+              !media.isOffline
+        else {
+            return false
+        }
+        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
+        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
+        guard let track = tracks.first(where: { !$0.locked }),
+              let timelineStart = try? RationalTime.atFrame(inFrame, frameRate: sequence.timebase),
+              let duration = try? sequence.timebase.duration(ofFrames: outFrame - inFrame),
+              duration <= media.metadata.duration,
+              let sourceRange = try? TimeRange(start: .zero, duration: duration)
+        else {
+            return false
+        }
+        let name = media.sourceURL?.deletingPathExtension().lastPathComponent
+            ?? AppString.localized("timeline.media.untitled", "Media")
+        return applyEdit(.threePointEdit(
+            sequenceID: sequence.id,
+            trackID: track.id,
+            clipID: UUID(),
+            source: .media(id: mediaID),
+            sourceRange: sourceRange,
+            timelineStart: timelineStart,
+            kind: kind,
+            name: name,
+            mode: mode
+        ))
     }
 
     @discardableResult
@@ -2345,12 +2823,14 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func setTimelineRangeIn() {
+        guard !isTextEditingActive else { return }
         timelineState.selectionInFrame = playheadFrame
         refreshLoopRange()
         persistActiveSequenceContext()
     }
 
     func setTimelineRangeOut() {
+        guard !isTextEditingActive else { return }
         timelineState.selectionOutFrame = playheadFrame
         refreshLoopRange()
         persistActiveSequenceContext()
@@ -3148,6 +3628,51 @@ final class EditorAjarAppModel: ObservableObject {
         }
     }
 
+    /// Applies an ordered list of engine commands as a single undo step (#240).
+    ///
+    /// Zero commands is a no-op; one command applies directly so common single-clip gestures stay
+    /// plain journal records; two or more are wrapped in one atomic `EditCommand.transaction` so a
+    /// multi-command gesture (linked A/V blade, multi-clip delete/lift/paste, multi-selection move)
+    /// undoes in one step and refuses atomically on any typed sub-command error.
+    @discardableResult
+    private func applyEditGroup(_ commands: [EditCommand]) -> Bool {
+        switch commands.count {
+        case 0:
+            return false
+        case 1:
+            return applyEdit(commands[0])
+        default:
+            return applyEdit(.transaction(commands))
+        }
+    }
+
+    /// Timeline references of a clip's linked A/V partners in the active sequence, excluding
+    /// `reference` itself. Empty when the clip is unlinked or the sequence is unavailable.
+    private func linkedPartnerReferences(
+        of reference: TimelineClipReference
+    ) -> [TimelineClipReference] {
+        guard let sequence = activeSequence,
+              let clip = Self.clip(reference, in: sequence),
+              let linkGroupID = clip.linkGroupID
+        else {
+            return []
+        }
+        return (sequence.videoTracks + sequence.audioTracks).flatMap { track in
+            track.items.compactMap { item -> TimelineClipReference? in
+                guard case .clip(let candidate) = item,
+                      candidate.linkGroupID == linkGroupID
+                else {
+                    return nil
+                }
+                let candidateReference = TimelineClipReference(
+                    trackID: track.id,
+                    clipID: candidate.id
+                )
+                return candidateReference == reference ? nil : candidateReference
+            }
+        }
+    }
+
     /// Surfaces the read-only refusal message once so UI edit paths stay quiet after the first try.
     private func surfaceReadOnlyEditRefusalOnce(reason: AjarProjectReadOnlyReason) {
         presentReadOnlyBannerIfNeeded()
@@ -3642,6 +4167,33 @@ final class EditorAjarAppModel: ObservableObject {
         return applyEdit(.insertClip(sequenceID: sequence.id, trackID: track.id, clip: clip))
     }
 
+    private func placeMediaOnTimeline(mediaID: UUID, overwrite: Bool, append: Bool) -> Bool {
+        guard let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+              !media.isOffline, let sequence = activeSequence else { return false }
+        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
+        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
+        guard let track = tracks.first(where: { !$0.locked }) else { return false }
+        let start: RationalTime
+        if append {
+            start = track.items.compactMap { try? $0.timelineRange.end() }.max() ?? .zero
+        } else {
+            start = (try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)) ?? .zero
+        }
+        guard let timelineRange = try? TimeRange(start: start, duration: media.metadata.duration),
+              let sourceRange = try? TimeRange(start: .zero, duration: media.metadata.duration)
+        else { return false }
+        let clip = Clip(
+            id: UUID(), source: .media(id: mediaID), sourceRange: sourceRange,
+            timelineRange: timelineRange, kind: kind,
+            name: media.sourceURL?.deletingPathExtension().lastPathComponent
+                ?? AppString.localized("timeline.media.untitled", "Media")
+        )
+        let command: EditCommand = overwrite
+            ? .overwriteClip(sequenceID: sequence.id, trackID: track.id, clip: clip)
+            : .appendClip(sequenceID: sequence.id, trackID: track.id, clip: clip)
+        return applyEdit(command)
+    }
+
     /// Applies durable `MediaRef.proxyState` without creating an undo entry (cache/derived state).
     private func applyProxyState(_ proxyState: MediaProxyState, for mediaID: UUID) {
         guard let project else {
@@ -3992,6 +4544,60 @@ struct TimelineInteractionState: Equatable, Sendable {
 struct TimelineClipReference: Hashable, Sendable {
     let trackID: UUID
     let clipID: UUID
+}
+
+enum TimelineTool: Equatable, Sendable {
+    case selection
+    case blade
+}
+
+enum TimelineMediaEditMode: Equatable, Sendable {
+    case insert
+    case overwrite
+    case append
+    case replace
+}
+
+enum TimelineTrimEdge: Equatable, Sendable {
+    case leading
+    case trailing
+}
+
+private struct TimelineClipboardItem: Sendable {
+    let sourceTrackID: UUID
+    let clip: Clip
+}
+
+private extension Clip {
+    /// Copy for paste: fresh clip ID, new placement, and an explicit link group.
+    ///
+    /// `linkGroupID` is required (no default) so paste call sites must decide group identity —
+    /// pasted copies never silently inherit the source's link group (#240 review, finding 5).
+    func copyingForTimeline(id: UUID, timelineRange: TimeRange, linkGroupID: UUID?) -> Clip {
+        Clip(
+            id: id,
+            source: source,
+            sourceRange: sourceRange,
+            timelineRange: timelineRange,
+            kind: kind,
+            name: name,
+            linkGroupID: linkGroupID,
+            transform: transform,
+            transformAnimation: transformAnimation,
+            effects: effects,
+            effectsAnimation: effectsAnimation,
+            effectStack: effectStack,
+            effectStackAnimation: effectStackAnimation,
+            audioMix: audioMix,
+            leadingTransition: leadingTransition,
+            trailingTransition: trailingTransition,
+            speed: speed,
+            reverse: reverse,
+            freezeFrame: freezeFrame,
+            timeRemap: timeRemap,
+            frameSampling: frameSampling
+        )
+    }
 }
 
 struct SelectedTransformInspectorState: Equatable, Sendable {
@@ -4652,6 +5258,7 @@ enum TimelineSnapTargetKind: Equatable, Sendable {
     case playhead
     case marker(UUID)
     case clipEdge(TimelineClipReference)
+    case keyframe(TimelineClipReference)
 }
 
 struct TimelineSnapTarget: Equatable, Sendable {
@@ -4803,6 +5410,20 @@ enum TimelineInteraction {
             ) {
                 targets.append(TimelineSnapTarget(frame: layout.startFrame, kind: .clipEdge(layout.reference)))
                 targets.append(TimelineSnapTarget(frame: layout.endFrame, kind: .clipEdge(layout.reference)))
+            }
+            for item in track.items {
+                guard case .clip(let clip) = item else { continue }
+                let reference = TimelineClipReference(trackID: track.id, clipID: clip.id)
+                for parameter in ClipTransformParameter.allCases {
+                    for point in TransformKeyframeLookup.keyframes(
+                        parameter: parameter,
+                        in: clip.transformAnimation,
+                        frameRate: sequence.timebase,
+                        pixelsPerFrame: 1
+                    ) {
+                        targets.append(TimelineSnapTarget(frame: point.frame, kind: .keyframe(reference)))
+                    }
+                }
             }
         }
         return targets

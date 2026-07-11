@@ -550,5 +550,19 @@ public enum EditCommand: Codable, Equatable, Sendable {
         kind: MediaReferenceEditKind,
         replacements: [MediaRef]
     )
+
+    /// Applies an ordered list of sub-commands atomically as **one** undoable, journal-persisted
+    /// step (FR-TL-004 / FR-TL-005 / FR-TL-009).
+    ///
+    /// A single user gesture that spans several engine commands — linked A/V blade, multi-clip
+    /// ripple-delete / lift / paste, or a multi-selection move — is expressed as one transaction
+    /// so it produces exactly one entry in the undo stack and one journal record. The reducer
+    /// threads each sub-command through the same pure pipeline in order; if any sub-command
+    /// refuses with a typed error the whole transaction refuses and the input project is left
+    /// unchanged (NFR-STAB-003). Central validation runs once over the final project, so a
+    /// gesture that would overlap clips is rejected atomically. Sub-commands are applied in the
+    /// given order, keeping replay and crash recovery deterministic. Callers wrap only genuine
+    /// multi-command gestures; single-command gestures stay plain commands.
+    case transaction([EditCommand])
 }
 // swiftlint:enable file_length type_body_length

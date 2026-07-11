@@ -67,6 +67,7 @@ struct LibraryPanel: View {
         VStack(spacing: 6) {
             TextField(AppString.localized("library.search", "Search media"), text: $query.searchText)
                 .textFieldStyle(.roundedBorder)
+                .timelineTextEditingScope(model: model)
                 .accessibilityLabel(AppString.localized("library.search", "Search media"))
                 .accessibilityIdentifier("Media Search")
             HStack {
@@ -105,6 +106,7 @@ struct LibraryPanel: View {
                 MediaBrowserListRow(media: $0, model: model)
             }
             .listStyle(.plain)
+            .onChange(of: selection) { model.setSelectedMediaIDs($0) }
         case .grid:
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
@@ -118,6 +120,7 @@ struct LibraryPanel: View {
                     }
                 }
             }
+            .onChange(of: selection) { model.setSelectedMediaIDs($0) }
         }
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import AjarCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -183,6 +184,17 @@ struct EditorAjarApp: App {
                 .keyboardShortcut("w", modifiers: [.command])
                 .disabled(!model.canCloseActiveSequence)
                 .accessibilityLabel(AppString.localized("menu.sequences.close", "Close Sequence"))
+
+                Divider()
+                Button(AppString.localized("menu.sequences.addVideoTrack", "Add Video Track")) {
+                    model.addTrack(kind: .video)
+                }
+                Button(AppString.localized("menu.sequences.addAudioTrack", "Add Audio Track")) {
+                    model.addTrack(kind: .audio)
+                }
+                Button(AppString.localized("menu.sequences.removeTrack", "Remove Selected Empty Track")) {
+                    model.removeSelectedEmptyTrack()
+                }
             }
             CommandMenu(Text(AppString.localized("menu.markers.title", "Markers"))) {
                 Button(AppString.localized("menu.markers.add", "Add Marker")) {
@@ -207,26 +219,32 @@ struct EditorAjarApp: App {
                     model.deleteSelectedMarker()
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
-                .disabled(model.selectedMarker == nil)
+                // Disabled while text editing so ⌘⌫ deletes text, not the marker being renamed.
+                .disabled(model.selectedMarker == nil || model.isTextEditingActive)
                 .accessibilityLabel(AppString.localized("menu.markers.delete", "Delete Marker"))
             }
+            // #245 playback commands. Modifier-less letter keys (J/K/L) are gated while text
+            // editing so they reach the field editor instead of the shuttle.
             CommandMenu(Text(AppString.localized("menu.playback.title", "Playback"))) {
                 Button(AppString.localized("playback.shuttle.reverse", "Shuttle Reverse")) {
                     model.shuttleBackward()
                 }
                 .keyboardShortcut("j", modifiers: [])
+                .disabled(model.isTextEditingActive)
                 .accessibilityLabel(AppString.localized("playback.shuttle.reverse", "Shuttle Reverse"))
 
                 Button(AppString.localized("playback.shuttle.pause", "Shuttle Pause")) {
                     model.shuttlePause()
                 }
                 .keyboardShortcut("k", modifiers: [])
+                .disabled(model.isTextEditingActive)
                 .accessibilityLabel(AppString.localized("playback.shuttle.pause", "Shuttle Pause"))
 
                 Button(AppString.localized("playback.shuttle.forward", "Shuttle Forward")) {
                     model.shuttleForward()
                 }
                 .keyboardShortcut("l", modifiers: [])
+                .disabled(model.isTextEditingActive)
                 .accessibilityLabel(AppString.localized("playback.shuttle.forward", "Shuttle Forward"))
 
                 Divider()
@@ -263,7 +281,126 @@ struct EditorAjarApp: App {
                 }
                 .keyboardShortcut("f", modifiers: [.command, .control])
             }
+            // Clip commands disable while a text editor is focused (#240 review): a disabled
+            // menu item does not consume its key equivalent, so typing (E, [, ], ⌫) and native
+            // clipboard shortcuts (⌘C/⌘X/⌘V) reach the text field instead of the timeline.
+            // Union: #240 timeline editing + #245 speed/reverse/freeze + existing grade/look.
             CommandMenu(Text(AppString.localized("menu.clip.title", "Clip"))) {
+                Button(AppString.localized("menu.clip.blade", "Blade at Playhead")) {
+                    model.bladeSelectedClipAtPlayhead()
+                }
+                .keyboardShortcut("b", modifiers: [.command])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.rippleDelete", "Ripple Delete")) {
+                    model.rippleDeleteSelection()
+                }
+                .keyboardShortcut(.delete, modifiers: [.shift])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.lift", "Lift")) {
+                    model.liftSelection()
+                }
+                .keyboardShortcut(.delete, modifiers: [])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.copy", "Copy Clips")) {
+                    model.copyTimelineClips()
+                }
+                .keyboardShortcut("c", modifiers: [.command])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.cut", "Cut Clips")) {
+                    model.cutTimelineClips()
+                }
+                .keyboardShortcut("x", modifiers: [.command])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.paste", "Paste Clips")) {
+                    model.pasteTimelineClips()
+                }
+                .keyboardShortcut("v", modifiers: [.command])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.trimStart", "Trim Start to Playhead")) {
+                    model.trimSelectedClipToPlayhead(edge: .leading)
+                }
+                .keyboardShortcut("[", modifiers: [])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.trimEnd", "Trim End to Playhead")) {
+                    model.trimSelectedClipToPlayhead(edge: .trailing)
+                }
+                .keyboardShortcut("]", modifiers: [])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.slipEarlier", "Slip Clip Earlier One Frame")) {
+                    model.slipSelectedClip(byFrames: -1)
+                }
+                .keyboardShortcut("[", modifiers: [.option])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.slipLater", "Slip Clip Later One Frame")) {
+                    model.slipSelectedClip(byFrames: 1)
+                }
+                .keyboardShortcut("]", modifiers: [.option])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.slideEarlier", "Slide Clip Earlier One Frame")) {
+                    model.slideSelectedClip(byFrames: -1)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.control, .option])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.slideLater", "Slide Clip Later One Frame")) {
+                    model.slideSelectedClip(byFrames: 1)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.control, .option])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.selectForward", "Select Forward from Playhead")) {
+                    model.selectForwardFromPlayhead()
+                }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(model.isTextEditingActive)
+                Divider()
+                Button(AppString.localized("menu.clip.insert", "Insert Selected Media")) {
+                    model.editSelectedMedia(.insert)
+                }
+                .keyboardShortcut(KeyEquivalent("\u{F70C}"), modifiers: [])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.overwrite", "Overwrite with Selected Media")) {
+                    model.editSelectedMedia(.overwrite)
+                }
+                .keyboardShortcut(KeyEquivalent("\u{F70D}"), modifiers: [])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.append", "Append Selected Media")) {
+                    model.editSelectedMedia(.append)
+                }
+                .keyboardShortcut("e", modifiers: [])
+                .disabled(model.isTextEditingActive)
+                Button(AppString.localized("menu.clip.replace", "Replace with Selected Media")) {
+                    model.editSelectedMedia(.replace)
+                }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                .disabled(model.isTextEditingActive)
+                Button(
+                    AppString.localized(
+                        "menu.clip.threePointInsert", "Three-Point Insert (Fit Marks)"
+                    )
+                ) {
+                    model.performThreePointEdit(mode: .insert)
+                }
+                .keyboardShortcut(KeyEquivalent("\u{F70C}"), modifiers: [.shift])
+                .disabled(!model.canPerformThreePointEdit)
+                .accessibilityLabel(
+                    AppString.localized(
+                        "menu.clip.threePointInsert.ax", "Three-Point Insert Fit to Marks"
+                    )
+                )
+                Button(
+                    AppString.localized(
+                        "menu.clip.threePointOverwrite", "Three-Point Overwrite (Fit Marks)"
+                    )
+                ) {
+                    model.performThreePointEdit(mode: .overwrite)
+                }
+                .keyboardShortcut(KeyEquivalent("\u{F70D}"), modifiers: [.shift])
+                .disabled(!model.canPerformThreePointEdit)
+                .accessibilityLabel(
+                    AppString.localized(
+                        "menu.clip.threePointOverwrite.ax", "Three-Point Overwrite Fit to Marks"
+                    )
+                )
+                Divider()
                 Menu(AppString.localized("menu.clip.speed", "Speed")) {
                     Button(AppString.localized("menu.clip.speed.half", "50%")) {
                         _ = model.updateSelectedClipSpeed(percentText: "50")
