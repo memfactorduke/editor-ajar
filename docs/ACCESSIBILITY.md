@@ -64,6 +64,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Select forward from playhead | `⇧⌘A` | Clip menu |
 | Save look… | `⌥⌘L` | Clip menu → naming sheet |
 | Toggle scopes | `⌥⌘S` | Clip menu / scopes panel |
+| Apply / remove video transition | Clip → Transition | Needs abutting cut; typed refusal otherwise (FR-FX-001) |
 | Cancel (sheets / banner dismiss) | `Esc` | Export dialog, import summary, save look, read-only dismiss, title edit |
 
 Full Keyboard Access (System Settings → Keyboard) tabs through buttons, fields, and toggles.
@@ -83,7 +84,7 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 6. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
 7. **Scopes panel** (when visible, `⌥⌘S`) → type picker → hide  
 8. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
-9. **Inspector** → marker, or Transform/Color/Audio tabs when a clip is selected  
+9. **Inspector** → marker, or Transform/Color/Audio/Effects tabs when a clip is selected  
 10. **Timeline toolbar** → tool buttons left-to-right  
 11. **Timeline tracks** → track state buttons → clips (waveforms / fade handles on audio) → keyframe dots when shown  
 12. **Mixer panel** (when visible) → per-track fader / pan / mute / solo → master fader / meter  
@@ -171,7 +172,9 @@ Visible when a project opens read-only (higher schema minor / ADR-0018).
 | Relink… | Full Keyboard Access | Relink… | offline items only; native single-file picker |
 | Batch relink offline media | Full Keyboard Access | Batch relink offline media from a folder | id: `Batch Relink Offline Media`; visible when any offline item exists; folder picker → recursive filename+hash match |
 | Import progress | — | Scanning folders… / Importing {filename} | `{completed} of {total} files`; id: `Media Import Progress` |
-| Effects row | — | Effects | static placeholder |
+| Effects library | — | Effects library | id: `Effects Library`; search + Add / double-click appends to selected clip (FR-FX-002) |
+| Effects search | typing | Search effects | id: `Effects Library Search` |
+| Effect library row | double-click / Add | {name}, {category} | id: `Effect Library Row {kind}`; Add id: `Effect Library Add {kind}` |
 
 The picker allows multiple files and folders. Folder enumeration, probing, hashing, and bookmark
 creation run off the main actor; progress is non-modal so transport and other window controls remain
@@ -293,6 +296,23 @@ Primary color grade is **static in v1** (no color keyframe toggles); transform k
 
 Selecting an audio clip auto-switches to the Audio tab; selecting a video clip leaves Color if
 already there, otherwise restores Transform so existing ui-smoke identifiers stay reachable.
+
+### Effects inspector (clip selected, Effects tab) — FR-FX-003 / FR-FX-001
+
+| Control | AX label | id / notes |
+|---------|----------|------------|
+| Panel | Effects Inspector | id: `Effects Inspector` |
+| Enable node | Enable {effect name} | id: `Effect Enable {nodeUUID}`; checkbox |
+| Move up / down | Move Effect Up / Down | id: `Effect Move Up/Down {nodeUUID}` |
+| Reset / Remove node | Reset/Remove {name} | id: `Effect Reset/Remove {nodeUUID}` |
+| Parameter sliders | {param title} | id: `Effect Param {nodeUUID} {paramID}` |
+| Mirror axis | Axis | id: `Effect Mirror Axis {nodeUUID}` |
+| Reset stack | Reset Effects Stack | id: `Effects Reset All` |
+| Transition section | Video Transition Inspector | id: `Transition Inspector` (cut after selected outgoing clip) |
+| Transition kind / duration / direction | Kind / Duration (frames) / Direction | id: `Transition Kind` / `Transition Duration` / `Transition Direction` |
+| Apply / Replace / Remove | Apply/Replace/Remove Transition | id: `Apply Transition` / `Remove Transition` |
+
+Effect parameters are **static in v1** (engine stack animation exists; no effect-keyframe UI yet). Transitions require two abutting clips; non-adjacent apply is a typed refusal (FR-FX-001).
 
 ### Scopes panel (toggle `⌥⌘S`) — FR-COL-003
 
@@ -476,7 +496,7 @@ launch-time tree test.
 | Edit | Undo / Redo (dynamic titles) |
 | Sequences | New Sequence, Close Sequence |
 | Markers | Add / Previous / Next / Delete Marker |
-| Clip | Copy/Paste Grade, Save Look, Apply Look…, Detach Audio |
+| Clip | Copy/Paste Grade, Save Look, Apply Look…, Transition (apply kinds / Remove), Detach Audio |
 | Title | Edit Canvas Title, Nudge Title Right/Down |
 | Export | Open export dialog, Export Active Sequence, Show/Hide Export Queue |
 | Help | Open Sample Project |

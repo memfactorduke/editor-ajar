@@ -822,6 +822,10 @@ private struct InspectorPanel: View {
                     label: AppString.localized("inspector.row.audio", "Audio"),
                     value: AppString.localized("inspector.audio.none", "Select one audio clip")
                 )
+                DetailRow(
+                    label: AppString.localized("inspector.row.effects", "Effects"),
+                    value: AppString.localized("inspector.effects.none", "Select one video clip")
+                )
             }
             Spacer(minLength: 0)
         }
@@ -1918,6 +1922,10 @@ private struct ClipInspectorTabs: View {
             case .audio:
                 if let audioState = model.selectedAudioClipInspector {
                     AudioClipInspectorView(clipName: audioState.clipName, model: model)
+                }
+            case .effects:
+                if let effectsState = model.selectedEffectStackInspector {
+                    EffectsInspector(state: effectsState, model: model)
                 }
             }
         }

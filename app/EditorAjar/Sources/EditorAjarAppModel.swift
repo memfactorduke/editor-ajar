@@ -172,8 +172,21 @@ final class EditorAjarAppModel: ObservableObject {
     /// summary → proposal via this pending flag instead of presenting both at once.
     private var pendingFirstMediaProposal = false
 
-    /// Clip inspector tab when a video clip is selected (Transform / Color).
+    /// Clip inspector tab when a video clip is selected (Transform / Color / Effects).
     @Published var selectedClipInspectorTab: ClipInspectorTab = .transform
+
+    /// Draft FR-FX-001 transition kind for the inspector / menu apply path.
+    @Published var videoTransitionDraftKind: ClipVideoTransitionKind = .crossDissolve
+
+    /// Draft transition duration in frames (text field; parsed on apply).
+    @Published var videoTransitionDraftDurationFrames =
+        "\(EditorAjarAppModel.defaultVideoTransitionDurationFrames)"
+
+    /// Draft direction for push / slide / wipe.
+    @Published var videoTransitionDraftDirection: ClipVideoTransitionDirection = .left
+
+    /// Most recent transition UI refusal (typed, non-blocking).
+    @Published var videoTransitionError: EditorAjarVideoTransitionError?
 
     /// Whether the FR-COL-003 scopes panel is visible.
     @Published var isScopesPanelVisible = false
@@ -256,6 +269,10 @@ final class EditorAjarAppModel: ObservableObject {
     var colorCorrectionCoalesceActive = false
     /// Coalesce continuous LUT strength slider gestures into one undo step.
     var lutStrengthCoalesceActive = false
+    /// Coalesce continuous effect-parameter slider gestures into one undo step.
+    var effectParameterCoalesceActive = false
+    /// Active effect-parameter coalesce key (`nodeID:parameterID`).
+    var effectParameterCoalesceKey: String?
     /// Shared GPU scope analyzer (lazy; never on the playback hot path).
     var scopeAnalyzer: MetalScopeAnalyzer?
     /// Retains the last `MetalScopeFrame` so display textures stay alive.
@@ -1935,6 +1952,10 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectedMarkerID = nil
         colorCorrectionCoalesceActive = false
         lutStrengthCoalesceActive = false
+        effectParameterCoalesceActive = false
+        effectParameterCoalesceKey = nil
+        videoTransitionError = nil
+        refreshVideoTransitionDraftFromSelection()
         persistActiveSequenceContext()
     }
 

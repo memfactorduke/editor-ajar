@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-FX-001/002/003 effects & transitions UI (#242): browsable Effects library (searchable
+  built-in kinds from `ClipEffectKind`, app-layer categories; double-click/Add appends an
+  identity node to the selected video clip); Effects inspector tab with stack reorder
+  (up/down), enable/disable, remove, reset-params, and scalar/mirror controls driven by
+  parameter definitions (continuous slider undo coalescing + focus-gated duration fields);
+  static params in v1 (engine stack animation exists; no effect-keyframe UI yet); video
+  transition apply/replace/remove on the cut after the selected outgoing clip (menu +
+  inspector; adjacency typed refusal; duration in frames; direction for push/slide/wipe).
+  No `schemaMinor` bump (stack + transition models already persisted). App-model tests cover
+  library filter, stack edits + undo symmetry, and transition apply/replace/remove/refusal.
 - FR-COL-001/003/004/007 color grading UI (#241): Color inspector tab (lift/gamma/gain + exposure
   through vibrance) wired to undoable `setClipColorCorrection` (static v1 — no color keyframes yet);
   throttled scopes panel (`⌥⌘S`, ≤10 analyses/s while playing, on-demand when paused) via
