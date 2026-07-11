@@ -527,6 +527,12 @@ public enum EditCommand: Codable, Equatable, Sendable {
     /// Replaces project-wide settings.
     case setProjectSettings(ProjectSettings)
 
+    /// Appends a prepared batch of imported media references to the project manifest.
+    ///
+    /// Probing, hashing, bookmark creation, and duplicate-content decisions happen in
+    /// `AjarMedia` before this deterministic command is created. One batch is one undo step.
+    case addMediaReferences([MediaRef])
+
     /// Replaces complete media references after platform I/O has already succeeded.
     ///
     /// URLs are never resolved, hashed, bookmarked, or copied by the reducer. Keeping those

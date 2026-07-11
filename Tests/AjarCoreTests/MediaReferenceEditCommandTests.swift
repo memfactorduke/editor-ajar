@@ -6,6 +6,70 @@ import XCTest
 @testable import AjarCore
 
 final class MediaReferenceEditCommandTests: XCTestCase {
+    func testFRMED001ImportBatchAppendsInOrderAndUndoRemovesWholeBatch() throws {
+        let fixture = try makeEditFixture(seed: 23_400)
+        let metadata = try XCTUnwrap(fixture.project.mediaPool.first?.metadata)
+        let first = MediaRef(
+            id: try editUUID(23_400_901),
+            sourceURL: URL(fileURLWithPath: "/import/first.mov"),
+            bookmark: Data([0x23, 0x40, 0x01]),
+            contentHash: ContentHash.sha256(data: Data("first import".utf8)),
+            metadata: metadata
+        )
+        let second = MediaRef(
+            id: try editUUID(23_400_902),
+            sourceURL: URL(fileURLWithPath: "/import/second.wav"),
+            bookmark: Data([0x23, 0x40, 0x02]),
+            contentHash: ContentHash.sha256(data: Data("second import".utf8)),
+            metadata: metadata
+        )
+        let command = EditCommand.addMediaReferences([first, second])
+        var history = EditHistory(project: fixture.project)
+
+        let imported = try history.apply(command)
+
+        XCTAssertEqual(imported.mediaPool.suffix(2), [first, second])
+        XCTAssertEqual(history.undoCount, 1)
+        XCTAssertEqual(command.actionName, "Import Media")
+        XCTAssertEqual(history.undo(), fixture.project)
+        XCTAssertEqual(try history.redo(), imported)
+
+        let roundTripped = try JSONDecoder().decode(
+            EditCommand.self,
+            from: JSONEncoder().encode(command)
+        )
+        XCTAssertEqual(roundTripped, command)
+    }
+
+    func testFRMED001ImportBatchRejectsExistingAndRepeatedIDsWithTypedError() throws {
+        let fixture = try makeEditFixture(seed: 23_401)
+        let existing = try XCTUnwrap(fixture.project.mediaPool.first)
+        let newID = try editUUID(23_401_901)
+        let imported = MediaRef(
+            id: newID,
+            sourceURL: URL(fileURLWithPath: "/import/new.mov"),
+            contentHash: ContentHash.sha256(data: Data("new import".utf8)),
+            metadata: existing.metadata
+        )
+
+        XCTAssertThrowsError(
+            try apply(.addMediaReferences([existing]), to: fixture.project)
+        ) { error in
+            XCTAssertEqual(
+                error as? EditReducerError,
+                .duplicateImportedMediaReferenceID(existing.id)
+            )
+        }
+        XCTAssertThrowsError(
+            try apply(.addMediaReferences([imported, imported]), to: fixture.project)
+        ) { error in
+            XCTAssertEqual(
+                error as? EditReducerError,
+                .duplicateImportedMediaReferenceID(newID)
+            )
+        }
+    }
+
     func testFRMED007RelinkReferenceRewriteIsUndoableAndRedoIsDeterministic() throws {
         let fixture = try makeEditFixture(seed: 21_800)
         let original = try XCTUnwrap(fixture.project.mediaPool.first)

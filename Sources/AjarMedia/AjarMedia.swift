@@ -15,4 +15,4 @@
 //  Depends on AjarCore; AjarCore never depends on this (ADR-0005). FFmpeg integration must stay
 //  GPL-compatible (ADR-0004).
 //
-//  STATUS: native decode is implemented; probe/import/proxy work continues in ROADMAP M9.
+//  STATUS: native probe/import/decode + proxy are implemented; FFmpeg import fallback remains.

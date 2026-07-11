@@ -25,6 +25,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Play / Pause | `Space` | Transport bar |
 | Step backward / forward | `←` / `→` | One frame |
 | Undo / Redo | `⌘Z` / `⇧⌘Z` | Edit menu |
+| Import media files / folders | `⌘I` | File menu; multi-select picker |
 | New Sequence | `⌘N` | Sequences menu + tab bar |
 | Close Sequence | `⌘W` | When more than one sequence |
 | Add Marker | `⇧⌘M` | Timeline + Markers menu |
@@ -41,7 +42,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Toggle action/title-safe guides | `⌥⌘G` | Program monitor overlay |
 | Copy / Paste grade | `⌥⌘C` / `⌥⌘V` | Clip menu |
 | Save look | `⌥⌘L` | Clip menu |
-| Cancel (sheets / banner dismiss) | `Esc` | Export dialog, read-only dismiss, title edit |
+| Cancel (sheets / banner dismiss) | `Esc` | Export dialog, import summary, read-only dismiss, title edit |
 
 Full Keyboard Access (System Settings → Keyboard) tabs through buttons, fields, and toggles.
 Arrow keys on a focused canvas title box nudge 1 unit (Shift = 10).
@@ -55,7 +56,7 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 1. **Read-only banner** (when visible) → Dismiss  
 2. **Workspace header** → Export… → Exports / Hide Exports  
 3. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence  
-4. **Library panel** (static rows; not focus targets for edit)  
+4. **Library panel** → Import Media; VoiceOver navigation also exposes media rows and import progress  
 5. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
 6. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
 7. **Inspector** → marker or transform fields when selection exists  
@@ -63,7 +64,8 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 9. **Timeline tracks** → track state buttons → clips → keyframe dots when shown  
 10. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
 
-**Sheets:** Export dialog focuses Mode → Preset/Range/format pickers → Cancel → Validate.
+**Sheets:** Export dialog focuses Mode → Preset/Range/format pickers → Cancel → Validate. The
+import summary exposes categorized result rows to VoiceOver, then the Done button to keyboard focus.
 
 ---
 
@@ -105,11 +107,15 @@ Visible when a project opens read-only (higher schema minor / ADR-0018).
 
 | Control | Shortcut | AX label | AX value / hint |
 |---------|----------|----------|-----------------|
-| Panel | — | Media and effects panel | — |
-| Project Media row | — | Project Media | static placeholder (M2+) |
+| Panel / window drop target | Finder drag/drop | Media and effects panel. Drop media files or folders here to import. | Window accepts files and folders recursively |
+| Import Media | `⌘I` via File menu / Full Keyboard Access | Import media files or folders | id: `Import Media` |
+| Project media row | — | Media {filename} | codec or Offline |
+| Import progress | — | Scanning folders… / Importing {filename} | `{completed} of {total} files`; id: `Media Import Progress` |
 | Effects row | — | Effects | static placeholder |
 
-No interactive pickers yet; when browser actions land, add rows here.
+The picker allows multiple files and folders. Folder enumeration, probing, hashing, and bookmark
+creation run off the main actor; progress is non-modal so transport and other window controls remain
+available.
 
 ---
 
@@ -264,15 +270,30 @@ When UI lands, require:
 - Keyboard: open, confirm, cancel, and progress dismissal without a pointer
 - Rows in this checklist + coverage once visible at launch or via a dedicated UI smoke
 
+## 13. Media import summary (FR-MED-001 / FR-MED-010)
+
+Sheet shown after every completed import batch. Imported VFR files appear in both Imported and
+Variable Frame Rate Conformed sections so the successful import and timebase decision are explicit.
+
+| Control | Shortcut | AX label | value / hint |
+|---------|----------|----------|--------------|
+| Sheet | — | Media import summary | id: `Media Import Summary` |
+| Imported row | — | Imported: {filename} | codec + dimensions/audio-only |
+| Skipped duplicate row | — | Skipped Duplicates: {filename} | existing source/bookmark kept |
+| VFR-conformed row | — | Variable Frame Rate Conformed: {filename} | stable timebase |
+| Failed row | — | Failed: {filename} | localized typed reason; unsupported text names the missing FFmpeg fallback |
+| Done | `Return` / `Esc` | Close media import summary | id: `Close Media Import Summary` |
+
 ---
 
-## 13. Menus (not in window AX tree walk)
+## 14. Menus (not in window AX tree walk)
 
 Menu commands still get `accessibilityLabel` for completeness; they are not walked by the
 launch-time tree test.
 
 | Menu | Items (labels) |
 |------|----------------|
+| File | Import Media… (`⌘I`) |
 | Edit | Undo / Redo (dynamic titles) |
 | Sequences | New Sequence, Close Sequence |
 | Markers | Add / Previous / Next / Delete Marker |

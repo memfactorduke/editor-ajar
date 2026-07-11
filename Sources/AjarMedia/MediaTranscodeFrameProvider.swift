@@ -73,7 +73,7 @@ public final class MediaTranscodeFrameProvider: @unchecked Sendable {
         guard let sourceURL = media.sourceURL else {
             throw MediaTranscodeError.missingSourceURL(mediaID: media.id)
         }
-        guard let frameRate = media.metadata.frameRate else {
+        guard let frameRate = media.metadata.conformedFrameRate ?? media.metadata.frameRate else {
             throw MediaTranscodeError.readerSetupFailed(
                 "media \(media.id) has no frame rate for proxy transcode"
             )

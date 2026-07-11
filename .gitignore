@@ -27,6 +27,7 @@ Icon?
 
 # ── Tooling / caches ─────────────────────────────────────────────
 *.log
+*.profraw
 .swiftlint-cache/
 fastlane/report.xml
 fastlane/Preview.html

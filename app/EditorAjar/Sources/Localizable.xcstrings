@@ -12,6 +12,457 @@
         }
       }
     },
+    "import.action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Media…"
+          }
+        }
+      }
+    },
+    "import.action.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import media files or folders"
+          }
+        }
+      }
+    },
+    "import.action.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import media files or folders"
+          }
+        }
+      }
+    },
+    "import.failure.localFileRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only files and folders stored on this Mac can be imported."
+          }
+        }
+      }
+    },
+    "import.failure.bookmark": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor Ajar could not save permission to reopen this file: %@"
+          }
+        }
+      }
+    },
+    "import.failure.folderScan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder could not be scanned: %@"
+          }
+        }
+      }
+    },
+    "import.failure.hash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file could not be fingerprinted: %@"
+          }
+        }
+      }
+    },
+    "import.failure.probe": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file's media information could not be read: %@"
+          }
+        }
+      }
+    },
+    "import.failure.projectUpdate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file was prepared but could not be added to the project: %@"
+          }
+        }
+      }
+    },
+    "import.failure.projectUpdate.reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The open project rejected the import batch."
+          }
+        }
+      }
+    },
+    "import.failure.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file or folder is missing or cannot be read."
+          }
+        }
+      }
+    },
+    "import.failure.unsupportedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This format is not supported by the native importer. The FFmpeg import fallback is not available in this build."
+          }
+        }
+      }
+    },
+    "import.failure.vfrConform": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variable frame rate was detected, but a stable playback rate could not be chosen."
+          }
+        }
+      }
+    },
+    "import.progress.discovering": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanning folders…"
+          }
+        }
+      }
+    },
+    "import.picker.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media selection failed: %@"
+          }
+        }
+      }
+    },
+    "import.progress.file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importing %@"
+          }
+        }
+      }
+    },
+    "import.progress.preparing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing import…"
+          }
+        }
+      }
+    },
+    "import.progress.value": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld of %lld files"
+          }
+        }
+      }
+    },
+    "import.status.applyFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported media could not be added to the project."
+          }
+        }
+      }
+    },
+    "import.status.complete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import complete: %lld imported, %lld skipped, %lld failed"
+          }
+        }
+      }
+    },
+    "import.summary.audioOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audio only"
+          }
+        }
+      }
+    },
+    "import.summary.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "import.summary.done.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close media import summary"
+          }
+        }
+      }
+    },
+    "import.summary.duplicate.reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same content is already in the media pool. The existing location and bookmark were kept."
+          }
+        }
+      }
+    },
+    "import.summary.duplicates": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped Duplicates"
+          }
+        }
+      }
+    },
+    "import.summary.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No media files were found in the selection."
+          }
+        }
+      }
+    },
+    "import.summary.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
+    "import.summary.imported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported"
+          }
+        }
+      }
+    },
+    "import.summary.imported.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@"
+          }
+        }
+      }
+    },
+    "import.summary.row.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %@"
+          }
+        }
+      }
+    },
+    "import.summary.section.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (%lld)"
+          }
+        }
+      }
+    },
+    "import.summary.sheet.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media import summary"
+          }
+        }
+      }
+    },
+    "import.summary.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media Import Summary"
+          }
+        }
+      }
+    },
+    "import.summary.vfrConformed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variable Frame Rate Conformed"
+          }
+        }
+      }
+    },
+    "import.summary.vfr.reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stable timebase: %@"
+          }
+        }
+      }
+    },
+    "library.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No project media"
+          }
+        }
+      }
+    },
+    "library.media.offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        }
+      }
+    },
+    "library.media.row.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media %@"
+          }
+        }
+      }
+    },
+    "library.media.unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown media"
+          }
+        }
+      }
+    },
+    "menu.import.media": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Media…"
+          }
+        }
+      }
+    },
+    "menu.import.media.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import media files or folders"
+          }
+        }
+      }
+    },
     "banner.readOnly.dismiss": {
       "extractionState": "manual",
       "localizations": {
@@ -1030,7 +1481,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Media and effects panel"
+            "value": "Media and effects panel. Drop media files or folders here to import."
           }
         }
       }
