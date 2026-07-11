@@ -304,26 +304,6 @@ extension EditReducer {
         }
     }
 
-    static func insertClip(
-        _ clip: Clip,
-        sequenceID: UUID,
-        trackID: UUID,
-        in project: Project
-    ) throws -> Project {
-        try replacingTrack(trackID, sequenceID: sequenceID, in: project) { track in
-            var items: [TimelineItem] = []
-            for item in track.items {
-                if item.timelineRange.start >= clip.timelineRange.start {
-                    items.append(try offsetItem(item, by: clip.timelineRange.duration))
-                } else {
-                    items.append(item)
-                }
-            }
-            items.append(.clip(clip))
-            return copying(track, items: sortedItems(items))
-        }
-    }
-
     static func overwriteClip(
         _ clip: Clip,
         sequenceID: UUID,

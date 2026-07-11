@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Release acceptance gate (#236): `EditorAjarReleaseAcceptanceTests` walks the real
+  user journey through `EditorAjarAppModel` APIs (new project defaults → import
+  video/still/audio → place + drag-equivalent + blade → gaussian blur + color + styled
+  title + audio fade → save/reopen full equality → ProRes export decode-verified with
+  `ExportMovieDecoder`). H.264 hardware-only extension capability-skips on encoder-less
+  runners. Runs in `EditorAjarTests` (ui-smoke app-test step); documented in TESTING.md.
 - FR-TXT-001/002/004 title styling UI + insert + animation presets (#244): Title menu
   **Insert Title** (`⌘T`) places a default title clip at the playhead on the topmost unlocked
   video track (or creates a track in one undo step via `#240` transactions); Clip inspector

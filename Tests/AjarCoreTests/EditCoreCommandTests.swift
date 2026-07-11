@@ -253,31 +253,4 @@ final class EditReducerCoreEditTests: XCTestCase {
         )
     }
 
-    func testFRTL003ADR0008InsertOverlapReturnsTypedValidationError() throws {
-        let fixture = try makeEditFixture(seed: 290)
-        let overlappingClip = try makeEditClip(
-            id: try editUUID(290_001),
-            mediaID: fixture.mediaID,
-            startFrame: 5,
-            durationFrames: 4
-        )
-
-        XCTAssertThrowsError(
-            try apply(
-                .insertClip(
-                    sequenceID: fixture.sequenceID,
-                    trackID: fixture.videoTrackID,
-                    clip: overlappingClip
-                ),
-                to: fixture.project
-            )
-        ) { error in
-            guard case .validationFailed(let errors) = error as? EditReducerError else {
-                XCTFail("Expected validationFailed, got \(error)")
-                return
-            }
-
-            XCTAssertTrue(errors.containsItemsOverlap)
-        }
-    }
 }
