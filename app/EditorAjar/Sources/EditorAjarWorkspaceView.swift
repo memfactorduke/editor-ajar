@@ -25,6 +25,11 @@ struct EditorAjarWorkspaceView: View {
                     ProgramMonitor(model: model)
                     TransportBar(model: model)
                 }
+                if model.isScopesPanelVisible {
+                    Divider()
+                    ScopesPanel(model: model)
+                        .frame(width: 260)
+                }
                 Divider()
                 InspectorPanel(model: model)
                     .frame(width: 280)
@@ -62,6 +67,9 @@ struct EditorAjarWorkspaceView: View {
         .sheet(isPresented: batchRelinkSummaryPresented) {
             EditorAjarBatchRelinkSummaryView(model: model)
         }
+        .sheet(isPresented: saveLookSheetPresented) {
+            SaveLookSheet(model: model)
+        }
         .alert(
             AppString.localized("library.relink.mismatch.title", "Media Does Not Match"),
             isPresented: relinkMismatchPresented
@@ -92,6 +100,12 @@ struct EditorAjarWorkspaceView: View {
             allowedContentTypes: [.data, .folder],
             allowsMultipleSelection: true,
             onCompletion: model.handleMediaImporterResult
+        )
+        .fileImporter(
+            isPresented: lutImporterPresented,
+            allowedContentTypes: [.cubeLUT, .data],
+            allowsMultipleSelection: false,
+            onCompletion: model.handleLUTImporterResult
         )
         .fileImporter(
             isPresented: relinkPickerPresented,
@@ -142,6 +156,32 @@ struct EditorAjarWorkspaceView: View {
                     model.presentExportDialog()
                 } else {
                     model.dismissExportDialog()
+                }
+            }
+        )
+    }
+
+    private var saveLookSheetPresented: Binding<Bool> {
+        Binding(
+            get: { model.isSaveLookSheetPresented },
+            set: { presented in
+                if presented {
+                    model.presentSaveLookSheet()
+                } else {
+                    model.dismissSaveLookSheet()
+                }
+            }
+        )
+    }
+
+    private var lutImporterPresented: Binding<Bool> {
+        Binding(
+            get: { model.isLUTImporterPresented },
+            set: { presented in
+                if presented {
+                    model.presentLUTImporter()
+                } else {
+                    model.dismissLUTImporter()
                 }
             }
         )
@@ -735,9 +775,9 @@ private struct InspectorPanel: View {
             Divider()
             if let marker = model.selectedMarker {
                 MarkerInspector(marker: marker, model: model)
-            } else if let transformState = model.selectedTransformInspector {
-                // Clip playback is nested inside TransformInspector's ScrollView (NFR-A11Y-001).
-                TransformInspector(state: transformState, model: model)
+            } else if model.selectedTransformInspector != nil || model.selectedColorInspector != nil {
+                // Transform tab hosts ClipPlaybackInspector inside its ScrollView (NFR-A11Y-001 / #245).
+                ClipInspectorTabs(model: model)
             } else {
                 DetailRow(
                     label: AppString.localized("inspector.row.marker", "Marker"),
@@ -746,6 +786,10 @@ private struct InspectorPanel: View {
                 DetailRow(
                     label: AppString.localized("inspector.row.transform", "Transform"),
                     value: AppString.localized("inspector.transform.none", "Select one video clip")
+                )
+                DetailRow(
+                    label: AppString.localized("inspector.row.color", "Color"),
+                    value: AppString.localized("inspector.color.none", "Select one video clip")
                 )
             }
             Spacer(minLength: 0)
@@ -770,6 +814,7 @@ private struct ClipPlaybackInspector: View {
                     text: $speedPercent
                 )
                 .textFieldStyle(.roundedBorder)
+                .timelineTextEditingScope(model: model)
                 .accessibilityLabel(AppString.localized("inspector.playback.speed", "Speed %"))
                 .accessibilityIdentifier("Speed %")
                 .onSubmit { _ = model.updateSelectedClipSpeed(percentText: speedPercent) }
@@ -1720,6 +1765,40 @@ private struct TimelineClipBlock: View {
         isSelected
             ? AppString.localized("state.selected", "Selected")
             : AppString.localized("state.notSelected", "Not selected")
+    }
+}
+
+private struct ClipInspectorTabs: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker(
+                AppString.localized("inspector.tab", "Inspector Tab"),
+                selection: $model.selectedClipInspectorTab
+            ) {
+                ForEach(ClipInspectorTab.allCases) { tab in
+                    Text(tab.localizedTitle)
+                        .tag(tab)
+                        .accessibilityIdentifier(tab.accessibilityIdentifier)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel(AppString.localized("inspector.tab.ax", "Inspector tab"))
+            .accessibilityIdentifier("Inspector Tab Picker")
+
+            switch model.selectedClipInspectorTab {
+            case .transform:
+                if let transformState = model.selectedTransformInspector {
+                    TransformInspector(state: transformState, model: model)
+                }
+            case .color:
+                if let colorState = model.selectedColorInspector {
+                    ColorInspector(state: colorState, model: model)
+                }
+            }
+        }
     }
 }
 

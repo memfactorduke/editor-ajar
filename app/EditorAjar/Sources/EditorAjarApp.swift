@@ -453,8 +453,8 @@ struct EditorAjarApp: App {
 
                 Divider()
 
-                Button(AppString.localized("menu.clip.saveLook", "Save Look")) {
-                    model.saveLookFromSelectedClip()
+                Button(AppString.localized("menu.clip.saveLook", "Save Look…")) {
+                    model.presentSaveLookSheet()
                 }
                 .keyboardShortcut("l", modifiers: [.command, .option])
                 .disabled(!model.canSaveLook)
@@ -475,6 +475,30 @@ struct EditorAjarApp: App {
                 .disabled(!model.canApplyLook)
                 .accessibilityLabel(
                     AppString.localized("menu.clip.applyLook.ax", "Apply Look to Selected Clip")
+                )
+
+                Button(AppString.localized("menu.clip.importLUT", "Import LUT…")) {
+                    model.presentLUTImporter()
+                }
+                .disabled(!model.canImportLUT)
+                .accessibilityLabel(
+                    AppString.localized("menu.clip.importLUT.ax", "Import cube LUT for Selected Clip")
+                )
+
+                Divider()
+
+                Button(
+                    model.isScopesPanelVisible
+                        ? AppString.localized("menu.clip.hideScopes", "Hide Scopes")
+                        : AppString.localized("menu.clip.showScopes", "Show Scopes")
+                ) {
+                    model.toggleScopesPanel()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+                .accessibilityLabel(
+                    model.isScopesPanelVisible
+                        ? AppString.localized("menu.clip.hideScopes", "Hide Scopes")
+                        : AppString.localized("menu.clip.showScopes", "Show Scopes")
                 )
 
                 Divider()

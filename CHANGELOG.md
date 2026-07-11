@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-COL-001/003/004/007 color grading UI (#241): Color inspector tab (lift/gamma/gain + exposure
+  through vibrance) wired to undoable `setClipColorCorrection` (static v1 — no color keyframes yet);
+  throttled scopes panel (`⌥⌘S`, ≤10 analyses/s while playing, on-demand when paused) via
+  `MetalScopeAnalyzer`; `.cube` LUT import applied as inline effect-stack tables (ADR-0007 has no
+  `luts/` directory — tables stay on the node, no `schemaMinor` bump); LUT strength slider; Save Look
+  naming sheet + looks apply/delete list; existing Copy/Paste Grade menus stay live once a grade
+  (e.g. LUT) exists on the clip.
 - FR-MED-002 / FR-PROJ-003 / FR-MED-007 v1 engine-hole close (#246):
   - **Still-image media:** PNG/JPEG/HEIF/TIFF probe via ImageIO with a process-wide 5-second
     default source duration (`StillMediaDefaults`, not project-persisted — no `schemaMinor`
@@ -36,7 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never to their source clips).
 
 - docs(ADR): v1 scope deferrals (#247).
-
 - FR-MED-005/009 real media browser (#235): searchable/filterable list and grid media-pool
   views with complete metadata, selection, offline and durable proxy state/actions, cancellable
   hover-scrub previews, single-file relink, and undoable drag-to-timeline insertion. Video
