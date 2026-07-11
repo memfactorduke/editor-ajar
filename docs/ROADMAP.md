@@ -154,8 +154,11 @@ import supported/fallback media without blocking the UI, inspect/search that med
 into a stable-timebase project with all keyboard/VoiceOver and recovery gates green.
 **Depends on:** M9.
 
-**Current status: STARTED.** #233 implements the project/document foundation; #234–#236 complete
-the first real-media path.
+**Current status: COMPLETE (2026-07-11, v1.0.0).** M10 (#233-#235, #238) and M11 (#239-#247: timeline
+gestures/transactions, color, audio, effects, titles, playback+cache, stills/auto-detect/relink,
+ADR-0020 scope) delivered the full usable editor; #236's release-acceptance journey (create ->
+import -> edit -> grade -> title -> mix -> save -> reopen -> export -> decode-verify) gates every
+PR via CI. Release evidence on the v1.0.0 tag notes.
 
 ## M11 — v1 app-surface completion and acceptance *(planned)*
 
