@@ -24,6 +24,13 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 |--------|----------|--------|
 | Play / Pause | `Space` | Transport bar |
 | Step backward / forward | `←` / `→` | One frame |
+| Shuttle reverse / pause / forward | `J` / `K` / `L` | Repeated J/L stacks 1×, 2×, 4× |
+| Loop In/Out range | `⇧⌘L` | Session-only; requires both marks |
+| Jump to In / Out | `⌥I` / `⌥O` | |
+| Previous / Next edit point | `⌘←` / `⌘→` | Clip heads and tails |
+| Jump to start / end | `⇧⌘←` / `⇧⌘→` | Sequence bounds |
+| Toggle alpha checkerboard | `⌥⌘B` | Display-only; export pixels unchanged |
+| Full-screen program monitor | `⌃⌘F` | Native macOS window full screen |
 | Undo / Redo | `⌘Z` / `⇧⌘Z` | Edit menu |
 | Import media files / folders | `⌘I` | File menu; multi-select picker |
 | New Project | `⌘N` | File menu + launch welcome |
@@ -187,6 +194,10 @@ NSTextView / drag flakiness on headless CI). Labels for title boxes are covered 
 | Step Forward | `→` | Step Forward | id: `Step Forward` |
 | Playhead readout | — | Playhead | value: frame description |
 | Scrub playhead | slider / arrows step | Scrub playhead | value: playhead; hint mentions arrows |
+| Shuttle Reverse / Pause / Forward | `J` / `K` / `L` | Playback menu commands | rate stacks on repeated J/L |
+| Loop In/Out Range | `⇧⌘L` | Loop In/Out Range | session-only; no project schema field |
+| Alpha checkerboard | `⌥⌘B` | Toggle Alpha Checkerboard | display-only |
+| Program monitor full screen | `⌃⌘F` | Toggle Program Monitor Full Screen | native window full screen |
 
 ---
 
@@ -218,6 +229,22 @@ NSTextView / drag flakiness on headless CI). Labels for title boxes are covered 
 | Blend Mode | Blend Mode | id: `Transform Blend Mode` |
 | Track compositing | Track Compositing Inspector | opacity + blend fields labelled |
 | Flip Horizontal / Vertical | Flip Horizontal / Flip Vertical | On/Off; ids `Transform Flip Horizontal/Vertical` |
+
+### Clip playback inspector (clip selected)
+
+Nested inside the transform inspector `ScrollView` (same clip-selected surface) so speed
+controls cannot steal viewport height from transform fields and drop them from the AX tree.
+
+| Control | AX label | id / notes |
+|---------|----------|------------|
+| Panel | Clip Playback Inspector | id: `Clip Playback Inspector` |
+| Speed % | Speed % | id: `Speed %`; constant positive speed; ramps deferred to #247 |
+| Reverse | Reverse | id: `Clip Reverse`; engine reverse sampler |
+| Freeze Frame | Freeze Frame | id: `Clip Freeze Frame`; holds the clip source frame |
+
+Audio scrubbing remains typed unavailable: the current live audio coordinator has no isolated,
+non-real-time preview route. A UI toggle must not mutate or add work to the real-time audio callback
+(ADR-0012). Loop and checkerboard state are deliberately session-only, so schema minor stays 13.
 
 ---
 

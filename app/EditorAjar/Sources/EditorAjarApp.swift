@@ -210,7 +210,92 @@ struct EditorAjarApp: App {
                 .disabled(model.selectedMarker == nil)
                 .accessibilityLabel(AppString.localized("menu.markers.delete", "Delete Marker"))
             }
+            CommandMenu(Text(AppString.localized("menu.playback.title", "Playback"))) {
+                Button(AppString.localized("playback.shuttle.reverse", "Shuttle Reverse")) {
+                    model.shuttleBackward()
+                }
+                .keyboardShortcut("j", modifiers: [])
+                .accessibilityLabel(AppString.localized("playback.shuttle.reverse", "Shuttle Reverse"))
+
+                Button(AppString.localized("playback.shuttle.pause", "Shuttle Pause")) {
+                    model.shuttlePause()
+                }
+                .keyboardShortcut("k", modifiers: [])
+                .accessibilityLabel(AppString.localized("playback.shuttle.pause", "Shuttle Pause"))
+
+                Button(AppString.localized("playback.shuttle.forward", "Shuttle Forward")) {
+                    model.shuttleForward()
+                }
+                .keyboardShortcut("l", modifiers: [])
+                .accessibilityLabel(AppString.localized("playback.shuttle.forward", "Shuttle Forward"))
+
+                Divider()
+                Button(AppString.localized("playback.loop.toggle", "Loop In/Out Range")) {
+                    model.toggleLoopRange()
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .accessibilityLabel(AppString.localized("playback.loop.toggle", "Loop In/Out Range"))
+
+                Button(AppString.localized("playback.jump.in", "Jump to In")) { model.jumpToRangeIn() }
+                    .keyboardShortcut("i", modifiers: [.option])
+                Button(AppString.localized("playback.jump.out", "Jump to Out")) { model.jumpToRangeOut() }
+                    .keyboardShortcut("o", modifiers: [.option])
+                Button(AppString.localized("playback.jump.previousEdit", "Previous Edit Point")) {
+                    model.jumpToPreviousEditPoint()
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [.command])
+                Button(AppString.localized("playback.jump.nextEdit", "Next Edit Point")) {
+                    model.jumpToNextEditPoint()
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [.command])
+                Button(AppString.localized("playback.jump.start", "Jump to Start")) { model.jumpToStart() }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .shift])
+                Button(AppString.localized("playback.jump.end", "Jump to End")) { model.jumpToEnd() }
+                    .keyboardShortcut(.rightArrow, modifiers: [.command, .shift])
+
+                Divider()
+                Button(AppString.localized("playback.checkerboard.toggle", "Toggle Alpha Checkerboard")) {
+                    model.toggleCheckerboardAlpha()
+                }
+                .keyboardShortcut("b", modifiers: [.command, .option])
+                Button(AppString.localized("playback.fullScreen.toggle", "Toggle Program Monitor Full Screen")) {
+                    model.toggleProgramMonitorFullScreen()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .control])
+            }
             CommandMenu(Text(AppString.localized("menu.clip.title", "Clip"))) {
+                Menu(AppString.localized("menu.clip.speed", "Speed")) {
+                    Button(AppString.localized("menu.clip.speed.half", "50%")) {
+                        _ = model.updateSelectedClipSpeed(percentText: "50")
+                    }
+                    Button(AppString.localized("menu.clip.speed.normal", "100%")) {
+                        _ = model.updateSelectedClipSpeed(percentText: "100")
+                    }
+                    Button(AppString.localized("menu.clip.speed.double", "200%")) {
+                        _ = model.updateSelectedClipSpeed(percentText: "200")
+                    }
+                }
+                .disabled(model.selectedClip == nil)
+
+                Button(
+                    model.selectedClip?.reverse == true
+                        ? AppString.localized("menu.clip.reverse.disable", "Disable Reverse")
+                        : AppString.localized("menu.clip.reverse.enable", "Enable Reverse")
+                ) {
+                    _ = model.setSelectedClipReverse(!(model.selectedClip?.reverse ?? false))
+                }
+                .disabled(model.selectedClip == nil)
+
+                Button(
+                    model.selectedClip?.freezeFrame == true
+                        ? AppString.localized("menu.clip.freeze.disable", "Disable Freeze Frame")
+                        : AppString.localized("menu.clip.freeze.enable", "Enable Freeze Frame")
+                ) {
+                    _ = model.setSelectedClipFreezeFrame(!(model.selectedClip?.freezeFrame ?? false))
+                }
+                .disabled(model.selectedClip == nil)
+
+                Divider()
                 Button(AppString.localized("menu.clip.copyGrade", "Copy Grade")) {
                     model.copyGradeFromSelectedClip()
                 }

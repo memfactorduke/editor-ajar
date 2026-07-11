@@ -188,6 +188,15 @@ public enum EditCommand: Codable, Equatable, Sendable {
         speed: RationalValue
     )
 
+    /// Replaces the constant reverse/freeze flags without introducing a speed ramp.
+    case setClipPlaybackAttributes(
+        sequenceID: UUID,
+        trackID: UUID,
+        clipID: UUID,
+        reverse: Bool,
+        freezeFrame: Bool
+    )
+
     /// Adds a keyframe to one transform parameter.
     case addClipTransformKeyframe(
         sequenceID: UUID,

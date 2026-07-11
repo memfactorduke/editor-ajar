@@ -8,6 +8,7 @@ import Foundation
 import Metal
 import XCTest
 
+// swiftlint:disable:next type_body_length
 final class MetalRenderExecutorTests: XCTestCase {
     func testADR0006FRFX007ExecutesSingleClipGraphFromCVMetalTexture() throws {
         let device = try metalDeviceOrSkip()
@@ -64,6 +65,28 @@ final class MetalRenderExecutorTests: XCTestCase {
         XCTAssertEqual(executor.cacheEntryCount, 1)
         XCTAssertEqual(first.contentHash, second.contentHash)
         XCTAssertTrue(first.texture === second.texture)
+    }
+
+    func testFRPLAY005CacheOnlyLookupMatchesFreshFrameWithoutSourceRequest() throws {
+        let device = try metalDeviceOrSkip()
+        let graph = try makeSingleClipGraph()
+        let sourceTexture = try makeCVMetalTextureFixture(
+            device: device, width: 1, height: 1, bgra: [7, 31, 127, 255]
+        )
+        let executor = try MetalRenderExecutor(device: device)
+        let provider = CountingSourceTextureProvider(texture: sourceTexture.texture)
+        let output = RenderOutputDescriptor(pixelDimensions: PixelDimensions(width: 1, height: 1))
+
+        let fresh = try executor.render(graph: graph, output: output, sourceProvider: provider)
+        try waitForRender(fresh)
+        let hash = try XCTUnwrap(graph.outputNode?.contentHash)
+        let cached = try XCTUnwrap(executor.cachedTexture(contentHash: hash, output: output))
+
+        XCTAssertEqual(provider.requestCount, 1)
+        XCTAssertEqual(
+            try readBGRA8(texture: cached, device: device),
+            try readBGRA8(texture: fresh.texture, device: device)
+        )
     }
 
     func testNFRQUAL001TransparentCompositeClearsOutputTexture() throws {

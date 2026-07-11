@@ -701,6 +701,28 @@ public final class MetalRenderExecutor {
         )
     }
 
+    /// Returns a GPU-resident cached output without asking the caller to decode source frames.
+    ///
+    /// The app uses this before constructing its source provider so an unchanged graph avoids
+    /// both decode and composite work. A RAM miss schedules the same non-blocking disk lookup as
+    /// `render`; callers should immediately render fresh rather than waiting for disk I/O.
+    public func cachedTexture(
+        contentHash: ContentHash,
+        output: RenderOutputDescriptor
+    ) -> MTLTexture? {
+        let cacheKey = FrameCacheKey(contentHash: contentHash, output: output)
+        let lookup = lookUpFrameCache(for: cacheKey)
+        switch lookup {
+        case .hit(let texture):
+            return texture
+        case .miss(scheduleDiskLookup: true, let generation):
+            dispatchDiskLookup(for: cacheKey, generation: generation)
+            return nil
+        case .miss(scheduleDiskLookup: false, _):
+            return nil
+        }
+    }
+
     /// Requests background warm-up of one frame from the disk tier into the RAM tier.
     ///
     /// Used by cache-warming/background routes (ADR-0012): the lookup runs off the playback
