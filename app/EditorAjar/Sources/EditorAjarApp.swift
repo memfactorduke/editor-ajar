@@ -23,7 +23,16 @@ struct EditorAjarApp: App {
                 .frame(minWidth: 1_100, minHeight: 720)
         }
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button(AppString.localized("menu.import.media", "Import Media…")) {
+                    model.presentMediaImporter()
+                }
+                .keyboardShortcut("i", modifiers: [.command])
+                .disabled(!model.canImportMedia)
+                .accessibilityLabel(
+                    AppString.localized("menu.import.media.ax", "Import media files or folders")
+                )
+            }
             CommandGroup(replacing: .undoRedo) {
                 Button(model.undoMenuTitle) {
                     model.undo()

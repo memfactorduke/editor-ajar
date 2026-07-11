@@ -22,6 +22,9 @@ public enum EditReducerError: Error, Equatable, Sendable {
     /// A batch media rewrite contains the same stable ID more than once.
     case duplicateMediaReferenceReplacement(UUID)
 
+    /// An imported media batch contains an ID already present in the project or repeated in-batch.
+    case duplicateImportedMediaReferenceID(UUID)
+
     /// The command would create duplicate sequence IDs inside the project.
     case duplicateSequenceID(UUID)
 

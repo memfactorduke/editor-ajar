@@ -131,8 +131,8 @@ final class MediaProxyPlaybackTests: XCTestCase {
         XCTAssertEqual(small.height % 2, 0)
     }
 
-    func testFRMED004SchemaMinorIs11() {
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 11)
+    func testFRMED004SchemaIncludesProxyFieldsAndLaterImportCommand() {
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 12)
     }
 
     func testFRMED004NestedLegacyMediaJSONWithoutProxyKeysLoads() throws {

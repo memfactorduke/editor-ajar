@@ -40,6 +40,21 @@ final class EditorAjarAppModel: ObservableObject {
     /// In-memory proxy generation progress by media id (FR-MED-004; not persisted).
     @Published private(set) var proxyGenerationProgress: [UUID: Double] = [:]
 
+    /// Whether the multi-select file/folder importer is presented (FR-MED-001).
+    @Published private(set) var isMediaImportPickerPresented = false
+
+    /// Whether one serialized media-import batch is running off-main.
+    @Published private(set) var isImportingMedia = false
+
+    /// Session-only folder/file import progress.
+    @Published private(set) var mediaImportProgress: MediaImportProgress?
+
+    /// Most recently completed import breakdown.
+    @Published private(set) var mediaImportSummary: MediaImportSummary?
+
+    /// Whether the categorized import summary sheet is visible.
+    @Published private(set) var isMediaImportSummaryPresented = false
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
@@ -48,6 +63,7 @@ final class EditorAjarAppModel: ObservableObject {
     private let autosaveIntervalSeconds: TimeInterval
     private let audioCoordinator: (any EditorAjarAudioCoordinating)?
     private let exportPresetStore: EditorAjarExportPresetStore
+    private let mediaImportPipeline: MediaImportPipeline
     /// Package root for `caches/proxies/` resolution and proxy writes (FR-MED-004).
     private var projectPackageRootURL: URL?
     /// Dedicated proxy-generation queue (not the user export queue).
@@ -58,6 +74,7 @@ final class EditorAjarAppModel: ObservableObject {
     private var autosaveLoopTask: Task<Void, Never>?
     private var autosaveWriteTask: Task<Void, Never>?
     private var mediaResolutionTask: Task<Void, Never>?
+    private var mediaImportTask: Task<Void, Never>?
     private var autosaveCommandCount = 0
     private var renderGeneration = 0
     private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
@@ -70,7 +87,8 @@ final class EditorAjarAppModel: ObservableObject {
         autosaveIntervalSeconds: TimeInterval = 5.0,
         audioCoordinator: (any EditorAjarAudioCoordinating)? = nil,
         exportPresetStoreURL: URL? = nil,
-        exportQueueController: EditorAjarExportQueueController? = nil
+        exportQueueController: EditorAjarExportQueueController? = nil,
+        mediaImportPipeline: MediaImportPipeline? = nil
     ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
         projectPackageRootURL = autosavePackageURL
@@ -84,6 +102,7 @@ final class EditorAjarAppModel: ObservableObject {
             fileURL: exportPresetStoreURL ?? EditorAjarExportPresetStore.defaultFileURL()
         )
         self.exportQueueController = exportQueueController ?? EditorAjarExportQueueController()
+        self.mediaImportPipeline = mediaImportPipeline ?? MediaImportPipeline()
         proxyGenerationQueue = ProxyGenerationQueue(
             sessionFactory: Self.makeProxySessionFactory()
         )
@@ -340,6 +359,7 @@ final class EditorAjarAppModel: ObservableObject {
         autosaveLoopTask?.cancel()
         autosaveWriteTask?.cancel()
         mediaResolutionTask?.cancel()
+        mediaImportTask?.cancel()
         proxyObserveTask?.cancel()
     }
 
@@ -367,6 +387,162 @@ final class EditorAjarAppModel: ObservableObject {
                 self.loadMessage = "Media availability refresh unavailable: \(error)"
             }
         }
+    }
+
+    // MARK: - Media import (FR-MED-001 / FR-MED-010)
+
+    /// Whether File > Import Media and drag/drop may start a new batch.
+    var canImportMedia: Bool {
+        project != nil && projectOpenMode.allowsEditing && !isImportingMedia
+    }
+
+    /// Presents the multi-select file/folder picker.
+    func presentMediaImporter() {
+        guard canImportMedia else {
+            if isProjectReadOnly {
+                presentReadOnlyBannerIfNeeded()
+            }
+            return
+        }
+        isMediaImportPickerPresented = true
+    }
+
+    /// Dismisses the file/folder picker binding.
+    func dismissMediaImporter() {
+        isMediaImportPickerPresented = false
+    }
+
+    /// Handles the SwiftUI file-importer result without exposing picker details to the pipeline.
+    func handleMediaImporterResult(_ result: Result<[URL], Error>) {
+        isMediaImportPickerPresented = false
+        switch result {
+        case .success(let urls):
+            importMedia(from: urls)
+        case .failure(let error):
+            guard !Self.isMediaPickerCancellation(error) else {
+                return
+            }
+            loadMessage = AppString.localized(
+                "import.picker.failed",
+                "Media selection failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    /// Starts an asynchronous import and returns immediately so menus/playback remain responsive.
+    func importMedia(from urls: [URL]) {
+        guard beginMediaImport(urls) else {
+            return
+        }
+        mediaImportTask = Task { [weak self] in
+            await self?.performMediaImport(urls)
+        }
+    }
+
+    /// Deterministic awaitable import surface for app-model tests.
+    func importMediaAndWait(from urls: [URL]) async {
+        guard beginMediaImport(urls) else {
+            return
+        }
+        await performMediaImport(urls)
+    }
+
+    /// Dismisses the result sheet while retaining its value for tests/session history.
+    func dismissMediaImportSummary() {
+        isMediaImportSummaryPresented = false
+    }
+
+    private func beginMediaImport(_ urls: [URL]) -> Bool {
+        guard !urls.isEmpty, canImportMedia else {
+            if isProjectReadOnly {
+                presentReadOnlyBannerIfNeeded()
+            }
+            return false
+        }
+        isMediaImportPickerPresented = false
+        isMediaImportSummaryPresented = false
+        isImportingMedia = true
+        mediaImportProgress = MediaImportProgress(
+            phase: .discovering,
+            completedUnitCount: 0,
+            totalUnitCount: 0
+        )
+        return true
+    }
+
+    private func performMediaImport(_ urls: [URL]) async {
+        let existingMedia = project?.mediaPool ?? []
+        let batch = await mediaImportPipeline.prepareImport(
+            from: urls,
+            existingMedia: existingMedia,
+            progress: { [weak self] progress in
+                await self?.receiveMediaImportProgress(progress)
+            }
+        )
+        guard !Task.isCancelled else {
+            isImportingMedia = false
+            mediaImportProgress = nil
+            return
+        }
+
+        var summary = batch.summary
+        if let command = batch.command, !applyEdit(command) {
+            summary = Self.projectUpdateFailureSummary(from: batch.summary)
+            loadMessage = AppString.localized(
+                "import.status.applyFailed",
+                "Imported media could not be added to the project."
+            )
+        } else {
+            let importedCount = summary.imported.count
+            let skippedCount = summary.skippedDuplicates.count
+            let failedCount = summary.failed.count
+            loadMessage = AppString.localized(
+                "import.status.complete",
+                "Import complete: \(importedCount) imported, \(skippedCount) skipped, \(failedCount) failed"
+            )
+        }
+        mediaImportSummary = summary
+        mediaImportProgress = nil
+        isImportingMedia = false
+        isMediaImportSummaryPresented = true
+        mediaImportTask = nil
+    }
+
+    private func receiveMediaImportProgress(_ progress: MediaImportProgress) {
+        guard isImportingMedia else {
+            return
+        }
+        mediaImportProgress = progress
+    }
+
+    private static func isMediaPickerCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        let cocoaError = error as NSError
+        return cocoaError.domain == NSCocoaErrorDomain
+            && cocoaError.code == CocoaError.Code.userCancelled.rawValue
+    }
+
+    private static func projectUpdateFailureSummary(
+        from summary: MediaImportSummary
+    ) -> MediaImportSummary {
+        let reason = AppString.localized(
+            "import.failure.projectUpdate.reason",
+            "The open project rejected the import batch."
+        )
+        let updateFailures = summary.imported.map { item in
+            FailedMediaImportItem(
+                sourceURL: item.sourceURL,
+                error: .projectUpdateFailed(url: item.sourceURL, reason: reason)
+            )
+        }
+        return MediaImportSummary(
+            imported: [],
+            skippedDuplicates: summary.skippedDuplicates,
+            vfrConformed: [],
+            failed: summary.failed + updateFailures
+        )
     }
 
     var canUndo: Bool {
@@ -2422,7 +2598,7 @@ final class EditorAjarAppModel: ObservableObject {
             guard !proxyJobsInFlight.contains(mediaID),
                   let media = project.mediaPool.first(where: { $0.id == mediaID }),
                   let sourceURL = media.sourceURL,
-                  let frameRate = media.metadata.frameRate,
+                  let frameRate = media.metadata.conformedFrameRate ?? media.metadata.frameRate,
                   let originalDims = media.metadata.pixelDimensions
             else {
                 continue

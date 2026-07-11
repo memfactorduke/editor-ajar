@@ -49,6 +49,13 @@ final class EditorAjarLocalizationTests: XCTestCase {
             "timeline.tool.fit": "Fit Timeline",
             "export.dialog.title": "Export",
             "exportQueue.title": "Export Queue",
+            "import.summary.title": "Media Import Summary",
+            "import.summary.empty": "No media files were found in the selection.",
+            "import.failure.projectUpdate.reason": "The open project rejected the import batch.",
+            "import.failure.unsupportedFormat":
+                "This format is not supported by the native importer. The FFmpeg import fallback is not available in this build.",
+            "library.panel.ax":
+                "Media and effects panel. Drop media files or folders here to import.",
             "marker.color.red": "Red",
             "blend.normal": "Normal",
             "transform.param.position": "Position",
@@ -79,6 +86,21 @@ final class EditorAjarLocalizationTests: XCTestCase {
         XCTAssertEqual(AppString.localized("app.name", "Editor Ajar"), "Editor Ajar")
         // Interpolated strings resolve via their compiler-generated default value.
         XCTAssertEqual(AppString.localized("frame.value", "Frame \(42)"), "Frame 42")
+        XCTAssertEqual(
+            AppString.localized("import.progress.file", "Importing \("clip.mov")"),
+            "Importing clip.mov"
+        )
+        XCTAssertEqual(
+            AppString.localized("import.progress.value", "\(2) of \(5) files"),
+            "2 of 5 files"
+        )
+        XCTAssertEqual(
+            AppString.localized(
+                "import.status.complete",
+                "Import complete: \(3) imported, \(1) skipped, \(2) failed"
+            ),
+            "Import complete: 3 imported, 1 skipped, 2 failed"
+        )
     }
 
     // MARK: - (c) Core → app mapping (CORE PURITY BOUNDARY)

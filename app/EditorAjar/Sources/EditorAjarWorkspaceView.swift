@@ -2,9 +2,11 @@
 
 import AjarCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EditorAjarWorkspaceView: View {
     @ObservedObject var model: EditorAjarAppModel
+    @State private var isMediaDropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,7 +17,7 @@ struct EditorAjarWorkspaceView: View {
             SequenceTabsBar(model: model)
             Divider()
             HStack(spacing: 0) {
-                LibraryPanel()
+                LibraryPanel(model: model)
                     .frame(width: 240)
                 Divider()
                 VStack(spacing: 0) {
@@ -44,6 +46,33 @@ struct EditorAjarWorkspaceView: View {
         .sheet(isPresented: exportSheetPresented) {
             EditorAjarExportDialogView(model: model)
         }
+        .sheet(isPresented: importSummaryPresented) {
+            EditorAjarMediaImportSummaryView(model: model)
+        }
+        .fileImporter(
+            isPresented: importPickerPresented,
+            allowedContentTypes: [.data, .folder],
+            allowsMultipleSelection: true,
+            onCompletion: model.handleMediaImporterResult
+        )
+        .dropDestination(for: URL.self) { urls, _ in
+            guard model.canImportMedia, !urls.isEmpty else {
+                return false
+            }
+            model.importMedia(from: urls)
+            return true
+        } isTargeted: { targeted in
+            isMediaDropTargeted = targeted
+        }
+        .overlay {
+            if isMediaDropTargeted && model.canImportMedia {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor, lineWidth: 3)
+                    .padding(4)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
     private var exportSheetPresented: Binding<Bool> {
@@ -54,6 +83,30 @@ struct EditorAjarWorkspaceView: View {
                     model.presentExportDialog()
                 } else {
                     model.dismissExportDialog()
+                }
+            }
+        )
+    }
+
+    private var importPickerPresented: Binding<Bool> {
+        Binding(
+            get: { model.isMediaImportPickerPresented },
+            set: { presented in
+                if presented {
+                    model.presentMediaImporter()
+                } else {
+                    model.dismissMediaImporter()
+                }
+            }
+        )
+    }
+
+    private var importSummaryPresented: Binding<Bool> {
+        Binding(
+            get: { model.isMediaImportSummaryPresented },
+            set: { presented in
+                if !presented {
+                    model.dismissMediaImportSummary()
                 }
             }
         )
@@ -304,27 +357,6 @@ private struct SequenceTabButton: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(tab.isActive ? Color.white.opacity(0.55) : Color.white.opacity(0.14))
         )
-    }
-}
-
-private struct LibraryPanel: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            PanelTitle(AppString.localized("library.title", "Media"))
-            EmptyPanelRow(
-                title: AppString.localized("library.projectMedia", "Project Media"),
-                systemImage: "film.stack"
-            )
-            EmptyPanelRow(
-                title: AppString.localized("library.effects", "Effects"),
-                systemImage: "sparkles"
-            )
-            Spacer()
-        }
-        .padding(14)
-        .background(Color(red: 0.13, green: 0.13, blue: 0.14))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(AppString.localized("library.panel.ax", "Media and effects panel"))
     }
 }
 
@@ -1997,7 +2029,7 @@ private struct TrackStateButton: View {
     }
 }
 
-private struct PanelTitle: View {
+struct PanelTitle: View {
     let title: String
 
     init(_ title: String) {
@@ -2011,7 +2043,7 @@ private struct PanelTitle: View {
     }
 }
 
-private struct EmptyPanelRow: View {
+struct EmptyPanelRow: View {
     let title: String
     let systemImage: String
 

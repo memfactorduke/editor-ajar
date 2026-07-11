@@ -185,7 +185,8 @@ public enum AjarProjectCodec {
     ///   (`FR-MED-007`, `FR-MED-008`, #218).
     /// - `11`: proxy / optimized media pipeline fields — `MediaRef.proxyState`,
     ///   `ProjectSettings.preferProxyPlayback` (FR-MED-004 / #217).
-    public static let currentSchemaMinor = 11
+    /// - `12`: undoable `EditCommand.addMediaReferences` import batches (FR-MED-001 / #234).
+    public static let currentSchemaMinor = 12
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

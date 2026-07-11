@@ -908,7 +908,18 @@ private func makeMediaReferenceCommandCases(
             bookmark: Data([0x21, 0x80])
         )
     )
+    let imported = MediaRef(
+        id: try editUUID(seed + 7_000_000),
+        sourceURL: URL(fileURLWithPath: "/generated/imported-\(seed).mov"),
+        bookmark: Data([0x23, 0x40]),
+        contentHash: ContentHash.sha256(data: Data("imported-\(seed)".utf8)),
+        metadata: media.metadata
+    )
     return [
+        EditCommandCase(
+            project: fixture.project,
+            command: .addMediaReferences([imported])
+        ),
         EditCommandCase(
             project: fixture.project,
             command: .updateMediaReferences(kind: .relink, replacements: [replacement])

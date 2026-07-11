@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- FR-MED-001/002/010 app media import (#234): multi-select File menu picker, window/panel
+  drag-and-drop, recursive off-main folder discovery with determinate progress, native
+  AVFoundation/ImageIO probing, streamed SHA-256 + security-scoped reference-in-place bookmarks,
+  same-content deduplication, one undoable command per successful batch, VFR timing detection and
+  stable-rate conform decisions, plus a localized keyboard/VoiceOver import summary. Formats the
+  native boundary cannot open return a typed per-file failure; the repository still has no FFmpeg
+  import fallback, so FR-MED-003 remains an explicit follow-up rather than an unsafe playback-path
+  integration.
+
 ## [1.0.0-rc1] - 2026-07-10
 
 ### Added

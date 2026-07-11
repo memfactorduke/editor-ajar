@@ -60,6 +60,37 @@ final class AjarAutosaveStoreTests: XCTestCase {
         XCTAssertEqual(recovered.project, history.currentProject)
     }
 
+    func testFRMED001AutosaveJournalReplaysImportedMediaBatch() throws {
+        let fixture = try makeEditFixture(seed: 3_512)
+        let metadata = try XCTUnwrap(fixture.project.mediaPool.first?.metadata)
+        let imported = MediaRef(
+            id: try editUUID(3_512_999),
+            sourceURL: URL(fileURLWithPath: "/external/imported.mov"),
+            bookmark: Data([0x23, 0x04]),
+            contentHash: ContentHash.sha256(data: Data("imported".utf8)),
+            metadata: metadata
+        )
+        let command = EditCommand.addMediaReferences([imported])
+        let snapshot = AjarAutosaveSnapshot(
+            package: try AjarProjectCodec.encodeNewDocument(fixture.project),
+            appliedCommandCount: 0
+        )
+        let journalData = try AjarAutosaveJournalCodec.encode([
+            AjarAutosaveJournalEntry(sequenceNumber: 1, command: command)
+        ])
+
+        let recovered = try AjarAutosaveStore.recover(
+            snapshot: snapshot,
+            journalData: journalData
+        )
+
+        XCTAssertTrue(recovered.isComplete)
+        XCTAssertEqual(recovered.appliedJournalEntryCount, 1)
+        XCTAssertEqual(recovered.latestCommandCount, 1)
+        XCTAssertEqual(recovered.project.mediaPool.last, imported)
+        XCTAssertEqual(recovered.project.mediaPool.count, fixture.project.mediaPool.count + 1)
+    }
+
     /// Higher-minor snapshot must not replay the journal (FR-PROJ-005 / #193 / ADR-0018).
     func testFRPROJ005Issue193HigherMinorSnapshotRecoverySkipsJournalAndStaysReadOnly() throws {
         let fixture = try makeEditFixture(seed: 3_515)

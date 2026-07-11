@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
+import AjarMedia
 import Foundation
 
 /// Central String Catalog accessor for the EditorAjar app target (NFR-I18N-001).
@@ -45,6 +46,57 @@ enum AppString {
                 \(supported) (major \(AjarProjectCodec.currentSchemaVersion)). It can be opened \
                 read-only; saving is disabled so newer data is not stripped (FR-PROJ-005).
                 """
+            )
+        }
+    }
+
+    /// Localized per-file explanation for a typed media import failure.
+    static func mediaImportFailureMessage(for error: MediaImportError) -> String {
+        switch error {
+        case .sourceMustBeFileURL:
+            return localized(
+                "import.failure.localFileRequired",
+                "Only files and folders stored on this Mac can be imported."
+            )
+        case .sourceUnavailable:
+            return localized(
+                "import.failure.unavailable",
+                "The file or folder is missing or cannot be read."
+            )
+        case .folderEnumerationFailed(_, let reason):
+            return localized(
+                "import.failure.folderScan",
+                "The folder could not be scanned: \(reason)"
+            )
+        case .unsupportedFormat:
+            return localized(
+                "import.failure.unsupportedFormat",
+                "This format is not supported by the native importer. The FFmpeg import fallback is not available in this build."
+            )
+        case .probingFailed(_, let reason):
+            return localized(
+                "import.failure.probe",
+                "The file's media information could not be read: \(reason)"
+            )
+        case .conformRateUnavailable:
+            return localized(
+                "import.failure.vfrConform",
+                "Variable frame rate was detected, but a stable playback rate could not be chosen."
+            )
+        case .hashingFailed(_, let reason):
+            return localized(
+                "import.failure.hash",
+                "The file could not be fingerprinted: \(reason)"
+            )
+        case .bookmarkCreationFailed(_, let reason):
+            return localized(
+                "import.failure.bookmark",
+                "Editor Ajar could not save permission to reopen this file: \(reason)"
+            )
+        case .projectUpdateFailed(_, let reason):
+            return localized(
+                "import.failure.projectUpdate",
+                "The file was prepared but could not be added to the project: \(reason)"
             )
         }
     }
