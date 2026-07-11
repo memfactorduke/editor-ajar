@@ -133,7 +133,7 @@ reference machine and gate every merge (see [PERFORMANCE](PERFORMANCE.md), ADR-0
 | FR-MED-005 | Media pool / browser: thumbnails, hover-scrub preview, list & grid views, metadata (codec, resolution, fps, duration, color space), search and filter. | v1 |
 | FR-MED-006 | Bins / folders to organize media; user-defined tags and ratings; smart collections by metadata. | v1.x |
 | FR-MED-007 | Relink workflow when source media moves; clear "media offline" state that never blocks the app. | v1 |
-| FR-MED-008 | Reference originals in place by default (no forced copy/import-into-library); optional "consolidate media" to a project folder. | v1 |
+| FR-MED-008 | Reference originals in place by default (no forced copy/import-into-library); optional "consolidate media" to a project folder. | v1.x[^adr-0020] |
 | FR-MED-009 | Audio waveform + video thumbnail extraction is incremental and cached on disk; never blocks the UI. | v1 |
 | FR-MED-010 | Detect and surface variable-frame-rate sources; conform to a stable timebase on import. | v1 |
 
@@ -179,11 +179,11 @@ The transforms the user explicitly asked for, plus the rest of the standard set.
 | FR-KEY-001 | Any animatable parameter (transform, opacity, effect params, audio gain/pan, color, crop, mask) can hold **keyframes**. | v1 |
 | FR-KEY-002 | Add/move/delete keyframes; per-keyframe time + value; multi-select and nudge. | v1 |
 | FR-KEY-003 | Interpolation modes per keyframe segment: **linear, hold/step, ease-in, ease-out, ease-in-out, and custom Bézier**. | v1 |
-| FR-KEY-004 | A **curve editor** (graph view) for direct manipulation of value curves and Bézier handles, with multiple parameters overlaid. | v1 |
+| FR-KEY-004 | A **curve editor** (graph view) for direct manipulation of value curves and Bézier handles, with multiple parameters overlaid. | v1.x[^adr-0020] |
 | FR-KEY-005 | Keyframe lanes shown inline under the clip in the timeline for quick edits. | v1 |
 | FR-KEY-006 | Spatial interpolation for position (smooth motion path on the canvas with editable tangents). | v1.x |
-| FR-KEY-007 | Copy/paste keyframes and whole animations between clips and parameters. | v1 |
-| FR-KEY-008 | Time-remap keyframes integrate with the speed system (`SPD`). | v1 |
+| FR-KEY-007 | Copy/paste keyframes and whole animations between clips and parameters. | v1.x[^adr-0020] |
+| FR-KEY-008 | Time-remap keyframes integrate with the speed system (`SPD`). | v1.x[^adr-0020] |
 | FR-KEY-009 | Keyframe interpolation is computed in `AjarCore` deterministically (testable without a GPU). | v1 |
 
 ### 6.5 Compositing, keying & masks — area `COMP`
@@ -192,7 +192,7 @@ The transforms the user explicitly asked for, plus the rest of the standard set.
 |----|-------------|-----|
 | FR-COMP-001 | **Chroma key / green screen:** key on green/blue or sampled color; controls for tolerance, edge softness, spill suppression, and de-spill color correction. GPU (Metal) implementation. | v1 |
 | FR-COMP-002 | Key refinement: choke/shrink matte, edge feather, view-matte (alpha) preview mode, light-wrap. | v1 |
-| FR-COMP-003 | **Masks:** rectangle, ellipse, and free-form Bézier/polygon masks per effect or clip; feather; invert; multiple masks with add/subtract/intersect. | v1 |
+| FR-COMP-003 | **Masks:** rectangle, ellipse, and free-form Bézier/polygon masks per effect or clip; feather; invert; multiple masks with add/subtract/intersect. | v1.x[^adr-0020] |
 | FR-COMP-004 | Animated masks (mask shape + position keyframable) for simple rotoscoping. | v1.x |
 | FR-COMP-005 | Luma key and basic alpha-channel passthrough for transparent media (e.g. PNG/ProRes 4444). | v1 |
 | FR-COMP-006 | Blend modes (full set) at clip and track level; honor premultiplied alpha correctly. | v1 |
@@ -202,11 +202,11 @@ The transforms the user explicitly asked for, plus the rest of the standard set.
 
 | ID | Requirement | Tag |
 |----|-------------|-----|
-| FR-CMP-001 | **Compound clip:** select clips across tracks and collapse them into a single nested clip that behaves like one clip on the timeline. | v1 |
-| FR-CMP-002 | Open a compound clip to edit its contents in its own timeline; changes propagate to all instances. | v1 |
-| FR-CMP-003 | Effects, transforms, speed, and keyframes can be applied to a compound clip as a whole. | v1 |
-| FR-CMP-004 | "Decompose" / break apart back into component clips in place. | v1 |
-| FR-CMP-005 | Nested compound clips (compounds within compounds) with cycle detection (a compound can never contain itself — enforced in `AjarCore`). | v1 |
+| FR-CMP-001 | **Compound clip:** select clips across tracks and collapse them into a single nested clip that behaves like one clip on the timeline. | v1.x[^adr-0020] |
+| FR-CMP-002 | Open a compound clip to edit its contents in its own timeline; changes propagate to all instances. | v1.x[^adr-0020] |
+| FR-CMP-003 | Effects, transforms, speed, and keyframes can be applied to a compound clip as a whole. | v1.x[^adr-0020] |
+| FR-CMP-004 | "Decompose" / break apart back into component clips in place. | v1.x[^adr-0020] |
+| FR-CMP-005 | Nested compound clips (compounds within compounds) with cycle detection (a compound can never contain itself — enforced in `AjarCore`). | v1.x[^adr-0020] |
 | FR-CMP-006 | Render caching of unchanged compound clips to keep playback real-time (ties to `PLAY` cache). | v1 |
 
 Implementation note: M7 has started with the headless sequence-backed clip model, query-time
@@ -223,7 +223,7 @@ warming, and retiming remain in later M7 follow-ups.
 | FR-COL-003 | **Scopes:** waveform, vectorscope, RGB parade, histogram — live, GPU-accelerated. | v1 |
 | FR-COL-004 | **LUTs:** import and apply `.cube` 1D/3D LUTs (input/transform/look); adjustable strength. | v1 |
 | FR-COL-005 | Color-managed pipeline with explicit working space; correct handling of Rec.709, sRGB, Display-P3 (ADR-0010). | v1 |
-| FR-COL-006 | **HDR awareness:** open and tone-map HDR (HLG/PQ, Rec.2020) sources to an SDR timeline; HDR timeline + export. | v1 (open/tone-map), v1.x (HDR timeline) |
+| FR-COL-006 | **HDR awareness:** open and tone-map HDR (HLG/PQ, Rec.2020) sources to an SDR timeline; HDR timeline + export. | v1.x[^adr-0020] |
 | FR-COL-007 | Per-clip and adjustment-layer grades; copy grade between clips; save/recall looks. | v1 |
 | FR-COL-008 | 10-bit internal processing to avoid banding. | v1 |
 
@@ -234,7 +234,7 @@ warming, and retiming remain in later M7 follow-ups.
 | FR-AUD-001 | Multitrack audio with per-clip and per-track gain; **keyframable volume** (rubber-band on the clip) and pan. | v1 |
 | FR-AUD-002 | Waveform display; sample-accurate trimming; fade-in/out handles + crossfades. | v1 |
 | FR-AUD-003 | Real-time **mixer**: per-track faders, pan, mute/solo, master bus; true-peak meters with clip indication. | v1 |
-| FR-AUD-004 | **Ducking:** automatically lower music under dialogue/voice (sidechain-style, keyframe-baked or live). | v1 |
+| FR-AUD-004 | **Ducking:** automatically lower music under dialogue/voice (sidechain-style, keyframe-baked or live). | v1.x[^adr-0020] |
 | FR-AUD-005 | **Noise reduction / de-noise** and basic EQ, compressor, limiter as built-in audio effects. | v1.x |
 | FR-AUD-006 | Audio effect chain per clip/track; effects are keyframable. | v1.x |
 | FR-AUD-007 | Audio meters and processing run on a real-time, glitch-free audio thread (no allocations on the audio render path — NFR-STAB). | v1 |
@@ -270,7 +270,7 @@ warming, and retiming remain in later M7 follow-ups.
 | ID | Requirement | Tag |
 |----|-------------|-----|
 | FR-SPD-001 | Constant speed change (e.g. 50%, 200%) with pitch-corrected or pitch-shifted audio option. | v1 |
-| FR-SPD-002 | **Speed ramping** (keyframed variable speed) via time-remap keyframes. | v1 |
+| FR-SPD-002 | **Speed ramping** (keyframed variable speed) via time-remap keyframes. | v1.x[^adr-0020] |
 | FR-SPD-003 | Reverse; freeze frame (hold) at a point; instant "still" from a frame. | v1 |
 | FR-SPD-004 | Frame-blending and **optical-flow** interpolation for smooth slow-motion. | v1.x (frame-blend v1) |
 | FR-SPD-005 | Speed changes preview in real-time at the timeline target rate. | v1 |
@@ -282,10 +282,10 @@ warming, and retiming remain in later M7 follow-ups.
 | FR-PLAY-001 | Real-time playback meeting NFR-PERF-003/004; J/K/L shuttle; play/pause; loop a range. | v1 |
 | FR-PLAY-002 | Frame-accurate stepping (←/→), jump to in/out, start/end, next/prev edit or marker. | v1 |
 | FR-PLAY-003 | Scrubbing with ≤ 1-frame latency (NFR-PERF-005); audio scrubbing toggle. | v1 |
-| FR-PLAY-004 | Adaptive playback quality: drop to a lower preview resolution under load to hold real-time, snap back to full when paused (never drop frames silently — show a quality/dropped indicator). | v1 |
+| FR-PLAY-004 | Adaptive playback quality: drop to a lower preview resolution under load to hold real-time, snap back to full when paused (never drop frames silently — show a quality/dropped indicator). | v1.x if performance gates hold[^adr-0020] |
 | FR-PLAY-005 | Render/playback cache: cache composited frames and unchanged segments to RAM + disk; background "render in place"; cache invalidation keyed to the render graph (ADR-0009). | v1 |
 | FR-PLAY-006 | Full-screen and second-display playback; loupe/zoom of the canvas; safe-area & checkerboard-alpha overlays. | v1 (full-screen), v1.x (2nd display) |
-| FR-PLAY-007 | Background rendering is fully pausable and never competes with interactive responsiveness (priority-aware — ADR-0012). | v1 |
+| FR-PLAY-007 | Background rendering is fully pausable and never competes with interactive responsiveness (priority-aware — ADR-0012). | v1.x if performance gates hold[^adr-0020] |
 
 ### 6.13 Export & delivery — area `EXP`
 
@@ -310,6 +310,9 @@ warming, and retiming remain in later M7 follow-ups.
 | FR-PROJ-004 | Import media references with stable IDs so relinking survives renames/moves (FR-MED-007). | v1 |
 | FR-PROJ-005 | Backward/forward compatibility policy: the format is versioned and migratable; older Ajar opens newer projects read-only with a clear message. | v1 |
 | FR-PROJ-006 | Import from other NLEs (FCPXML / OTIO). | future |
+
+[^adr-0020]: Deferred by [ADR-0020](adr/0020-v1-scope-deferrals.md). The conditional
+    FR-PLAY-004/007 deferrals require post-cache performance evidence before Acceptance.
 
 ---
 

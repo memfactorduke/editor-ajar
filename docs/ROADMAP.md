@@ -157,6 +157,16 @@ into a stable-timebase project with all keyboard/VoiceOver and recovery gates gr
 **Current status: STARTED.** #233 implements the project/document foundation; #234–#236 complete
 the first real-media path.
 
+## M11 — v1 app-surface completion and acceptance *(planned)*
+
+**Goal:** complete the shippable v1 editing surface and record the intentional v1.x boundary.
+**Scope decision:** [ADR-0020](adr/0020-v1-scope-deferrals.md) records the advanced app-surface
+deferrals found by the #239 audit, excludes shipped FR-PROJ-002 snapshots, and makes any
+FR-PLAY-004/007 deferral conditional on measured performance after #245 wires the FR-PLAY-005
+cache. The acceptance evidence must be recorded on #247 or its PR before the ADR is Accepted.
+**Work items:** #240–#247.
+**Depends on:** M10.
+
 ---
 
 ## Post-1.0 (v1.x / future)
