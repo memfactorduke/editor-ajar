@@ -767,8 +767,18 @@ private struct EditorAjarTrailingCommands: Commands {
                     : AppString.localized("menu.audio.showMixer.ax", "Show audio mixer")
             )
         }
-        // FR-TXT-003: menu/keyboard paths for headless UI-smoke (same pattern as Undo).
+        // FR-TXT-001/003: insert + canvas edit paths (same pattern as Undo for headless smoke).
         CommandMenu(Text(AppString.localized("menu.title.title", "Title"))) {
+            Button(AppString.localized("menu.title.insert", "Insert Title")) {
+                model.insertTitleAtPlayhead()
+            }
+            // ⌘T is free post-M11 (ACCESSIBILITY.md global map; no other plain ⌘T binding).
+            .keyboardShortcut("t", modifiers: [.command])
+            .disabled(!model.canInsertTitle)
+            .accessibilityLabel(AppString.localized("menu.title.insert", "Insert Title"))
+
+            Divider()
+
             Button(AppString.localized("menu.title.edit", "Edit Canvas Title")) {
                 model.editPrimaryCanvasTitleBox()
             }

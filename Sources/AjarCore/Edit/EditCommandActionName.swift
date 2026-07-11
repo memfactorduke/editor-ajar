@@ -178,6 +178,16 @@ public extension EditCommand {
             if let only = names.first, names.count == 1 {
                 return only
             }
+            // Occupied-track / locked-track title insert is one user gesture: create a free video
+            // track, then insert the title on it (`insertTitleAtPlayhead` via `applyEditGroup`).
+            // Track creation is scaffolding — the undo menu should still say "Insert Title", not
+            // "Multiple Edits" (#240 MIXED default vs FR-TXT-001 overlay insert). Pure shape
+            // match only; no persisted label field on the enum.
+            if commands.count == 2,
+               case .addTrack = commands[0],
+               case .insertTitleClip = commands[1] {
+                return commands[1].actionName
+            }
             return "Multiple Edits"
         }
     }

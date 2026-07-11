@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-TXT-001/002/004 title styling UI + insert + animation presets (#244): Title menu
+  **Insert Title** (`⌘T`) places a default title clip at the playhead on the topmost unlocked
+  video track (or creates a track in one undo step via `#240` transactions); Clip inspector
+  **Title** tab edits per-box typography and FR-TXT-002 styling (fill/stroke/shadow/background/
+  gradient) with per-gesture undo coalescing and focus-gated font-family text input; multi-box
+  list add/remove/select stays in sync with the canvas overlay; animation preset picker applies
+  built-in `TitleAnimationPreset` programs as one undoable edit. Engine goldens unchanged
+  (render path already covered). No `schemaMinor` bump — title styling and presets were already
+  persisted.
 - FR-FX-001/002/003 effects & transitions UI (#242): browsable Effects library (searchable
   built-in kinds from `ClipEffectKind`, app-layer categories; double-click/Add appends an
   identity node to the selected video clip); Effects inspector tab with stack reorder

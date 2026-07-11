@@ -76,7 +76,8 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var checkerboardAlphaVisible = false
     /// Session-only in/out looping; project schema remains unchanged.
     @Published private(set) var isLoopRangeEnabled = false
-    @Published private(set) var selectedCanvasTitleBoxReference: CanvasTitleBoxReference?
+    /// Selected title text box (canvas + Title inspector). Internal set for FR-TXT-001 multi-box sync.
+    @Published var selectedCanvasTitleBoxReference: CanvasTitleBoxReference?
     @Published private(set) var editingCanvasTitleBoxReference: CanvasTitleBoxReference?
 
     /// Identities of text fields that currently hold keyboard focus (#240 review).
@@ -172,7 +173,7 @@ final class EditorAjarAppModel: ObservableObject {
     /// summary → proposal via this pending flag instead of presenting both at once.
     private var pendingFirstMediaProposal = false
 
-    /// Clip inspector tab when a video clip is selected (Transform / Color / Effects).
+    /// Clip inspector tab when a clip is selected (Transform / Color / Audio / Effects / Title).
     @Published var selectedClipInspectorTab: ClipInspectorTab = .transform
 
     /// Draft FR-FX-001 transition kind for the inspector / menu apply path.
@@ -187,6 +188,9 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Most recent transition UI refusal (typed, non-blocking).
     @Published var videoTransitionError: EditorAjarVideoTransitionError?
+
+    /// Continuous title-style slider / field gestures arm this so edits coalesce into one undo step.
+    var titleStyleCoalesceActive = false
 
     /// Whether the FR-COL-003 scopes panel is visible.
     @Published var isScopesPanelVisible = false
@@ -1956,6 +1960,7 @@ final class EditorAjarAppModel: ObservableObject {
         effectParameterCoalesceKey = nil
         videoTransitionError = nil
         refreshVideoTransitionDraftFromSelection()
+        titleStyleCoalesceActive = false
         persistActiveSequenceContext()
     }
 
@@ -1977,13 +1982,31 @@ final class EditorAjarAppModel: ObservableObject {
     /// Gaining focus blurs the timeline so destructive clipboard/delete commands refuse while
     /// typing; losing focus does not restore timeline focus — the next timeline interaction
     /// (clip click, track selection, blade toggle) reclaims it explicitly via `focusTimeline()`.
-    func textEditorFocusChanged(id: UUID, isFocused: Bool) {
+    ///
+    /// No-op transitions for the same editor id are ignored (already focused / already blurred).
+    /// SwiftUI can re-fire `onChange` / `onDisappear` with the same boolean; treating those as
+    /// real flips would spuriously disarm title-style undo coalescing and split one drag into
+    /// multiple undo steps.
+    ///
+    /// - Returns: `true` when focus membership actually changed.
+    @discardableResult
+    func textEditorFocusChanged(id: UUID, isFocused: Bool) -> Bool {
         if isFocused {
-            focusedTextEditorIDs.insert(id)
+            let inserted = focusedTextEditorIDs.insert(id).inserted
+            guard inserted else {
+                return false
+            }
             timelineHasFocus = false
-        } else {
-            focusedTextEditorIDs.remove(id)
+            return true
         }
+        guard focusedTextEditorIDs.contains(id) else {
+            return false
+        }
+        focusedTextEditorIDs.remove(id)
+        // Real focus loss ends a continuous title-style gesture so the next edit is a new undo
+        // step (P3b: focus-loss disarms title coalescing, unioned with submit / slider end).
+        titleStyleCoalesceActive = false
+        return true
     }
 
     func setSelectedMediaIDs(_ ids: Set<UUID>) {
@@ -3786,6 +3809,7 @@ final class EditorAjarAppModel: ObservableObject {
         isReadOnlyBannerVisible = !loadResult.openMode.allowsEditing
         colorCorrectionCoalesceActive = false
         lutStrengthCoalesceActive = false
+        titleStyleCoalesceActive = false
         isScopesPanelVisible = false
         selectedScopeKind = .waveform
         retainedScopeFrame = nil
@@ -4265,6 +4289,18 @@ final class EditorAjarAppModel: ObservableObject {
         }
     }
 
+    /// Overwrites status with a typed, localized refusal (never a raw engine dump).
+    ///
+    /// Callers in other files of this type use this instead of assigning `loadMessage` directly
+    /// (`private(set)` is file-scoped). Prefer this after a domain action fails so the UI never
+    /// shows `validationFailed(...)` or similar diagnostics.
+    func surfaceLocalizedEditRefusal(
+        _ key: StaticString,
+        _ english: String.LocalizationValue
+    ) {
+        loadMessage = AppString.localized(key, english)
+    }
+
     /// Applies an ordered list of engine commands as a single undo step (#240).
     ///
     /// Zero commands is a no-op; one command applies directly so common single-clip gestures stay
@@ -4272,7 +4308,7 @@ final class EditorAjarAppModel: ObservableObject {
     /// multi-command gesture (linked A/V blade, multi-clip delete/lift/paste, multi-selection move)
     /// undoes in one step and refuses atomically on any typed sub-command error.
     @discardableResult
-    private func applyEditGroup(_ commands: [EditCommand]) -> Bool {
+    func applyEditGroup(_ commands: [EditCommand]) -> Bool {
         switch commands.count {
         case 0:
             return false

@@ -8,6 +8,7 @@ Package.resolved
 
 # ── Xcode ────────────────────────────────────────────────────────
 DerivedData/
+.derivedData/
 build/
 *.xcuserstate
 *.xcscmblueprint
