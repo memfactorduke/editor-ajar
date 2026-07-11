@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   integration.
 ### Fixed
 
+- fix(CI): retry TSan runtime SEGV flakes, still fail hard on data races (#232).
 - `VideoFrameDecoder` no longer blocks the Swift cooperative thread pool during the
   `AVAssetReader` read; the blocking phase now runs on a dedicated GCD queue behind a checked
   continuation (#233, NFR-STAB-001). Previously, enough concurrent decodes could occupy every

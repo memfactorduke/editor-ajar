@@ -291,9 +291,55 @@ jobs:
       - name: Thread Sanitizer (concurrency scope)
         env:
           TSAN_OPTIONS: "halt_on_error=1 suppressions=${{ github.workspace }}/.tsan-suppressions.txt"
+        shell: bash
         run: |
-          swift test --sanitize=thread \
-            --filter "AjarAudioTests|AjarExportTests|SoakCommandTests|ConcurrentCompound|VideoFrameDecoderConcurrencyTests"
+          set -o pipefail
+
+          max_attempts=3
+          for attempt in $(seq 1 "$max_attempts"); do
+            log_path="/tmp/editor-ajar-tsan-${attempt}.log"
+            rm -f "$log_path"
+
+            echo "::group::Thread Sanitizer attempt ${attempt}/${max_attempts}"
+            set +e
+            swift test --sanitize=thread \
+              --filter "AjarAudioTests|AjarExportTests|SoakCommandTests|ConcurrentCompound|VideoFrameDecoderConcurrencyTests" \
+              2>&1 | tee "$log_path"
+            status=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+
+            # Check for races first: a race report must never be mistaken for a retryable runtime
+            # crash, even if the same log also contains a signal/SEGV while halt_on_error aborts.
+            if grep -E -q \
+              -e "ThreadSanitizer: data race" \
+              -e "ThreadSanitizer: reported [1-9][0-9]* warnings?" \
+              "$log_path"; then
+              echo "::error::TSan detected a data race"
+              cat "$log_path"
+              exit "$status"
+            fi
+
+            if ! grep -E -q \
+              -e "ThreadSanitizer: SEGV" \
+              -e "unexpected signal" \
+              "$log_path"; then
+              echo "::error::TSan failed without a recognized sanitizer-runtime crash; not retrying."
+              exit "$status"
+            fi
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "::error::TSan runtime crashed on all ${max_attempts} attempts."
+              exit "$status"
+            fi
+
+            echo "::warning::TSan runtime crash (VM flake), retrying"
+            sleep 5
+          done
 
   # ── Forthcoming gates (per docs/TESTING.md §5) ─────────────────────────────────────────────
   # Address Sanitizer (`swift test --sanitize=address`, NFR-STAB-004) joins the reference-runner

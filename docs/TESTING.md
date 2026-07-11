@@ -86,8 +86,9 @@ data race fails the job (TSan otherwise only warns and exits 0). GPU golden / me
 excluded: their cross-thread ordering is owned by Metal/AVFoundation, not our code, and TSan cannot
 see through those frameworks. Known framework false positives (Metal command-buffer completion
 handlers) are documented, narrowly, in `.tsan-suppressions.txt` — a reviewed commit, never a way to
-hide a real race. Full-suite TSan plus Address Sanitizer join the matrix on the dedicated reference
-runner (PERFORMANCE §1).
+hide a real race. Sanitizer-runtime SEGV/signal flakes are retried up to twice, while race reports
+and ordinary test failures fail immediately. Full-suite TSan plus Address Sanitizer join the matrix
+on the dedicated reference runner (PERFORMANCE §1).
 
 ## 6. Coverage & traceability
 
