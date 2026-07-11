@@ -4924,6 +4924,10 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     /// Simple #235 drop behavior: insert/ripple at the playhead on the first compatible track.
+    ///
+    /// Still images use the 5 s initial placement duration (not the unbounded source extent on
+    /// `MediaMetadata.duration`) so insert does not place a 24 h clip; trims can still extend
+    /// up to the source extent (FR-MED-002 / #246).
     @discardableResult
     func insertMediaOnTimeline(mediaID: UUID) -> Bool {
         guard let media = project?.mediaPool.first(where: { $0.id == mediaID }),
@@ -4932,16 +4936,8 @@ final class EditorAjarAppModel: ObservableObject {
         let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
         guard let track = tracks.first(where: { !$0.locked }) else { return false }
         let start = (try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)) ?? .zero
-        // Stills declare a large source extent for trim/extend; initial placement is 5 s.
-        let isStill = StillMediaDefaults.isStillCodec(media.metadata.codecID)
-            || media.sourceURL.map(StillMediaDefaults.isStillImageFile) == true
-        let duration: RationalTime
-        if isStill, let placement = try? StillMediaDefaults.defaultDuration() {
-            duration = placement
-        } else {
-            duration = media.metadata.duration
-        }
-        guard let range = try? TimeRange(start: start, duration: duration),
+        guard let duration = try? StillMediaDefaults.timelinePlacementDuration(for: media),
+              let range = try? TimeRange(start: start, duration: duration),
               let sourceRange = try? TimeRange(start: .zero, duration: duration)
         else {
             return false
@@ -4972,8 +4968,10 @@ final class EditorAjarAppModel: ObservableObject {
         } else {
             start = (try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)) ?? .zero
         }
-        guard let timelineRange = try? TimeRange(start: start, duration: media.metadata.duration),
-              let sourceRange = try? TimeRange(start: .zero, duration: media.metadata.duration)
+        // Same still placement rule as insert: 5 s initial span, not the 24 h source extent.
+        guard let duration = try? StillMediaDefaults.timelinePlacementDuration(for: media),
+              let timelineRange = try? TimeRange(start: start, duration: duration),
+              let sourceRange = try? TimeRange(start: .zero, duration: duration)
         else { return false }
         let clip = Clip(
             id: UUID(), source: .media(id: mediaID), sourceRange: sourceRange,

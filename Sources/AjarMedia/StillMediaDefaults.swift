@@ -53,4 +53,25 @@ public enum StillMediaDefaults: Sendable {
     public static func isStillImageFile(_ url: URL) -> Bool {
         stillPathExtensions.contains(url.pathExtension.lowercased())
     }
+
+    /// Whether media is a still image (probe codec or native still path extension).
+    public static func isStillMedia(codecID: String, sourceURL: URL?) -> Bool {
+        isStillCodec(codecID) || sourceURL.map(isStillImageFile) == true
+    }
+
+    /// Whether `media` is a still image.
+    public static func isStillMedia(_ media: MediaRef) -> Bool {
+        isStillMedia(codecID: media.metadata.codecID, sourceURL: media.sourceURL)
+    }
+
+    /// Initial timeline clip duration when placing `media` (FR-MED-002).
+    ///
+    /// Stills use ``defaultDuration`` (5 s) even though ``MediaMetadata.duration`` holds the
+    /// unbounded source extent for later trim/extend. Non-stills use the probed duration.
+    public static func timelinePlacementDuration(for media: MediaRef) throws -> RationalTime {
+        if isStillMedia(media) {
+            return try defaultDuration()
+        }
+        return media.metadata.duration
+    }
 }

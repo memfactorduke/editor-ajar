@@ -20,6 +20,7 @@ watching every diff. If it's not tested, it's not done.
 | **Soak** | seeded edit+render loop for leaks/stability, §8 (NFR-STAB-005) | short: every PR · full 1-hour: pre-release | ~3 min / 1 h |
 | **Sanitizers** | Thread Sanitizer on the concurrency-relevant suite (NFR-STAB-004); Address Sanitizer forthcoming on the reference runner | every PR (TSan) | min |
 | **UI smoke** | app launches, opens a project, plays; **AX tree walk** asserts every interactive role has a VoiceOver label (NFR-A11Y-001); canvas edit/nudge smokes are local-only (#210) | every PR | min |
+| **Release acceptance** | app-model end-to-end usable-app journey (create → import → edit → save/reopen → ProRes export decode); H.264 capability-skipped on encoder-less runners (#236) | every PR (EditorAjarTests / ui-smoke) | seconds–min |
 
 ## 2. Golden-frame testing (the core visual gate)
 
@@ -147,3 +148,41 @@ Cadence: CI runs `ajar soak --duration-seconds 150` on every PR (~3 minutes,
 `timeout-minutes: 10` so a hang fails fast). The **NFR-STAB-005 acceptance run** is the full
 1-hour soak — `ajar soak --duration-seconds 3600` — executed before releases (nightly wiring
 may adopt it later).
+
+## 9. Release acceptance (usable-app journey, #236)
+
+The final release gate is an **app-model** end-to-end test — not a UI automation script — so it
+is deterministic, CI-runnable, and diagnostic on failure. Implementation:
+`app/EditorAjar/Tests/EditorAjarReleaseAcceptanceTests.swift` (`EditorAjarTests` target).
+
+### Journey (every step asserts; typed refusals fail the test)
+
+1. **Create project** from New Project sheet defaults (`EditorAjarNewProjectSettings.sensibleDefaults`).
+2. **Import** three temp fixtures via the production import pipeline: a short **ProRes** synthetic
+   movie (CI-safe real encode), a solid **PNG** still, and an **audio** placeholder whose probe
+   result is injected (same temp-file + injectable-probe pattern as the import app-model tests;
+   real codecs are used where CI-safe).
+3. **Verify media pool** membership (video + still + audio).
+4. **Place clips** with `insertMediaOnTimeline` and a drag-equivalent `moveSelectedClip`.
+5. **Blade** one video clip at the playhead mid-point.
+6. **Apply** one effect (gaussian blur), one color correction (exposure), and a **styled title**
+   (`insertTitleAtPlayhead` + font weight/size).
+7. **Audio fade** via `applyDefaultFadeInToSelectedAudioClip`.
+8. **Save** to a temp `.ajar` package, **reopen**, and assert **full `Project` equality**.
+9. **Export ProRes** through `enqueueActiveSequenceExport` (production queue + Metal render path),
+   decode with `ExportMovieDecoder`, and assert frame count + non-trivial pixel content.
+10. **Undo-count sanity** on the pre-save edit history (non-empty multi-step journey).
+
+### Hardware-only extension
+
+`testReleaseAcceptanceH264ExportHardwareOnly` repeats a compact edit path and enqueues an H.264
+export. On runners without a free hardware encoder it **capability-skips** cleanly (same
+`ExportError.isHardwareEncoderUnavailable(for: .h264)` discipline as golden-export / throughput
+benches). ProRes remains the hard CI pass.
+
+### Where it runs
+
+- **CI:** `ui-smoke` job → `xcodebuild test -only-testing:EditorAjarTests` (see
+  `.github/workflows/ci.yml`). The `EditorAjarCI` test plan does **not** skip these classes.
+- **Local:** same target via the `EditorAjar` scheme / `EditorAjarCI` plan; not part of root
+  `swift test` (package tests stay headless).
