@@ -7,12 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0561B8D79F3F207A4716C97E /* MediaBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ACFFC4E276C76281FB36A0B /* MediaBrowserView.swift */; };
 		17B35B6C5F41AE77A7A15807 /* EditorAjarUISmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */; };
 		18A50F6FE3F5F215D59EEB06 /* AjarRender in Frameworks */ = {isa = PBXBuildFile; productRef = 1A54917698517881ACC715AF /* AjarRender */; };
 		1CB8FB2C28ED2215873C6090 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9B6F3CF811C108DB83A7857D /* Localizable.xcstrings */; };
 		27AC5FC45DA5EF355A9DB6A4 /* EditorAjarWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */; };
 		32C022A66891270FC71E1D4E /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535FF68DE6DDA5467F309039 /* AppLocalization.swift */; };
 		3A246BF62A10B5DED981A4E7 /* EditorAjarAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */; };
+		3A42D8AAC784E8A48A0B2882 /* MediaPreviewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81C89CEDF112C4BB96B1DF1 /* MediaPreviewCache.swift */; };
 		3C06D3ACA96C0714C211702C /* EditorAjarLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C129A432C60CF2C95005DE /* EditorAjarLocalizationTests.swift */; };
 		3D7AF3B32C664C68DFEDD2D5 /* EditorAjarExportDialogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88FEA85E5F58004FD8DD75BE /* EditorAjarExportDialogView.swift */; };
 		49708A2AFB12A81D9F1ADD3C /* AjarMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 834313F8ED36DC6955A87E81 /* AjarMedia */; };
@@ -22,6 +24,8 @@
 		5FD25C168A644F1D7D7D373C /* ProgramMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */; };
 		63D76714CAA834902EE03BC5 /* CanvasTitleEditingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */; };
 		6653EE21E97F97F4A1337738 /* EditorAjarDisplayLinkDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */; };
+		668859A516DF395B27997893 /* MediaBrowserModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4918CB04549E69A2DA033C9 /* MediaBrowserModel.swift */; };
+		6C5EFECCC919C8FA75EF5745 /* MediaBrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DC8542CE997AA86110B61E /* MediaBrowserTests.swift */; };
 		76992C808148BFDD103AC033 /* ExportQueuePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1208F41DB2872AAFEB4908DE /* ExportQueuePanel.swift */; };
 		77444F64B877AEF4C7D4FC6A /* EditorAjarNewProjectSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFA6C6935E779909C66E11A /* EditorAjarNewProjectSettings.swift */; };
 		7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */; };
@@ -74,21 +78,25 @@
 		4B3331D5EA7AED5D0D63F83D /* EditorAjar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditorAjar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		535FF68DE6DDA5467F309039 /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLocalization.swift; sourceTree = "<group>"; };
 		64FE9E23EF9A44E444F2A7E3 /* EditorAjarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7ACFFC4E276C76281FB36A0B /* MediaBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBrowserView.swift; sourceTree = "<group>"; };
 		7DAA8F76C2C44C8920890DB3 /* EditorAjarExportDialogModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportDialogModel.swift; sourceTree = "<group>"; };
 		7E74D68AE2348056EF75E244 /* EditorAjarAccessibilityTreeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAccessibilityTreeTests.swift; sourceTree = "<group>"; };
 		7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarWorkspaceView.swift; sourceTree = "<group>"; };
 		88FEA85E5F58004FD8DD75BE /* EditorAjarExportDialogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportDialogView.swift; sourceTree = "<group>"; };
 		8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarRenderPipeline.swift; sourceTree = "<group>"; };
+		92DC8542CE997AA86110B61E /* MediaBrowserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBrowserTests.swift; sourceTree = "<group>"; };
 		9B6F3CF811C108DB83A7857D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		9C5E7F4DD692019AF869D874 /* editor-ajar-wt-235 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar"; path = ../..; sourceTree = SOURCE_ROOT; };
 		A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModelTests.swift; sourceTree = "<group>"; };
 		A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportQueueAppModelTests.swift; sourceTree = "<group>"; };
 		AE92A31AD23053909AB8286A /* EditorAjarDocumentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDocumentViews.swift; sourceTree = "<group>"; };
-		B18D46E119B1E7EF6629DF1A /* editor-ajar-wt-238 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar-wt-238"; path = ../..; sourceTree = SOURCE_ROOT; };
 		B7B397BCAB3E49B3E54D1706 /* EditorAjarExportPresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportPresetStore.swift; sourceTree = "<group>"; };
+		B81C89CEDF112C4BB96B1DF1 /* MediaPreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewCache.swift; sourceTree = "<group>"; };
 		D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramMetalView.swift; sourceTree = "<group>"; };
 		DAF934E19339DC9EEF4DB2EE /* EditorAjarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DCFA6C6935E779909C66E11A /* EditorAjarNewProjectSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarNewProjectSettings.swift; sourceTree = "<group>"; };
 		E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarPlaybackController.swift; sourceTree = "<group>"; };
+		E4918CB04549E69A2DA033C9 /* MediaBrowserModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBrowserModel.swift; sourceTree = "<group>"; };
 		EDD23BF031574B09CE28C0EA /* EditorAjarDocumentLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDocumentLifecycleTests.swift; sourceTree = "<group>"; };
 		F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModel.swift; sourceTree = "<group>"; };
 		F6E2A9996CA6E7ABFFA6C91A /* EditorAjarMediaImportAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarMediaImportAppModelTests.swift; sourceTree = "<group>"; };
@@ -113,7 +121,7 @@
 		3515CBA41C5031917253259D /* editor-ajar */ = {
 			isa = PBXGroup;
 			children = (
-				B18D46E119B1E7EF6629DF1A /* editor-ajar-wt-238 */,
+				9C5E7F4DD692019AF869D874 /* editor-ajar-wt-235 */,
 			);
 			name = "editor-ajar";
 			sourceTree = "<group>";
@@ -126,6 +134,7 @@
 				A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */,
 				28C129A432C60CF2C95005DE /* EditorAjarLocalizationTests.swift */,
 				F6E2A9996CA6E7ABFFA6C91A /* EditorAjarMediaImportAppModelTests.swift */,
+				92DC8542CE997AA86110B61E /* MediaBrowserTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -174,6 +183,9 @@
 				7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */,
 				1208F41DB2872AAFEB4908DE /* ExportQueuePanel.swift */,
 				9B6F3CF811C108DB83A7857D /* Localizable.xcstrings */,
+				E4918CB04549E69A2DA033C9 /* MediaBrowserModel.swift */,
+				7ACFFC4E276C76281FB36A0B /* MediaBrowserView.swift */,
+				B81C89CEDF112C4BB96B1DF1 /* MediaPreviewCache.swift */,
 				D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */,
 			);
 			path = Sources;
@@ -331,6 +343,9 @@
 				7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */,
 				27AC5FC45DA5EF355A9DB6A4 /* EditorAjarWorkspaceView.swift in Sources */,
 				76992C808148BFDD103AC033 /* ExportQueuePanel.swift in Sources */,
+				668859A516DF395B27997893 /* MediaBrowserModel.swift in Sources */,
+				0561B8D79F3F207A4716C97E /* MediaBrowserView.swift in Sources */,
+				3A42D8AAC784E8A48A0B2882 /* MediaPreviewCache.swift in Sources */,
 				5FD25C168A644F1D7D7D373C /* ProgramMetalView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -353,6 +368,7 @@
 				FF92728078D2828BEA1E8C21 /* EditorAjarExportQueueAppModelTests.swift in Sources */,
 				3C06D3ACA96C0714C211702C /* EditorAjarLocalizationTests.swift in Sources */,
 				7A5FACECC05715D930D2E260 /* EditorAjarMediaImportAppModelTests.swift in Sources */,
+				6C5EFECCC919C8FA75EF5745 /* MediaBrowserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

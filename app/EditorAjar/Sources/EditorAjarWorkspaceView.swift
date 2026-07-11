@@ -32,6 +32,12 @@ struct EditorAjarWorkspaceView: View {
             Divider()
             TimelineView(model: model)
                 .frame(height: 250)
+                .dropDestination(for: String.self) { values, _ in
+                    guard let value = values.first, let mediaID = UUID(uuidString: value) else {
+                        return false
+                    }
+                    return model.insertMediaOnTimeline(mediaID: mediaID)
+                }
             if model.isExportQueuePanelVisible {
                 Divider()
                 ExportQueuePanel(
@@ -55,6 +61,20 @@ struct EditorAjarWorkspaceView: View {
             allowsMultipleSelection: true,
             onCompletion: model.handleMediaImporterResult
         )
+        .fileImporter(
+            isPresented: relinkPickerPresented,
+            allowedContentTypes: [.data, .movie, .audio, .image],
+            allowsMultipleSelection: false
+        ) { result in
+            // Guard empty selection — never invent a path (L4).
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                model.handleRelinkerResult(.success(url))
+            case .failure(let error):
+                model.handleRelinkerResult(.failure(error))
+            }
+        }
         .dropDestination(for: URL.self) { urls, _ in
             guard model.canImportMedia, !urls.isEmpty else {
                 return false
@@ -109,6 +129,13 @@ struct EditorAjarWorkspaceView: View {
                     model.dismissMediaImportSummary()
                 }
             }
+        )
+    }
+
+    private var relinkPickerPresented: Binding<Bool> {
+        Binding(
+            get: { model.mediaIDAwaitingRelink != nil },
+            set: { if !$0 { model.dismissRelinker() } }
         )
     }
 

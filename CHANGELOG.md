@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-MED-005/009 real media browser (#235): searchable/filterable list and grid media-pool
+  views with complete metadata, selection, offline and durable proxy state/actions, cancellable
+  hover-scrub previews, single-file relink, and undoable drag-to-timeline insertion. Video
+  thumbnails and audio waveform summaries are generated incrementally off-main through a
+  bounded/coalescing scheduler and stored as regeneratable content-hash keyed files under the
+  package-top-level `thumbnails/` directory (ADR-0007); offline sources skip extraction.
+  Untitled projects fall back to the autosave package root for preview storage.
+
 - FR-PROJ-001/002/003 project document lifecycle (#233): launch now offers New/Open instead of
   loading the sample; New Project collects resolution, frame rate, color space, and audio rate;
   File commands provide Open/Recent/Save/Save As/Revert with native dirty-window state,

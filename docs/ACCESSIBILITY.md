@@ -60,7 +60,7 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 2. **Read-only banner** (when visible) → Dismiss  
 3. **Workspace header** → Export… → Exports / Hide Exports  
 4. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence  
-5. **Library panel** → Import Media; VoiceOver navigation also exposes media rows and import progress  
+5. **Media browser** → Import Media → layout → search → codec/state filters → media rows/cards → proxy/relink actions; VoiceOver navigation also exposes import progress  
 6. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
 7. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
 8. **Inspector** → marker or transform fields when selection exists  
@@ -135,19 +135,27 @@ Visible when a project opens read-only (higher schema minor / ADR-0018).
 
 ---
 
-## 4. Media / library panel
+## 4. Media browser (FR-MED-005/009, #235)
 
 | Control | Shortcut | AX label | AX value / hint |
 |---------|----------|----------|-----------------|
 | Panel / window drop target | Finder drag/drop | Media and effects panel. Drop media files or folders here to import. | Window accepts files and folders recursively |
 | Import Media | `⌘I` via File menu / Full Keyboard Access | Import media files or folders | id: `Import Media` |
-| Project media row | — | Media {filename} | codec or Offline |
+| List / grid layout | Full Keyboard Access | Media layout (explicit AX label; `labelsHidden`) | id: `Media Browser Layout` |
+| Search | typing | Search media | id: `Media Search` |
+| Codec / state filters | arrows / menu | Codec / State (explicit AX labels; `labelsHidden`) | All, offline, proxy-ready, proxy-pending |
+| Project media row/card | click; drag to timeline | Media {filename} | codec, resolution, fps/VFR, duration, color space, offline and proxy state; id: `Media Row {uuid}` for list rows |
+| Generate / Regenerate proxy | Full Keyboard Access | Generate / Regenerate | disabled while source is offline |
+| Relink… | Full Keyboard Access | Relink… | offline items only; native single-file picker |
 | Import progress | — | Scanning folders… / Importing {filename} | `{completed} of {total} files`; id: `Media Import Progress` |
 | Effects row | — | Effects | static placeholder |
 
 The picker allows multiple files and folders. Folder enumeration, probing, hashing, and bookmark
 creation run off the main actor; progress is non-modal so transport and other window controls remain
 available.
+
+Preview placeholders remain accessible while thumbnail/waveform cache work runs off-main. Hover
+scrub is pointer enhancement only; the row metadata and timeline drag/drop are not hover-dependent.
 
 ---
 
