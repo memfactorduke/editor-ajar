@@ -2,6 +2,7 @@
 // swiftlint:disable file_length
 
 import AjarCore
+import AjarMedia
 import AjarRender
 import Foundation
 import Metal
@@ -157,6 +158,8 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
         return manifests.sorted { left, right in left.path < right.path }
     }
 
+    // Still-image write adds a few lines over the 60-line soft cap; keep the case runner whole.
+    // swiftlint:disable:next function_body_length
     private static func runCase(
         manifest: GoldenFrameManifest,
         manifestURL: URL
@@ -170,21 +173,27 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
 
         let clipSpecs = try manifest.resolvedClipSpecs()
         let mediaURLs: [URL?] = clipSpecs.indices.map { index in
-            clipSpecs[index].isTitleClip
-                ? nil
-                : workingDirectory.appendingPathComponent("source-\(index).mov")
+            if clipSpecs[index].isTitleClip {
+                return nil
+            }
+            if clipSpecs[index].isStillImageClip {
+                return workingDirectory.appendingPathComponent("source-\(index).png")
+            }
+            return workingDirectory.appendingPathComponent("source-\(index).mov")
         }
         let projectURL = workingDirectory.appendingPathComponent("project.ajar")
         let actualURL = workingDirectory.appendingPathComponent("actual.png")
         for (clipSpec, mediaURL) in zip(clipSpecs, mediaURLs) {
-            guard
-                clipSpec.offline != true,
-                let mediaURL,
-                let syntheticMedia = clipSpec.syntheticMedia
-            else {
+            guard clipSpec.offline != true, let mediaURL else {
                 continue
             }
-            try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: syntheticMedia)
+            if let stillImage = clipSpec.stillImage {
+                try writeStillImagePNG(stillImage, to: mediaURL)
+                continue
+            }
+            if let syntheticMedia = clipSpec.syntheticMedia {
+                try SyntheticMovieWriter.writeMovie(to: mediaURL, spec: syntheticMedia)
+            }
         }
         let project = try makeSyntheticProject(
             manifest: manifest,
@@ -346,6 +355,18 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
                 defaultHeight: mediaSpec.height
             )
         }
+        if let still = clipSpecs.compactMap(\.stillImage).first {
+            // Still goldens use a fixed 24 fps project timebase; source extent is the
+            // app-side default still length (5s) so timeline placement matches import.
+            let frameRate = try FrameRate(frames: 24)
+            let duration = try StillMediaDefaults.defaultDuration()
+            return GoldenTimingAndSize(
+                frameRate: frameRate,
+                duration: duration,
+                defaultWidth: still.width,
+                defaultHeight: still.height
+            )
+        }
         // Title-only fixtures must declare output dimensions and use a fixed 24 fps / 1 frame.
         let frameRate = try FrameRate(frames: 24)
         let duration = try frameRate.duration(ofFrames: 1)
@@ -457,9 +478,30 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
         mediaURL: URL,
         index: Int
     ) throws -> MediaRef {
+        if let stillImage = clipSpec.stillImage {
+            return MediaRef(
+                id: try numberedUUID(18 + index),
+                sourceURL: mediaURL,
+                contentHash: ContentHash.sha256(data: Data("\(context.manifestID)-\(index)".utf8)),
+                metadata: MediaMetadata(
+                    codecID: "png",
+                    pixelDimensions: PixelDimensions(
+                        width: stillImage.width,
+                        height: stillImage.height
+                    ),
+                    frameRate: nil,
+                    duration: context.duration,
+                    colorSpace: .sRGB,
+                    audioChannelLayout: nil,
+                    isVariableFrameRate: false,
+                    conformedFrameRate: nil
+                ),
+                availability: clipSpec.offline == true ? .offline : .available
+            )
+        }
         guard let syntheticMedia = clipSpec.syntheticMedia else {
             throw AjarCLIError.invalidGoldenManifest(
-                "\(context.manifestID) media clip \(index) missing syntheticMedia"
+                "\(context.manifestID) media clip \(index) missing syntheticMedia or stillImage"
             )
         }
         return MediaRef(
@@ -480,6 +522,27 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
                 conformedFrameRate: nil
             ),
             availability: clipSpec.offline == true ? .offline : .available
+        )
+    }
+
+    private static func writeStillImagePNG(
+        _ still: SyntheticStillImageSpec,
+        to url: URL
+    ) throws {
+        guard still.isValid else {
+            throw AjarCLIError.invalidGoldenManifest("stillImage spec is invalid")
+        }
+        var pixels = [UInt8](repeating: 0, count: still.width * still.height * 4)
+        for pixelIndex in 0..<(still.width * still.height) {
+            let offset = pixelIndex * 4
+            pixels[offset] = still.bgra[0]
+            pixels[offset + 1] = still.bgra[1]
+            pixels[offset + 2] = still.bgra[2]
+            pixels[offset + 3] = still.bgra[3]
+        }
+        try PNGCodec.write(
+            PNGImage(width: still.width, height: still.height, bgra8: pixels),
+            to: url
         )
     }
 
@@ -508,6 +571,8 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
             sourceDuration = try context.frameRate.duration(ofFrames: sourceFrames)
         } else if let media = clipSpec.syntheticMedia {
             sourceDuration = try context.frameRate.duration(ofFrames: Int64(media.frameCount))
+        } else if clipSpec.stillImage != nil {
+            sourceDuration = context.duration
         } else {
             sourceDuration = context.duration
         }
@@ -559,6 +624,12 @@ public enum GoldenFrameHarness {  // swiftlint:disable:this type_body_length
         if let media = clipSpec.syntheticMedia {
             let sourceDuration = try context.frameRate.duration(ofFrames: Int64(media.frameCount))
             return try Clip.timelineDuration(forSourceDuration: sourceDuration, speed: speed)
+        }
+        if clipSpec.stillImage != nil {
+            return try Clip.timelineDuration(
+                forSourceDuration: context.duration,
+                speed: speed
+            )
         }
         return try timelineDuration(context: context, speed: speed, timeRemap: nil)
     }

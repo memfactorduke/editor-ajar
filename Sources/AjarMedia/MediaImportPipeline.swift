@@ -137,10 +137,21 @@ public struct ImportedMediaItem: Equatable, Sendable {
     /// Stable, hashed, bookmarked project reference.
     public let mediaReference: MediaRef
 
+    /// First audio track sample rate in Hz when the probe observed one (session-only).
+    ///
+    /// Not persisted on `MediaMetadata` (would require `schemaMinor`); used by FR-PROJ-003
+    /// auto-detect when the first imported item carries audio.
+    public let audioSampleRate: Int?
+
     /// Creates an imported item.
-    public init(sourceURL: URL, mediaReference: MediaRef) {
+    public init(
+        sourceURL: URL,
+        mediaReference: MediaRef,
+        audioSampleRate: Int? = nil
+    ) {
         self.sourceURL = sourceURL
         self.mediaReference = mediaReference
+        self.audioSampleRate = audioSampleRate
     }
 }
 
@@ -586,7 +597,11 @@ public actor MediaImportPipeline {
             }
         )
         return .imported(
-            ImportedMediaItem(sourceURL: fileURL, mediaReference: reference),
+            ImportedMediaItem(
+                sourceURL: fileURL,
+                mediaReference: reference,
+                audioSampleRate: probed.audioSampleRate
+            ),
             transcodeResult.flatMap {
                 guard !$0.reusedExistingTranscode else { return nil }
                 return TranscodedMediaImportItem(

@@ -1,0 +1,27 @@
+{
+  "frame" : "0/24",
+  "id" : "still-image-solid-red",
+  "referencePNG" : "reference.png",
+  "requirements" : [
+    "FR-MED-002",
+    "TESTING-2",
+    "ADR-0011",
+    "NFR-QUAL-001"
+  ],
+  "schemaVersion" : 1,
+  "stillImage" : {
+    "bgra" : [
+      0,
+      0,
+      255,
+      255
+    ],
+    "height" : 16,
+    "width" : 16
+  },
+  "tolerance" : {
+    "maximumAlphaDelta" : 0,
+    "maximumDeltaE" : 25,
+    "minimumSSIM" : 0.9
+  }
+}

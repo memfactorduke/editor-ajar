@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
+import AjarMedia
 import Foundation
 
 /// Common new-project raster choices (FR-PROJ-003).
@@ -210,17 +211,43 @@ enum EditorAjarNewProjectFactory {
 
 /// FR-PROJ-003 first-clip auto-detection seam for the #234 import flow.
 ///
-/// #234 should call this before committing the first imported media/clip, then replace project
-/// settings through the app model's edit boundary. Resolution, exact frame rate, and a known color
-/// tag come from today's `MediaMetadata`. Audio sample rate is not currently probed there, so the
-/// richer import result may pass it separately once #234 owns that path.
+/// The importer calls this when the first media lands in an empty-default project, then the app
+/// model presents a confirmation sheet (apply = undoable settings edit; decline = keep).
+/// Resolution, exact frame rate (including VFR-conformed rate), and a known color tag come from
+/// `MediaMetadata`.
+///
+/// **Audio sample rate:** not a persisted `MediaMetadata` field (would require `schemaMinor` /
+/// ADR-0018). The native probe carries it session-only on `MediaProbeResult.audioSampleRate` →
+/// `ImportedMediaItem.audioSampleRate`; callers must pass `detectedAudioSampleRate` for the
+/// proposal to pick up the source rate. Without that argument the detector keeps the current
+/// project audio rate.
+///
+/// **Stills propose resolution only** (keep fps/color/audio).
 enum EditorAjarFirstClipSettingsDetector {
+    /// Whether `media` is a still image (ImageIO codecs from AjarMedia probe).
+    static func isStillImage(_ media: MediaRef) -> Bool {
+        StillMediaDefaults.isStillCodec(media.metadata.codecID)
+            || media.sourceURL.map(StillMediaDefaults.isStillImageFile) == true
+    }
+
     static func detectedSettings(
         from media: MediaRef,
         current: ProjectSettings,
         detectedAudioSampleRate: Int? = nil
     ) -> ProjectSettings {
         let metadata = media.metadata
+
+        // Stills: resolution only — no fps/audio on pure images; keep project timebase/audio.
+        if isStillImage(media) {
+            return ProjectSettings(
+                frameRate: current.frameRate,
+                resolution: metadata.pixelDimensions ?? current.resolution,
+                colorSpace: current.colorSpace,
+                audioSampleRate: current.audioSampleRate,
+                preferProxyPlayback: current.preferProxyPlayback
+            )
+        }
+
         let detectedColorSpace: MediaColorSpace
         switch metadata.colorSpace {
         case .unspecified, .unknown:
@@ -228,12 +255,25 @@ enum EditorAjarFirstClipSettingsDetector {
         case .rec709, .sRGB, .displayP3, .rec2020:
             detectedColorSpace = metadata.colorSpace
         }
+        // VFR: conformed rate wins when present (FR-MED-010 + FR-PROJ-003).
+        let frameRate = metadata.conformedFrameRate ?? metadata.frameRate ?? current.frameRate
         return ProjectSettings(
-            frameRate: metadata.conformedFrameRate ?? metadata.frameRate ?? current.frameRate,
+            frameRate: frameRate,
             resolution: metadata.pixelDimensions ?? current.resolution,
             colorSpace: detectedColorSpace,
             audioSampleRate: detectedAudioSampleRate ?? current.audioSampleRate,
             preferProxyPlayback: current.preferProxyPlayback
         )
+    }
+
+    /// Whether a proposal differs enough from current settings to warrant a confirmation sheet.
+    static func proposalDiffersFromCurrent(
+        _ proposed: ProjectSettings,
+        current: ProjectSettings
+    ) -> Bool {
+        proposed.resolution != current.resolution
+            || proposed.frameRate != current.frameRate
+            || proposed.colorSpace != current.colorSpace
+            || proposed.audioSampleRate != current.audioSampleRate
     }
 }

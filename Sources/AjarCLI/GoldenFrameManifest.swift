@@ -11,6 +11,9 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
     let referencePNG: String
     let outputDimensions: PixelDimensions?
     let syntheticMedia: SyntheticMovieSpec?
+    /// Solid-color still-image source (FR-MED-002 / #246). Mutually exclusive with
+    /// top-level `syntheticMedia` / multi-clip `clips` that need movie fixtures.
+    let stillImage: SyntheticStillImageSpec?
     let clips: [GoldenFrameClipSpec]?
     let tolerance: GoldenFrameTolerance
 
@@ -46,40 +49,33 @@ struct GoldenFrameManifest: Codable, Equatable, Sendable {
             }
             return clips
         }
+        if let stillImage {
+            return [GoldenFrameClipSpec.singleSource(stillImage: stillImage)]
+        }
         if let syntheticMedia {
-            return [
-                GoldenFrameClipSpec(
-                    syntheticMedia: syntheticMedia,
-                    offline: nil,
-                    title: nil,
-                    compound: nil,
-                    speed: nil,
-                    reverse: nil,
-                    freezeFrame: nil,
-                    timeRemap: nil,
-                    frameSampling: nil,
-                    transform: nil,
-                    transformAnimation: nil,
-                    effects: nil,
-                    effectsAnimation: nil,
-                    effectStack: nil,
-                    effectStackAnimation: nil,
-                    trackOpacity: nil,
-                    trackBlendMode: nil,
-                    timelineStartFrame: nil,
-                    sourceFrameCount: nil,
-                    leadingTransition: nil,
-                    trailingTransition: nil
-                )
-            ]
+            return [GoldenFrameClipSpec.singleSource(syntheticMedia: syntheticMedia)]
         }
         throw AjarCLIError.invalidGoldenManifest("\(id) has no synthetic media")
     }
 }
 
+/// Deterministic solid-color still for FR-MED-002 golden fixtures.
+struct SyntheticStillImageSpec: Codable, Equatable, Sendable {
+    let width: Int
+    let height: Int
+    /// Premultiplied BGRA solid fill (4 bytes).
+    let bgra: [UInt8]
+
+    var isValid: Bool {
+        width > 0 && height > 0 && bgra.count == 4
+    }
+}
+
 struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
-    /// Synthetic movie for media-backed clips. Optional when `title` is present (ADR-0017).
+    /// Synthetic movie for media-backed clips. Optional when `title` / `stillImage` is present.
     let syntheticMedia: SyntheticMovieSpec?
+    /// ImageIO still (FR-MED-002). Optional when `syntheticMedia` or `title` is present.
+    let stillImage: SyntheticStillImageSpec?
     /// FR-MED-007 fixture hook: retain metadata/URL but omit the file and render the slate.
     let offline: Bool?
     /// Title generator payload (FR-TXT-001). When set, the clip source is `.title`.
@@ -120,6 +116,41 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
         leadingTransition != nil || trailingTransition != nil
     }
 
+    var isStillImageClip: Bool {
+        stillImage != nil
+    }
+
+    /// Single-clip legacy manifests (top-level `syntheticMedia` / `stillImage`).
+    static func singleSource(
+        syntheticMedia: SyntheticMovieSpec? = nil,
+        stillImage: SyntheticStillImageSpec? = nil
+    ) -> GoldenFrameClipSpec {
+        GoldenFrameClipSpec(
+            syntheticMedia: syntheticMedia,
+            stillImage: stillImage,
+            offline: nil,
+            title: nil,
+            compound: nil,
+            speed: nil,
+            reverse: nil,
+            freezeFrame: nil,
+            timeRemap: nil,
+            frameSampling: nil,
+            transform: nil,
+            transformAnimation: nil,
+            effects: nil,
+            effectsAnimation: nil,
+            effectStack: nil,
+            effectStackAnimation: nil,
+            trackOpacity: nil,
+            trackBlendMode: nil,
+            timelineStartFrame: nil,
+            sourceFrameCount: nil,
+            leadingTransition: nil,
+            trailingTransition: nil
+        )
+    }
+
     func validateSourcePayload(manifestID: String) throws {
         if title != nil {
             if let error = title?.validate() {
@@ -129,9 +160,17 @@ struct GoldenFrameClipSpec: Codable, Equatable, Sendable {
             }
             return
         }
+        if let stillImage {
+            guard stillImage.isValid else {
+                throw AjarCLIError.invalidGoldenManifest(
+                    "\(manifestID) stillImage needs positive size and 4-byte BGRA"
+                )
+            }
+            return
+        }
         if syntheticMedia == nil {
             throw AjarCLIError.invalidGoldenManifest(
-                "\(manifestID) clip needs syntheticMedia or title"
+                "\(manifestID) clip needs syntheticMedia, stillImage, or title"
             )
         }
     }

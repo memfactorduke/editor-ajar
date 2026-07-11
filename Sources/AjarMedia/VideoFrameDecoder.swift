@@ -133,11 +133,15 @@ public struct DecodedFrame {
 }
 
 /// Native AVFoundation/VideoToolbox frame decoder for one source frame.
+///
+/// Still images (PNG/JPEG/HEIF/TIFF) use ImageIO once and reuse a Metal-compatible pixel buffer
+/// for every presentation time (FR-MED-002 / #246). Video continues on the AVAssetReader path.
 public final class VideoFrameDecoder {
     private let device: MTLDevice
     private let pixelFormat: OSType
     private let metalPixelFormat: MTLPixelFormat
     private let textureCache: CVMetalTextureCache
+    private let stillDecoder: StillImageFrameDecoder
 
     /// Creates a decoder with the default Metal device.
     public convenience init(
@@ -172,6 +176,12 @@ public final class VideoFrameDecoder {
         }
 
         textureCache = cache
+        stillDecoder = StillImageFrameDecoder(
+            pixelFormat: pixelFormat,
+            metalPixelFormat: metalPixelFormat,
+            textureCache: cache,
+            blockingQueue: Self.blockingDecodeQueue
+        )
     }
 
     /// Decodes a frame from a media reference's source URL.
@@ -183,15 +193,20 @@ public final class VideoFrameDecoder {
             throw MediaDecodeError.missingSourceURL(mediaID: media.id)
         }
 
+        // Prefer the still path when metadata already identifies ImageIO codecs so proxy movies
+        // and genuine video files with image-like names keep the AVFoundation path.
+        let useStillPath = StillMediaDefaults.isStillCodec(media.metadata.codecID)
+            || StillMediaDefaults.isStillImageFile(sourceURL)
+        if useStillPath {
+            return try await stillDecoder.decode(from: sourceURL, at: time)
+        }
         return try await decodeFrame(from: sourceURL, at: time)
     }
 
     /// Decodes a frame from `sourceURL` at `time`.
     ///
-    /// The AVAssetReader output requests Metal-compatible IOSurface-backed pixel buffers and sets
-    /// `alwaysCopiesSampleData = false`. The decode path does not call
-    /// base-address pixel buffer accessors; frame bytes stay in the pixel buffer for the Metal
-    /// texture cache to wrap without CPU readback.
+    /// Still-image files open via ImageIO (one decode, cached). Video uses AVAssetReader with
+    /// Metal-compatible IOSurface-backed pixel buffers and `alwaysCopiesSampleData = false`.
     public func decodeFrame(
         from sourceURL: URL,
         at time: RationalTime
@@ -204,16 +219,28 @@ public final class VideoFrameDecoder {
         }
         try requireAvailableSource(sourceURL)
 
+        // Extension-first: avoid probing every movie with ImageIO on the hot path.
+        if StillMediaDefaults.isStillImageFile(sourceURL) {
+            return try await stillDecoder.decode(from: sourceURL, at: time)
+        }
+
         let asset = AVURLAsset(url: sourceURL)
         let tracks: [AVAssetTrack]
         do {
             tracks = try await asset.loadTracks(withMediaType: .video)
         } catch {
+            // Extensionless/odd stills: ImageIO fallback before typed failure.
+            if stillDecoder.stillImageSourceExists(at: sourceURL) {
+                return try await stillDecoder.decode(from: sourceURL, at: time)
+            }
             try requireAvailableSource(sourceURL)
             throw MediaDecodeError.unsupportedSource(sourceURL)
         }
 
         guard let track = tracks.first else {
+            if stillDecoder.stillImageSourceExists(at: sourceURL) {
+                return try await stillDecoder.decode(from: sourceURL, at: time)
+            }
             try requireAvailableSource(sourceURL)
             throw MediaDecodeError.unsupportedSource(sourceURL)
         }

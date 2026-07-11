@@ -21,15 +21,23 @@ public struct MediaProbeResult: Equatable, Sendable {
     /// Exact video-track duration used with frame statistics, which may differ from asset duration.
     public let videoDuration: RationalTime?
 
+    /// First audio track sample rate in Hz when present (session-only; not stored on `MediaMetadata`).
+    ///
+    /// Carried here so FR-PROJ-003 can propose project audio rate without a `schemaMinor` field on
+    /// persisted media metadata (ADR-0018).
+    public let audioSampleRate: Int?
+
     /// Creates a probe result.
     public init(
         metadata: MediaMetadata,
         videoFrameCount: Int64? = nil,
-        videoDuration: RationalTime? = nil
+        videoDuration: RationalTime? = nil,
+        audioSampleRate: Int? = nil
     ) {
         self.metadata = metadata
         self.videoFrameCount = videoFrameCount
         self.videoDuration = videoDuration
+        self.audioSampleRate = audioSampleRate
     }
 }
 
@@ -105,16 +113,18 @@ public struct AVFoundationMediaProbe: MediaProbing, Sendable {
         guard let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else {
             return nil
         }
+        // Multi-frame animated GIFs (and HEIF sequences) use index 0 only — first frame.
+        // Later frames are not imported as separate media or still sequences (FR-MED-002).
         guard CGImageSourceGetCount(source) > 0,
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             return nil
         }
         guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
                 as? [CFString: Any],
-              let width = integerValue(properties[kCGImagePropertyPixelWidth]),
-              let height = integerValue(properties[kCGImagePropertyPixelHeight]),
-              width > 0,
-              height > 0
+              let rawWidth = integerValue(properties[kCGImagePropertyPixelWidth]),
+              let rawHeight = integerValue(properties[kCGImagePropertyPixelHeight]),
+              rawWidth > 0,
+              rawHeight > 0
         else {
             throw MediaProbeError.metadataUnavailable(
                 url: sourceURL,
@@ -122,13 +132,21 @@ public struct AVFoundationMediaProbe: MediaProbing, Sendable {
             )
         }
 
+        // EXIF orientation: 90°/270° (and mirrored variants) swap display width/height so
+        // FR-PROJ-003 proposals and timeline proxies match upright pixels after transform decode.
+        let oriented = orientedStillDimensions(
+            width: rawWidth,
+            height: rawHeight,
+            orientation: integerValue(properties[kCGImagePropertyOrientation])
+        )
+
         let metadata = MediaMetadata(
             codecID: stillCodecID(for: sourceURL, source: source),
-            pixelDimensions: PixelDimensions(width: width, height: height),
+            pixelDimensions: PixelDimensions(width: oriented.width, height: oriented.height),
             frameRate: nil,
-            // Still duration is an editable placement concern. Store a positive one-second
-            // source extent until a clip chooses its timeline duration.
-            duration: try RationalTime(value: 1, timescale: 1),
+            // Effectively unbounded still source extent (`StillMediaDefaults`); initial timeline
+            // placement stays at the 5 s default (FR-MED-002 / #246).
+            duration: try StillMediaDefaults.sourceExtentDuration(),
             colorSpace: stillColorSpace(for: image),
             audioChannelLayout: nil,
             isVariableFrameRate: false,
@@ -182,7 +200,8 @@ public struct AVFoundationMediaProbe: MediaProbing, Sendable {
         return MediaProbeResult(
             metadata: metadata,
             videoFrameCount: video?.timing.frameCount,
-            videoDuration: video?.duration
+            videoDuration: video?.duration,
+            audioSampleRate: audio?.sampleRate
         )
     }
 
@@ -264,9 +283,17 @@ public struct AVFoundationMediaProbe: MediaProbing, Sendable {
         try validateNativeAudioDecode(asset: asset, track: track, sourceURL: sourceURL)
         let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(description)
         let channels = streamDescription.map { Int($0.pointee.mChannelsPerFrame) } ?? 0
+        let sampleRate = streamDescription.flatMap { desc -> Int? in
+            let rate = desc.pointee.mSampleRate
+            guard rate.isFinite, rate > 0 else {
+                return nil
+            }
+            return Int(rate.rounded())
+        }
         return AudioFacts(
             codecID: codecID(for: CMFormatDescriptionGetMediaSubType(description)),
-            layout: channels > 0 ? AjarCore.AudioChannelLayout(channelCount: channels) : nil
+            layout: channels > 0 ? AjarCore.AudioChannelLayout(channelCount: channels) : nil,
+            sampleRate: sampleRate
         )
     }
 
