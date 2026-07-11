@@ -23,7 +23,8 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            mediaImportPipeline: pipeline
+            mediaImportPipeline: pipeline,
+            opensSampleProjectWhenNoRecovery: true
         )
         let originalCount = try XCTUnwrap(model.project?.mediaPool.count)
 
@@ -55,7 +56,8 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            mediaImportPipeline: pipeline
+            mediaImportPipeline: pipeline,
+            opensSampleProjectWhenNoRecovery: true
         )
 
         model.importMedia(from: [root])
@@ -97,7 +99,8 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            mediaImportPipeline: pipeline
+            mediaImportPipeline: pipeline,
+            opensSampleProjectWhenNoRecovery: true
         )
 
         await model.importMediaAndWait(from: [sourceURL])
@@ -120,7 +123,8 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            mediaImportPipeline: pipeline
+            mediaImportPipeline: pipeline,
+            opensSampleProjectWhenNoRecovery: true
         )
 
         await model.importMediaAndWait(from: [sourceURL])
@@ -131,6 +135,18 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         let message = AppString.mediaImportFailureMessage(for: failure.error)
         XCTAssertTrue(message.contains("FFmpeg"))
         XCTAssertTrue(message.localizedCaseInsensitiveContains("not available"))
+    }
+
+    func testProgrammaticImportWithoutProjectPublishesTypedVisibleRefusal() async {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+
+        await model.importMediaAndWait(from: [URL(fileURLWithPath: "/tmp/clip.mov")])
+
+        XCTAssertEqual(model.mediaImportError, .noProject)
+        XCTAssertEqual(model.loadMessage, "Create or open a project before importing media.")
+        XCTAssertFalse(model.isImportingMedia)
+        XCTAssertNil(model.mediaImportProgress)
+        XCTAssertNil(model.mediaImportSummary)
     }
 
     private func constantProbeResult() throws -> MediaProbeResult {

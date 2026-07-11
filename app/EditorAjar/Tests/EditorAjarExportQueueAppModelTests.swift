@@ -36,7 +36,8 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportQueueController: controller
+            exportQueueController: controller,
+            opensSampleProjectWhenNoRecovery: true
         )
         let sequenceName = try XCTUnwrap(model.activeSequence?.name)
         let destination = directory.appendingPathComponent("app-export.mov")
@@ -79,7 +80,8 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportQueueController: controller
+            exportQueueController: controller,
+            opensSampleProjectWhenNoRecovery: true
         )
         let destination = directory.appendingPathComponent("cancel.mov")
         model.enqueueActiveSequenceExport(destinationURL: destination)

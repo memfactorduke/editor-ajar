@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-PROJ-001/002/003 project document lifecycle (#233): launch now offers New/Open instead of
+  loading the sample; New Project collects resolution, frame rate, color space, and audio rate;
+  File commands provide Open/Recent/Save/Save As/Revert with native dirty-window state,
+  security-scoped document access, crash-recovery compatibility, and rolling `versions/`
+  snapshots (newest 10). The sample project is available from Help, and a documented first-media
+  settings detection seam is ready for #234. All new controls are localized, keyboard reachable,
+  VoiceOver-labelled, and covered by app-model lifecycle tests.
+
 - FR-MED-001/002/010 app media import (#234): multi-select File menu picker, window/panel
   drag-and-drop, recursive off-main folder discovery with determinate progress, native
   AVFoundation/ImageIO probing, streamed SHA-256 + security-scoped reference-in-place bookmarks,
@@ -16,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   native boundary cannot open return a typed per-file failure; the repository still has no FFmpeg
   import fallback, so FR-MED-003 remains an explicit follow-up rather than an unsafe playback-path
   integration.
+### Fixed
+
+- `VideoFrameDecoder` no longer blocks the Swift cooperative thread pool during the
+  `AVAssetReader` read; the blocking phase now runs on a dedicated GCD queue behind a checked
+  continuation (#233, NFR-STAB-001). Previously, enough concurrent decodes could occupy every
+  cooperative-pool thread while the completions and buffer releases they were transitively
+  waiting on also needed pool threads, wedging the entire process (observed as a deterministic
+  app-test deadlock).
+- Sample-project media is now written once per process instead of on every open (#233). The
+  per-open rewrite deleted the movie out from under earlier models' active readers, surfacing as
+  MediaToolbox `-12893` errors and hung `copyNextSampleBuffer` calls.
 
 ## [1.0.0-rc1] - 2026-07-10
 

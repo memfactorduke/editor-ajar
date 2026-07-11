@@ -283,9 +283,9 @@ jobs:
       # Scope: the ADR-0012 concurrency surfaces — the export queue/session/writer state machine,
       # the real-time audio plan publish/consume handoff, and the seeded soak loop (RT slot
       # reclamation, disk-frame-cache churn, edit reducer under concurrent GCD workers), plus the
-      # render executor's concurrent-compound-render synchronization guard. GPU golden / media
-      # decode tests are data-race-irrelevant (Metal/AVFoundation own that ordering) and are
-      # excluded to keep runtime sane.
+      # render executor's concurrent-compound-render synchronization guard, plus the video
+      # decoder regression that keeps blocking AVAssetReader work off Swift's cooperative pool.
+      # Other GPU golden / media decode tests remain excluded to keep runtime sane.
       # TODO(NFR-STAB-004): run the FULL suite under TSan on the dedicated reference runner once it
       # exists (PERFORMANCE §1), where hosted-runner runtime is not a constraint.
       - name: Thread Sanitizer (concurrency scope)
@@ -293,7 +293,7 @@ jobs:
           TSAN_OPTIONS: "halt_on_error=1 suppressions=${{ github.workspace }}/.tsan-suppressions.txt"
         run: |
           swift test --sanitize=thread \
-            --filter "AjarAudioTests|AjarExportTests|SoakCommandTests|ConcurrentCompound"
+            --filter "AjarAudioTests|AjarExportTests|SoakCommandTests|ConcurrentCompound|VideoFrameDecoderConcurrencyTests"
 
   # ── Forthcoming gates (per docs/TESTING.md §5) ─────────────────────────────────────────────
   # Address Sanitizer (`swift test --sanitize=address`, NFR-STAB-004) joins the reference-runner

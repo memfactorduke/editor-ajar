@@ -3,16 +3,11 @@
 import Foundation
 import XCTest
 
-/// Durable NFR-A11Y-001 regression net: launch the app and walk the accessibility tree.
+/// Durable NFR-A11Y-001 regression net: walk both the launch welcome and sample workspace trees.
 ///
-/// **Read-only** — no clicks, typing, or sheet presentation. That keeps the case runner-robust
-/// compared with interaction-heavy canvas smokes (#210). Every element with an interactive AX
-/// role must carry a non-empty accessibility label. Failures list identifier + role + frame.
-///
-/// Covered at launch: workspace chrome, sequence tabs, program monitor, transport, timeline,
-/// track headers/clips, and any canvas title boxes in the sample project. Conditional surfaces
-/// (export dialog, export queue jobs, marker/transform inspector, read-only banner) are
-/// documented in `docs/ACCESSIBILITY.md` and rely on the same labelling conventions.
+/// The only interaction is the deterministic Help > Open Sample Project command. No editing,
+/// typing, or sheet interaction occurs. Every interactive AX role must carry a non-empty label;
+/// failures list identifier + role + frame.
 final class EditorAjarAccessibilityTreeTests: XCTestCase {
     private static let launchAttemptLimit = 3
     private static let launchRetryDelay: TimeInterval = 1
@@ -40,6 +35,18 @@ final class EditorAjarAccessibilityTreeTests: XCTestCase {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 10))
 
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Welcome View"].waitForExistence(timeout: 10)
+        )
+        assertNoUnlabeledInteractiveElements(in: app)
+
+        let helpMenu = app.menuBars.menuBarItems["Help"]
+        XCTAssertTrue(helpMenu.waitForExistence(timeout: 5))
+        helpMenu.click()
+        let sampleItem = app.menuItems["Open Sample Project"]
+        XCTAssertTrue(sampleItem.waitForExistence(timeout: 5))
+        sampleItem.click()
+
         // Role-agnostic wait for stable sample-project chrome (#187 lesson).
         XCTAssertTrue(
             app.descendants(matching: .any)["Program monitor showing Sample Playback Sequence"]
@@ -50,6 +57,10 @@ final class EditorAjarAccessibilityTreeTests: XCTestCase {
                 .waitForExistence(timeout: 10)
         )
 
+        assertNoUnlabeledInteractiveElements(in: app)
+    }
+
+    private func assertNoUnlabeledInteractiveElements(in app: XCUIApplication) {
         let offenders = unlabeledInteractiveElements(in: app)
         if !offenders.isEmpty {
             let report = offenders.map(\.description).joined(separator: "\n")
@@ -126,6 +137,8 @@ final class EditorAjarAccessibilityTreeTests: XCTestCase {
         //    CI #219 macos-14: 6 unlabeled buttons at right edge (x≈1481, w=15) and
         //    bottom edge (y≈832, h=15). Descendant-of checks are awkward on a flat
         //    per-type walk, so we collect scrollbar frames first and use containment.
+        // 4. AppKit's Help-menu search field (`_SC_SEARCH_FIELD`) — CI reported the injected
+        //    role=searchField at (0,1058 352×22) with an empty label; apps never label it.
         // We do NOT exclude by missing identifier or by size alone beyond zero-area.
         let scrollBarFrames = collectScrollBarFrames(in: app)
 
@@ -151,6 +164,10 @@ final class EditorAjarAccessibilityTreeTests: XCTestCase {
 
                 // NSScroller track/thumb chrome (see scrollBarFrames comment above).
                 if isFrameContainedInAnyScrollBar(frame, scrollBarFrames: scrollBarFrames) {
+                    continue
+                }
+
+                if element.identifier == "_SC_SEARCH_FIELD" {
                     continue
                 }
 

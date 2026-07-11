@@ -41,6 +41,9 @@ final class EditorAjarLocalizationTests: XCTestCase {
         // One representative key per major surface; values are the shipping English base strings.
         let expected: [String: String] = [
             "app.name": "Editor Ajar",
+            "document.open.title": "Open…",
+            "document.newSettings.title": "New Project",
+            "welcome.title": "Welcome to Editor Ajar",
             "workspace.header.export": "Export…",
             "banner.readOnly.title": "Read-only project",
             "sequenceTabs.new": "New Sequence",

@@ -138,6 +138,25 @@ benchmarks). NFR §5 audit, acceptance evidence (1-hour soak: 20,069 iterations,
 accepted-posture notes are recorded on #221. Reference-machine benchmark gating remains deferred
 per PERFORMANCE.md §4 (CI benchmarks stay report-only).
 
+## M10 — Usable app shell *(started)*
+
+**Goal:** turn the proven editor engine into an ordinary macOS document app that a user can start
+with their own media instead of a developer sample.
+**Delivers:** project New/Open/Recent/Save/Save As/Revert, settings and first-clip auto-detection
+(FR-PROJ-001/002/003); video/audio/still and folder intake with native decode plus FFmpeg fallback
+(FR-MED-001/002/003); a searchable list/grid media browser (FR-MED-005); incremental cached
+thumbnails/waveforms (FR-MED-009); and visible variable-frame-rate detection/conform choices
+(FR-MED-010).
+**Work items:** #233 — project document lifecycle; #234, #235, and #236 — the remaining media
+intake, browser/preview, fallback/VFR, and usable-shell integration slices.
+**Exit:** launch offers New/Open; a user can create or reopen a package, safely save/revert it,
+import supported/fallback media without blocking the UI, inspect/search that media, and place it
+into a stable-timebase project with all keyboard/VoiceOver and recovery gates green.
+**Depends on:** M9.
+
+**Current status: STARTED.** #233 implements the project/document foundation; #234–#236 complete
+the first real-media path.
+
 ---
 
 ## Post-1.0 (v1.x / future)

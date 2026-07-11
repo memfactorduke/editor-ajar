@@ -10,8 +10,20 @@ import XCTest
 
 @MainActor
 final class EditorAjarAppModelTests: XCTestCase {
-    func testFRPLAY001SampleProjectLoadsFromAjarCoreModel() {
-        let model = EditorAjarAppModel()
+    func testFRPROJ001LaunchStartsAtNewOrOpenWithoutSampleProject() {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+
+        XCTAssertNil(model.project)
+        XCTAssertNil(model.documentURL)
+        XCTAssertFalse(model.isDocumentDirty)
+        XCTAssertFalse(model.canSaveProject)
+        XCTAssertEqual(model.documentDisplayName, "Editor Ajar")
+    }
+
+    func testFRPLAY001HelpSampleProjectLoadsFromAjarCoreModel() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+
+        try model.openSampleProject()
 
         XCTAssertNotNil(model.project)
         XCTAssertEqual(model.activeSequenceName, "Sample Playback Sequence")
@@ -29,7 +41,8 @@ final class EditorAjarAppModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: storeURL) }
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportPresetStoreURL: storeURL
+            exportPresetStoreURL: storeURL,
+            opensSampleProjectWhenNoRecovery: true
         )
 
         model.presentExportDialog()
@@ -61,7 +74,8 @@ final class EditorAjarAppModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: storeURL) }
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportPresetStoreURL: storeURL
+            exportPresetStoreURL: storeURL,
+            opensSampleProjectWhenNoRecovery: true
         )
         let frameRate = try FrameRate(frames: 30)
         let custom = ExportPreset(
@@ -83,7 +97,8 @@ final class EditorAjarAppModelTests: XCTestCase {
 
         let reloaded = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportPresetStoreURL: storeURL
+            exportPresetStoreURL: storeURL,
+            opensSampleProjectWhenNoRecovery: true
         )
         XCTAssertTrue(reloaded.exportDialog.availablePresets.contains { $0.id == custom.id })
         // Project package is untouched — custom presets never appear in project.json fields.
@@ -96,7 +111,8 @@ final class EditorAjarAppModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: storeURL) }
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportPresetStoreURL: storeURL
+            exportPresetStoreURL: storeURL,
+            opensSampleProjectWhenNoRecovery: true
         )
         model.presentExportDialog()
         model.setExportRangeChoice(.inOutMarks)
@@ -112,7 +128,8 @@ final class EditorAjarAppModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: storeURL) }
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportPresetStoreURL: storeURL
+            exportPresetStoreURL: storeURL,
+            opensSampleProjectWhenNoRecovery: true
         )
         let sequence = try XCTUnwrap(model.activeSequence)
         let frameRate = sequence.timebase
@@ -197,7 +214,8 @@ final class EditorAjarAppModelTests: XCTestCase {
 
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportPresetStoreURL: storeURL
+            exportPresetStoreURL: storeURL,
+            opensSampleProjectWhenNoRecovery: true
         )
         let frameRate = try FrameRate(frames: 30)
         let custom = ExportPreset(
@@ -221,13 +239,14 @@ final class EditorAjarAppModelTests: XCTestCase {
 
         let reloaded = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            exportPresetStoreURL: storeURL
+            exportPresetStoreURL: storeURL,
+            opensSampleProjectWhenNoRecovery: true
         )
         XCTAssertTrue(reloaded.exportDialog.availablePresets.contains { $0.id == custom.id })
     }
 
     func testFRPLAY001TransportTogglesPlaybackAndFrameStepPauses() {
-        let model = EditorAjarAppModel()
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
 
         XCTAssertFalse(model.isPlaying)
         model.togglePlayback()
@@ -246,7 +265,8 @@ final class EditorAjarAppModelTests: XCTestCase {
         let audioCoordinator = FakeAudioCoordinator()
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            audioCoordinator: audioCoordinator
+            audioCoordinator: audioCoordinator,
+            opensSampleProjectWhenNoRecovery: true
         )
 
         model.togglePlayback()
@@ -265,7 +285,8 @@ final class EditorAjarAppModelTests: XCTestCase {
         let audioCoordinator = FakeAudioCoordinator()
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
-            audioCoordinator: audioCoordinator
+            audioCoordinator: audioCoordinator,
+            opensSampleProjectWhenNoRecovery: true
         )
 
         model.scrub(to: 12)
@@ -351,7 +372,7 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL001TrackToggleRoutesThroughEditHistoryAndUndo() throws {
-        let model = EditorAjarAppModel()
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
         let sequence = try XCTUnwrap(model.activeSequence)
         let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
 
@@ -378,7 +399,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL012AppUndoRedoMenuTitlesAndAvailabilityReflectEditHistory() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let sequence = try XCTUnwrap(model.activeSequence)
         let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
         let originalProject = try XCTUnwrap(model.project)
@@ -424,7 +448,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL012LongAppUndoRedoSequenceRestoresExactProjectState() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let originalProject = try XCTUnwrap(model.project)
         let sequence = try XCTUnwrap(model.activeSequence)
         let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
@@ -480,7 +507,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL011SequenceTabsAddCloseAndUndoThroughEditHistory() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let originalProject = try XCTUnwrap(model.project)
         let originalSequenceID = try XCTUnwrap(model.activeSequenceID)
 
@@ -515,7 +545,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL011SequenceTabsRestorePerSequenceEditingContext() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let firstSequenceID = try XCTUnwrap(model.activeSequenceID)
         let firstVideoTrack = try XCTUnwrap(model.activeSequence?.videoTracks.first)
         let firstClipLayout = try XCTUnwrap(model.timelineClipLayouts(for: firstVideoTrack).first)
@@ -680,7 +713,7 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL006FRTL007FRTL010AppTimelineInteractionState() throws {
-        let model = EditorAjarAppModel()
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
         let sequence = try XCTUnwrap(model.activeSequence)
         let videoTrack = try XCTUnwrap(sequence.videoTracks.first)
         let clipLayout = try XCTUnwrap(model.timelineClipLayouts(for: videoTrack).first)
@@ -712,7 +745,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL009AppLinkedMoveAndMomentaryUnlinkRouteThroughEditHistory() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let selection = try sampleLinkedSelection(in: model)
 
         XCTAssertEqual(selection.videoClip.linkGroupID, selection.audioClip.linkGroupID)
@@ -756,7 +792,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL009AppTrimAndDetachAudioRouteThroughEditHistory() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let selection = try sampleLinkedSelection(in: model)
 
         model.selectClip(
@@ -798,7 +837,7 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTL008AppMarkerActionsRouteThroughEditHistoryAndUndo() throws {
-        let model = EditorAjarAppModel()
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
         let initialMarkerCount = model.activeSequence?.markers.count ?? 0
 
         model.scrub(to: 12)
@@ -837,7 +876,7 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRPLAY002AppJumpsBetweenMarkers() throws {
-        let model = EditorAjarAppModel()
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
 
         model.scrub(to: 10)
         model.addTimelineMarkerAtPlayhead()
@@ -864,7 +903,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRXFORM007TransformInspectorFieldsRouteThroughEditHistoryAndUndo() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         try selectSampleVideoClip(in: model)
         let originalProject = try XCTUnwrap(model.project)
 
@@ -882,7 +924,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRXFORM007BlendFlipAndCanvasGestureRouteThroughEditHistory() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         try selectSampleVideoClip(in: model)
 
         XCTAssertTrue(model.updateSelectedClipBlendMode(.screen))
@@ -1026,7 +1071,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRCOMP006TrackCompositingInspectorRoutesThroughEditHistoryAndUndo() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
 
         XCTAssertNil(model.selectedTrackCompositingInspector)
         XCTAssertFalse(model.updateSelectedTrackOpacityPercent(rawValue: "45"))
@@ -1064,7 +1112,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRKEY005TransformKeyframeToggleLaneMoveAndDeleteRouteThroughEditHistory() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         try selectSampleVideoClip(in: model)
         model.scrub(to: 10)
         let selectedTransformReference = try XCTUnwrap(model.selectedTransformClipReference)
@@ -1138,7 +1189,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTXT003CanvasTitleTextEditingIsLiveAndOneUndoStep() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let originalProject = try XCTUnwrap(model.project)
         let firstLayout = try XCTUnwrap(model.visibleCanvasTitleBoxes.first)
 
@@ -1165,7 +1219,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTXT003CanvasTitleDragSnapsAndArrowKeysNudge() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let firstLayout = try XCTUnwrap(model.visibleCanvasTitleBoxes.first)
         let actionSafeOrigin = CanvasTitlePositioning.draggedOrigin(
             for: firstLayout,
@@ -1220,7 +1277,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTXT003TabMovesEditingToTheNextCanvasTitleBox() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let layouts = model.visibleCanvasTitleBoxes
         XCTAssertEqual(layouts.count, 2)
         let first = try XCTUnwrap(layouts.first)
@@ -1239,7 +1299,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTXT003StaleEndCommitDoesNotClobberOtherBoxEditSession() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let layouts = model.visibleCanvasTitleBoxes
         XCTAssertEqual(layouts.count, 2)
         let first = try XCTUnwrap(layouts.first)
@@ -1262,7 +1325,10 @@ final class EditorAjarAppModelTests: XCTestCase {
     }
 
     func testFRTXT003SafeAreaGuidesNeverEnterProjectOrRenderedOutput() throws {
-        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
         let project = try XCTUnwrap(model.project)
         let sequence = try XCTUnwrap(model.activeSequence)
         let graphBefore = try buildRenderGraph(for: sequence, at: .zero, in: project)
@@ -1304,7 +1370,8 @@ final class EditorAjarAppModelTests: XCTestCase {
 
         let model = EditorAjarAppModel(
             autosavePackageURL: packageURL,
-            autosaveIntervalSeconds: 0
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
         )
 
         XCTAssertEqual(model.project, recoveredProject)
@@ -1406,7 +1473,8 @@ final class EditorAjarAppModelTests: XCTestCase {
 
         let model = EditorAjarAppModel(
             autosavePackageURL: packageURL,
-            autosaveIntervalSeconds: 0
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
         )
         let sequence = try XCTUnwrap(model.activeSequence)
         let videoTrack = try XCTUnwrap(sequence.videoTracks.first)

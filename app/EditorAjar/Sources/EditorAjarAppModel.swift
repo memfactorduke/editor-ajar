@@ -7,9 +7,52 @@ import Foundation
 import Metal
 import SwiftUI
 
+/// Typed state-machine refusals above the package I/O layer.
+enum EditorAjarDocumentLifecycleError: Error, Equatable {
+    /// Replacing the current document would discard unsaved user work.
+    case unsavedChanges
+
+    /// The requested operation needs an open project.
+    case noProject
+
+    /// Plain Save was requested for an untitled project; the UI should present Save As.
+    case documentHasNoURL
+
+    /// A save path was requested for a newer-minor read-only open.
+    case projectOpenedReadOnly(AjarProjectReadOnlyReason)
+}
+
+/// Typed reasons a requested media import did not start.
+enum EditorAjarMediaImportError: Error, Equatable {
+    case noProject
+    case projectReadOnly
+    case importInProgress
+    case emptySelection
+}
+
+/// User-facing context for localized document errors.
+enum EditorAjarDocumentOperation {
+    case create
+    case open
+    case save
+    case revert
+    case sample
+}
+
 @MainActor
 final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var project: Project?
+    /// User-visible `.ajar` package currently represented by the window.
+    @Published private(set) var documentURL: URL?
+    /// Native window edited-state source, derived from the last explicit save baseline.
+    @Published private(set) var isDocumentDirty = false
+    /// App-side recent project list (never persisted inside project packages).
+    @Published private(set) var recentProjectURLs: [URL] = []
+    /// New-project settings sheet state (FR-PROJ-003).
+    @Published private(set) var isNewProjectSheetPresented = false
+    @Published var newProjectSettings = EditorAjarNewProjectSettings.sensibleDefaults
+    /// Localized document-operation failure shown by the root view.
+    @Published private(set) var documentErrorMessage: String?
     @Published private(set) var isPlaying = false
     @Published private(set) var playheadFrame: Int64 = 0
     @Published private(set) var durationFrames: Int64 = 1
@@ -55,6 +98,9 @@ final class EditorAjarAppModel: ObservableObject {
     /// Whether the categorized import summary sheet is visible.
     @Published private(set) var isMediaImportSummaryPresented = false
 
+    /// Most recent programmatic import refusal, cleared when a batch starts.
+    @Published private(set) var mediaImportError: EditorAjarMediaImportError?
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
@@ -64,6 +110,11 @@ final class EditorAjarAppModel: ObservableObject {
     private let audioCoordinator: (any EditorAjarAudioCoordinating)?
     private let exportPresetStore: EditorAjarExportPresetStore
     private let mediaImportPipeline: MediaImportPipeline
+    private let documentStore: EditorAjarDocumentStore
+    private let recentProjectsStore: EditorAjarRecentProjectsStore
+    private var savedProjectBaseline: Project?
+    private var unsavedDocumentName: String?
+    private var documentSecurityScope: EditorAjarSecurityScopedAccess?
     /// Package root for `caches/proxies/` resolution and proxy writes (FR-MED-004).
     private var projectPackageRootURL: URL?
     /// Dedicated proxy-generation queue (not the user export queue).
@@ -81,6 +132,8 @@ final class EditorAjarAppModel: ObservableObject {
     private var canvasTitleEditingUndoBaseline: Int?
     /// Surfaces the read-only edit refusal message once per session (not per-command spam).
     private var hasSurfacedReadOnlyEditRefusal = false
+    /// One-shot authorization set only after the user confirms Discard in native document chrome.
+    private var mayDiscardChangesForNextReplacement = false
 
     init(
         autosavePackageURL: URL? = nil,
@@ -88,10 +141,13 @@ final class EditorAjarAppModel: ObservableObject {
         audioCoordinator: (any EditorAjarAudioCoordinating)? = nil,
         exportPresetStoreURL: URL? = nil,
         exportQueueController: EditorAjarExportQueueController? = nil,
-        mediaImportPipeline: MediaImportPipeline? = nil
+        mediaImportPipeline: MediaImportPipeline? = nil,
+        documentStore: EditorAjarDocumentStore = EditorAjarDocumentStore(),
+        recentProjectsUserDefaults: UserDefaults = .standard,
+        recentProjectsStorageKey: String = "document.recentProjects",
+        opensSampleProjectWhenNoRecovery: Bool = false
     ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
-        projectPackageRootURL = autosavePackageURL
         if let autosavePackageURL {
             autosaveCoordinator = EditorAjarAutosaveCoordinator(packageURL: autosavePackageURL)
         } else {
@@ -101,21 +157,32 @@ final class EditorAjarAppModel: ObservableObject {
         exportPresetStore = EditorAjarExportPresetStore(
             fileURL: exportPresetStoreURL ?? EditorAjarExportPresetStore.defaultFileURL()
         )
+        self.documentStore = documentStore
+        recentProjectsStore = EditorAjarRecentProjectsStore(
+            userDefaults: recentProjectsUserDefaults,
+            storageKey: recentProjectsStorageKey
+        )
+        recentProjectURLs = recentProjectsStore.load()
         self.exportQueueController = exportQueueController ?? EditorAjarExportQueueController()
         self.mediaImportPipeline = mediaImportPipeline ?? MediaImportPipeline()
         proxyGenerationQueue = ProxyGenerationQueue(
             sessionFactory: Self.makeProxySessionFactory()
         )
 
-        loadMessage = AppString.localized("status.loadingSampleProject", "Loading sample project")
+        loadMessage = AppString.localized(
+            "status.noProject",
+            "Create a new project or open an existing project"
+        )
 
         var initialLoadResult: AjarProjectLoadResult?
+        var initialLoadIsSampleFixture = false
         if let autosavePackageURL,
            AjarAutosaveStore.hasRecoverableSnapshot(at: autosavePackageURL)
         {
             do {
                 let recovery = try AjarAutosaveStore.recoverProject(from: autosavePackageURL)
                 initialLoadResult = recovery.loadResult
+                projectPackageRootURL = autosavePackageURL
                 autosaveCommandCount = recovery.latestCommandCount
                 let recoveryPrefix = recovery.isComplete
                     ? AppString.localized("status.recoveredAutosave", "Recovered autosave")
@@ -136,15 +203,22 @@ final class EditorAjarAppModel: ObservableObject {
             }
         }
 
-        if initialLoadResult == nil {
+        // Explicit test fixture only. Production launch never opts in; Help uses openSampleProject().
+        if initialLoadResult == nil, opensSampleProjectWhenNoRecovery {
             switch Self.makeSampleProject() {
             case .success(let sampleProject):
                 initialLoadResult = .editable(sampleProject)
+                initialLoadIsSampleFixture = true
                 loadMessage = AppString.localized(
-                    "status.sampleProjectLoaded", "Sample project loaded"
+                    "status.sampleProjectLoaded",
+                    "Sample project loaded"
                 )
             case .failure(let error):
-                loadMessage = "Sample project unavailable: \(error)"
+                let detail = String(describing: error)
+                loadMessage = AppString.localized(
+                    "document.error.sample",
+                    "Could not open the sample project: \(detail)"
+                )
             }
         }
 
@@ -152,6 +226,22 @@ final class EditorAjarAppModel: ObservableObject {
             project = initialLoadResult.project
             projectOpenMode = initialLoadResult.openMode
             editHistory = EditHistory(loadResult: initialLoadResult)
+            if initialLoadIsSampleFixture {
+                savedProjectBaseline = initialLoadResult.project
+                unsavedDocumentName = AppString.localized(
+                    "document.sample.name",
+                    "Sample Project"
+                )
+                isDocumentDirty = false
+            } else {
+                // Recovery has no explicit saved-document baseline: retain it as unsaved work.
+                savedProjectBaseline = nil
+                unsavedDocumentName = AppString.localized(
+                    "document.recovered.name",
+                    "Recovered Project"
+                )
+                isDocumentDirty = initialLoadResult.openMode.allowsEditing
+            }
             if case .readOnly = initialLoadResult.openMode {
                 isReadOnlyBannerVisible = true
             }
@@ -171,14 +261,6 @@ final class EditorAjarAppModel: ObservableObject {
         do {
             renderPipeline = try EditorAjarRenderPipeline()
             bindRenderPackageRoot()
-            if project != nil,
-                loadMessage == AppString.localized(
-                    "status.loadingSampleProject", "Loading sample project"
-                ) {
-                loadMessage = AppString.localized(
-                    "status.sampleProjectLoaded", "Sample project loaded"
-                )
-            }
         } catch {
             loadMessage = "Metal playback unavailable: \(error)"
         }
@@ -197,6 +279,244 @@ final class EditorAjarAppModel: ObservableObject {
         if let initialLoadResult {
             startMediaResolution(for: initialLoadResult)
         }
+    }
+
+    // MARK: - Project document lifecycle (FR-PROJ-001/002/003)
+
+    /// Display name used by the native window title bridge.
+    var documentDisplayName: String {
+        if let documentURL {
+            return documentURL.deletingPathExtension().lastPathComponent
+        }
+        if project != nil {
+            return unsavedDocumentName
+                ?? AppString.localized("document.untitled", "Untitled")
+        }
+        return AppString.localized("app.name", "Editor Ajar")
+    }
+
+    /// Whether Save As is available for this session.
+    var canSaveProjectAs: Bool {
+        project != nil && projectOpenMode.allowsEditing
+    }
+
+    /// Whether Revert can discard edits back to an on-disk package.
+    var canRevertProject: Bool {
+        documentURL != nil && isDocumentDirty
+    }
+
+    /// Presents the FR-PROJ-003 settings sheet with sensible defaults.
+    func presentNewProjectSheet() {
+        newProjectSettings = .sensibleDefaults
+        isNewProjectSheetPresented = true
+    }
+
+    /// Cancels the New Project sheet without changing the current document.
+    func dismissNewProjectSheet() {
+        isNewProjectSheetPresented = false
+        mayDiscardChangesForNextReplacement = false
+    }
+
+    /// Allows exactly one New/Open/Sample transition to replace dirty work after confirmation.
+    func authorizeDiscardForNextDocumentReplacement() {
+        mayDiscardChangesForNextReplacement = true
+    }
+
+    /// Clears a pending authorization when a file panel or settings sheet is cancelled.
+    func cancelDocumentReplacementAuthorization() {
+        mayDiscardChangesForNextReplacement = false
+    }
+
+    /// Records an explicit Discard choice made while closing the window or quitting.
+    ///
+    /// Making the live state clean queues removal of the app-level crash-recovery package. Quit
+    /// waits for that queue below, so deliberately discarded work is not offered again at launch.
+    func discardUnsavedChangesForClosing() {
+        guard let project else {
+            return
+        }
+        savedProjectBaseline = project
+        refreshDirtyState()
+        resetAutosaveForInstalledProject()
+    }
+
+    /// Waits for the latest queued recovery write/removal before the process terminates.
+    func finishPendingDocumentWrites() async {
+        await autosaveWriteTask?.value
+    }
+
+    /// Creates an untitled project from the settings sheet.
+    func createNewProject(settings: EditorAjarNewProjectSettings) throws {
+        try refuseReplacementWhenDirty()
+        let newProject = try EditorAjarNewProjectFactory.makeProject(settings: settings)
+        installProjectSession(
+            .editable(newProject),
+            documentURL: nil,
+            savedBaseline: nil,
+            unsavedName: AppString.localized("document.untitled", "Untitled")
+        )
+        isNewProjectSheetPresented = false
+        loadMessage = AppString.localized("status.newProjectCreated", "New project created")
+        resetAutosaveForInstalledProject()
+    }
+
+    /// #234 import seam for FR-PROJ-003 auto-detection from the first media item.
+    ///
+    /// The importer should call this before committing its first `MediaRef`, then apply the
+    /// returned settings together with that import edit. Returning `nil` once media already exists
+    /// makes the first-clip-only policy explicit without adding persisted lifecycle flags.
+    func autoDetectedSettingsForFirstImportedMedia(
+        _ media: MediaRef,
+        detectedAudioSampleRate: Int? = nil
+    ) -> ProjectSettings? {
+        guard let project, project.mediaPool.isEmpty else {
+            return nil
+        }
+        return EditorAjarFirstClipSettingsDetector.detectedSettings(
+            from: media,
+            current: project.settings,
+            detectedAudioSampleRate: detectedAudioSampleRate
+        )
+    }
+
+    /// Opens a user-selected package through recovery + existing read-only open machinery.
+    func openProject(at url: URL) throws {
+        try refuseReplacementWhenDirty()
+        let standardizedURL = url.standardizedFileURL
+        let scope = EditorAjarSecurityScopedAccess(url: standardizedURL)
+        let opened = try documentStore.open(at: standardizedURL)
+        installProjectSession(
+            opened.loadResult,
+            documentURL: standardizedURL,
+            savedBaseline: opened.savedBaseline,
+            unsavedName: nil
+        )
+        documentSecurityScope = scope
+        recentProjectURLs = recentProjectsStore.record(standardizedURL)
+        loadMessage = opened.recoveryIssues.isEmpty
+            ? AppString.localized(
+                "status.projectOpened",
+                "Opened \(standardizedURL.deletingPathExtension().lastPathComponent)"
+            )
+            : AppString.localized(
+                "status.projectOpenedWithRecovery",
+                "Opened project at the last recoverable edit"
+            )
+        resetAutosaveForInstalledProject()
+    }
+
+    /// Opens a recent item, removing an entry that can no longer be opened.
+    func openRecentProject(at url: URL) throws {
+        do {
+            try openProject(at: url)
+        } catch {
+            recentProjectURLs = recentProjectsStore.remove(url)
+            throw error
+        }
+    }
+
+    /// Explicit Help-menu sample path. Normal launch intentionally stays at New/Open.
+    func openSampleProject() throws {
+        try refuseReplacementWhenDirty()
+        let sampleProject = try Self.makeSampleProject().get()
+        installProjectSession(
+            .editable(sampleProject),
+            documentURL: nil,
+            savedBaseline: sampleProject,
+            unsavedName: AppString.localized("document.sample.name", "Sample Project")
+        )
+        loadMessage = AppString.localized("status.sampleProjectLoaded", "Sample project loaded")
+        resetAutosaveForInstalledProject()
+    }
+
+    /// Saves over the represented package using canonical codec + atomic write APIs.
+    func saveProject() throws {
+        guard let project else {
+            throw EditorAjarDocumentLifecycleError.noProject
+        }
+        guard let documentURL else {
+            throw EditorAjarDocumentLifecycleError.documentHasNoURL
+        }
+        try requireEditableSaveMode()
+        try documentStore.save(
+            project: project,
+            openMode: projectOpenMode,
+            appliedCommandCount: autosaveCommandCount,
+            to: documentURL
+        )
+        didSave(project: project, at: documentURL)
+    }
+
+    /// Saves to a new package, cloning non-identity sidecars from the current package first.
+    func saveProjectAs(to destinationURL: URL) throws {
+        guard let project else {
+            throw EditorAjarDocumentLifecycleError.noProject
+        }
+        try requireEditableSaveMode()
+        let standardizedURL = destinationURL.standardizedFileURL
+        let newScope = EditorAjarSecurityScopedAccess(url: standardizedURL)
+        try documentStore.saveAs(
+            project: project,
+            openMode: projectOpenMode,
+            appliedCommandCount: autosaveCommandCount,
+            sourceURL: documentURL,
+            destinationURL: standardizedURL
+        )
+        documentSecurityScope = newScope
+        didSave(project: project, at: standardizedURL)
+    }
+
+    /// Discards unsaved edits and reloads only the explicit saved bytes (no journal replay).
+    func revertProject() throws {
+        guard let documentURL else {
+            throw EditorAjarDocumentLifecycleError.documentHasNoURL
+        }
+        let loadResult = try documentStore.revert(at: documentURL)
+        installProjectSession(
+            loadResult,
+            documentURL: documentURL,
+            savedBaseline: loadResult.project,
+            unsavedName: nil
+        )
+        loadMessage = AppString.localized("status.projectReverted", "Reverted to saved project")
+        resetAutosaveForInstalledProject()
+    }
+
+    /// Localizes a typed lifecycle/store failure for the root alert.
+    func presentDocumentError(_ error: Error, operation: EditorAjarDocumentOperation) {
+        let detail = localizedDocumentErrorDetail(error)
+        switch operation {
+        case .create:
+            documentErrorMessage = AppString.localized(
+                "document.error.create",
+                "Could not create the project: \(detail)"
+            )
+        case .open:
+            documentErrorMessage = AppString.localized(
+                "document.error.open",
+                "Could not open the project: \(detail)"
+            )
+        case .save:
+            documentErrorMessage = AppString.localized(
+                "document.error.save",
+                "Could not save the project: \(detail)"
+            )
+        case .revert:
+            documentErrorMessage = AppString.localized(
+                "document.error.revert",
+                "Could not revert the project: \(detail)"
+            )
+        case .sample:
+            documentErrorMessage = AppString.localized(
+                "document.error.sample",
+                "Could not open the sample project: \(detail)"
+            )
+        }
+    }
+
+    /// Dismisses the document-operation alert.
+    func dismissDocumentError() {
+        documentErrorMessage = nil
     }
 
     // MARK: - Export dialog (FR-EXP-003 / FR-EXP-004)
@@ -453,12 +773,24 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func beginMediaImport(_ urls: [URL]) -> Bool {
-        guard !urls.isEmpty, canImportMedia else {
-            if isProjectReadOnly {
-                presentReadOnlyBannerIfNeeded()
-            }
+        if urls.isEmpty {
+            refuseMediaImport(.emptySelection)
             return false
         }
+        guard project != nil else {
+            refuseMediaImport(.noProject)
+            return false
+        }
+        guard projectOpenMode.allowsEditing else {
+            refuseMediaImport(.projectReadOnly)
+            presentReadOnlyBannerIfNeeded()
+            return false
+        }
+        guard !isImportingMedia else {
+            refuseMediaImport(.importInProgress)
+            return false
+        }
+        mediaImportError = nil
         isMediaImportPickerPresented = false
         isMediaImportSummaryPresented = false
         isImportingMedia = true
@@ -468,6 +800,33 @@ final class EditorAjarAppModel: ObservableObject {
             totalUnitCount: 0
         )
         return true
+    }
+
+    /// Keeps non-UI callers honest: a rejected import publishes a typed reason and visible status.
+    private func refuseMediaImport(_ error: EditorAjarMediaImportError) {
+        mediaImportError = error
+        switch error {
+        case .noProject:
+            loadMessage = AppString.localized(
+                "import.status.noProject",
+                "Create or open a project before importing media."
+            )
+        case .projectReadOnly:
+            loadMessage = AppString.localized(
+                "import.status.readOnly",
+                "Media cannot be imported into a read-only project."
+            )
+        case .importInProgress:
+            loadMessage = AppString.localized(
+                "import.status.inProgress",
+                "A media import is already in progress."
+            )
+        case .emptySelection:
+            loadMessage = AppString.localized(
+                "import.status.emptySelection",
+                "No media was selected for import."
+            )
+        }
     }
 
     private func performMediaImport(_ urls: [URL]) async {
@@ -486,6 +845,20 @@ final class EditorAjarAppModel: ObservableObject {
         }
 
         var summary = batch.summary
+        let detectedFirstMediaSettings: ProjectSettings?
+        if existingMedia.isEmpty,
+           let currentSettings = project?.settings,
+           let defaultSettings = try? EditorAjarNewProjectSettings.sensibleDefaults
+               .makeProjectSettings(),
+           currentSettings == defaultSettings,
+           let firstImportedMedia = summary.imported.first?.mediaReference
+        {
+            detectedFirstMediaSettings = autoDetectedSettingsForFirstImportedMedia(
+                firstImportedMedia
+            )
+        } else {
+            detectedFirstMediaSettings = nil
+        }
         if let command = batch.command, !applyEdit(command) {
             summary = Self.projectUpdateFailureSummary(from: batch.summary)
             loadMessage = AppString.localized(
@@ -493,6 +866,9 @@ final class EditorAjarAppModel: ObservableObject {
                 "Imported media could not be added to the project."
             )
         } else {
+            if let detectedFirstMediaSettings {
+                _ = applyEdit(.setProjectSettings(detectedFirstMediaSettings))
+            }
             let importedCount = summary.imported.count
             let skippedCount = summary.skippedDuplicates.count
             let failedCount = summary.failed.count
@@ -612,10 +988,12 @@ final class EditorAjarAppModel: ObservableObject {
         if var history = editHistory, projectOpenMode.allowsEditing {
             self.project = history.replaceCurrentProjectPreservingHistory(updated)
             editHistory = history
+            refreshDirtyState()
             scheduleAutosaveCheckpoint(project: updated)
         } else {
             // Session-local flip under read-only open (no package rewrite).
             self.project = updated
+            refreshDirtyState()
         }
         loadMessage = next
             ? AppString.localized("status.proxyPlaybackOn", "Proxy playback on")
@@ -2034,6 +2412,200 @@ final class EditorAjarAppModel: ObservableObject {
         }
     }
 
+    private func refuseReplacementWhenDirty() throws {
+        if isDocumentDirty, !mayDiscardChangesForNextReplacement {
+            throw EditorAjarDocumentLifecycleError.unsavedChanges
+        }
+        mayDiscardChangesForNextReplacement = false
+    }
+
+    private func requireEditableSaveMode() throws {
+        if case .readOnly(let reason) = projectOpenMode {
+            throw EditorAjarDocumentLifecycleError.projectOpenedReadOnly(reason)
+        }
+    }
+
+    /// Turns typed lifecycle failures into localized, ordinary-language details.
+    ///
+    /// Raw enum descriptions can contain implementation case names and full filesystem paths.
+    /// Those are useful to developers but inappropriate in a document alert.
+    private func localizedDocumentErrorDetail(_ error: Error) -> String {
+        if let lifecycleError = error as? EditorAjarDocumentLifecycleError {
+            switch lifecycleError {
+            case .unsavedChanges:
+                return AppString.localized(
+                    "document.error.detail.unsavedChanges",
+                    "The current project has unsaved changes."
+                )
+            case .noProject:
+                return AppString.localized(
+                    "document.error.detail.noProject",
+                    "No project is open."
+                )
+            case .documentHasNoURL:
+                return AppString.localized(
+                    "document.error.detail.noURL",
+                    "Choose a name and location for the project first."
+                )
+            case .projectOpenedReadOnly(let reason):
+                switch reason {
+                case .newerSchemaMinor(let found, let supported):
+                    return AppString.localized(
+                        "document.error.detail.readOnlyNewerMinor",
+                        "Format \(found) is newer than supported format \(supported). Saving is unavailable."
+                    )
+                }
+            }
+        }
+
+        if let storeError = error as? EditorAjarDocumentStoreError {
+            switch storeError {
+            case .invalidPackageExtension:
+                return AppString.localized(
+                    "document.error.detail.invalidExtension",
+                    "Choose an Editor Ajar project ending in .ajar."
+                )
+            case .packageNotFound:
+                return AppString.localized(
+                    "document.error.detail.notFound",
+                    "The selected project could not be found."
+                )
+            case .packageIsNotDirectory:
+                return AppString.localized(
+                    "document.error.detail.notPackage",
+                    "The selected .ajar item is not a project package."
+                )
+            case .codec:
+                return AppString.localized(
+                    "document.error.detail.codec",
+                    "The project data is damaged or uses an unsupported format."
+                )
+            case .persistence:
+                return AppString.localized(
+                    "document.error.detail.persistence",
+                    "The project package could not be read or written safely."
+                )
+            case .fileOperation(let path, _):
+                return AppString.localized(
+                    "document.error.detail.fileOperation",
+                    "A file operation failed for \(URL(fileURLWithPath: path).lastPathComponent)."
+                )
+            }
+        }
+
+        return AppString.localized(
+            "document.error.detail.unknown",
+            "An unexpected error occurred."
+        )
+    }
+
+    private func didSave(project: Project, at url: URL) {
+        documentURL = url.standardizedFileURL
+        projectPackageRootURL = documentURL
+        savedProjectBaseline = project
+        unsavedDocumentName = nil
+        refreshDirtyState()
+        bindRenderPackageRoot()
+        recentProjectURLs = recentProjectsStore.record(url)
+        loadMessage = AppString.localized(
+            "status.projectSaved",
+            "Saved \(url.deletingPathExtension().lastPathComponent)"
+        )
+        resetAutosaveForInstalledProject()
+    }
+
+    /// Single installation boundary for recovery, New, Open, Revert, and the Help sample.
+    private func installProjectSession(
+        _ loadResult: AjarProjectLoadResult,
+        documentURL: URL?,
+        savedBaseline: Project?,
+        unsavedName: String?
+    ) {
+        displayLinkDriver?.stop()
+        audioCoordinator?.stop()
+        mediaResolutionTask?.cancel()
+        renderGeneration += 1
+        isPlaying = false
+        project = loadResult.project
+        projectOpenMode = loadResult.openMode
+        editHistory = EditHistory(loadResult: loadResult)
+        self.documentURL = documentURL
+        if documentURL == nil {
+            documentSecurityScope = nil
+        }
+        savedProjectBaseline = savedBaseline
+        unsavedDocumentName = unsavedName
+        projectPackageRootURL = documentURL
+        autosaveCommandCount = 0
+        sequenceContexts = [:]
+        timelineState = TimelineInteractionState()
+        activeSequenceID = nil
+        selectedCanvasTitleBoxReference = nil
+        editingCanvasTitleBoxReference = nil
+        copiedGradeSource = nil
+        canvasTitleEditingUndoBaseline = nil
+        hasSurfacedReadOnlyEditRefusal = false
+        isReadOnlyBannerVisible = !loadResult.openMode.allowsEditing
+
+        if let sequence = loadResult.project.sequences.first {
+            activeSequenceID = sequence.id
+            durationFrames = Self.durationFrames(for: sequence)
+            playheadFrame = 0
+            playbackController = EditorAjarPlaybackController(
+                frameRate: sequence.timebase,
+                durationFrames: durationFrames
+            )
+            persistActiveSequenceContext()
+        } else {
+            durationFrames = 1
+            playheadFrame = 0
+            playbackController = nil
+            presentedTexture = nil
+        }
+
+        refreshDirtyState()
+        bindRenderPackageRoot()
+        startAutosaveLoop()
+        requestRenderForCurrentFrame()
+        startMediaResolution(for: loadResult)
+    }
+
+    private func refreshDirtyState() {
+        guard projectOpenMode.allowsEditing, let project else {
+            isDocumentDirty = false
+            return
+        }
+        if let savedProjectBaseline {
+            isDocumentDirty = project != savedProjectBaseline
+        } else {
+            // New/recovered documents have user work but no explicit saved baseline yet.
+            isDocumentDirty = true
+        }
+    }
+
+    private func resetAutosaveForInstalledProject() {
+        guard let autosaveCoordinator, let project else {
+            return
+        }
+        let openMode = projectOpenMode
+        let shouldPersistRecovery = isDocumentDirty && openMode.allowsEditing
+        let previousWriteTask = autosaveWriteTask
+        autosaveWriteTask = Task {
+            [weak self, autosaveCoordinator, openMode, project, shouldPersistRecovery] in
+            await previousWriteTask?.value
+            let message = await autosaveCoordinator.resetSession(
+                project: project,
+                openMode: openMode,
+                shouldPersistRecovery: shouldPersistRecovery
+            )
+            await MainActor.run {
+                if let message {
+                    self?.loadMessage = message
+                }
+            }
+        }
+    }
+
     static func makeSampleProject() -> Result<Project, Error> {
         do {
             return .success(try EditorAjarSampleProjectFactory.makeSampleProject())
@@ -2221,7 +2793,7 @@ final class EditorAjarAppModel: ObservableObject {
                 resolved: resolvedMedia
             )
             editHistory = history
-            project = mergedProject
+            updateProject(mergedProject)
             if projectOpenMode.allowsEditing {
                 scheduleAutosaveCheckpoint(project: mergedProject)
             }
@@ -2462,6 +3034,7 @@ final class EditorAjarAppModel: ObservableObject {
     private func updateProject(_ project: Project) {
         persistActiveSequenceContext()
         self.project = project
+        refreshDirtyState()
         bindRenderPackageRoot()
         let sequenceIDs = Set(project.sequences.map(\.id))
         sequenceContexts = sequenceContexts.filter { sequenceIDs.contains($0.key) }
@@ -2684,11 +3257,13 @@ final class EditorAjarAppModel: ObservableObject {
         if var history = editHistory {
             self.project = history.replaceCurrentProjectPreservingHistory(updated)
             editHistory = history
+            refreshDirtyState()
             if projectOpenMode.allowsEditing {
                 scheduleAutosaveCheckpoint(project: updated)
             }
         } else {
             self.project = updated
+            refreshDirtyState()
         }
     }
 
@@ -2749,6 +3324,8 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func startAutosaveLoop() {
+        autosaveLoopTask?.cancel()
+        autosaveLoopTask = nil
         guard autosaveCoordinator != nil,
               autosaveIntervalSeconds.isFinite,
               autosaveIntervalSeconds > 0,
@@ -2805,6 +3382,11 @@ final class EditorAjarAppModel: ObservableObject {
             return
         }
 
+        guard isDocumentDirty else {
+            resetAutosaveForInstalledProject()
+            return
+        }
+
         let openMode = projectOpenMode
         let commandCount = autosaveCommandCount
         let previousWriteTask = autosaveWriteTask
@@ -2825,7 +3407,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func autosaveCurrentProject() {
-        guard let project, projectOpenMode.allowsEditing else {
+        guard let project, projectOpenMode.allowsEditing, isDocumentDirty else {
             return
         }
         scheduleAutosaveCheckpoint(project: project)
@@ -2834,7 +3416,8 @@ final class EditorAjarAppModel: ObservableObject {
     private func autosaveCurrentProjectAndWait() async {
         guard let project,
               let autosaveCoordinator,
-              projectOpenMode.allowsEditing
+              projectOpenMode.allowsEditing,
+              isDocumentDirty
         else {
             return
         }
@@ -2858,6 +3441,36 @@ private actor EditorAjarAutosaveCoordinator {
         self.packageURL = packageURL
     }
 
+    /// Starts recovery state for a newly installed app document.
+    ///
+    /// Dirty editable sessions replace both checkpoint and journal. Clean/read-only sessions
+    /// remove stale recovery so the next normal launch stays at New/Open.
+    func resetSession(
+        project: Project,
+        openMode: AjarProjectOpenMode,
+        shouldPersistRecovery: Bool
+    ) -> String? {
+        do {
+            if shouldPersistRecovery, openMode.allowsEditing {
+                try AjarAutosaveStore.writeSnapshot(
+                    project,
+                    appliedCommandCount: 0,
+                    openMode: openMode,
+                    to: packageURL
+                )
+                try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
+            } else {
+                if FileManager.default.fileExists(atPath: packageURL.path) {
+                    try FileManager.default.removeItem(at: packageURL)
+                }
+            }
+            return nil
+        } catch {
+            let detail = String(describing: error)
+            return AppString.localized("status.autosaveFailed", "Autosave failed: \(detail)")
+        }
+    }
+
     func recordSignificantEdit(
         command: EditCommand,
         sequenceNumber: Int,
@@ -2878,7 +3491,8 @@ private actor EditorAjarAutosaveCoordinator {
             )
             return nil
         } catch {
-            return "Autosave failed: \(error)"
+            let detail = String(describing: error)
+            return AppString.localized("status.autosaveFailed", "Autosave failed: \(detail)")
         }
     }
 
@@ -2896,7 +3510,8 @@ private actor EditorAjarAutosaveCoordinator {
             )
             return nil
         } catch {
-            return "Autosave failed: \(error)"
+            let detail = String(describing: error)
+            return AppString.localized("status.autosaveFailed", "Autosave failed: \(detail)")
         }
     }
 }

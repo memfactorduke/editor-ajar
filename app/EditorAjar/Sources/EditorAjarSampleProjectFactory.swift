@@ -8,20 +8,42 @@ import Foundation
 enum EditorAjarSampleProjectFactory {
     static let sampleToneCodecID = "editor-ajar-sample-tone"
 
+    private static let sampleWidth = 320
+    private static let sampleHeight = 180
+    private static let sampleFrameCount: Int64 = 90
+    private static let sampleFramesPerSecond: Int64 = 30
+
+    /// Sample movie bytes are written exactly once per process, then treated as immutable.
+    ///
+    /// Rewriting on every call deleted the file out from under `AVAssetReader`s belonging to
+    /// previously created app models (each render decodes this movie). MediaToolbox blocks
+    /// `copyNextSampleBuffer` indefinitely when its file is replaced mid-read, and enough wedged
+    /// readers exhaust the Swift cooperative thread pool — deadlocking any later actor hop
+    /// (observed as a test-suite hang; NFR-STAB-001). The pixel content is deterministic, so a
+    /// single write per process serves every subsequent open identically.
+    private static let sampleMovieWriteResult: Result<URL, Error> = {
+        do {
+            let url = try sampleMovieURL()
+            try writeMovie(
+                to: url,
+                width: sampleWidth,
+                height: sampleHeight,
+                frameCount: Int(sampleFrameCount),
+                frameRate: Int32(sampleFramesPerSecond)
+            )
+            return .success(url)
+        } catch {
+            return .failure(error)
+        }
+    }()
+
     static func makeSampleProject() throws -> Project {
-        let frameRate = try FrameRate(frames: 30)
-        let width = 320
-        let height = 180
-        let frameCount: Int64 = 90
-        let mediaURL = try sampleMovieURL()
+        let frameRate = try FrameRate(frames: sampleFramesPerSecond)
+        let width = sampleWidth
+        let height = sampleHeight
+        let frameCount = sampleFrameCount
+        let mediaURL = try sampleMovieWriteResult.get()
         let audioURL = try sampleToneURL()
-        try writeMovie(
-            to: mediaURL,
-            width: width,
-            height: height,
-            frameCount: Int(frameCount),
-            frameRate: Int32(frameRate.frames)
-        )
 
         let duration = try frameRate.duration(ofFrames: frameCount)
         // Canvas title occupies the head of V2 so FR-TXT-003 is visible at playhead 0.
