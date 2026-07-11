@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- docs(ADR): v1 scope deferrals (#247).
+
 - FR-MED-005/009 real media browser (#235): searchable/filterable list and grid media-pool
   views with complete metadata, selection, offline and durable proxy state/actions, cancellable
   hover-scrub previews, single-file relink, and undoable drag-to-timeline insertion. Video
