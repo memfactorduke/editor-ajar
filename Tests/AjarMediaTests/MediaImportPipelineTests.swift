@@ -36,6 +36,10 @@ final class MediaImportPipelineTests: XCTestCase {
             TestImportBookmarkStore.bookmark(for: fixtureURL)
         )
         XCTAssertEqual(item.mediaReference.metadata.codecID, "png")
+        XCTAssertEqual(
+            item.mediaReference.metadata.duration,
+            try StillMediaDefaults.sourceExtentDuration()
+        )
         XCTAssertGreaterThan(item.mediaReference.metadata.pixelDimensions?.width ?? 0, 0)
         XCTAssertGreaterThan(item.mediaReference.metadata.pixelDimensions?.height ?? 0, 0)
         XCTAssertFalse(item.mediaReference.metadata.isVariableFrameRate)

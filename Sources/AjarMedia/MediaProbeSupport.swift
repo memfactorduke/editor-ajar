@@ -140,6 +140,23 @@ extension AVFoundationMediaProbe {
         return value as? Int
     }
 
+    /// Display dimensions after applying EXIF orientation (swap for 90°/270° tags).
+    func orientedStillDimensions(width: Int, height: Int, orientation: Int?) -> (
+        width: Int,
+        height: Int
+    ) {
+        guard let orientation else {
+            return (width, height)
+        }
+        // CGImagePropertyOrientation: 5–8 are 90°/270° (with or without mirror).
+        switch orientation {
+        case 5, 6, 7, 8:
+            return (height, width)
+        default:
+            return (width, height)
+        }
+    }
+
     func stillCodecID(for url: URL, source: CGImageSource) -> String {
         switch url.pathExtension.lowercased() {
         case "jpg", "jpeg":
@@ -274,6 +291,7 @@ struct VideoFacts {
 struct AudioFacts {
     let codecID: String
     let layout: AjarCore.AudioChannelLayout?
+    let sampleRate: Int?
 }
 
 struct VideoTimingFacts {

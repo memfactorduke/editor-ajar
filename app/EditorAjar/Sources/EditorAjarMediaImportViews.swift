@@ -178,10 +178,18 @@ struct EditorAjarMediaImportSummaryView: View {
         } else {
             dimensions = AppString.localized("import.summary.audioOnly", "audio only")
         }
-        return AppString.localized(
+        let base = AppString.localized(
             "import.summary.imported.detail",
             "\(reference.metadata.codecID), \(dimensions)"
         )
+        // Animated GIFs decode/import first frame only (see StillImageFrameDecoder / MediaProbe).
+        if reference.metadata.codecID.lowercased() == "gif" {
+            return AppString.localized(
+                "import.summary.imported.gifFirstFrame",
+                "\(base); animated GIF — first frame only"
+            )
+        }
+        return base
     }
 }
 

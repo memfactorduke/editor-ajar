@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- FR-MED-002 / FR-PROJ-003 / FR-MED-007 v1 engine-hole close (#246):
+  - **Still-image media:** PNG/JPEG/HEIF/TIFF probe via ImageIO with a process-wide 5-second
+    default source duration (`StillMediaDefaults`, not project-persisted — no `schemaMinor`
+    bump), ImageIO decode with path-keyed pixel-buffer cache on `VideoFrameDecoder`, native
+    import (no FFmpeg detour), browser/timeline placement, and golden fixture
+    `still-image-solid-red` (real solid-red reference; re-establish from CI if macos-14
+    diverges per ADR-0017 §6).
+  - **First-media settings auto-detect:** confirmation sheet after the first import into an
+    empty-default project (apply = undoable settings edit; decline keeps current). Stills propose
+    resolution only; VFR uses the conformed rate for fps.
+  - **Relink UI completion:** batch relink-by-folder with summary (relinked/unmatched), hash-
+    mismatch Override alert, and typed re-transcode outcome messages for provenance-aware relink.
 - FR-TL-003/004/005/009 timeline editing gestures (#240): the blade tool now splits at the exact
   pointer position (not the playhead); a linked A/V clip blades, moves, and is deleted together as
   one undo step; multi-selection move shifts the whole selection (with linked partners following)

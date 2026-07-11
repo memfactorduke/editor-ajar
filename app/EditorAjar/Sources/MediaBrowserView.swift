@@ -2,6 +2,7 @@
 
 import AjarAudio
 import AjarCore
+import AjarMedia
 import AppKit
 import SwiftUI
 
@@ -52,6 +53,25 @@ struct LibraryPanel: View {
             .labelsHidden()
             .accessibilityLabel(AppString.localized("library.layout", "Media layout"))
             .accessibilityIdentifier("Media Browser Layout")
+            if model.canBatchRelinkOfflineMedia {
+                Button(action: model.presentBatchRelinker) {
+                    Image(systemName: "folder.badge.questionmark")
+                }
+                .buttonStyle(.borderless)
+                .help(
+                    AppString.localized(
+                        "library.relink.batch.help",
+                        "Relink offline media by scanning a folder"
+                    )
+                )
+                .accessibilityLabel(
+                    AppString.localized(
+                        "library.relink.batch.ax",
+                        "Batch relink offline media from a folder"
+                    )
+                )
+                .accessibilityIdentifier("Batch Relink Offline Media")
+            }
             Button(action: model.presentMediaImporter) { Image(systemName: "plus") }
                 .buttonStyle(.borderless)
                 .disabled(!model.canImportMedia)
@@ -353,9 +373,23 @@ enum MediaBrowserText {
     static func metadata(_ media: MediaRef) -> String {
         let m = media.metadata
         let dimensions = m.pixelDimensions.map { "\($0.width)×\($0.height)" } ?? "Audio"
-        let fps = (m.conformedFrameRate ?? m.frameRate).map(String.init(describing:)) ?? "— fps"
+        let isStill = StillMediaDefaults.isStillCodec(m.codecID)
+        let fps: String
+        if let rate = m.conformedFrameRate ?? m.frameRate {
+            fps = String(describing: rate)
+        } else if isStill {
+            fps = "still"
+        } else {
+            fps = "— fps"
+        }
         let vfr = m.isVariableFrameRate ? " VFR→" : ""
-        let seconds = m.duration.seconds
+        // Stills store a large source extent for trim/extend; UI shows the default placement length.
+        let seconds: Double
+        if isStill, let placement = try? StillMediaDefaults.defaultDuration() {
+            seconds = placement.seconds
+        } else {
+            seconds = m.duration.seconds
+        }
         return "\(m.codecID) · \(dimensions) · \(fps)\(vfr) · \(String(format: "%.1fs", seconds)) · \(m.colorSpace.rawValue)"
     }
 

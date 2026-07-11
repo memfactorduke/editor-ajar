@@ -56,6 +56,37 @@ struct EditorAjarWorkspaceView: View {
         .sheet(isPresented: importSummaryPresented) {
             EditorAjarMediaImportSummaryView(model: model)
         }
+        .sheet(isPresented: firstMediaSettingsPresented) {
+            EditorAjarFirstMediaSettingsProposalView(model: model)
+        }
+        .sheet(isPresented: batchRelinkSummaryPresented) {
+            EditorAjarBatchRelinkSummaryView(model: model)
+        }
+        .alert(
+            AppString.localized("library.relink.mismatch.title", "Media Does Not Match"),
+            isPresented: relinkMismatchPresented
+        ) {
+            Button(
+                AppString.localized("library.relink.mismatch.override", "Override"),
+                role: .destructive
+            ) {
+                model.overridePendingRelinkMismatch()
+            }
+            .keyboardShortcut(.defaultAction)
+            Button(
+                AppString.localized("library.relink.mismatch.cancel", "Cancel"),
+                role: .cancel
+            ) {
+                model.dismissPendingRelinkMismatch()
+            }
+        } message: {
+            Text(
+                AppString.localized(
+                    "library.relink.mismatch.message",
+                    "The selected file does not match the original media fingerprint. Override only if you intentionally replaced the source."
+                )
+            )
+        }
         .fileImporter(
             isPresented: importPickerPresented,
             allowedContentTypes: [.data, .folder],
@@ -75,6 +106,13 @@ struct EditorAjarWorkspaceView: View {
             case .failure(let error):
                 model.handleRelinkerResult(.failure(error))
             }
+        }
+        .fileImporter(
+            isPresented: batchRelinkPickerPresented,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            model.handleBatchRelinkerResult(result)
         }
         .dropDestination(for: URL.self) { urls, _ in
             guard model.canImportMedia, !urls.isEmpty else {
@@ -137,6 +175,34 @@ struct EditorAjarWorkspaceView: View {
         Binding(
             get: { model.mediaIDAwaitingRelink != nil },
             set: { if !$0 { model.dismissRelinker() } }
+        )
+    }
+
+    private var batchRelinkPickerPresented: Binding<Bool> {
+        Binding(
+            get: { model.isBatchRelinkFolderPickerPresented },
+            set: { if !$0 { model.dismissBatchRelinker() } }
+        )
+    }
+
+    private var batchRelinkSummaryPresented: Binding<Bool> {
+        Binding(
+            get: { model.isBatchRelinkSummaryPresented },
+            set: { if !$0 { model.dismissBatchRelinkSummary() } }
+        )
+    }
+
+    private var firstMediaSettingsPresented: Binding<Bool> {
+        Binding(
+            get: { model.isFirstMediaSettingsProposalPresented },
+            set: { if !$0 { model.dismissFirstMediaSettingsProposal() } }
+        )
+    }
+
+    private var relinkMismatchPresented: Binding<Bool> {
+        Binding(
+            get: { model.pendingRelinkMismatch != nil },
+            set: { if !$0 { model.dismissPendingRelinkMismatch() } }
         )
     }
 

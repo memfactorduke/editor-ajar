@@ -164,6 +164,7 @@ Visible when a project opens read-only (higher schema minor / ADR-0018).
 | Project media row/card | click; drag to timeline | Media {filename} | codec, resolution, fps/VFR, duration, color space, offline and proxy state; id: `Media Row {uuid}` for list rows |
 | Generate / Regenerate proxy | Full Keyboard Access | Generate / Regenerate | disabled while source is offline |
 | Relink… | Full Keyboard Access | Relink… | offline items only; native single-file picker |
+| Batch relink offline media | Full Keyboard Access | Batch relink offline media from a folder | id: `Batch Relink Offline Media`; visible when any offline item exists; folder picker → recursive filename+hash match |
 | Import progress | — | Scanning folders… / Importing {filename} | `{completed} of {total} files`; id: `Media Import Progress` |
 | Effects row | — | Effects | static placeholder |
 
@@ -342,18 +343,22 @@ Toggled with `⌃⌘E`; empty list is the default when opened.
   list to attach none/generating/ready/failed labels to (state is durable on `MediaRef` and
   becomes visible once a media list lands).
 
-## 12. Relink / consolidate (#218)
+## 12. Relink / consolidate (#218 / #246)
 
-**No dedicated interactive app chrome yet.** FR-MED-007/008 recovery is implemented in
-`AjarMedia` / app model (bookmark reconcile, offline slate, relink + consolidate commands).
-Playback shows a deterministic offline slate; there is no relink sheet or consolidate progress
-panel in `app/EditorAjar/Sources/` as of this audit.
+FR-MED-007 recovery UI (single-file + batch) is in the media browser and workspace. Consolidate
+still has no dedicated progress chrome; engine commands remain in `AjarMedia`.
 
-When UI lands, require:
+| Control | Shortcut | AX label | value / hint |
+|---------|----------|----------|--------------|
+| Relink… (per offline row) | Full Keyboard Access | Relink… | native single-file picker (movie/audio/image) |
+| Batch Relink (library header) | Full Keyboard Access | Batch relink offline media from a folder | id: `Batch Relink Offline Media`; folder picker |
+| Hash-mismatch alert | Default = Override | Media Does Not Match | Override (destructive) / Cancel; Override re-prepares with `.override` |
+| Batch relink summary sheet | Return / Esc | Batch relink summary | id: `Batch Relink Summary`; relinked / unmatched counts + filenames |
+| Close batch summary | Return | Done | id: `Close Batch Relink Summary` |
 
-- Every button/progress/list row: non-empty `accessibilityLabel` (+ value for progress/state)
-- Keyboard: open, confirm, cancel, and progress dismissal without a pointer
-- Rows in this checklist + coverage once visible at launch or via a dedicated UI smoke
+Provenance-aware single-file relink that must re-transcode surfaces FFmpeg install/failure
+messages through the same typed mapping as import (`library.relink.retranscode.*` / import
+FFmpeg guidance).
 
 ## 13. Media import summary (FR-MED-001 / FR-MED-010)
 
@@ -368,6 +373,21 @@ Variable Frame Rate Conformed sections so the successful import and timebase dec
 | VFR-conformed row | — | Variable Frame Rate Conformed: {filename} | stable timebase |
 | Failed row | — | Failed: {filename} | localized typed reason; unsupported text names the missing FFmpeg fallback |
 | Done | `Return` / `Esc` | Close media import summary | id: `Close Media Import Summary` |
+
+---
+
+## 13b. First-media project settings proposal (FR-PROJ-003 / #246)
+
+Shown after the first import into an empty project still on New Project sensible defaults, when
+auto-detected settings differ from current. Apply is one undoable settings edit; Keep Current
+leaves project settings unchanged.
+
+| Control | Shortcut | AX label | value / hint |
+|---------|----------|----------|--------------|
+| Sheet | — | First media project settings proposal | id: `First Media Settings Proposal` |
+| Proposed summary | — | Proposed settings | resolution, frame rate, color space, audio rate |
+| Keep Current | Esc / cancel | Keep Current | id: `Decline First Media Settings` |
+| Apply | Return | Apply | id: `Apply First Media Settings`; undoable |
 
 ---
 

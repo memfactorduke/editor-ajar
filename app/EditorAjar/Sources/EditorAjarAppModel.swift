@@ -137,6 +137,30 @@ final class EditorAjarAppModel: ObservableObject {
     /// Stable offline item currently awaiting a single-file relink choice.
     @Published private(set) var mediaIDAwaitingRelink: UUID?
 
+    /// Hash-mismatch candidate awaiting explicit Override / Cancel (FR-MED-007 / #246).
+    @Published private(set) var pendingRelinkMismatch: EditorAjarPendingRelinkMismatch?
+
+    /// Whether the batch relink folder picker is presented.
+    @Published private(set) var isBatchRelinkFolderPickerPresented = false
+
+    /// Result of the last batch folder relink, when the summary sheet is open.
+    @Published private(set) var batchRelinkSummary: MediaBatchRelinkResult?
+
+    /// Whether the batch relink summary sheet is visible.
+    @Published private(set) var isBatchRelinkSummaryPresented = false
+
+    /// First-media project-settings proposal awaiting Apply / Keep (FR-PROJ-003 / #246).
+    @Published private(set) var proposedFirstMediaSettings: ProjectSettings?
+
+    /// Whether the first-media settings confirmation sheet is visible.
+    @Published private(set) var isFirstMediaSettingsProposalPresented = false
+
+    /// When true, present the FR-PROJ-003 proposal after the import summary sheet dismisses.
+    ///
+    /// macOS drops one of two simultaneous `.sheet` modifiers stacked on the same view; sequence
+    /// summary → proposal via this pending flag instead of presenting both at once.
+    private var pendingFirstMediaProposal = false
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
@@ -812,8 +836,15 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     /// Dismisses the result sheet while retaining its value for tests/session history.
+    ///
+    /// If a first-media settings proposal was deferred (H1 sequencing), present it now so only
+    /// one sheet is active at a time on macOS.
     func dismissMediaImportSummary() {
         isMediaImportSummaryPresented = false
+        if pendingFirstMediaProposal {
+            pendingFirstMediaProposal = false
+            isFirstMediaSettingsProposalPresented = true
+        }
     }
 
     private func beginMediaImport(_ urls: [URL]) -> Bool {
@@ -837,6 +868,7 @@ final class EditorAjarAppModel: ObservableObject {
         mediaImportError = nil
         isMediaImportPickerPresented = false
         isMediaImportSummaryPresented = false
+        pendingFirstMediaProposal = false
         isImportingMedia = true
         mediaImportProgress = MediaImportProgress(
             phase: .discovering,
@@ -890,16 +922,22 @@ final class EditorAjarAppModel: ObservableObject {
         }
 
         var summary = batch.summary
+        // FR-PROJ-003: propose (do not silently apply) settings when the first media lands in a
+        // still-empty project that still uses the New Project sensible defaults.
         let detectedFirstMediaSettings: ProjectSettings?
         if existingMedia.isEmpty,
            let currentSettings = project?.settings,
            let defaultSettings = try? EditorAjarNewProjectSettings.sensibleDefaults
                .makeProjectSettings(),
-           currentSettings == defaultSettings,
-           let firstImportedMedia = summary.imported.first?.mediaReference
+           currentSettings.resolution == defaultSettings.resolution
+               && currentSettings.frameRate == defaultSettings.frameRate
+               && currentSettings.colorSpace == defaultSettings.colorSpace
+               && currentSettings.audioSampleRate == defaultSettings.audioSampleRate,
+           let firstImported = summary.imported.first
         {
             detectedFirstMediaSettings = autoDetectedSettingsForFirstImportedMedia(
-                firstImportedMedia
+                firstImported.mediaReference,
+                detectedAudioSampleRate: firstImported.audioSampleRate
             )
         } else {
             detectedFirstMediaSettings = nil
@@ -911,8 +949,16 @@ final class EditorAjarAppModel: ObservableObject {
                 "Imported media could not be added to the project."
             )
         } else {
-            if let detectedFirstMediaSettings {
-                _ = applyEdit(.setProjectSettings(detectedFirstMediaSettings))
+            if let proposed = detectedFirstMediaSettings,
+               let current = project?.settings,
+               EditorAjarFirstClipSettingsDetector.proposalDiffersFromCurrent(
+                   proposed,
+                   current: current
+               )
+            {
+                proposedFirstMediaSettings = proposed
+                // Defer presentation until the import summary dismisses (H1: one sheet at a time).
+                pendingFirstMediaProposal = true
             }
             let importedCount = summary.imported.count
             let skippedCount = summary.skippedDuplicates.count
@@ -927,6 +973,35 @@ final class EditorAjarAppModel: ObservableObject {
         isImportingMedia = false
         isMediaImportSummaryPresented = true
         mediaImportTask = nil
+    }
+
+    /// Applies the FR-PROJ-003 first-media settings proposal as one undoable settings edit.
+    func applyProposedFirstMediaSettings() {
+        guard let proposed = proposedFirstMediaSettings else {
+            dismissFirstMediaSettingsProposal()
+            return
+        }
+        _ = applyEdit(.setProjectSettings(proposed))
+        loadMessage = AppString.localized(
+            "document.settings.autoDetect.applied",
+            "Project settings updated from first media"
+        )
+        dismissFirstMediaSettingsProposal()
+    }
+
+    /// Declines the FR-PROJ-003 first-media settings proposal (keeps current settings).
+    func declineProposedFirstMediaSettings() {
+        loadMessage = AppString.localized(
+            "document.settings.autoDetect.declined",
+            "Kept current project settings"
+        )
+        dismissFirstMediaSettingsProposal()
+    }
+
+    func dismissFirstMediaSettingsProposal() {
+        proposedFirstMediaSettings = nil
+        isFirstMediaSettingsProposalPresented = false
+        pendingFirstMediaProposal = false
     }
 
     private func receiveMediaImportProgress(_ progress: MediaImportProgress) {
@@ -3300,6 +3375,29 @@ final class EditorAjarAppModel: ObservableObject {
         await autosaveCurrentProjectAndWait()
     }
 
+    /// Test seam: applies an edit command through the normal undoable boundary.
+    @discardableResult
+    func applyEditForTesting(_ command: EditCommand) -> Bool {
+        applyEdit(command)
+    }
+
+    /// Test seam: replaces the open project while preserving edit history (availability flips).
+    func replaceProjectPreservingHistoryForTesting(_ next: Project) {
+        if var history = editHistory {
+            project = history.replaceCurrentProjectPreservingHistory(next)
+            editHistory = history
+            refreshDirtyState()
+        } else {
+            project = next
+            refreshDirtyState()
+        }
+    }
+
+    /// Test seam: package root used by proxy/relink re-transcode paths.
+    func setProjectPackageRootForTesting(_ url: URL?) {
+        projectPackageRootURL = url
+    }
+
     private func displayLinkTick(_ deltaSeconds: Double) {
         guard isPlaying, playbackController?.advance(by: deltaSeconds) == true else {
             return
@@ -3969,20 +4067,71 @@ final class EditorAjarAppModel: ObservableObject {
         enqueueProxyGeneration(for: [mediaID])
     }
 
-    /// Starts the native single-file relink seam (batch relink remains #246).
+    /// Starts the native single-file relink seam.
     func presentRelinker(for mediaID: UUID) {
         guard isProjectEditable,
               project?.mediaPool.contains(where: { $0.id == mediaID && $0.isOffline }) == true
         else { return }
+        pendingRelinkMismatch = nil
         mediaIDAwaitingRelink = mediaID
     }
 
     func dismissRelinker() { mediaIDAwaitingRelink = nil }
 
+    /// Opens the batch relink-by-folder picker when any offline media is present (FR-MED-007).
+    func presentBatchRelinker() {
+        guard isProjectEditable,
+              project?.mediaPool.contains(where: \.isOffline) == true
+        else { return }
+        isBatchRelinkFolderPickerPresented = true
+    }
+
+    func dismissBatchRelinker() {
+        isBatchRelinkFolderPickerPresented = false
+    }
+
+    /// Whether the library should offer batch relink (editable project with offline items).
+    var canBatchRelinkOfflineMedia: Bool {
+        isProjectEditable && (project?.mediaPool.contains(where: \.isOffline) == true)
+    }
+
     func handleRelinkerResult(_ result: Result<URL, Error>) {
         guard let mediaID = mediaIDAwaitingRelink, let project else { return }
         mediaIDAwaitingRelink = nil
         guard case .success(let url) = result else { return }
+        performSingleFileRelink(
+            mediaID: mediaID,
+            url: url,
+            project: project,
+            mismatchPolicy: .warn
+        )
+    }
+
+    /// Explicit hash-mismatch override after the user confirms the alert (FR-MED-007).
+    func overridePendingRelinkMismatch() {
+        guard let pending = pendingRelinkMismatch, let project else {
+            pendingRelinkMismatch = nil
+            return
+        }
+        pendingRelinkMismatch = nil
+        performSingleFileRelink(
+            mediaID: pending.mediaID,
+            url: pending.candidateURL,
+            project: project,
+            mismatchPolicy: .override
+        )
+    }
+
+    func dismissPendingRelinkMismatch() {
+        pendingRelinkMismatch = nil
+    }
+
+    private func performSingleFileRelink(
+        mediaID: UUID,
+        url: URL,
+        project: Project,
+        mismatchPolicy: MediaRelinkMismatchPolicy
+    ) {
         // Package root is required so provenance-aware relink can re-run FFmpeg into
         // `.ajar/transcodes/` when the chosen file matches a fallback import's original
         // (`MediaRelinkDecision.matchedOriginalRequiresTranscode` → prepare re-transcodes).
@@ -3999,7 +4148,7 @@ final class EditorAjarAppModel: ObservableObject {
                         newFileURL: url,
                         in: project,
                         projectPackageURL: projectPackageURL,
-                        mismatchPolicy: .warn
+                        mismatchPolicy: mismatchPolicy
                     )
                 }.value
                 switch preparation {
@@ -4009,9 +4158,18 @@ final class EditorAjarAppModel: ObservableObject {
                     // absorbs `matchedOriginalRequiresTranscode` into `.ready` or throws).
                     _ = self.applyEdit(command)
                     self.requestMediaPreview(forID: mediaID)
-                case .warning:
-                    // Hash mismatch / missing stored or candidate hash — caller must resubmit
-                    // with `.override` (no silent accept of different bytes).
+                    self.loadMessage = AppString.localized(
+                        "library.relink.success",
+                        "Media relinked"
+                    )
+                case .warning(let warning):
+                    // Hash mismatch / missing stored or candidate hash — surface Override alert;
+                    // no silent accept of different bytes.
+                    self.pendingRelinkMismatch = EditorAjarPendingRelinkMismatch(
+                        mediaID: mediaID,
+                        candidateURL: url,
+                        warning: warning
+                    )
                     self.loadMessage = AppString.localized(
                         "library.relink.mismatch",
                         "Relink file does not match the original media"
@@ -4028,6 +4186,41 @@ final class EditorAjarAppModel: ObservableObject {
                 )
             }
         }
+    }
+
+    /// Batch relink offline media by recursive filename + content-hash match (FR-MED-007 / #218).
+    func handleBatchRelinkerResult(_ result: Result<[URL], Error>) {
+        isBatchRelinkFolderPickerPresented = false
+        guard case .success(let urls) = result, let folderURL = urls.first, let project else {
+            return
+        }
+        do {
+            let batch = try MediaRelinkCommand().prepareBatch(folderURL: folderURL, in: project)
+            if let command = batch.command {
+                _ = applyEdit(command)
+                for mediaID in batch.relinkedMediaIDs {
+                    requestMediaPreview(forID: mediaID)
+                }
+            }
+            batchRelinkSummary = batch
+            isBatchRelinkSummaryPresented = true
+            loadMessage = AppString.localized(
+                "library.relink.batch.status",
+                "Batch relink: \(batch.relinkedMediaIDs.count) relinked, \(batch.unresolvedMediaIDs.count) unmatched"
+            )
+        } catch let error as MediaRelinkCommandError {
+            loadMessage = AppString.mediaRelinkFailureMessage(for: error)
+        } catch {
+            loadMessage = AppString.localized(
+                "library.relink.failed",
+                "Relink failed: \(String(describing: error))"
+            )
+        }
+    }
+
+    func dismissBatchRelinkSummary() {
+        batchRelinkSummary = nil
+        isBatchRelinkSummaryPresented = false
     }
 
     /// Incremental thumbnail/waveform request. Offline items deliberately skip extraction.
@@ -4160,10 +4353,31 @@ final class EditorAjarAppModel: ObservableObject {
         let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
         guard let track = tracks.first(where: { !$0.locked }) else { return false }
         let start = (try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)) ?? .zero
-        let duration = media.metadata.duration
+        // Stills declare a large source extent for trim/extend; initial placement is 5 s.
+        let isStill = StillMediaDefaults.isStillCodec(media.metadata.codecID)
+            || media.sourceURL.map(StillMediaDefaults.isStillImageFile) == true
+        let duration: RationalTime
+        if isStill, let placement = try? StillMediaDefaults.defaultDuration() {
+            duration = placement
+        } else {
+            duration = media.metadata.duration
+        }
         guard let range = try? TimeRange(start: start, duration: duration),
-              let sourceRange = try? TimeRange(start: .zero, duration: duration) else { return false }
-        let clip = Clip(id: UUID(), source: .media(id: mediaID), sourceRange: sourceRange, timelineRange: range, kind: kind, name: media.sourceURL?.deletingPathExtension().lastPathComponent ?? "Media")
+              let sourceRange = try? TimeRange(start: .zero, duration: duration)
+        else {
+            return false
+        }
+        let clipName = media.sourceURL?
+            .deletingPathExtension()
+            .lastPathComponent ?? "Media"
+        let clip = Clip(
+            id: UUID(),
+            source: .media(id: mediaID),
+            sourceRange: sourceRange,
+            timelineRange: range,
+            kind: kind,
+            name: clipName
+        )
         return applyEdit(.insertClip(sequenceID: sequence.id, trackID: track.id, clip: clip))
     }
 
