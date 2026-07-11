@@ -109,4 +109,84 @@ enum AppString {
             )
         }
     }
+
+    /// Localized explanation for a typed single-item relink preparation failure (FR-MED-007).
+    ///
+    /// Provenance-aware relink can re-run FFmpeg when the selected file matches a fallback
+    /// import's original bytes (`matchedOriginalRequiresTranscode`); those failures surface
+    /// through ``MediaRelinkCommandError/retranscodeFailed`` with the same install/convert
+    /// guidance as import (#238).
+    static func mediaRelinkFailureMessage(for error: MediaRelinkCommandError) -> String {
+        switch error {
+        case .mediaReferenceNotFound:
+            return localized(
+                "library.relink.mediaMissing",
+                "The media reference to relink is no longer in the project."
+            )
+        case .duplicateMediaReferenceID:
+            return localized(
+                "library.relink.duplicateMediaID",
+                "The project has more than one media reference with the same id."
+            )
+        case .sourceMustBeFileURL:
+            return localized(
+                "library.relink.localFileRequired",
+                "Only files stored on this Mac can be used for relink."
+            )
+        case .folderUnavailable:
+            return localized(
+                "library.relink.folderUnavailable",
+                "The selected folder is missing or cannot be read."
+            )
+        case .hashingFailed(_, let reason):
+            return localized(
+                "library.relink.hash",
+                "The file could not be fingerprinted: \(reason)"
+            )
+        case .bookmarkCreationFailed(_, let reason):
+            return localized(
+                "library.relink.bookmark",
+                "Editor Ajar could not save permission to reopen this file: \(reason)"
+            )
+        case .folderEnumerationFailed:
+            return localized(
+                "library.relink.folderScan",
+                "The folder could not be scanned for matching media."
+            )
+        case .retranscodeFailed(let transcodeError):
+            return mediaRelinkRetranscodeFailureMessage(for: transcodeError)
+        }
+    }
+
+    /// Maps FFmpeg re-transcode failures during provenance-aware relink
+    /// (shared install guidance with import).
+    private static func mediaRelinkRetranscodeFailureMessage(
+        for error: FFmpegTranscodeError
+    ) -> String {
+        switch error {
+        case .ffmpegUnavailable(let guidance):
+            // Same install guidance string as import.failure.ffmpegUnavailable (#238).
+            return localized("import.failure.ffmpegUnavailable", "\(guidance)")
+        case .ffmpegFailed(let exitCode, let stderrTail):
+            return localized(
+                "library.relink.retranscode.ffmpegFailed",
+                "FFmpeg could not rebuild working media for relink (exit \(exitCode)): \(stderrTail)"
+            )
+        case .transcodeCancelled:
+            return localized(
+                "library.relink.retranscode.cancelled",
+                "Rebuilding working media for relink was cancelled."
+            )
+        case .transcodeTimedOut(let reason):
+            return localized(
+                "library.relink.retranscode.timedOut",
+                "Rebuilding working media for relink timed out: \(reason)"
+            )
+        case .transactionFailed(let reason):
+            return localized(
+                "library.relink.retranscode.transactionFailed",
+                "Could not rebuild working media for relink: \(reason)"
+            )
+        }
+    }
 }

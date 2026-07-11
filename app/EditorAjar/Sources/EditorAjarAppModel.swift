@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AjarAudio
 import AjarCore
 import AjarExport
 import AjarMedia
+import AppKit
+import CoreImage
 import Foundation
 import Metal
 import SwiftUI
@@ -101,11 +104,22 @@ final class EditorAjarAppModel: ObservableObject {
     /// Most recent programmatic import refusal, cleared when a batch starts.
     @Published private(set) var mediaImportError: EditorAjarMediaImportError?
 
+    /// Browser-owned regeneratable preview bytes, keyed by stable media id (FR-MED-009).
+    @Published private(set) var mediaThumbnailData: [UUID: Data] = [:]
+    /// Transient hover-scrub frames only — never written into `mediaThumbnailData` (M4).
+    @Published private(set) var mediaHoverPreviewData: [UUID: Data] = [:]
+    /// Decoded audio waveform summaries for media-browser tiles (M6).
+    @Published private(set) var mediaWaveformSummary: [UUID: AudioWaveformSummary] = [:]
+    /// Stable offline item currently awaiting a single-file relink choice.
+    @Published private(set) var mediaIDAwaitingRelink: UUID?
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
     private var editHistory: EditHistory?
     private let autosaveCoordinator: EditorAjarAutosaveCoordinator?
+    /// Fallback package root for untitled/never-saved projects (preview cache, M3).
+    private let autosavePackageRootURL: URL?
     private let autosaveIntervalSeconds: TimeInterval
     private let audioCoordinator: (any EditorAjarAudioCoordinating)?
     private let exportPresetStore: EditorAjarExportPresetStore
@@ -126,6 +140,10 @@ final class EditorAjarAppModel: ObservableObject {
     private var autosaveWriteTask: Task<Void, Never>?
     private var mediaResolutionTask: Task<Void, Never>?
     private var mediaImportTask: Task<Void, Never>?
+    private var mediaHoverTask: Task<Void, Never>?
+    private var mediaHoverMediaID: UUID?
+    private var mediaPreviewTasks: [UUID: Task<Void, Never>] = [:]
+    private var mediaPreviewCache: MediaPreviewCache?
     private var autosaveCommandCount = 0
     private var renderGeneration = 0
     private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
@@ -148,6 +166,7 @@ final class EditorAjarAppModel: ObservableObject {
         opensSampleProjectWhenNoRecovery: Bool = false
     ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
+        autosavePackageRootURL = autosavePackageURL
         if let autosavePackageURL {
             autosaveCoordinator = EditorAjarAutosaveCoordinator(packageURL: autosavePackageURL)
         } else {
@@ -2526,6 +2545,10 @@ final class EditorAjarAppModel: ObservableObject {
         displayLinkDriver?.stop()
         audioCoordinator?.stop()
         mediaResolutionTask?.cancel()
+        cancelAllMediaPreviews()
+        mediaThumbnailData = [:]
+        mediaWaveformSummary = [:]
+        mediaPreviewCache = nil
         renderGeneration += 1
         isPlaying = false
         project = loadResult.project
@@ -3245,6 +3268,212 @@ final class EditorAjarAppModel: ObservableObject {
         }
     }
 
+    /// Explicit media-browser proxy action; the queue and durable state remain centralized here.
+    func generateProxy(for mediaID: UUID) {
+        guard isProjectEditable else { return }
+        if proxyJobsInFlight.contains(mediaID) { return }
+        applyProxyState(.none, for: mediaID)
+        enqueueProxyGeneration(for: [mediaID])
+    }
+
+    /// Starts the native single-file relink seam (batch relink remains #246).
+    func presentRelinker(for mediaID: UUID) {
+        guard isProjectEditable,
+              project?.mediaPool.contains(where: { $0.id == mediaID && $0.isOffline }) == true
+        else { return }
+        mediaIDAwaitingRelink = mediaID
+    }
+
+    func dismissRelinker() { mediaIDAwaitingRelink = nil }
+
+    func handleRelinkerResult(_ result: Result<URL, Error>) {
+        guard let mediaID = mediaIDAwaitingRelink, let project else { return }
+        mediaIDAwaitingRelink = nil
+        guard case .success(let url) = result else { return }
+        // Package root is required so provenance-aware relink can re-run FFmpeg into
+        // `.ajar/transcodes/` when the chosen file matches a fallback import's original
+        // (`MediaRelinkDecision.matchedOriginalRequiresTranscode` → prepare re-transcodes).
+        let projectPackageURL = projectPackageRootURL
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let preparation = try await Task.detached(priority: .userInitiated) {
+                    // `prepare` is async: hash/bookmark I/O, and when the candidate matches
+                    // stored `transcodeProvenance.originalContentHash` it routes through the
+                    // FFmpeg import transcoder before returning `.ready`.
+                    try await MediaRelinkCommand().prepare(
+                        mediaReferenceID: mediaID,
+                        newFileURL: url,
+                        in: project,
+                        projectPackageURL: projectPackageURL,
+                        mismatchPolicy: .warn
+                    )
+                }.value
+                switch preparation {
+                case .ready(let command, _):
+                    // Covers both direct hash/filename matches and successful re-transcode of a
+                    // matched original (the latter is not a separate preparation case — prepare
+                    // absorbs `matchedOriginalRequiresTranscode` into `.ready` or throws).
+                    _ = self.applyEdit(command)
+                    self.requestMediaPreview(forID: mediaID)
+                case .warning:
+                    // Hash mismatch / missing stored or candidate hash — caller must resubmit
+                    // with `.override` (no silent accept of different bytes).
+                    self.loadMessage = AppString.localized(
+                        "library.relink.mismatch",
+                        "Relink file does not match the original media"
+                    )
+                }
+            } catch let error as MediaRelinkCommandError {
+                // Includes `.retranscodeFailed` (FFmpeg missing/failed/timed out/cancelled, or
+                // package URL unavailable) with #238-aligned guidance.
+                self.loadMessage = AppString.mediaRelinkFailureMessage(for: error)
+            } catch {
+                self.loadMessage = AppString.localized(
+                    "library.relink.failed",
+                    "Relink failed: \(String(describing: error))"
+                )
+            }
+        }
+    }
+
+    /// Incremental thumbnail/waveform request. Offline items deliberately skip extraction.
+    func requestMediaPreview(for media: MediaRef) async {
+        guard !media.isOffline, media.contentHash != nil else { return }
+        if mediaPreviewTasks[media.id] != nil { return }
+        guard let cache = ensureMediaPreviewCache() else { return }
+        let mediaID = media.id
+        let task = Task { [weak self] in
+            defer {
+                Task { @MainActor in
+                    self?.mediaPreviewTasks[mediaID] = nil
+                }
+            }
+            if media.metadata.pixelDimensions != nil {
+                guard let data = try? await cache.data(for: media, kind: .thumbnail),
+                      !Task.isCancelled
+                else { return }
+                await MainActor.run { self?.mediaThumbnailData[mediaID] = data }
+            } else if media.metadata.audioChannelLayout != nil
+                || media.metadata.pixelDimensions == nil
+            {
+                guard let data = try? await cache.data(for: media, kind: .waveform),
+                      !Task.isCancelled,
+                      let summary = try? JSONDecoder().decode(AudioWaveformSummary.self, from: data)
+                else { return }
+                await MainActor.run { self?.mediaWaveformSummary[mediaID] = summary }
+            }
+        }
+        mediaPreviewTasks[mediaID] = task
+        // Propagate SwiftUI `.task` cancellation into the per-id extraction task (M1).
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func requestMediaPreview(forID mediaID: UUID) {
+        guard let media = project?.mediaPool.first(where: { $0.id == mediaID }) else { return }
+        Task { await requestMediaPreview(for: media) }
+    }
+
+    /// Cancels per-id preview extraction (tile disappear) and notifies the cache (M1).
+    func cancelMediaPreview(for mediaID: UUID) {
+        mediaPreviewTasks[mediaID]?.cancel()
+        mediaPreviewTasks[mediaID] = nil
+        if let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+           let cache = mediaPreviewCache
+        {
+            Task {
+                await cache.cancel(for: media, kind: .thumbnail)
+                await cache.cancel(for: media, kind: .waveform)
+            }
+        }
+    }
+
+    /// Panel close / project swap — drop all preview and hover work.
+    func cancelAllMediaPreviews() {
+        for (_, task) in mediaPreviewTasks {
+            task.cancel()
+        }
+        mediaPreviewTasks.removeAll()
+        cancelMediaHoverPreview()
+        if let cache = mediaPreviewCache {
+            Task { await cache.cancelAll() }
+        }
+    }
+
+    /// Throttled grid hover decode via the bounded cache scheduler (M5); transient store only (M4).
+    func requestMediaHoverPreview(mediaID: UUID, fraction: Double) {
+        mediaHoverTask?.cancel()
+        mediaHoverMediaID = mediaID
+        guard let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+              !media.isOffline,
+              media.metadata.pixelDimensions != nil,
+              let cache = ensureMediaPreviewCache()
+        else { return }
+        mediaHoverTask = Task { [weak self] in
+            guard let scaled = try? media.metadata.duration.multiplied(
+                by: Int64((fraction * 1_000).rounded())
+            ),
+                let time = try? scaled.divided(by: 1_000),
+                !Task.isCancelled
+            else { return }
+            guard let data = try? await cache.hoverFramePNG(for: media, at: time),
+                  !Task.isCancelled
+            else { return }
+            await MainActor.run {
+                guard self?.mediaHoverMediaID == mediaID else { return }
+                self?.mediaHoverPreviewData = [mediaID: data]
+            }
+        }
+    }
+
+    func cancelMediaHoverPreview() {
+        mediaHoverTask?.cancel()
+        mediaHoverTask = nil
+        mediaHoverMediaID = nil
+        // Restore durable thumbnail display by clearing the transient hover store (M4).
+        if !mediaHoverPreviewData.isEmpty {
+            mediaHoverPreviewData = [:]
+        }
+    }
+
+    /// Package root for previews: saved project, else autosave package for untitled work (M3).
+    /// Internal for tests that assert the untitled fallback.
+    var mediaPreviewPackageRootURL: URL? {
+        projectPackageRootURL ?? autosavePackageRootURL
+    }
+
+    private func ensureMediaPreviewCache() -> MediaPreviewCache? {
+        if let mediaPreviewCache {
+            return mediaPreviewCache
+        }
+        guard let root = mediaPreviewPackageRootURL else {
+            return nil
+        }
+        let cache = MediaPreviewCache(packageURL: root)
+        mediaPreviewCache = cache
+        return cache
+    }
+
+    /// Simple #235 drop behavior: insert/ripple at the playhead on the first compatible track.
+    @discardableResult
+    func insertMediaOnTimeline(mediaID: UUID) -> Bool {
+        guard let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+              !media.isOffline, let sequence = activeSequence else { return false }
+        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
+        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
+        guard let track = tracks.first(where: { !$0.locked }) else { return false }
+        let start = (try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)) ?? .zero
+        let duration = media.metadata.duration
+        guard let range = try? TimeRange(start: start, duration: duration),
+              let sourceRange = try? TimeRange(start: .zero, duration: duration) else { return false }
+        let clip = Clip(id: UUID(), source: .media(id: mediaID), sourceRange: sourceRange, timelineRange: range, kind: kind, name: media.sourceURL?.deletingPathExtension().lastPathComponent ?? "Media")
+        return applyEdit(.insertClip(sequenceID: sequence.id, trackID: track.id, clip: clip))
+    }
+
     /// Applies durable `MediaRef.proxyState` without creating an undo entry (cache/derived state).
     private func applyProxyState(_ proxyState: MediaProxyState, for mediaID: UUID) {
         guard let project else {
@@ -3447,6 +3676,10 @@ private actor EditorAjarAutosaveCoordinator {
     ///
     /// Dirty editable sessions replace both checkpoint and journal. Clean/read-only sessions
     /// remove stale recovery so the next normal launch stays at New/Open.
+    ///
+    /// The package **root directory is kept** (or recreated) so untitled sessions can still host
+    /// regeneratable package-local caches such as ADR-0007 `thumbnails/` (media browser previews).
+    /// Only recovery/document identity files are cleared — never leave callers with a missing root.
     func resetSession(
         project: Project,
         openMode: AjarProjectOpenMode,
@@ -3462,14 +3695,25 @@ private actor EditorAjarAutosaveCoordinator {
                 )
                 try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
             } else {
-                if FileManager.default.fileExists(atPath: packageURL.path) {
-                    try FileManager.default.removeItem(at: packageURL)
-                }
+                try Self.clearRecoverableContentPreservingPackageRoot(at: packageURL)
             }
             return nil
         } catch {
             let detail = String(describing: error)
             return AppString.localized("status.autosaveFailed", "Autosave failed: \(detail)")
+        }
+    }
+
+    /// Drops files that make `AjarAutosaveStore.hasRecoverableSnapshot` true while keeping the
+    /// package directory (and any `thumbnails/` cache) intact for untitled preview fallbacks.
+    private static func clearRecoverableContentPreservingPackageRoot(at packageURL: URL) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: packageURL, withIntermediateDirectories: true)
+        for relativePath in ["project.json", "media.json", "recovery"] {
+            let url = packageURL.appendingPathComponent(relativePath)
+            if fileManager.fileExists(atPath: url.path) {
+                try fileManager.removeItem(at: url)
+            }
         }
     }
 
