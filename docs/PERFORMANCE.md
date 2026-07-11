@@ -84,3 +84,15 @@ adding an effect that blows the frame budget at the target spec fails CI.
 - Synchronous disk or network I/O on the main thread or playback pipeline.
 - Force-unwraps / `try!` (also a stability failure, NFR-STAB-003).
 - "Works on my M3 Max" — targets are defined on the **reference machine**.
+
+## 7. Scopes analysis budget (FR-COL-003)
+
+Live scopes (`MetalScopeAnalyzer`) **must not** regress playback gates:
+
+| Mode | Budget | Notes |
+|------|--------|--------|
+| Paused | On-demand when the program frame texture identity changes | Analyze the displayed frame only |
+| Playing | ≤ **10 analyses/sec** | `ScopeAnalysisThrottle.maxAnalysesPerSecondWhilePlaying` |
+| Hot path | Never | Separate Metal command buffer; no GPU wait / CPU readback on present |
+
+The gated `scope-analyzer-compute` bench remains the analyzer unit cost; the app-level throttle keeps analysis **beside** playback rather than inside the frame-present critical section.

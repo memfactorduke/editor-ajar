@@ -61,8 +61,9 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Three-point insert / overwrite (fit marks) | `⇧F9` / `⇧F10` | Fits the media selection into the in/out marks (FR-TL-003); Clip menu |
 | Replace selected clip source | `⌥⌘R` | Selected media-browser item |
 | Select forward from playhead | `⇧⌘A` | Clip menu |
-| Save look | `⌥⌘L` | Clip menu |
-| Cancel (sheets / banner dismiss) | `Esc` | Export dialog, import summary, read-only dismiss, title edit |
+| Save look… | `⌥⌘L` | Clip menu → naming sheet |
+| Toggle scopes | `⌥⌘S` | Clip menu / scopes panel |
+| Cancel (sheets / banner dismiss) | `Esc` | Export dialog, import summary, save look, read-only dismiss, title edit |
 
 Full Keyboard Access (System Settings → Keyboard) tabs through buttons, fields, and toggles.
 Arrow keys on a focused canvas title box nudge 1 unit (Shift = 10).
@@ -79,15 +80,17 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 4. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence  
 5. **Media browser** → Import Media → layout → search → codec/state filters → media rows/cards → proxy/relink actions; VoiceOver navigation also exposes import progress  
 6. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
-7. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
-8. **Inspector** → marker or transform fields when selection exists  
-9. **Timeline toolbar** → tool buttons left-to-right  
-10. **Timeline tracks** → track state buttons → clips → keyframe dots when shown  
-11. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
+7. **Scopes panel** (when visible, `⌥⌘S`) → type picker → hide  
+8. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
+9. **Inspector** → marker, or Transform/Color tabs when a video clip is selected  
+10. **Timeline toolbar** → tool buttons left-to-right  
+11. **Timeline tracks** → track state buttons → clips → keyframe dots when shown  
+12. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
 
 **Sheets:** New Project focuses Resolution → Frame Rate → Color Space → Audio Rate → Cancel →
 Create. Export focuses Mode → Preset/Range/format pickers → Cancel → Validate. The import summary
-exposes categorized result rows to VoiceOver, then the Done button to keyboard focus.
+exposes categorized result rows to VoiceOver, then the Done button to keyboard focus. Save Look
+focuses Look name → Cancel → Save.
 
 ---
 
@@ -234,6 +237,7 @@ NSTextView / drag flakiness on headless CI). Labels for title boxes are covered 
 
 | Control | AX label | id / value |
 |---------|----------|------------|
+| Tab picker | Inspector tab | id: `Inspector Tab Picker` (Transform / Color) |
 | Panel | Transform Inspector | id: `Transform Inspector` |
 | Number fields | Position X, Scale X %, … | id: `Transform {title}` |
 | Keyframe toggles | Add/Delete {param} Keyframe | id: `Transform {param} Keyframe Toggle` |
@@ -243,7 +247,7 @@ NSTextView / drag flakiness on headless CI). Labels for title boxes are covered 
 
 ### Clip playback inspector (clip selected)
 
-Nested inside the transform inspector `ScrollView` (same clip-selected surface) so speed
+Nested inside the Transform tab's `ScrollView` (same clip-selected surface) so speed
 controls cannot steal viewport height from transform fields and drop them from the AX tree.
 
 | Control | AX label | id / notes |
@@ -256,6 +260,41 @@ controls cannot steal viewport height from transform fields and drop them from t
 Audio scrubbing remains typed unavailable: the current live audio coordinator has no isolated,
 non-real-time preview route. A UI toggle must not mutate or add work to the real-time audio callback
 (ADR-0012). Loop and checkerboard state are deliberately session-only, so schema minor stays 13.
+
+### Color inspector (clip selected, Color tab) — FR-COL-001/004/007
+
+| Control | AX label | id / value |
+|---------|----------|------------|
+| Panel | Color Inspector | id: `Color Inspector` |
+| Lift/Gamma/Gain RGB sliders | Lift R / Gamma G / … | id: `Color {Group} {R\|G\|B}` |
+| Exposure…Vibrance sliders | Exposure, Contrast, … | id: `Color {title}` |
+| Reset per-control / Reset All | Reset {name} / Reset All Color | id: `Color Reset …` |
+| Import LUT… | Import cube LUT | id: `Import LUT` |
+| LUT strength | Strength | id: `LUT Strength` |
+| Remove LUT | Remove LUT | id: `Remove LUT` |
+| Looks list Apply / Delete | Apply/Delete Look {name} | id: `Apply/Delete Look {uuid}` |
+| Save Look… | Save Look from Selected Clip | id: `Save Look` → sheet |
+
+Primary color grade is **static in v1** (no color keyframe toggles); transform keyframes remain on the Transform tab.
+
+### Scopes panel (toggle `⌥⌘S`) — FR-COL-003
+
+| Control | Shortcut | AX label | id |
+|---------|----------|----------|-----|
+| Panel | `⌥⌘S` | Scopes panel | `Scopes Panel` |
+| Type picker | — | Scope type | `Scope Type Picker` |
+| Display | — | {kind} scope | `Scope Display` |
+| Hide | — | Hide Scopes | `Hide Scopes` |
+
+Analysis is on-demand when paused and ≤ 10/s while playing (off the playback hot path).
+
+### Save Look sheet (FR-COL-007)
+
+| Control | AX label | id |
+|---------|----------|-----|
+| Sheet | Save Look dialog | `Save Look Sheet` |
+| Name field | Look name | `Save Look Name` |
+| Cancel / Save | Cancel / Save | `Save Look Cancel` / `Save Look Confirm` |
 
 ---
 

@@ -8,11 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		0561B8D79F3F207A4716C97E /* MediaBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ACFFC4E276C76281FB36A0B /* MediaBrowserView.swift */; };
+		060A17B973AEC702B8503A8D /* EditorAjarColorUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDD858649BC5564489E4628 /* EditorAjarColorUITests.swift */; };
 		1609504734AF289DE420F40C /* EditorAjarRelinkSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 017BB969221AA91DCB0ED375 /* EditorAjarRelinkSupport.swift */; };
 		17B35B6C5F41AE77A7A15807 /* EditorAjarUISmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */; };
 		18A50F6FE3F5F215D59EEB06 /* AjarRender in Frameworks */ = {isa = PBXBuildFile; productRef = 1A54917698517881ACC715AF /* AjarRender */; };
 		1CB8FB2C28ED2215873C6090 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9B6F3CF811C108DB83A7857D /* Localizable.xcstrings */; };
 		27AC5FC45DA5EF355A9DB6A4 /* EditorAjarWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */; };
+		286A6C459BA6D3E87E6E0876 /* EditorAjarColorTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D2D94CFD6620E614A5FB71 /* EditorAjarColorTypes.swift */; };
 		32C022A66891270FC71E1D4E /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535FF68DE6DDA5467F309039 /* AppLocalization.swift */; };
 		3A246BF62A10B5DED981A4E7 /* EditorAjarAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */; };
 		3A42D8AAC784E8A48A0B2882 /* MediaPreviewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81C89CEDF112C4BB96B1DF1 /* MediaPreviewCache.swift */; };
@@ -24,6 +26,7 @@
 		5F81FCEB82A63EC85F3996A6 /* EditorAjarAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */; };
 		5FD25C168A644F1D7D7D373C /* ProgramMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */; };
 		63D76714CAA834902EE03BC5 /* CanvasTitleEditingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */; };
+		65D1B3635182F92F410B1A5D /* EditorAjarAppModel+Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFFEDB5AFB02CF6D41016B56 /* EditorAjarAppModel+Color.swift */; };
 		6653EE21E97F97F4A1337738 /* EditorAjarDisplayLinkDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */; };
 		668859A516DF395B27997893 /* MediaBrowserModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4918CB04549E69A2DA033C9 /* MediaBrowserModel.swift */; };
 		6C5EFECCC919C8FA75EF5745 /* MediaBrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DC8542CE997AA86110B61E /* MediaBrowserTests.swift */; };
@@ -31,6 +34,7 @@
 		77444F64B877AEF4C7D4FC6A /* EditorAjarNewProjectSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFA6C6935E779909C66E11A /* EditorAjarNewProjectSettings.swift */; };
 		7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */; };
 		7A5FACECC05715D930D2E260 /* EditorAjarMediaImportAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6E2A9996CA6E7ABFFA6C91A /* EditorAjarMediaImportAppModelTests.swift */; };
+		8138BEB352470D5D2BB68627 /* EditorAjarColorInspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAD0E295D4D75205756419E8 /* EditorAjarColorInspectorViews.swift */; };
 		859809191F61E0E85C7B4D8E /* EditorAjarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */; };
 		A34A4BEDBC84D704C0891449 /* EditorAjarExportQueueController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E765A9F0A9CAED2B6A7198 /* EditorAjarExportQueueController.swift */; };
 		AB2A1C41DEC38DAA0002963C /* AjarAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A01CC1757C5405C05674F732 /* AjarAudio */; };
@@ -45,6 +49,7 @@
 		E056E9938F510F165A587C82 /* EditorAjarRenderPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */; };
 		E06DD6EA42B16AF32C5F5EDA /* EditorAjarLiveAudioCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */; };
 		E6D687BC1C07CE3C51931A4A /* EditorAjarIssue246AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F95903632A39A8E24C51C50 /* EditorAjarIssue246AppModelTests.swift */; };
+		E7C7BE013E7FE7B4B3D56F5F /* EditorAjarScopesPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4AB4BF3E056ED1EA913F7D /* EditorAjarScopesPanel.swift */; };
 		F6D10E1573E2C5428D7006DE /* EditorAjarExportDialogModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DAA8F76C2C44C8920890DB3 /* EditorAjarExportDialogModel.swift */; };
 		FF92728078D2828BEA1E8C21 /* EditorAjarExportQueueAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */; };
 /* End PBXBuildFile section */
@@ -81,8 +86,8 @@
 		4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarLiveAudioCoordinator.swift; sourceTree = "<group>"; };
 		49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarUISmokeTests.swift; sourceTree = "<group>"; };
 		4B3331D5EA7AED5D0D63F83D /* EditorAjar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditorAjar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D4AB4BF3E056ED1EA913F7D /* EditorAjarScopesPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarScopesPanel.swift; sourceTree = "<group>"; };
 		535FF68DE6DDA5467F309039 /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLocalization.swift; sourceTree = "<group>"; };
-		544569CCAE449A04859E6163 /* editor-ajar */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar"; path = ../..; sourceTree = SOURCE_ROOT; };
 		64FE9E23EF9A44E444F2A7E3 /* EditorAjarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7ACFFC4E276C76281FB36A0B /* MediaBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBrowserView.swift; sourceTree = "<group>"; };
 		7DAA8F76C2C44C8920890DB3 /* EditorAjarExportDialogModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportDialogModel.swift; sourceTree = "<group>"; };
@@ -91,10 +96,12 @@
 		88FEA85E5F58004FD8DD75BE /* EditorAjarExportDialogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportDialogView.swift; sourceTree = "<group>"; };
 		8B1A9B85B357222D571AA8DF /* EditorAjarRenderPipelineCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarRenderPipelineCacheTests.swift; sourceTree = "<group>"; };
 		8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarRenderPipeline.swift; sourceTree = "<group>"; };
+		903FCD27B46F6888550A8480 /* editor-ajar */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar"; path = ../..; sourceTree = SOURCE_ROOT; };
 		92DC8542CE997AA86110B61E /* MediaBrowserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBrowserTests.swift; sourceTree = "<group>"; };
 		9B6F3CF811C108DB83A7857D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModelTests.swift; sourceTree = "<group>"; };
 		A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportQueueAppModelTests.swift; sourceTree = "<group>"; };
+		ADDD858649BC5564489E4628 /* EditorAjarColorUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarColorUITests.swift; sourceTree = "<group>"; };
 		AE92A31AD23053909AB8286A /* EditorAjarDocumentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDocumentViews.swift; sourceTree = "<group>"; };
 		B7B397BCAB3E49B3E54D1706 /* EditorAjarExportPresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportPresetStore.swift; sourceTree = "<group>"; };
 		B81C89CEDF112C4BB96B1DF1 /* MediaPreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewCache.swift; sourceTree = "<group>"; };
@@ -103,9 +110,12 @@
 		DCFA6C6935E779909C66E11A /* EditorAjarNewProjectSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarNewProjectSettings.swift; sourceTree = "<group>"; };
 		E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarPlaybackController.swift; sourceTree = "<group>"; };
 		E4918CB04549E69A2DA033C9 /* MediaBrowserModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBrowserModel.swift; sourceTree = "<group>"; };
+		E7D2D94CFD6620E614A5FB71 /* EditorAjarColorTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarColorTypes.swift; sourceTree = "<group>"; };
 		EDD23BF031574B09CE28C0EA /* EditorAjarDocumentLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDocumentLifecycleTests.swift; sourceTree = "<group>"; };
+		EFFEDB5AFB02CF6D41016B56 /* EditorAjarAppModel+Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorAjarAppModel+Color.swift"; sourceTree = "<group>"; };
 		F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModel.swift; sourceTree = "<group>"; };
 		F6E2A9996CA6E7ABFFA6C91A /* EditorAjarMediaImportAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarMediaImportAppModelTests.swift; sourceTree = "<group>"; };
+		FAD0E295D4D75205756419E8 /* EditorAjarColorInspectorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarColorInspectorViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,7 +137,7 @@
 		3515CBA41C5031917253259D /* editor-ajar */ = {
 			isa = PBXGroup;
 			children = (
-				544569CCAE449A04859E6163 /* editor-ajar */,
+				903FCD27B46F6888550A8480 /* editor-ajar */,
 			);
 			name = "editor-ajar";
 			sourceTree = "<group>";
@@ -136,6 +146,7 @@
 			isa = PBXGroup;
 			children = (
 				A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */,
+				ADDD858649BC5564489E4628 /* EditorAjarColorUITests.swift */,
 				EDD23BF031574B09CE28C0EA /* EditorAjarDocumentLifecycleTests.swift */,
 				A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */,
 				0F95903632A39A8E24C51C50 /* EditorAjarIssue246AppModelTests.swift */,
@@ -175,6 +186,9 @@
 				1A9F34827F29582998DDF2DF /* CanvasTitleEditingOverlay.swift */,
 				15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */,
 				F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */,
+				EFFEDB5AFB02CF6D41016B56 /* EditorAjarAppModel+Color.swift */,
+				FAD0E295D4D75205756419E8 /* EditorAjarColorInspectorViews.swift */,
+				E7D2D94CFD6620E614A5FB71 /* EditorAjarColorTypes.swift */,
 				1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */,
 				10B37ECA3BAA33EF7A7FEF96 /* EditorAjarDocumentStore.swift */,
 				AE92A31AD23053909AB8286A /* EditorAjarDocumentViews.swift */,
@@ -189,6 +203,7 @@
 				017BB969221AA91DCB0ED375 /* EditorAjarRelinkSupport.swift */,
 				8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */,
 				0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */,
+				4D4AB4BF3E056ED1EA913F7D /* EditorAjarScopesPanel.swift */,
 				7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */,
 				1208F41DB2872AAFEB4908DE /* ExportQueuePanel.swift */,
 				9B6F3CF811C108DB83A7857D /* Localizable.xcstrings */,
@@ -336,7 +351,10 @@
 				32C022A66891270FC71E1D4E /* AppLocalization.swift in Sources */,
 				63D76714CAA834902EE03BC5 /* CanvasTitleEditingOverlay.swift in Sources */,
 				859809191F61E0E85C7B4D8E /* EditorAjarApp.swift in Sources */,
+				65D1B3635182F92F410B1A5D /* EditorAjarAppModel+Color.swift in Sources */,
 				3A246BF62A10B5DED981A4E7 /* EditorAjarAppModel.swift in Sources */,
+				8138BEB352470D5D2BB68627 /* EditorAjarColorInspectorViews.swift in Sources */,
+				286A6C459BA6D3E87E6E0876 /* EditorAjarColorTypes.swift in Sources */,
 				6653EE21E97F97F4A1337738 /* EditorAjarDisplayLinkDriver.swift in Sources */,
 				564651141114E8BC36D979C7 /* EditorAjarDocumentStore.swift in Sources */,
 				C807AAAFFC33E43695235AC2 /* EditorAjarDocumentViews.swift in Sources */,
@@ -351,6 +369,7 @@
 				1609504734AF289DE420F40C /* EditorAjarRelinkSupport.swift in Sources */,
 				E056E9938F510F165A587C82 /* EditorAjarRenderPipeline.swift in Sources */,
 				7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */,
+				E7C7BE013E7FE7B4B3D56F5F /* EditorAjarScopesPanel.swift in Sources */,
 				27AC5FC45DA5EF355A9DB6A4 /* EditorAjarWorkspaceView.swift in Sources */,
 				76992C808148BFDD103AC033 /* ExportQueuePanel.swift in Sources */,
 				668859A516DF395B27997893 /* MediaBrowserModel.swift in Sources */,
@@ -374,6 +393,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5F81FCEB82A63EC85F3996A6 /* EditorAjarAppModelTests.swift in Sources */,
+				060A17B973AEC702B8503A8D /* EditorAjarColorUITests.swift in Sources */,
 				BCE96AF43A7C5EAD6A016DEF /* EditorAjarDocumentLifecycleTests.swift in Sources */,
 				FF92728078D2828BEA1E8C21 /* EditorAjarExportQueueAppModelTests.swift in Sources */,
 				E6D687BC1C07CE3C51931A4A /* EditorAjarIssue246AppModelTests.swift in Sources */,

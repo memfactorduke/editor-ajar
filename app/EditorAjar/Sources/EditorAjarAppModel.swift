@@ -4,6 +4,7 @@ import AjarAudio
 import AjarCore
 import AjarExport
 import AjarMedia
+import AjarRender
 import AppKit
 import CoreImage
 import Foundation
@@ -161,10 +162,40 @@ final class EditorAjarAppModel: ObservableObject {
     /// summary → proposal via this pending flag instead of presenting both at once.
     private var pendingFirstMediaProposal = false
 
+    /// Clip inspector tab when a video clip is selected (Transform / Color).
+    @Published var selectedClipInspectorTab: ClipInspectorTab = .transform
+
+    /// Whether the FR-COL-003 scopes panel is visible.
+    @Published var isScopesPanelVisible = false
+
+    /// Active scope visualization kind.
+    @Published var selectedScopeKind: ScopeDisplayKind = .waveform
+
+    /// Latest GPU scope texture for the selected kind (retained via `retainedScopeFrame`).
+    @Published var scopeDisplayTexture: MTLTexture?
+
+    /// Non-nil when the last scope analysis attempt failed (typed, non-blocking).
+    @Published var scopeAnalysisErrorMessage: String?
+
+    /// Count of scope analysis requests (model-level throttle instrumentation / tests).
+    @Published var scopeAnalysisRequestCount = 0
+
+    /// Whether the FR-COL-004 `.cube` file importer is presented.
+    @Published var isLUTImporterPresented = false
+
+    /// Most recent LUT import refusal (typed, non-blocking).
+    @Published var lutImportError: EditorAjarLUTImportError?
+
+    /// Whether the FR-COL-007 Save Look naming sheet is presented.
+    @Published var isSaveLookSheetPresented = false
+
+    /// Draft name for the Save Look sheet.
+    @Published var saveLookDraftName = ""
+
     private var playbackController: EditorAjarPlaybackController?
     private var renderPipeline: EditorAjarRenderPipeline?
     private var displayLinkDriver: EditorAjarDisplayLinkDriver?
-    private var editHistory: EditHistory?
+    var editHistory: EditHistory?
     private let autosaveCoordinator: EditorAjarAutosaveCoordinator?
     /// Fallback package root for untitled/never-saved projects (preview cache, M3).
     private let autosavePackageRootURL: URL?
@@ -201,6 +232,19 @@ final class EditorAjarAppModel: ObservableObject {
     private var hasSurfacedReadOnlyEditRefusal = false
     /// One-shot authorization set only after the user confirms Discard in native document chrome.
     private var mayDiscardChangesForNextReplacement = false
+
+    /// Coalesce continuous primary color slider gestures into one undo step.
+    var colorCorrectionCoalesceActive = false
+    /// Coalesce continuous LUT strength slider gestures into one undo step.
+    var lutStrengthCoalesceActive = false
+    /// Shared GPU scope analyzer (lazy; never on the playback hot path).
+    var scopeAnalyzer: MetalScopeAnalyzer?
+    /// Retains the last `MetalScopeFrame` so display textures stay alive.
+    var retainedScopeFrame: MetalScopeFrame?
+    /// Last analyzed program texture identity for pause-mode on-demand analysis.
+    var lastScopeTextureIdentity: ObjectIdentifier?
+    /// Uptime of the last scope analysis request (throttle clock).
+    var lastScopeAnalysisTime: TimeInterval?
 
     init(
         autosavePackageURL: URL? = nil,
@@ -1861,6 +1905,8 @@ final class EditorAjarAppModel: ObservableObject {
         timelineState.selectedClips = result.selectedClips
         timelineState.selectionAnchor = result.anchor
         timelineState.selectedMarkerID = nil
+        colorCorrectionCoalesceActive = false
+        lutStrengthCoalesceActive = false
         persistActiveSequenceContext()
     }
 
@@ -1936,21 +1982,14 @@ final class EditorAjarAppModel: ObservableObject {
         )
     }
 
+    /// Presents the naming sheet for FR-COL-007 save-look (preferred UI path).
     @discardableResult
     func saveLookFromSelectedClip() -> Bool {
-        guard let project,
-              canSaveLook,
-              let source = selectedProjectClipReference
-        else {
+        guard canSaveLook else {
             return false
         }
-        return applyEdit(
-            .saveLookFromClip(
-                source: source,
-                lookID: UUID(),
-                name: Self.nextLookName(in: project)
-            )
-        )
+        presentSaveLookSheet()
+        return true
     }
 
     @discardableResult
@@ -3284,6 +3323,21 @@ final class EditorAjarAppModel: ObservableObject {
         canvasTitleEditingUndoBaseline = nil
         hasSurfacedReadOnlyEditRefusal = false
         isReadOnlyBannerVisible = !loadResult.openMode.allowsEditing
+        colorCorrectionCoalesceActive = false
+        lutStrengthCoalesceActive = false
+        isScopesPanelVisible = false
+        selectedScopeKind = .waveform
+        retainedScopeFrame = nil
+        scopeDisplayTexture = nil
+        lastScopeTextureIdentity = nil
+        lastScopeAnalysisTime = nil
+        scopeAnalysisErrorMessage = nil
+        scopeAnalysisRequestCount = 0
+        isLUTImporterPresented = false
+        lutImportError = nil
+        isSaveLookSheetPresented = false
+        saveLookDraftName = ""
+        selectedClipInspectorTab = .transform
 
         if let sequence = loadResult.project.sequences.first {
             activeSequenceID = sequence.id
@@ -3524,6 +3578,7 @@ final class EditorAjarAppModel: ObservableObject {
                         )
                     }
                     self?.presentedTexture = renderedFrame.texture
+                    self?.notePresentedTextureForScopes()
                     self?.loadMessage = AppString.localized(
                         "status.renderedFrame", "Rendered \(sequence.name), frame \(frame)"
                     )
@@ -3656,7 +3711,7 @@ final class EditorAjarAppModel: ObservableObject {
         )
     }
 
-    private static func nextLookName(in project: Project) -> String {
+    static func nextLookName(in project: Project) -> String {
         let names = Set(
             project.looks.map { look in
                 look.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -3688,7 +3743,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     @discardableResult
-    private func applyEdit(
+    func applyEdit(
         _ command: EditCommand,
         coalescingWithPrevious: Bool = false
     ) -> Bool {

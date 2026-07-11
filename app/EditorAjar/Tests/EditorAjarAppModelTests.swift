@@ -1230,7 +1230,12 @@ final class EditorAjarAppModelTests: XCTestCase {
         )
         XCTAssertTrue(model.canSaveLook)
         XCTAssertTrue(model.saveLookFromSelectedClip())
-        XCTAssertEqual(model.savedLooks.map(\.name), [" look 1 ", "Look 2"])
+        XCTAssertTrue(model.isSaveLookSheetPresented)
+        XCTAssertEqual(model.saveLookDraftName, "Look 2")
+        model.updateSaveLookDraftName("Warm Grade")
+        XCTAssertTrue(model.confirmSaveLookFromSelectedClip())
+        XCTAssertFalse(model.isSaveLookSheetPresented)
+        XCTAssertEqual(model.savedLooks.map(\.name), [" look 1 ", "Warm Grade"])
         XCTAssertEqual(model.undoMenuTitle, "Undo Save Look")
         let savedLook = try XCTUnwrap(model.savedLooks.last)
 
