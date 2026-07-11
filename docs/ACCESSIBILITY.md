@@ -1,8 +1,8 @@
 # Editor Ajar — Accessibility checklist (NFR-A11Y-001)
 
 > **Living document.** When you add an interactive control, add a row here and keep the
-> VoiceOver label / keyboard path in sync with the source. CI enforces labels on **launch-
-> visible** interactive AX roles via `EditorAjarAccessibilityTreeTests` (read-only tree walk).
+> VoiceOver label / keyboard path in sync with the source. CI enforces labels on launch-welcome
+> and sample-workspace interactive AX roles via `EditorAjarAccessibilityTreeTests`.
 
 **Requirement:** [SPEC NFR-A11Y-001](SPEC.md) — full keyboard control; VoiceOver labels on all
 controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
@@ -11,7 +11,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 
 | Layer | What it covers | Where |
 |-------|----------------|--------|
-| Read-only AX tree walk | Every interactive role at launch has a non-empty label | `app/EditorAjar/UITests/EditorAjarAccessibilityTreeTests.swift` (ui-smoke) |
+| AX tree walks | Every interactive role on the launch welcome and sample workspace has a non-empty label | `app/EditorAjar/UITests/EditorAjarAccessibilityTreeTests.swift` (ui-smoke) |
 | Interaction smokes | Transport, tabs, inspector keyframe toggle, guides | `EditorAjarUISmokeTests` (ui-smoke) |
 | Local-only canvas edit/nudge | FR-TXT-003 keyboard edit + drag/nudge | same file; **skipped on CI** (#210) |
 | This checklist | Conditional panels, menus, shortcuts, tab order | human + PR review |
@@ -26,7 +26,10 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Step backward / forward | `←` / `→` | One frame |
 | Undo / Redo | `⌘Z` / `⇧⌘Z` | Edit menu |
 | Import media files / folders | `⌘I` | File menu; multi-select picker |
-| New Sequence | `⌘N` | Sequences menu + tab bar |
+| New Project | `⌘N` | File menu + launch welcome |
+| Open Project | `⌘O` | File menu + launch welcome |
+| Save / Save As | `⌘S` / `⇧⌘S` | File menu; Save opens Save As for Untitled |
+| New Sequence | `⌥⌘N` | Sequences menu + tab bar |
 | Close Sequence | `⌘W` | When more than one sequence |
 | Add Marker | `⇧⌘M` | Timeline + Markers menu |
 | Previous / Next Marker | `⌘[` / `⌘]` | |
@@ -53,19 +56,48 @@ Arrow keys on a focused canvas title box nudge 1 unit (Shift = 10).
 
 Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 
-1. **Read-only banner** (when visible) → Dismiss  
-2. **Workspace header** → Export… → Exports / Hide Exports  
-3. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence  
-4. **Library panel** → Import Media; VoiceOver navigation also exposes media rows and import progress  
-5. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
-6. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
-7. **Inspector** → marker or transform fields when selection exists  
-8. **Timeline toolbar** → tool buttons left-to-right  
-9. **Timeline tracks** → track state buttons → clips → keyframe dots when shown  
-10. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
+1. **Launch welcome** (when no project) → New Project → Open Project → recent projects  
+2. **Read-only banner** (when visible) → Dismiss  
+3. **Workspace header** → Export… → Exports / Hide Exports  
+4. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence  
+5. **Library panel** → Import Media; VoiceOver navigation also exposes media rows and import progress  
+6. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
+7. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
+8. **Inspector** → marker or transform fields when selection exists  
+9. **Timeline toolbar** → tool buttons left-to-right  
+10. **Timeline tracks** → track state buttons → clips → keyframe dots when shown  
+11. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
 
-**Sheets:** Export dialog focuses Mode → Preset/Range/format pickers → Cancel → Validate. The
-import summary exposes categorized result rows to VoiceOver, then the Done button to keyboard focus.
+**Sheets:** New Project focuses Resolution → Frame Rate → Color Space → Audio Rate → Cancel →
+Create. Export focuses Mode → Preset/Range/format pickers → Cancel → Validate. The import summary
+exposes categorized result rows to VoiceOver, then the Done button to keyboard focus.
+
+---
+
+## Document lifecycle (FR-PROJ-001/002/003, #233)
+
+Launches to the welcome unless crash recovery has a project. The native window exposes the
+package-derived title/represented URL and macOS edited indicator.
+
+| Control | Shortcut | AX label | id / hint |
+|---------|----------|----------|-----------|
+| Welcome | — | Editor Ajar project welcome | id: `Welcome View` |
+| New Project… | `⌘N` | Create a new project | id: `Welcome New Project` |
+| Open… | `⌘O` | Open an existing project | id: `Welcome Open Project` |
+| Recent project row | click / Full Keyboard Access | Open recent project {name} | id: `Recent Project {index}` |
+| New Project sheet | — | New project settings | id: `New Project Settings` |
+| Resolution | arrows / menu | Project resolution | id: `Project Resolution` |
+| Frame Rate | arrows / menu | Project frame rate | id: `Project Frame Rate` |
+| Color Space | arrows / menu | Project color space | id: `Project Color Space` |
+| Audio Rate | arrows / menu | Project audio sample rate | id: `Project Audio Sample Rate` |
+| Cancel | `Esc` | Cancel new project | id: `Cancel New Project` |
+| Create | Return | Create new project | id: `Create New Project` |
+
+New/Open/Sample replacement, window close, and app Quit all use the native unsaved-changes
+confirmation buttons Save → Cancel → Discard Changes. Revert uses Revert → Cancel. Open/Save
+panels carry localized titles/actions and retain security-scoped access after selection; Finder
+Open With routes registered `.ajar` packages through the same open path. Full Keyboard Access
+covers the standard AppKit controls in these dialogs.
 
 ---
 
@@ -293,13 +325,14 @@ launch-time tree test.
 
 | Menu | Items (labels) |
 |------|----------------|
-| File | Import Media… (`⌘I`) |
+| File | New Project (`⌘N`), Open, Recent Projects, Import Media… (`⌘I`), Save, Save As, Revert to Saved |
 | Edit | Undo / Redo (dynamic titles) |
 | Sequences | New Sequence, Close Sequence |
 | Markers | Add / Previous / Next / Delete Marker |
 | Clip | Copy/Paste Grade, Save Look, Apply Look…, Detach Audio |
 | Title | Edit Canvas Title, Nudge Title Right/Down |
 | Export | Open export dialog, Export Active Sequence, Show/Hide Export Queue |
+| Help | Open Sample Project |
 
 ---
 

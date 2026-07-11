@@ -22,6 +22,28 @@ targets:
   EditorAjar:
     type: application
     platform: macOS
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Editor Ajar
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.video
+        NSHighResolutionCapable: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Editor Ajar Project
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSTypeIsPackage: true
+            LSItemContentTypes:
+              - org.editorajar.project
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: org.editorajar.project
+            UTTypeDescription: Editor Ajar Project
+            UTTypeConformsTo:
+              - com.apple.package
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - ajar
     sources:
       - path: Sources
     dependencies:
@@ -38,9 +60,7 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Editor Ajar
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.video
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: org.editorajar.EditorAjar
         PRODUCT_NAME: EditorAjar
   EditorAjarTests:

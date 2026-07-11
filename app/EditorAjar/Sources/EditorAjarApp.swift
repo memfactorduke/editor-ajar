@@ -1,9 +1,39 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// Adds the document save review that a custom SwiftUI window does not receive automatically.
+final class EditorAjarApplicationDelegate: NSObject, NSApplicationDelegate {
+    var shouldTerminate: (() -> Bool)?
+    var prepareForTermination: (() async -> Void)?
+
+    private var isPreparingTermination = false
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard shouldTerminate?() != false else {
+            return .terminateCancel
+        }
+        guard let prepareForTermination else {
+            return .terminateNow
+        }
+        guard !isPreparingTermination else {
+            return .terminateLater
+        }
+        isPreparingTermination = true
+        Task {
+            await prepareForTermination()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}
 
 @main
 struct EditorAjarApp: App {
+    @NSApplicationDelegateAdaptor(EditorAjarApplicationDelegate.self)
+    private var applicationDelegate
     @StateObject private var model: EditorAjarAppModel
 
     init() {
@@ -19,11 +49,73 @@ struct EditorAjarApp: App {
 
     var body: some Scene {
         WindowGroup {
-            EditorAjarWorkspaceView(model: model)
-                .frame(minWidth: 1_100, minHeight: 720)
+            EditorAjarRootView(
+                model: model,
+                presentOpenPanel: presentOpenPanel,
+                openRecentProject: openRecentProject,
+                shouldCloseWindow: shouldCloseCurrentDocument
+            )
+            .onAppear {
+                applicationDelegate.shouldTerminate = shouldCloseCurrentDocument
+                applicationDelegate.prepareForTermination = {
+                    await model.finishPendingDocumentWrites()
+                }
+            }
+            .onOpenURL { url in
+                prepareForDocumentReplacement {
+                    openRecentProject(url)
+                }
+            }
         }
         .commands {
             CommandGroup(replacing: .newItem) {
+                Button(AppString.localized("document.new.title", "New Project…")) {
+                    prepareForDocumentReplacement {
+                        model.presentNewProjectSheet()
+                    }
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+                .accessibilityLabel(AppString.localized(
+                    "document.new.ax",
+                    "Create a new project"
+                ))
+
+                Button(AppString.localized("document.open.title", "Open…")) {
+                    prepareForDocumentReplacement {
+                        presentOpenPanel()
+                    }
+                }
+                .keyboardShortcut("o", modifiers: [.command])
+                .accessibilityLabel(AppString.localized(
+                    "document.open.ax",
+                    "Open an existing project"
+                ))
+
+                Menu(AppString.localized("document.openRecent.title", "Recent Projects")) {
+                    if model.recentProjectURLs.isEmpty {
+                        Text(AppString.localized(
+                            "document.openRecent.empty",
+                            "No Recent Projects"
+                        ))
+                    } else {
+                        ForEach(model.recentProjectURLs, id: \.self) { url in
+                            Button(url.deletingPathExtension().lastPathComponent) {
+                                prepareForDocumentReplacement {
+                                    openRecentProject(url)
+                                }
+                            }
+                            .accessibilityLabel(AppString.localized(
+                                "document.openRecent.item.ax",
+                                "Open recent project \(url.deletingPathExtension().lastPathComponent)"
+                            ))
+                        }
+                    }
+                }
+                .accessibilityLabel(AppString.localized(
+                    "document.openRecent.ax",
+                    "Recent projects"
+                ))
+
                 Button(AppString.localized("menu.import.media", "Import Media…")) {
                     model.presentMediaImporter()
                 }
@@ -32,6 +124,36 @@ struct EditorAjarApp: App {
                 .accessibilityLabel(
                     AppString.localized("menu.import.media.ax", "Import media files or folders")
                 )
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button(AppString.localized("document.save.title", "Save")) {
+                    _ = saveCurrentProject()
+                }
+                .keyboardShortcut("s", modifiers: [.command])
+                .disabled(!model.canSaveProject)
+                .accessibilityLabel(AppString.localized(
+                    "document.save.ax",
+                    "Save project"
+                ))
+
+                Button(AppString.localized("document.saveAs.title", "Save As…")) {
+                    _ = presentSavePanel()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(!model.canSaveProjectAs)
+                .accessibilityLabel(AppString.localized(
+                    "document.saveAs.ax",
+                    "Save project as"
+                ))
+
+                Button(AppString.localized("document.revert.title", "Revert to Saved")) {
+                    confirmAndRevertProject()
+                }
+                .disabled(!model.canRevertProject)
+                .accessibilityLabel(AppString.localized(
+                    "document.revert.ax",
+                    "Revert project to its last saved version"
+                ))
             }
             CommandGroup(replacing: .undoRedo) {
                 Button(model.undoMenuTitle) {
@@ -52,7 +174,7 @@ struct EditorAjarApp: App {
                 Button(AppString.localized("menu.sequences.new", "New Sequence")) {
                     model.addSequence()
                 }
-                .keyboardShortcut("n", modifiers: [.command])
+                .keyboardShortcut("n", modifiers: [.command, .option])
                 .accessibilityLabel(AppString.localized("menu.sequences.new", "New Sequence"))
 
                 Button(AppString.localized("menu.sequences.close", "Close Sequence")) {
@@ -200,6 +322,169 @@ struct EditorAjarApp: App {
                         : AppString.localized("menu.export.showQueue", "Show Export Queue")
                 )
             }
+            CommandGroup(after: .help) {
+                Button(AppString.localized(
+                    "help.openSampleProject.title",
+                    "Open Sample Project"
+                )) {
+                    prepareForDocumentReplacement {
+                        do {
+                            try model.openSampleProject()
+                        } catch {
+                            model.presentDocumentError(error, operation: .sample)
+                        }
+                    }
+                }
+                .accessibilityLabel(AppString.localized(
+                    "help.openSampleProject.ax",
+                    "Open the Editor Ajar sample project"
+                ))
+            }
+        }
+    }
+
+    private var ajarContentType: UTType {
+        UTType(filenameExtension: "ajar", conformingTo: .package) ?? .package
+    }
+
+    private func prepareForDocumentReplacement(_ action: () -> Void) {
+        guard confirmUnsavedChangesIfNeeded(authorizingReplacement: true) else {
+            return
+        }
+        action()
+    }
+
+    private func shouldCloseCurrentDocument() -> Bool {
+        confirmUnsavedChangesIfNeeded(authorizingReplacement: false)
+    }
+
+    private func confirmUnsavedChangesIfNeeded(authorizingReplacement: Bool) -> Bool {
+        guard model.isDocumentDirty else {
+            return true
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = AppString.localized(
+            "document.unsavedChanges.title",
+            "Save changes before continuing?"
+        )
+        alert.informativeText = AppString.localized(
+            "document.unsavedChanges.message",
+            "Your unsaved project changes will be lost if you continue without saving."
+        )
+        alert.addButton(withTitle: AppString.localized(
+            "document.unsavedChanges.save",
+            "Save"
+        ))
+        alert.addButton(withTitle: AppString.localized(
+            "document.unsavedChanges.cancel",
+            "Cancel"
+        ))
+        alert.addButton(withTitle: AppString.localized(
+            "document.unsavedChanges.discard",
+            "Discard Changes"
+        ))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return saveCurrentProject()
+        case .alertThirdButtonReturn:
+            if authorizingReplacement {
+                model.authorizeDiscardForNextDocumentReplacement()
+            } else {
+                model.discardUnsavedChangesForClosing()
+            }
+            return true
+        default:
+            model.cancelDocumentReplacementAuthorization()
+            return false
+        }
+    }
+
+    private func presentOpenPanel() {
+        let panel = NSOpenPanel()
+        panel.title = AppString.localized("document.open.panelTitle", "Open Project")
+        panel.prompt = AppString.localized("document.open.panelAction", "Open")
+        panel.allowedContentTypes = [ajarContentType]
+        panel.allowsMultipleSelection = false
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.treatsFilePackagesAsDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else {
+            model.cancelDocumentReplacementAuthorization()
+            return
+        }
+        openRecentProject(url)
+    }
+
+    private func openRecentProject(_ url: URL) {
+        do {
+            try model.openRecentProject(at: url)
+        } catch {
+            model.presentDocumentError(error, operation: .open)
+        }
+    }
+
+    @discardableResult
+    private func saveCurrentProject() -> Bool {
+        if model.documentURL == nil {
+            return presentSavePanel()
+        }
+        do {
+            try model.saveProject()
+            return true
+        } catch {
+            model.presentDocumentError(error, operation: .save)
+            return false
+        }
+    }
+
+    @discardableResult
+    private func presentSavePanel() -> Bool {
+        let panel = NSSavePanel()
+        panel.title = AppString.localized("document.saveAs.panelTitle", "Save Project")
+        panel.prompt = AppString.localized("document.saveAs.panelAction", "Save")
+        panel.allowedContentTypes = [ajarContentType]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.nameFieldStringValue = "\(model.documentDisplayName).ajar"
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return false
+        }
+        do {
+            try model.saveProjectAs(to: url)
+            return true
+        } catch {
+            model.presentDocumentError(error, operation: .save)
+            return false
+        }
+    }
+
+    private func confirmAndRevertProject() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = AppString.localized(
+            "document.revertConfirm.title",
+            "Revert to the last saved version?"
+        )
+        alert.informativeText = AppString.localized(
+            "document.revertConfirm.message",
+            "All changes since the last save will be discarded."
+        )
+        alert.addButton(withTitle: AppString.localized(
+            "document.revertConfirm.action",
+            "Revert"
+        ))
+        alert.addButton(withTitle: AppString.localized(
+            "document.revertConfirm.cancel",
+            "Cancel"
+        ))
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+        do {
+            try model.revertProject()
+        } catch {
+            model.presentDocumentError(error, operation: .revert)
         }
     }
 }

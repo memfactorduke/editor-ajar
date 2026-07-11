@@ -33,6 +33,16 @@ final class EditorAjarUISmokeTests: XCTestCase {
         let app = try XCTUnwrap(launchedApp)
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Welcome View"].waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.buttons["Welcome New Project"].exists)
+        XCTAssertTrue(app.buttons["Welcome Open Project"].exists)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["Program monitor showing Sample Playback Sequence"]
+                .exists
+        )
+        openSampleProjectFromHelp(in: app)
 
         assertInitialProjectChrome(in: app)
         exerciseSequenceTabs(in: app)
@@ -43,6 +53,30 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
         XCTAssertTrue(window.exists)
         XCTAssertEqual(app.state, .runningForeground)
+    }
+
+    func testFRPROJ003NewProjectSheetExposesSettingsAndCancelPath() throws {
+        let app = try XCTUnwrap(launchedApp)
+        let newProjectButton = app.buttons["Welcome New Project"]
+        XCTAssertTrue(newProjectButton.waitForExistence(timeout: 10))
+        newProjectButton.click()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["New Project Settings"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["Project Resolution"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["Project Frame Rate"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["Project Color Space"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["Project Audio Sample Rate"].exists)
+        XCTAssertTrue(app.buttons["Create New Project"].exists)
+
+        let cancelButton = app.buttons["Cancel New Project"]
+        XCTAssertTrue(cancelButton.exists)
+        cancelButton.click()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Welcome View"].waitForExistence(timeout: 10)
+        )
     }
 
     // #210 / NFR-A11Y-001 canvas edit smoke — **local-only**.
@@ -61,6 +95,7 @@ final class EditorAjarUISmokeTests: XCTestCase {
     //   xcodebuild … -testPlan EditorAjarLocal -only-testing:EditorAjarUITests
     func testFRTXT003EditsCanvasTitleWithKeyboardAndUndoRestoresText() throws {
         let app = try XCTUnwrap(launchedApp)
+        openSampleProjectFromHelp(in: app)
         defer { restoreCanvasTitleUIState(in: app) }
         let firstBoxID = "00000000-0000-0000-0000-000000000129"
 
@@ -121,6 +156,7 @@ final class EditorAjarUISmokeTests: XCTestCase {
     // Skip mechanism: EditorAjarCI.xctestplan + ci.yml -skip-testing (see edit smoke above).
     func testFRTXT003DragsAndKeyboardNudgesCanvasTitleBox() throws {
         let app = try XCTUnwrap(launchedApp)
+        openSampleProjectFromHelp(in: app)
         defer { restoreCanvasTitleUIState(in: app) }
         let boxID = "00000000-0000-0000-0000-000000000129"
 
@@ -172,6 +208,7 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
     func testFRTXT003TogglesActionAndTitleSafeGuides() throws {
         let app = try XCTUnwrap(launchedApp)
+        openSampleProjectFromHelp(in: app)
         let toggle = app.buttons["Canvas Safe Area Guides Toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         XCTAssertEqual(toggle.value as? String, "Off")
@@ -202,6 +239,22 @@ final class EditorAjarUISmokeTests: XCTestCase {
                 .waitForExistence(timeout: 5)
         )
         XCTAssertTrue(app.buttons["New Sequence"].waitForExistence(timeout: 5))
+    }
+
+    private func openSampleProjectFromHelp(in app: XCUIApplication) {
+        let monitor = app.descendants(matching: .any)[
+            "Program monitor showing Sample Playback Sequence"
+        ]
+        if monitor.exists {
+            return
+        }
+        let helpMenu = app.menuBars.menuBarItems["Help"]
+        XCTAssertTrue(helpMenu.waitForExistence(timeout: 5))
+        helpMenu.click()
+        let sampleItem = app.menuItems["Open Sample Project"]
+        XCTAssertTrue(sampleItem.waitForExistence(timeout: 5))
+        sampleItem.click()
+        XCTAssertTrue(monitor.waitForExistence(timeout: 15))
     }
 
     private func exerciseSequenceTabs(in app: XCUIApplication) {

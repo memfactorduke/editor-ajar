@@ -98,7 +98,7 @@ final class VideoFrameDecoderTests: XCTestCase {
     }
 }
 
-private enum SyntheticMovieWriter {
+enum SyntheticMovieWriter {
     static func writeMovie(
         to url: URL,
         width: Int,

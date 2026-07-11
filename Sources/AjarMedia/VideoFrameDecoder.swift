@@ -218,6 +218,45 @@ public final class VideoFrameDecoder {
             throw MediaDecodeError.unsupportedSource(sourceURL)
         }
 
+        // `copyNextSampleBuffer` blocks its thread while MediaToolbox decodes. Running that on
+        // the Swift cooperative pool can wedge the entire process: enough concurrent decodes
+        // occupy every pool thread, and the completions/releases they are transitively waiting
+        // on also need pool threads, so nothing ever drains (NFR-STAB-001, observed as an
+        // app-test deadlock). A dedicated concurrent GCD queue keeps decoder blocking out of
+        // the cooperative pool entirely. Cancellation intentionally does not interrupt
+        // AVAssetReader: a cancelled Task still waits for this uninterruptible read to finish,
+        // matching the decoder's behavior before the queue hop.
+        return try await withCheckedThrowingContinuation { continuation in
+            Self.blockingDecodeQueue.async {
+                do {
+                    let frame = try self.readFirstFrame(
+                        asset: asset,
+                        track: track,
+                        sourceURL: sourceURL,
+                        at: time
+                    )
+                    continuation.resume(returning: frame)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Queue for the blocking `AVAssetReader` phase; never the Swift cooperative pool.
+    private static let blockingDecodeQueue = DispatchQueue(
+        label: "org.editorajar.video-frame-decode",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+
+    /// Blocking first-frame read at `time`; runs on `blockingDecodeQueue`.
+    private func readFirstFrame(
+        asset: AVAsset,
+        track: AVAssetTrack,
+        sourceURL: URL,
+        at time: RationalTime
+    ) throws -> DecodedFrame {
         let reader: AVAssetReader
         do {
             reader = try makeReader(asset: asset)
