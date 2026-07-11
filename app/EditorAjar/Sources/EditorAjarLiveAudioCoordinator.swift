@@ -46,6 +46,9 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
     private let renderQueue: DispatchQueue
     private var publishedRange: Range<Int64>?
     private var pendingRange: Range<Int64>?
+    /// Session master monitoring gain. Written from the main actor, read only on `renderQueue`
+    /// when preparing plans — never on the real-time audio callback (ADR-0012).
+    private var masterGainLinear: Double = AudioMixUISupport.defaultMasterGainLinear
 
     init(
         driver: any EditorAjarAudioOutputDriving,
@@ -56,6 +59,17 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
     ) {
         self.driver = driver
         self.renderQueue = renderQueue
+    }
+
+    /// Updates session master gain. Applied when the next plan is prepared off-thread.
+    func setMasterGainLinear(_ linear: Double) {
+        let clamped = min(
+            AudioMixLimits.maximumGain.doubleValue,
+            max(AudioMixLimits.minimumGain.doubleValue, linear)
+        )
+        renderQueue.async { [weak self] in
+            self?.masterGainLinear = clamped
+        }
     }
 
     convenience init() throws {
@@ -166,7 +180,8 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
                 let plan = try Self.renderPlan(
                     project: project,
                     sequence: sequence,
-                    range: request.renderRange
+                    range: request.renderRange,
+                    masterGainLinear: self.masterGainLinear
                 )
                 try self.driver.publish(plan)
                 self.publishedRange = request.publishRange
@@ -208,10 +223,14 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
 
     /// Builds the realtime callback plan off-thread, flattening compound/nested sources with
     /// the same contributor semantics as the offline mix (FR-AUD-007, FR-CMP-001).
+    ///
+    /// Session master gain is applied here by scaling the pre-rendered buffer so the RT
+    /// callback remains a pure copy (ADR-0012).
     private static func renderPlan(
         project: Project,
         sequence: Sequence,
-        range: TimeRange
+        range: TimeRange,
+        masterGainLinear: Double
     ) throws -> RealtimeAudioRenderPlan {
         let provider = try EditorAjarProjectAudioSourceProvider(
             project: project,
@@ -219,12 +238,14 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
             range: range
         )
         do {
-            return try RealtimeAudioRenderPlan.preparingCompoundMix(
+            let buffer = try OfflineAudioMixer.render(
                 project: project,
                 sequence: sequence,
                 range: range,
                 sourceProvider: provider
             )
+            let scaled = try Self.applyingMasterGain(masterGainLinear, to: buffer)
+            return RealtimeAudioRenderPlan(buffer: scaled)
         } catch let error as AudioRenderError {
             switch error {
             case .missingAudioSource, .unsupportedClipSource:
@@ -235,6 +256,22 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
                 throw error
             }
         }
+    }
+
+    private static func applyingMasterGain(
+        _ linear: Double,
+        to buffer: RenderedAudioBuffer
+    ) throws -> RenderedAudioBuffer {
+        guard linear != 1.0, linear.isFinite else {
+            return buffer
+        }
+        let gain = Float(linear)
+        let samples = buffer.samples.map { $0 * gain }
+        return try RenderedAudioBuffer(
+            format: buffer.format,
+            frameCount: buffer.frameCount,
+            samples: samples
+        )
     }
 
     private static func silentBuffer(project: Project, range: TimeRange) throws -> RenderedAudioBuffer {
@@ -286,7 +323,8 @@ final class EditorAjarLiveAudioCoordinator: EditorAjarAudioCoordinating {
     }
 }
 
-private struct EditorAjarProjectAudioSourceProvider: AudioSourceProvider {
+/// Sample-tone / project media provider shared by live playback plan prep and off-RT metering.
+struct EditorAjarProjectAudioSourceProvider: AudioSourceProvider {
     let project: Project
     let sourceWindowsByMediaID: [UUID: Range<Int>]
 

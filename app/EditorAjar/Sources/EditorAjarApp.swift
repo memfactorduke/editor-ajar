@@ -510,81 +510,61 @@ struct EditorAjarApp: App {
                 .accessibilityLabel(
                     AppString.localized("menu.clip.detachAudio.ax", "Detach Audio from Selected Clip")
                 )
-            }
-            // FR-TXT-003: menu/keyboard paths for headless UI-smoke (same pattern as Undo).
-            CommandMenu(Text(AppString.localized("menu.title.title", "Title"))) {
-                Button(AppString.localized("menu.title.edit", "Edit Canvas Title")) {
-                    model.editPrimaryCanvasTitleBox()
-                }
-                .keyboardShortcut("e", modifiers: [.command, .option])
-                .disabled(model.primaryCanvasTitleBoxReference == nil)
-                .accessibilityLabel(AppString.localized("menu.title.edit", "Edit Canvas Title"))
 
-                Button(AppString.localized("menu.title.nudgeRight", "Nudge Title Right")) {
-                    model.nudgePrimaryCanvasTitleBox(direction: .right, largeStep: true)
+                Divider()
+
+                Button(AppString.localized("menu.clip.fadeIn", "Apply Fade In")) {
+                    _ = model.applyDefaultFadeInToSelectedAudioClip()
                 }
-                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-                .disabled(model.primaryCanvasTitleBoxReference == nil)
+                .disabled(model.selectedClip?.kind != .audio)
                 .accessibilityLabel(
-                    AppString.localized("menu.title.nudgeRight.ax", "Nudge Canvas Title Right")
+                    AppString.localized("menu.clip.fadeIn.ax", "Apply default fade in to audio clip")
                 )
 
-                Button(AppString.localized("menu.title.nudgeDown", "Nudge Title Down")) {
-                    model.nudgePrimaryCanvasTitleBox(direction: .down, largeStep: true)
+                Button(AppString.localized("menu.clip.fadeOut", "Apply Fade Out")) {
+                    _ = model.applyDefaultFadeOutToSelectedAudioClip()
                 }
-                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-                .disabled(model.primaryCanvasTitleBoxReference == nil)
+                .disabled(model.selectedClip?.kind != .audio)
                 .accessibilityLabel(
-                    AppString.localized("menu.title.nudgeDown.ax", "Nudge Canvas Title Down")
-                )
-            }
-            CommandMenu(Text(AppString.localized("menu.export.title", "Export"))) {
-                Button(AppString.localized("menu.export.open", "Export…")) {
-                    model.presentExportDialog()
-                }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-                .accessibilityLabel(AppString.localized("menu.export.open.ax", "Open export dialog"))
-
-                Button(AppString.localized("menu.export.enqueue", "Export Active Sequence")) {
-                    model.enqueueActiveSequenceExport()
-                }
-                // ⌘⇧E is the export dialog; enqueue uses ⌘⌃⇧E to avoid collision.
-                .keyboardShortcut("e", modifiers: [.command, .control, .shift])
-                .accessibilityLabel(
-                    AppString.localized("menu.export.enqueue", "Export Active Sequence")
+                    AppString.localized(
+                        "menu.clip.fadeOut.ax",
+                        "Apply default fade out to audio clip"
+                    )
                 )
 
-                Button(
-                    model.isExportQueuePanelVisible
-                        ? AppString.localized("menu.export.hideQueue", "Hide Export Queue")
-                        : AppString.localized("menu.export.showQueue", "Show Export Queue")
-                ) {
-                    model.toggleExportQueuePanel()
+                Button(AppString.localized("menu.clip.crossfade", "Add Crossfade")) {
+                    _ = model.addCrossfadeAfterSelectedAudioClip()
                 }
-                .keyboardShortcut("e", modifiers: [.command, .control])
+                .disabled(!model.canAddCrossfadeAfterSelectedAudioClip)
                 .accessibilityLabel(
-                    model.isExportQueuePanelVisible
-                        ? AppString.localized("menu.export.hideQueue", "Hide Export Queue")
-                        : AppString.localized("menu.export.showQueue", "Show Export Queue")
+                    AppString.localized(
+                        "menu.clip.crossfade.ax",
+                        "Add audio crossfade after selected clip"
+                    )
+                )
+
+                Button(AppString.localized("menu.clip.removeCrossfade", "Remove Crossfade")) {
+                    _ = model.removeCrossfadeFromSelectedAudioClip()
+                }
+                .disabled(!model.selectedClipHasTrailingCrossfade)
+                .accessibilityLabel(
+                    AppString.localized(
+                        "menu.clip.removeCrossfade.ax",
+                        "Remove audio crossfade after selected clip"
+                    )
                 )
             }
-            CommandGroup(after: .help) {
-                Button(AppString.localized(
-                    "help.openSampleProject.title",
-                    "Open Sample Project"
-                )) {
-                    prepareForDocumentReplacement {
-                        do {
-                            try model.openSampleProject()
-                        } catch {
-                            model.presentDocumentError(error, operation: .sample)
-                        }
+            // Audio/Title/Export/Help are nested so `.commands` stays within
+            // CommandsBuilder's 10-child limit (extra CommandMenus would otherwise
+            // surface as "extra argument in call" on the 11th item).
+            EditorAjarTrailingCommands(model: model) {
+                prepareForDocumentReplacement {
+                    do {
+                        try model.openSampleProject()
+                    } catch {
+                        model.presentDocumentError(error, operation: .sample)
                     }
                 }
-                .accessibilityLabel(AppString.localized(
-                    "help.openSampleProject.ax",
-                    "Open the Editor Ajar sample project"
-                ))
             }
         }
     }
@@ -731,6 +711,100 @@ struct EditorAjarApp: App {
             try model.revertProject()
         } catch {
             model.presentDocumentError(error, operation: .revert)
+        }
+    }
+}
+
+/// Audio / Title / Export / Help menus, factored out so the app's `.commands`
+/// builder stays within `CommandsBuilder`'s 10-child arity limit.
+private struct EditorAjarTrailingCommands: Commands {
+    @ObservedObject var model: EditorAjarAppModel
+    let openSampleProject: () -> Void
+
+    var body: some Commands {
+        CommandMenu(Text(AppString.localized("menu.audio.title", "Audio"))) {
+            Button(
+                model.isMixerPanelVisible
+                    ? AppString.localized("menu.audio.hideMixer", "Hide Mixer")
+                    : AppString.localized("menu.audio.showMixer", "Show Mixer")
+            ) {
+                model.toggleMixerPanel()
+            }
+            .keyboardShortcut("m", modifiers: [.command, .option])
+            .accessibilityLabel(
+                model.isMixerPanelVisible
+                    ? AppString.localized("menu.audio.hideMixer.ax", "Hide audio mixer")
+                    : AppString.localized("menu.audio.showMixer.ax", "Show audio mixer")
+            )
+        }
+        // FR-TXT-003: menu/keyboard paths for headless UI-smoke (same pattern as Undo).
+        CommandMenu(Text(AppString.localized("menu.title.title", "Title"))) {
+            Button(AppString.localized("menu.title.edit", "Edit Canvas Title")) {
+                model.editPrimaryCanvasTitleBox()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .option])
+            .disabled(model.primaryCanvasTitleBoxReference == nil)
+            .accessibilityLabel(AppString.localized("menu.title.edit", "Edit Canvas Title"))
+
+            Button(AppString.localized("menu.title.nudgeRight", "Nudge Title Right")) {
+                model.nudgePrimaryCanvasTitleBox(direction: .right, largeStep: true)
+            }
+            .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+            .disabled(model.primaryCanvasTitleBoxReference == nil)
+            .accessibilityLabel(
+                AppString.localized("menu.title.nudgeRight.ax", "Nudge Canvas Title Right")
+            )
+
+            Button(AppString.localized("menu.title.nudgeDown", "Nudge Title Down")) {
+                model.nudgePrimaryCanvasTitleBox(direction: .down, largeStep: true)
+            }
+            .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            .disabled(model.primaryCanvasTitleBoxReference == nil)
+            .accessibilityLabel(
+                AppString.localized("menu.title.nudgeDown.ax", "Nudge Canvas Title Down")
+            )
+        }
+        CommandMenu(Text(AppString.localized("menu.export.title", "Export"))) {
+            Button(AppString.localized("menu.export.open", "Export…")) {
+                model.presentExportDialog()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .accessibilityLabel(AppString.localized("menu.export.open.ax", "Open export dialog"))
+
+            Button(AppString.localized("menu.export.enqueue", "Export Active Sequence")) {
+                model.enqueueActiveSequenceExport()
+            }
+            // ⌘⇧E is the export dialog; enqueue uses ⌘⌃⇧E to avoid collision.
+            .keyboardShortcut("e", modifiers: [.command, .control, .shift])
+            .accessibilityLabel(
+                AppString.localized("menu.export.enqueue", "Export Active Sequence")
+            )
+
+            Button(
+                model.isExportQueuePanelVisible
+                    ? AppString.localized("menu.export.hideQueue", "Hide Export Queue")
+                    : AppString.localized("menu.export.showQueue", "Show Export Queue")
+            ) {
+                model.toggleExportQueuePanel()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .control])
+            .accessibilityLabel(
+                model.isExportQueuePanelVisible
+                    ? AppString.localized("menu.export.hideQueue", "Hide Export Queue")
+                    : AppString.localized("menu.export.showQueue", "Show Export Queue")
+            )
+        }
+        CommandGroup(after: .help) {
+            Button(AppString.localized(
+                "help.openSampleProject.title",
+                "Open Sample Project"
+            )) {
+                openSampleProject()
+            }
+            .accessibilityLabel(AppString.localized(
+                "help.openSampleProject.ax",
+                "Open the Editor Ajar sample project"
+            ))
         }
     }
 }

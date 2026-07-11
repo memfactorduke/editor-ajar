@@ -46,6 +46,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Open export dialog | `⇧⌘E` | Header + Export menu |
 | Toggle export queue | `⌃⌘E` | Header + Export menu |
 | Toggle proxy / original playback | `⌥⌘P` | Header (FR-MED-004) |
+| Toggle audio mixer | `⌥⌘M` | Header + Audio menu (FR-AUD-003) |
 | Enqueue active sequence export | `⌃⇧⌘E` | Export menu / queue panel |
 | Edit canvas title | `⌥⌘E` | Title menu (primary visible box) |
 | Nudge canvas title right / down | `⌥⌘→` / `⌥⌘↓` | Title menu (large step) |
@@ -76,16 +77,17 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 
 1. **Launch welcome** (when no project) → New Project → Open Project → recent projects  
 2. **Read-only banner** (when visible) → Dismiss  
-3. **Workspace header** → Export… → Exports / Hide Exports  
+3. **Workspace header** → Mixer → Export… → Exports / Hide Exports  
 4. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence  
 5. **Media browser** → Import Media → layout → search → codec/state filters → media rows/cards → proxy/relink actions; VoiceOver navigation also exposes import progress  
 6. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
 7. **Scopes panel** (when visible, `⌥⌘S`) → type picker → hide  
 8. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
-9. **Inspector** → marker, or Transform/Color tabs when a video clip is selected  
+9. **Inspector** → marker, or Transform/Color/Audio tabs when a clip is selected  
 10. **Timeline toolbar** → tool buttons left-to-right  
-11. **Timeline tracks** → track state buttons → clips → keyframe dots when shown  
-12. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
+11. **Timeline tracks** → track state buttons → clips (waveforms / fade handles on audio) → keyframe dots when shown  
+12. **Mixer panel** (when visible) → per-track fader / pan / mute / solo → master fader / meter  
+13. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
 
 **Sheets:** New Project focuses Resolution → Frame Rate → Color Space → Audio Rate → Cancel →
 Create. Export focuses Mode → Preset/Range/format pickers → Cancel → Validate. The import summary
@@ -237,7 +239,7 @@ NSTextView / drag flakiness on headless CI). Labels for title boxes are covered 
 
 | Control | AX label | id / value |
 |---------|----------|------------|
-| Tab picker | Inspector tab | id: `Inspector Tab Picker` (Transform / Color) |
+| Tab picker | Inspector tab | id: `Inspector Tab Picker` (Transform / Color / Audio) |
 | Panel | Transform Inspector | id: `Transform Inspector` |
 | Number fields | Position X, Scale X %, … | id: `Transform {title}` |
 | Keyframe toggles | Add/Delete {param} Keyframe | id: `Transform {param} Keyframe Toggle` |
@@ -277,6 +279,21 @@ non-real-time preview route. A UI toggle must not mutate or add work to the real
 
 Primary color grade is **static in v1** (no color keyframe toggles); transform keyframes remain on the Transform tab.
 
+### Clip audio inspector (clip selected, Audio tab) — FR-AUD-001/002
+
+| Control | AX label | id / notes |
+|---------|----------|------------|
+| Panel | Audio clip inspector | id: `Audio Clip Inspector` |
+| Gain dB | Gain dB | id: `Clip Audio Gain dB`; static base; keyframe rubber-band deferred |
+| Pan | Pan | id: `Clip Audio Pan` |
+| Fade In (s) | Fade In (s) | id: `Clip Fade In Seconds` |
+| Fade Out (s) | Fade Out (s) | id: `Clip Fade Out Seconds` |
+| Add Crossfade | Add audio crossfade after selected clip | id: `Add Clip Audio Crossfade` |
+| Remove Crossfade | Remove audio crossfade after selected clip | id: `Remove Clip Audio Crossfade` |
+
+Selecting an audio clip auto-switches to the Audio tab; selecting a video clip leaves Color if
+already there, otherwise restores Transform so existing ui-smoke identifiers stay reachable.
+
 ### Scopes panel (toggle `⌥⌘S`) — FR-COL-003
 
 | Control | Shortcut | AX label | id |
@@ -295,6 +312,21 @@ Analysis is on-demand when paused and ≤ 10/s while playing (off the playback h
 | Sheet | Save Look dialog | `Save Look Sheet` |
 | Name field | Look name | `Save Look Name` |
 | Cancel / Save | Cancel / Save | `Save Look Cancel` / `Save Look Confirm` |
+
+### Mixer panel (FR-AUD-003)
+
+| Control | Shortcut | AX label | Notes |
+|---------|----------|----------|--------|
+| Toggle mixer | `⌥⌘M` | Show/Hide audio mixer | id: `Toggle Mixer` |
+| Panel | Audio mixer panel | id: `Mixer Panel` |
+| Track fader | arrows when focused | A{n} volume | id: `Mixer Track {uuid} Gain`; adjustable |
+| Track pan | arrows when focused | A{n} pan | id: `Mixer Track {uuid} Pan` |
+| Mute / Solo | — | Mute/Unmute / Solo/Unsolo A{n} | ids `Mixer Mute/Solo {uuid}` |
+| Master fader | arrows when focused | Master volume | id: `Mixer Master Gain`; session monitoring |
+| Meters | — | A{n} meter / Master meter | off-RT via `AudioMixerMeterAnalyzer` only |
+
+Meters never observe the real-time audio callback; they are published from the
+`org.editorajar.mixer-meter.analysis` queue (ADR-0012).
 
 ---
 
@@ -325,6 +357,9 @@ Analysis is on-demand when paused and ≤ 10/s while playing (off the playback h
 | Add/remove track | Sequence menu / Full Keyboard Access | menu item title | remove requires a selected empty track header |
 | Marker flag | click | Marker {name} | selection + color + frame + note |
 | Track lane | — | Video/Audio track n, …states | contain track buttons |
+| Audio clip waveform | — | (decorative under clip label) | reuses #235 `AudioWaveformSummary` cache |
+| Fade in handle | drag | Fade in handle | id: `Fade In Handle {clipID}` |
+| Fade out handle | drag | Fade out handle | id: `Fade Out Handle {clipID}` |
 | Enable/Lock/Hide/Mute/Solo | — | dynamic per track | value On/Off |
 | Select all track | — | Select all {track} | |
 | Clip | click | Clip {name} | selected + frame range |

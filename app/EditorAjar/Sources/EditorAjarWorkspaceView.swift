@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AjarAudio
 import AjarCore
 import AppKit
 import SwiftUI
@@ -44,6 +45,11 @@ struct EditorAjarWorkspaceView: View {
                     }
                     return model.insertMediaOnTimeline(mediaID: mediaID)
                 }
+            if model.isMixerPanelVisible {
+                Divider()
+                MixerPanelView(model: model)
+                    .frame(height: 220)
+            }
             if model.isExportQueuePanelVisible {
                 Divider()
                 ExportQueuePanel(
@@ -255,6 +261,24 @@ struct EditorAjarWorkspaceView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             proxyPlaybackToggle
+            Button(
+                model.isMixerPanelVisible
+                    ? AppString.localized("workspace.header.hideMixer", "Hide Mixer")
+                    : AppString.localized("workspace.header.mixer", "Mixer")
+            ) {
+                model.toggleMixerPanel()
+            }
+            .buttonStyle(.bordered)
+            .keyboardShortcut("m", modifiers: [.command, .option])
+            .help(AppString.localized(
+                "workspace.header.mixer.help", "Show or hide the audio mixer panel"
+            ))
+            .accessibilityLabel(
+                model.isMixerPanelVisible
+                    ? AppString.localized("workspace.header.hideMixer.ax", "Hide audio mixer")
+                    : AppString.localized("workspace.header.showMixer.ax", "Show audio mixer")
+            )
+            .accessibilityIdentifier("Toggle Mixer")
             Button(AppString.localized("workspace.header.export", "Export…")) {
                 model.presentExportDialog()
             }
@@ -775,8 +799,11 @@ private struct InspectorPanel: View {
             Divider()
             if let marker = model.selectedMarker {
                 MarkerInspector(marker: marker, model: model)
-            } else if model.selectedTransformInspector != nil || model.selectedColorInspector != nil {
-                // Transform tab hosts ClipPlaybackInspector inside its ScrollView (NFR-A11Y-001 / #245).
+            } else if model.selectedTransformInspector != nil
+                || model.selectedColorInspector != nil
+                || model.selectedAudioClipInspector != nil
+            {
+                // Transform tab hosts ClipPlaybackInspector (#245); Audio tab hosts gain/pan/fades.
                 ClipInspectorTabs(model: model)
             } else {
                 DetailRow(
@@ -790,6 +817,10 @@ private struct InspectorPanel: View {
                 DetailRow(
                     label: AppString.localized("inspector.row.color", "Color"),
                     value: AppString.localized("inspector.color.none", "Select one video clip")
+                )
+                DetailRow(
+                    label: AppString.localized("inspector.row.audio", "Audio"),
+                    value: AppString.localized("inspector.audio.none", "Select one audio clip")
                 )
             }
             Spacer(minLength: 0)
@@ -1527,6 +1558,7 @@ private struct TrackLane: View {
                     isSelected: model.isClipSelected(layout.reference),
                     model: model,
                     keyframeLanes: transformKeyframeLanes(for: layout),
+                    waveform: layout.mediaID.flatMap { model.waveformSummary(forMediaID: $0) },
                     pixelsPerFrame: model.timelineState.pixelsPerFrame,
                     addKeyframe: { parameter, frame in
                         model.addSelectedTransformKeyframe(parameter: parameter, atFrame: frame)
@@ -1540,6 +1572,41 @@ private struct TrackLane: View {
                     },
                     deleteKeyframe: { parameter, frame in
                         model.deleteSelectedTransformKeyframe(parameter: parameter, atFrame: frame)
+                    },
+                    onFadeInDrag: { frames, phase in
+                        guard let sequence = model.activeSequence else { return }
+                        let duration =
+                            (try? sequence.timebase.duration(ofFrames: max(0, frames))) ?? .zero
+                        // Select once at gesture start — not on every drag tick.
+                        if phase == .began {
+                            model.selectClip(
+                                trackID: layout.reference.trackID,
+                                clipID: layout.reference.clipID,
+                                mode: .replace
+                            )
+                        }
+                        _ = model.setSelectedClipFade(
+                            edge: .fadeIn,
+                            duration: duration,
+                            gesturePhase: phase
+                        )
+                    },
+                    onFadeOutDrag: { frames, phase in
+                        guard let sequence = model.activeSequence else { return }
+                        let duration =
+                            (try? sequence.timebase.duration(ofFrames: max(0, frames))) ?? .zero
+                        if phase == .began {
+                            model.selectClip(
+                                trackID: layout.reference.trackID,
+                                clipID: layout.reference.clipID,
+                                mode: .replace
+                            )
+                        }
+                        _ = model.setSelectedClipFade(
+                            edge: .fadeOut,
+                            duration: duration,
+                            gesturePhase: phase
+                        )
                     }
                 ) {
                     model.focusTimeline()
@@ -1595,29 +1662,70 @@ private struct TimelineClipBlock: View {
     let isSelected: Bool
     @ObservedObject var model: EditorAjarAppModel
     let keyframeLanes: [TransformKeyframeLane]
+    let waveform: AudioWaveformSummary?
     let pixelsPerFrame: Double
     let addKeyframe: (ClipTransformParameter, Int64) -> Void
     let moveKeyframe: (ClipTransformParameter, Int64, Int64) -> Void
     let deleteKeyframe: (ClipTransformParameter, Int64) -> Void
+    let onFadeInDrag: (Int64, AudioMixGesturePhase) -> Void
+    let onFadeOutDrag: (Int64, AudioMixGesturePhase) -> Void
     let action: () -> Void
 
     @State private var dragStartFrame: Int64?
     /// Set while a trim-handle drag is in flight so the clip-body move gesture stays inert
     /// (#240 review, finding 3): one edge drag is one trim, never trim + move.
     @State private var activeTrimEdge: TimelineTrimEdge?
+    /// Set while an audio fade-handle drag is in flight so the clip-body move gesture stays inert
+    /// (same arbitration pattern as `activeTrimEdge`; fade handles sit inside the clip body).
+    @State private var isFadeDragging = false
 
     var body: some View {
         VStack(spacing: 2) {
             Button(action: action) {
-                HStack(spacing: 6) {
-                    Image(systemName: "film")
-                        .font(.caption2)
-                    Text(layout.name)
-                        .font(.caption)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+                ZStack(alignment: .leading) {
+                    if layout.kind == .audio, let waveform {
+                        AudioWaveformBarsView(
+                            summary: waveform,
+                            maxBars: max(8, Int(layout.width / 3)),
+                            barColor: (isSelected ? Color.black : Color.accentColor).opacity(0.55)
+                        )
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 4)
+                    }
+                    HStack(spacing: 6) {
+                        Image(systemName: layout.kind == .audio ? "waveform" : "film")
+                            .font(.caption2)
+                        Text(layout.name)
+                            .font(.caption)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if layout.hasTrailingCrossfade {
+                            Image(systemName: "arrow.left.and.right")
+                                .font(.caption2)
+                                .accessibilityLabel(
+                                    AppString.localized(
+                                        "timeline.clip.crossfade",
+                                        "Has crossfade"
+                                    )
+                                )
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    if layout.kind == .audio {
+                        AudioFadeHandlesOverlay(
+                            layout: layout,
+                            pixelsPerFrame: pixelsPerFrame,
+                            onFadeInDrag: { frames, phase in
+                                updateFadeDragState(phase)
+                                onFadeInDrag(frames, phase)
+                            },
+                            onFadeOutDrag: { frames, phase in
+                                updateFadeDragState(phase)
+                                onFadeOutDrag(frames, phase)
+                            }
+                        )
+                    }
                 }
-                .padding(.horizontal, 8)
             }
             .buttonStyle(.plain)
             .foregroundStyle(isSelected ? .black : .white)
@@ -1679,14 +1787,15 @@ private struct TimelineClipBlock: View {
                     // A drag that began on a trim handle is a trim, never a move (#240 review,
                     // finding 3). The handle's gesture (2px threshold) recognizes before this
                     // one (4px), so the flag is already set when a handle drag reaches here.
-                    guard activeTrimEdge == nil else { return }
+                    // Fade-handle drags use the same gate (`isFadeDragging`).
+                    guard activeTrimEdge == nil, !isFadeDragging else { return }
                     dragStartFrame = layout.startFrame
                     if !isSelected {
                         model.selectClip(trackID: layout.reference.trackID,
                                          clipID: layout.reference.clipID, mode: .replace)
                     }
                 }
-                guard activeTrimEdge == nil else { return }
+                guard activeTrimEdge == nil, !isFadeDragging else { return }
                 let delta = Int64((value.translation.width / max(1, pixelsPerFrame)).rounded())
                 let proposed = max(0, layout.startFrame + delta)
                 let disabled = NSEvent.modifierFlags.contains(.control)
@@ -1694,9 +1803,9 @@ private struct TimelineClipBlock: View {
                 model.previewTimelineGesture(frame: frame, snapped: frame != proposed)
             }
             .onEnded { value in
-                // Trim drags suppress the move entirely: either the trim is still active, or it
-                // ended without this gesture's onChanged ever arming dragStartFrame.
-                guard activeTrimEdge == nil, dragStartFrame != nil else {
+                // Trim/fade drags suppress the move entirely: either that edit is still active,
+                // or it ended without this gesture's onChanged ever arming dragStartFrame.
+                guard activeTrimEdge == nil, !isFadeDragging, dragStartFrame != nil else {
                     dragStartFrame = nil
                     return
                 }
@@ -1766,6 +1875,15 @@ private struct TimelineClipBlock: View {
             ? AppString.localized("state.selected", "Selected")
             : AppString.localized("state.notSelected", "Not selected")
     }
+
+    private func updateFadeDragState(_ phase: AudioMixGesturePhase) {
+        switch phase {
+        case .began, .changed:
+            isFadeDragging = true
+        case .ended, .discrete:
+            isFadeDragging = false
+        }
+    }
 }
 
 private struct ClipInspectorTabs: View {
@@ -1797,8 +1915,194 @@ private struct ClipInspectorTabs: View {
                 if let colorState = model.selectedColorInspector {
                     ColorInspector(state: colorState, model: model)
                 }
+            case .audio:
+                if let audioState = model.selectedAudioClipInspector {
+                    AudioClipInspectorView(clipName: audioState.clipName, model: model)
+                }
             }
         }
+        .onAppear(perform: syncInspectorTabToSelection)
+        .onChange(of: model.selectedClip?.id) { _ in
+            syncInspectorTabToSelection()
+        }
+    }
+
+    /// Audio clips land on the Audio tab; leaving an audio selection returns to Transform so
+    /// existing ui-smoke identifiers (Transform Position X, etc.) stay reachable without extra clicks.
+    private func syncInspectorTabToSelection() {
+        if model.selectedAudioClipInspector != nil {
+            if model.selectedClipInspectorTab != .audio {
+                model.selectedClipInspectorTab = .audio
+            }
+        } else if model.selectedTransformInspector != nil || model.selectedColorInspector != nil {
+            if model.selectedClipInspectorTab == .audio {
+                model.selectedClipInspectorTab = .transform
+            }
+        }
+    }
+}
+
+/// Reference-type drag session so base fade length is readable on the same `onChanged` tick
+/// (SwiftUI `@State` value updates are not always visible within the originating callback).
+private final class AudioFadeDragSession {
+    var isActive = false
+    var baseFrames: Int64 = 0
+
+    func beginIfNeeded(baseFrames: Int64) -> AudioMixGesturePhase {
+        if isActive {
+            return .changed
+        }
+        isActive = true
+        self.baseFrames = baseFrames
+        return .began
+    }
+
+    func reset() {
+        isActive = false
+        baseFrames = 0
+    }
+}
+
+/// Corner drag handles for audio fade-in / fade-out (FR-AUD-002).
+private struct AudioFadeHandlesOverlay: View {
+    let layout: TimelineClipLayout
+    let pixelsPerFrame: Double
+    let onFadeInDrag: (Int64, AudioMixGesturePhase) -> Void
+    let onFadeOutDrag: (Int64, AudioMixGesturePhase) -> Void
+
+    /// Per-edge sessions hold the pre-drag fade length and the once-per-drag `.began` flag.
+    @State private var fadeInSession = AudioFadeDragSession()
+    @State private var fadeOutSession = AudioFadeDragSession()
+
+    var body: some View {
+        GeometryReader { geometry in
+            let fadeInWidth = fadeWidth(frames: layout.fadeInFrames, in: geometry.size.width)
+            let fadeOutWidth = fadeWidth(frames: layout.fadeOutFrames, in: geometry.size.width)
+            ZStack(alignment: .leading) {
+                Path { path in
+                    path.move(to: .zero)
+                    path.addLine(to: CGPoint(x: max(8, fadeInWidth), y: 0))
+                    path.addLine(to: CGPoint(x: 0, y: geometry.size.height))
+                    path.closeSubpath()
+                }
+                .fill(Color.white.opacity(0.18))
+                .frame(width: max(8, fadeInWidth), height: geometry.size.height)
+                .contentShape(Rectangle())
+                .gesture(fadeDragGesture(edge: .fadeIn))
+                .accessibilityLabel(
+                    AppString.localized("timeline.fade.in.handle", "Fade in handle")
+                )
+                .accessibilityIdentifier(
+                    "Fade In Handle \(layout.reference.clipID.uuidString)"
+                )
+
+                Path { path in
+                    path.move(to: CGPoint(x: geometry.size.width, y: 0))
+                    path.addLine(
+                        to: CGPoint(x: geometry.size.width - max(8, fadeOutWidth), y: 0)
+                    )
+                    path.addLine(to: CGPoint(x: geometry.size.width, y: geometry.size.height))
+                    path.closeSubpath()
+                }
+                .fill(Color.white.opacity(0.18))
+                .frame(width: max(8, fadeOutWidth), height: geometry.size.height)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .contentShape(Rectangle())
+                .gesture(fadeDragGesture(edge: .fadeOut))
+                .accessibilityLabel(
+                    AppString.localized("timeline.fade.out.handle", "Fade out handle")
+                )
+                .accessibilityIdentifier(
+                    "Fade Out Handle \(layout.reference.clipID.uuidString)"
+                )
+            }
+        }
+        .allowsHitTesting(true)
+    }
+
+    private func fadeWidth(frames: Int64, in clipWidth: CGFloat) -> CGFloat {
+        let width = CGFloat(frames) * CGFloat(pixelsPerFrame)
+        return min(clipWidth * 0.45, max(0, width))
+    }
+
+    private func fadeDragGesture(edge: ClipAudioFadeEdge) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                let session = session(for: edge)
+                let phase = session.beginIfNeeded(baseFrames: baseFadeFrames(for: edge))
+                let frames = framesForDrag(
+                    edge: edge,
+                    translationX: value.translation.width,
+                    baseFrames: session.baseFrames
+                )
+                switch edge {
+                case .fadeIn:
+                    onFadeInDrag(frames, phase)
+                case .fadeOut:
+                    onFadeOutDrag(frames, phase)
+                case .leadingCrossfade, .trailingCrossfade:
+                    break
+                }
+            }
+            .onEnded { value in
+                let session = session(for: edge)
+                let frames = framesForDrag(
+                    edge: edge,
+                    translationX: value.translation.width,
+                    baseFrames: session.isActive ? session.baseFrames : baseFadeFrames(for: edge)
+                )
+                switch edge {
+                case .fadeIn:
+                    onFadeInDrag(frames, .ended)
+                case .fadeOut:
+                    onFadeOutDrag(frames, .ended)
+                case .leadingCrossfade, .trailingCrossfade:
+                    break
+                }
+                session.reset()
+            }
+    }
+
+    private func session(for edge: ClipAudioFadeEdge) -> AudioFadeDragSession {
+        switch edge {
+        case .fadeIn:
+            return fadeInSession
+        case .fadeOut:
+            return fadeOutSession
+        case .leadingCrossfade, .trailingCrossfade:
+            return fadeInSession
+        }
+    }
+
+    private func baseFadeFrames(for edge: ClipAudioFadeEdge) -> Int64 {
+        switch edge {
+        case .fadeIn:
+            return layout.fadeInFrames
+        case .fadeOut:
+            return layout.fadeOutFrames
+        case .leadingCrossfade, .trailingCrossfade:
+            return 0
+        }
+    }
+
+    private func framesForDrag(
+        edge: ClipAudioFadeEdge,
+        translationX: CGFloat,
+        baseFrames: Int64
+    ) -> Int64 {
+        let delta: Double
+        let pixels = max(TimelineInteractionState.minimumPixelsPerFrame, pixelsPerFrame)
+        switch edge {
+        case .fadeIn:
+            delta = Double(translationX) / pixels
+        case .fadeOut:
+            delta = Double(-translationX) / pixels
+        case .leadingCrossfade, .trailingCrossfade:
+            return 0
+        }
+        let maxFrames = max(0, layout.durationFrames - 1)
+        let proposed = Int64((Double(baseFrames) + delta).rounded())
+        return min(maxFrames, max(0, proposed))
     }
 }
 
