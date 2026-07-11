@@ -54,6 +54,8 @@ public extension EditCommand {
             return "Set Clip Transform"
         case .setClipSpeed:
             return "Set Clip Speed"
+        case .setClipPlaybackAttributes:
+            return "Set Clip Playback"
         case .addClipTransformKeyframe:
             return "Add Transform Keyframe"
         case .moveClipTransformKeyframe:

@@ -25,6 +25,24 @@ extension EditReducer {
                 ),
                 in: project
             )
+        case .setClipPlaybackAttributes(
+            let sequenceID, let trackID, let clipID, let reverse, let freezeFrame
+        ):
+            return try replacingTrack(trackID, sequenceID: sequenceID, in: project) { track in
+                guard let index = clipIndex(clipID, in: track.items),
+                      case .clip(let clip) = track.items[index] else {
+                    throw EditReducerError.clipNotFound(
+                        sequenceID: sequenceID, trackID: trackID, clipID: clipID
+                    )
+                }
+                var items = track.items
+                items[index] = .clip(copying(
+                    clip,
+                    reverse: reverse,
+                    freezeFrame: freezeFrame
+                ))
+                return copying(track, items: items)
+            }
         default:
             throw EditReducerError.validationFailed([])
         }

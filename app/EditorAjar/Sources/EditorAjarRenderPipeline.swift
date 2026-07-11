@@ -11,24 +11,31 @@ final class EditorAjarRenderPipeline {
     let device: MTLDevice
     private let decoder: VideoFrameDecoder
     private let executor: MetalRenderExecutor
+    private let diskCache: MetalDiskFrameCache
+    private let writeBehindTracker = DiskWriteBehindTracker()
     private let offlineSlateCache: AppOfflineSlateTextureCache
     /// Optional `.ajar` package root for resolving `caches/proxies/` paths (FR-MED-004).
     var packageRootURL: URL?
 
-    init() throws {
+    init(cacheDirectoryURL: URL? = nil) throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw MetalRenderError.metalDeviceUnavailable
         }
         self.device = device
         decoder = try VideoFrameDecoder(device: device)
-        executor = try MetalRenderExecutor(device: device)
+        diskCache = try MetalDiskFrameCache(
+            device: device,
+            directoryURL: cacheDirectoryURL ?? Self.defaultCacheDirectoryURL()
+        )
+        executor = try MetalRenderExecutor(device: device, diskCache: diskCache)
         offlineSlateCache = AppOfflineSlateTextureCache(device: device)
     }
 
     func renderFrame(
         project: Project,
         sequence: Sequence,
-        frame: Int64
+        frame: Int64,
+        allowDiskWriteBehind: Bool = true
     ) async throws -> EditorAjarRenderedFrame {
         let time = try RationalTime.atFrame(frame, frameRate: sequence.timebase)
         let packageRoot = packageRootURL
@@ -51,6 +58,22 @@ final class EditorAjarRenderPipeline {
             in: project,
             proxyFileExists: proxyFileExists
         )
+        let output = RenderOutputDescriptor(pixelDimensions: project.settings.resolution)
+        guard let outputNode = graph.outputNode else {
+            throw MetalRenderError.missingOutputNode(graph.outputNodeID)
+        }
+        if let texture = executor.cachedTexture(
+            contentHash: outputNode.contentHash,
+            output: output
+        ) {
+            return EditorAjarRenderedFrame(
+                texture: texture,
+                contentHash: outputNode.contentHash,
+                cacheDisposition: .ramHit,
+                runtimeOfflineMediaIDs: [],
+                mediaIDsNeedingProxyGeneration: []
+            )
+        }
         let sourceProvider = try await AppSourceTextureProvider(
             graph: graph,
             project: project,
@@ -72,23 +95,96 @@ final class EditorAjarRenderPipeline {
         }
         let renderedFrame = try executor.render(
             graph: graph,
-            output: RenderOutputDescriptor(pixelDimensions: project.settings.resolution),
+            output: output,
             sourceProvider: sourceProvider
         )
 
         try await renderedFrame.waitForCompletion()
+        if allowDiskWriteBehind, !renderedFrame.cacheHit {
+            await writeBehindTracker.submit(
+                diskCache: diskCache,
+                frame: renderedFrame,
+                output: output
+            )
+        }
         return EditorAjarRenderedFrame(
             texture: renderedFrame.texture,
+            contentHash: renderedFrame.contentHash,
+            cacheDisposition: renderedFrame.cacheDisposition,
             runtimeOfflineMediaIDs: sourceProvider.runtimeOfflineMediaIDs,
             mediaIDsNeedingProxyGeneration: sourceProvider.mediaIDsNeedingProxyGeneration
         )
+    }
+
+    func removeAllCachedFramesForTesting() {
+        executor.removeAllCachedFrames()
+    }
+
+    func prefetchCachedFrameForTesting(
+        contentHash: ContentHash,
+        output: RenderOutputDescriptor
+    ) {
+        executor.prefetchCachedFrame(contentHash: contentHash, output: output)
+    }
+
+    var diskPopulatedFrameCountForTesting: Int {
+        executor.diskPopulatedFrameCount
+    }
+
+    func waitForDiskWriteBehindForTesting() async {
+        await writeBehindTracker.waitForAll()
+    }
+
+    private static func defaultCacheDirectoryURL() throws -> URL {
+        guard let cachesURL = FileManager.default.urls(
+            for: .cachesDirectory,
+            in: .userDomainMask
+        ).first else {
+            throw EditorAjarRenderError.cacheDirectoryUnavailable
+        }
+        return cachesURL
+            .appendingPathComponent("org.editor-ajar.EditorAjar", isDirectory: true)
+            .appendingPathComponent("render-frames", isDirectory: true)
     }
 }
 
 struct EditorAjarRenderedFrame {
     let texture: MTLTexture
+    let contentHash: ContentHash
+    let cacheDisposition: RenderFrameCacheDisposition
     let runtimeOfflineMediaIDs: Set<UUID>
     let mediaIDsNeedingProxyGeneration: Set<UUID>
+}
+
+private actor DiskWriteBehindTracker {
+    private static let maximumPendingWrites = 2
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+
+    func submit(
+        diskCache: MetalDiskFrameCache,
+        frame: RenderedFrame,
+        output: RenderOutputDescriptor
+    ) {
+        guard tasks.count < Self.maximumPendingWrites else {
+            return
+        }
+        let id = UUID()
+        tasks[id] = Task.detached(priority: .background) { [weak self] in
+            try? await diskCache.persist(frame: frame, output: output)
+            await self?.complete(id)
+        }
+    }
+
+    func waitForAll() async {
+        let pending = tasks.values
+        for task in pending {
+            await task.value
+        }
+    }
+
+    private func complete(_ id: UUID) {
+        tasks[id] = nil
+    }
 }
 
 private struct AppSourceTextureKey: Hashable {
@@ -271,11 +367,14 @@ private final class AppOfflineSlateTextureCache {
 }
 
 enum EditorAjarRenderError: Error, CustomStringConvertible {
+    case cacheDirectoryUnavailable
     case missingMedia(UUID)
     case decodedTextureUnavailable(UUID)
 
     var description: String {
         switch self {
+        case .cacheDirectoryUnavailable:
+            "the user cache directory is unavailable"
         case .missingMedia(let mediaID):
             "missing media \(mediaID)"
         case .decodedTextureUnavailable(let mediaID):

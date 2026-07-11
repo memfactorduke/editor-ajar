@@ -65,6 +65,10 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var activeSequenceID: UUID?
     @Published private(set) var copiedGradeSource: ProjectClipReference?
     @Published private(set) var canvasSafeAreaGuidesVisible = false
+    /// Display-only monitor option; never changes graph identity or exported pixels.
+    @Published private(set) var checkerboardAlphaVisible = false
+    /// Session-only in/out looping; project schema remains unchanged.
+    @Published private(set) var isLoopRangeEnabled = false
     @Published private(set) var selectedCanvasTitleBoxReference: CanvasTitleBoxReference?
     @Published private(set) var editingCanvasTitleBoxReference: CanvasTitleBoxReference?
 
@@ -1198,6 +1202,19 @@ final class EditorAjarAppModel: ObservableObject {
         AppString.localized("frame.value", "Frame \(playheadFrame)")
     }
 
+    var playbackRate: Int {
+        playbackController?.playbackRate ?? 0
+    }
+
+    /// Audio scrubbing is intentionally typed off until the audio coordinator exposes a
+    /// non-real-time preview route; toggling the live render callback would violate ADR-0012.
+    var audioScrubbingUnavailableReason: String {
+        AppString.localized(
+            "playback.audioScrub.unavailable",
+            "Audio scrubbing is unavailable until a safe preview-audio path is added"
+        )
+    }
+
     var timelineSnappingEnabled: Bool {
         timelineState.snappingEnabled
     }
@@ -1233,6 +1250,49 @@ final class EditorAjarAppModel: ObservableObject {
             return nil
         }
         return Self.clip(selectedClipReference, in: sequence)
+    }
+
+    var selectedClipSpeedPercent: String {
+        guard let clip = selectedClip else { return "100" }
+        return String(Double(clip.speed.numerator) / Double(clip.speed.denominator) * 100)
+    }
+
+    @discardableResult
+    func updateSelectedClipSpeed(percentText: String) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedClipReference,
+              let percent = Double(percentText), percent > 0,
+              percent.isFinite else { return false }
+        let scaled = Int64((percent * 1_000).rounded())
+        guard let speed = try? RationalValue(numerator: scaled, denominator: 100_000) else {
+            return false
+        }
+        return applyEdit(.setClipSpeed(
+            sequenceID: sequenceID, trackID: reference.trackID,
+            clipID: reference.clipID, speed: speed
+        ))
+    }
+
+    @discardableResult
+    func setSelectedClipReverse(_ reverse: Bool) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedClipReference,
+              let clip = selectedClip else { return false }
+        return applyEdit(.setClipPlaybackAttributes(
+            sequenceID: sequenceID, trackID: reference.trackID, clipID: reference.clipID,
+            reverse: reverse, freezeFrame: clip.freezeFrame
+        ))
+    }
+
+    @discardableResult
+    func setSelectedClipFreezeFrame(_ freezeFrame: Bool) -> Bool {
+        guard let sequenceID = activeSequence?.id,
+              let reference = selectedClipReference,
+              let clip = selectedClip else { return false }
+        return applyEdit(.setClipPlaybackAttributes(
+            sequenceID: sequenceID, trackID: reference.trackID, clipID: reference.clipID,
+            reverse: clip.reverse, freezeFrame: freezeFrame
+        ))
     }
 
     var savedLooks: [ProjectLook] {
@@ -1427,14 +1487,100 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func togglePlayback() {
-        isPlaying.toggle()
-        if isPlaying {
+        isPlaying ? shuttlePause() : shuttleForward()
+    }
+
+    func shuttleBackward() {
+        playbackController?.shuttleBackward()
+        isPlaying = true
+        stopAudioPlayback()
+        displayLinkDriver?.start()
+    }
+
+    func shuttlePause() {
+        playbackController?.shuttlePause()
+        isPlaying = false
+        stopAudioPlayback()
+        displayLinkDriver?.stop()
+    }
+
+    func shuttleForward() {
+        playbackController?.shuttleForward()
+        isPlaying = true
+        if playbackRate == 1 {
             startAudioPlayback()
-            displayLinkDriver?.start()
         } else {
             stopAudioPlayback()
-            displayLinkDriver?.stop()
         }
+        displayLinkDriver?.start()
+    }
+
+    func toggleLoopRange() {
+        guard let lower = timelineState.selectionInFrame,
+              let upper = timelineState.selectionOutFrame else {
+            isLoopRangeEnabled = false
+            playbackController?.setLoopRange(nil)
+            loadMessage = AppString.localized(
+                "playback.loop.needsRange",
+                "Set both range In and Out before enabling loop playback"
+            )
+            return
+        }
+        isLoopRangeEnabled.toggle()
+        playbackController?.setLoopRange(
+            isLoopRangeEnabled ? min(lower, upper)...max(lower, upper) : nil
+        )
+    }
+
+    func toggleCheckerboardAlpha() {
+        checkerboardAlphaVisible.toggle()
+    }
+
+    func toggleProgramMonitorFullScreen() {
+        NSApp.keyWindow?.toggleFullScreen(nil)
+    }
+
+    func jumpToStart() { scrub(to: 0) }
+    func jumpToEnd() { scrub(to: max(0, durationFrames - 1)) }
+
+    func jumpToRangeIn() {
+        if let frame = timelineState.selectionInFrame { scrub(to: frame) }
+    }
+
+    func jumpToRangeOut() {
+        if let frame = timelineState.selectionOutFrame { scrub(to: frame) }
+    }
+
+    func jumpToNextEditPoint() {
+        if let target = editPointFrames.first(where: { $0 > playheadFrame }) { scrub(to: target) }
+    }
+
+    func jumpToPreviousEditPoint() {
+        if let target = editPointFrames.last(where: { $0 < playheadFrame }) { scrub(to: target) }
+    }
+
+    private var editPointFrames: [Int64] {
+        guard let sequence = activeSequence else { return [] }
+        return Self.editPointFrames(
+            in: sequence,
+            durationFrames: durationFrames
+        )
+    }
+
+    static func editPointFrames(in sequence: Sequence, durationFrames: Int64) -> [Int64] {
+        Set((sequence.videoTracks + sequence.audioTracks).flatMap { track in
+            track.items.flatMap { item -> [Int64] in
+                guard case .clip(let clip) = item,
+                      let start = try? clip.timelineRange.start.frameIndex(
+                        at: sequence.timebase, rounding: .nearestOrAwayFromZero
+                      ),
+                      let endTime = try? clip.timelineRange.end(),
+                      let end = try? endTime.frameIndex(
+                        at: sequence.timebase, rounding: .nearestOrAwayFromZero
+                      ) else { return [] }
+                return [start, min(max(0, durationFrames - 1), end)]
+            }
+        }).sorted()
     }
 
     @discardableResult
@@ -1447,6 +1593,7 @@ final class EditorAjarAppModel: ObservableObject {
 
         persistActiveSequenceContext()
         isPlaying = false
+        isLoopRangeEnabled = false
         stopAudioPlayback()
         displayLinkDriver?.stop()
         restoreActiveSequenceContext(for: sequence)
@@ -2199,18 +2346,29 @@ final class EditorAjarAppModel: ObservableObject {
 
     func setTimelineRangeIn() {
         timelineState.selectionInFrame = playheadFrame
+        refreshLoopRange()
         persistActiveSequenceContext()
     }
 
     func setTimelineRangeOut() {
         timelineState.selectionOutFrame = playheadFrame
+        refreshLoopRange()
         persistActiveSequenceContext()
     }
 
     func clearTimelineRange() {
         timelineState.selectionInFrame = nil
         timelineState.selectionOutFrame = nil
+        isLoopRangeEnabled = false
+        playbackController?.setLoopRange(nil)
         persistActiveSequenceContext()
+    }
+
+    private func refreshLoopRange() {
+        guard isLoopRangeEnabled,
+              let lower = timelineState.selectionInFrame,
+              let upper = timelineState.selectionOutFrame else { return }
+        playbackController?.setLoopRange(min(lower, upper)...max(lower, upper))
     }
 
     func setTimelineSnappingEnabled(_ isEnabled: Bool) {
@@ -2754,14 +2912,24 @@ final class EditorAjarAppModel: ObservableObject {
         renderGeneration += 1
         let generation = renderGeneration
         let frame = playheadFrame
+        let allowDiskWriteBehind = playbackRate == 0
         loadMessage = AppString.localized("status.renderingFrame", "Rendering frame \(frame)")
 
-        Task { [weak self, project, sequence, renderPipeline, frame, generation] in
+        Task { [
+            weak self,
+            project,
+            sequence,
+            renderPipeline,
+            frame,
+            generation,
+            allowDiskWriteBehind
+        ] in
             do {
                 let renderedFrame = try await renderPipeline.renderFrame(
                     project: project,
                     sequence: sequence,
-                    frame: frame
+                    frame: frame,
+                    allowDiskWriteBehind: allowDiskWriteBehind
                 )
                 await MainActor.run {
                     guard self?.renderGeneration == generation else {

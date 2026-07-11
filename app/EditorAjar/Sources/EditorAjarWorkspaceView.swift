@@ -475,7 +475,13 @@ private struct ProgramMonitor: View {
 
     private var programCanvasBase: some View {
         ProgramMetalView(device: model.metalDevice, texture: model.presentedTexture)
-            .background(Color.black)
+            .background {
+                if model.checkerboardAlphaVisible {
+                    CheckerboardBackground()
+                } else {
+                    Color.black
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .accessibilityHidden(true)
     }
@@ -485,6 +491,25 @@ private struct ProgramMonitor: View {
             .stroke(Color.white.opacity(0.12), lineWidth: 1)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+private struct CheckerboardBackground: View {
+    var body: some View {
+        Canvas { context, size in
+            let cell = 12.0
+            for row in 0...Int(size.height / cell) {
+                for column in 0...Int(size.width / cell) where (row + column).isMultiple(of: 2) {
+                    context.fill(
+                        Path(CGRect(x: Double(column) * cell, y: Double(row) * cell,
+                                    width: cell, height: cell)),
+                        with: .color(Color.white.opacity(0.18))
+                    )
+                }
+            }
+        }
+        .background(Color.black)
+        .accessibilityHidden(true)
     }
 }
 
@@ -644,6 +669,7 @@ private struct InspectorPanel: View {
             if let marker = model.selectedMarker {
                 MarkerInspector(marker: marker, model: model)
             } else if let transformState = model.selectedTransformInspector {
+                // Clip playback is nested inside TransformInspector's ScrollView (NFR-A11Y-001).
                 TransformInspector(state: transformState, model: model)
             } else {
                 DetailRow(
@@ -655,12 +681,62 @@ private struct InspectorPanel: View {
                     value: AppString.localized("inspector.transform.none", "Select one video clip")
                 )
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(14)
         .background(Color(red: 0.13, green: 0.13, blue: 0.14))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(AppString.localized("inspector.panel.ax", "Inspector panel"))
+    }
+}
+
+/// FR-SPD-001/003 clip retime controls (nested in `TransformInspector` ScrollView).
+private struct ClipPlaybackInspector: View {
+    @ObservedObject var model: EditorAjarAppModel
+    @State private var speedPercent = "100"
+
+    var body: some View {
+        GroupBox(AppString.localized("inspector.playback.title", "Clip Playback")) {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField(
+                    AppString.localized("inspector.playback.speed", "Speed %"),
+                    text: $speedPercent
+                )
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(AppString.localized("inspector.playback.speed", "Speed %"))
+                .accessibilityIdentifier("Speed %")
+                .onSubmit { _ = model.updateSelectedClipSpeed(percentText: speedPercent) }
+                Toggle(
+                    AppString.localized("inspector.playback.reverse", "Reverse"),
+                    isOn: Binding(
+                        get: { model.selectedClip?.reverse ?? false },
+                        set: { _ = model.setSelectedClipReverse($0) }
+                    )
+                )
+                .accessibilityLabel(AppString.localized("inspector.playback.reverse", "Reverse"))
+                .accessibilityIdentifier("Clip Reverse")
+                Toggle(
+                    AppString.localized("inspector.playback.freeze", "Freeze Frame"),
+                    isOn: Binding(
+                        get: { model.selectedClip?.freezeFrame ?? false },
+                        set: { _ = model.setSelectedClipFreezeFrame($0) }
+                    )
+                )
+                .accessibilityLabel(
+                    AppString.localized("inspector.playback.freeze", "Freeze Frame")
+                )
+                .accessibilityIdentifier("Clip Freeze Frame")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Clip Playback Inspector")
+        .accessibilityLabel(
+            AppString.localized("inspector.playback.ax", "Clip Playback Inspector")
+        )
+        .onAppear { speedPercent = model.selectedClipSpeedPercent }
+        .onChange(of: model.selectedClip?.id) { _ in
+            speedPercent = model.selectedClipSpeedPercent
+        }
     }
 }
 
@@ -1481,8 +1557,11 @@ private struct TransformInspector: View {
                     model: model
                 )
                 TransformFlipControls(model: model)
+                ClipPlaybackInspector(model: model)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Keep offscreen scroll children in the AX tree (NFR-A11Y-001 / #187).
+            .accessibilityElement(children: .contain)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Transform Inspector")
@@ -1504,11 +1583,27 @@ private struct TransformFieldGrid: View {
                 Spacer()
                 TransformKeyframeToggle(parameter: keyframeParameter, model: model)
             }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(fields) { field in
-                    TransformNumberField(field: field, model: model)
+            // Non-lazy 2-column grid so transform fields stay in the AX tree (not only
+            // on-screen LazyVGrid cells).
+            VStack(spacing: 8) {
+                ForEach(Array(fieldRows.enumerated()), id: \.offset) { _, row in
+                    HStack(alignment: .top, spacing: 8) {
+                        ForEach(row) { field in
+                            TransformNumberField(field: field, model: model)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if row.count == 1 {
+                            Spacer().frame(maxWidth: .infinity)
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    private var fieldRows: [[TransformInspectorField]] {
+        stride(from: 0, to: fields.count, by: 2).map { start in
+            Array(fields[start..<min(start + 2, fields.count)])
         }
     }
 }

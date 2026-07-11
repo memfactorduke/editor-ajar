@@ -281,6 +281,28 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(audioCoordinator.stopCount, 1)
     }
 
+    func testFRAUD007FastForwardShuttleMutesWithoutRestartingAudio() {
+        let audioCoordinator = FakeAudioCoordinator()
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            audioCoordinator: audioCoordinator,
+            opensSampleProjectWhenNoRecovery: true
+        )
+
+        model.shuttleForward()
+        model.shuttleForward()
+        model.shuttleForward()
+
+        XCTAssertEqual(model.playbackRate, 4)
+        XCTAssertEqual(audioCoordinator.startedFrames, [0])
+        XCTAssertEqual(audioCoordinator.stopCount, 2)
+
+        model.shuttlePause()
+        model.shuttleForward()
+        XCTAssertEqual(model.playbackRate, 1)
+        XCTAssertEqual(audioCoordinator.startedFrames, [0, 0])
+    }
+
     func testFRPLAY003StepAndScrubDoNotRepublishLiveAudioWhilePaused() {
         let audioCoordinator = FakeAudioCoordinator()
         let model = EditorAjarAppModel(
@@ -344,6 +366,7 @@ final class EditorAjarAppModelTests: XCTestCase {
     func testFRPLAY001DisplayLinkAdvancesPlayheadAtSequenceFrameRate() throws {
         let frameRate = try FrameRate(frames: 30)
         var controller = EditorAjarPlaybackController(frameRate: frameRate, durationFrames: 4)
+        controller.shuttleForward()
 
         XCTAssertFalse(controller.advance(by: 1.0 / 60.0))
         XCTAssertEqual(controller.playheadFrame, 0)
@@ -369,6 +392,101 @@ final class EditorAjarAppModelTests: XCTestCase {
 
         controller.scrub(to: -4)
         XCTAssertEqual(controller.playheadFrame, 0)
+    }
+
+    func testFRPLAY001JKLStacksRateAndReverses() throws {
+        let frameRate = try FrameRate(frames: 30)
+        var controller = EditorAjarPlaybackController(frameRate: frameRate, durationFrames: 10)
+
+        controller.shuttleForward()
+        XCTAssertEqual(controller.playbackRate, 1)
+        controller.shuttleForward()
+        XCTAssertEqual(controller.playbackRate, 2)
+        controller.shuttleForward()
+        XCTAssertEqual(controller.playbackRate, 4)
+        controller.shuttleBackward()
+        XCTAssertEqual(controller.playbackRate, -1)
+        controller.scrub(to: 5)
+        XCTAssertEqual(controller.playbackRate, 0)
+        XCTAssertFalse(controller.advance(by: 1.0 / 30.0))
+        controller.shuttleBackward()
+        XCTAssertEqual(controller.playbackRate, -1)
+        XCTAssertTrue(controller.advance(by: 1.0 / 30.0))
+        XCTAssertEqual(controller.playheadFrame, 4)
+        controller.shuttlePause()
+        XCTAssertEqual(controller.playbackRate, 0)
+        XCTAssertFalse(controller.advance(by: 1.0))
+    }
+
+    func testFRPLAY001LoopWrapsInBothDirections() throws {
+        let frameRate = try FrameRate(frames: 30)
+        var controller = EditorAjarPlaybackController(frameRate: frameRate, durationFrames: 10)
+        controller.setLoopRange(2...4)
+        controller.scrub(to: 4)
+        XCTAssertTrue(controller.advance(by: 1.0 / 30.0))
+        XCTAssertEqual(controller.playheadFrame, 2)
+        controller.shuttleBackward()
+        XCTAssertTrue(controller.advance(by: 1.0 / 30.0))
+        XCTAssertEqual(controller.playheadFrame, 4)
+    }
+
+    func testFRPLAY003EditPointsIncludeAudioOnlyCuts() throws {
+        let frameRate = try FrameRate(frames: 30)
+        let baseSequence = try makeInteractionSequence()
+        let audioClip = try makeInteractionClip(
+            id: "00000000-0000-0000-0000-00000000d004",
+            name: "Audio-only cut",
+            startFrame: 37,
+            durationFrames: 5,
+            frameRate: frameRate
+        )
+        let sequence = Sequence(
+            id: baseSequence.id,
+            name: baseSequence.name,
+            videoTracks: baseSequence.videoTracks,
+            audioTracks: [Track(id: UUID(), kind: .audio, items: [.clip(audioClip)])],
+            markers: baseSequence.markers,
+            timebase: baseSequence.timebase
+        )
+
+        let editPoints = EditorAjarAppModel.editPointFrames(
+            in: sequence,
+            durationFrames: 90
+        )
+
+        XCTAssertTrue(editPoints.contains(37))
+        XCTAssertTrue(editPoints.contains(42))
+    }
+
+    func testFRPLAY006CheckerboardIsSessionState() {
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
+        XCTAssertFalse(model.checkerboardAlphaVisible)
+        model.toggleCheckerboardAlpha()
+        XCTAssertTrue(model.checkerboardAlphaVisible)
+    }
+
+    func testFRSPD001FRSPD003SelectedClipControlsRoundTripThroughEditHistory() throws {
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
+        let track = try XCTUnwrap(model.activeSequence?.videoTracks.first)
+        let clip = try XCTUnwrap(track.items.compactMap { item -> Clip? in
+            guard case .clip(let clip) = item else { return nil }
+            return clip
+        }.first)
+        model.selectClip(trackID: track.id, clipID: clip.id, mode: .replace)
+
+        XCTAssertTrue(model.updateSelectedClipSpeed(percentText: "200"))
+        XCTAssertEqual(model.selectedClip?.speed, RationalValue(2))
+        XCTAssertTrue(model.setSelectedClipReverse(true))
+        XCTAssertTrue(model.selectedClip?.reverse == true)
+        XCTAssertTrue(model.setSelectedClipFreezeFrame(true))
+        XCTAssertTrue(model.selectedClip?.freezeFrame == true)
+
+        model.undo()
+        XCTAssertFalse(model.selectedClip?.freezeFrame ?? true)
+        model.undo()
+        XCTAssertFalse(model.selectedClip?.reverse ?? true)
+        model.undo()
+        XCTAssertEqual(model.selectedClip?.speed, .one)
     }
 
     func testFRTL001TrackToggleRoutesThroughEditHistoryAndUndo() throws {
