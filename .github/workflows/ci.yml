@@ -135,7 +135,11 @@ jobs:
   ui-smoke:
     name: UI smoke (macOS app)
     runs-on: macos-14
-    timeout-minutes: 10
+    # 20 min: app unit tests + XCUITest suite. EditorAjarAccessibilityTreeTests alone may take
+    # up to 8 min (executionTimeAllowance 480) walking the full interactive AX tree on welcome
+    # + sample workspace (inspector tabs, mixer, effects library, title surfaces). Leave headroom
+    # for build/derived-data reuse, other smokes, and launch-flake retries.
+    timeout-minutes: 20
     needs: [build-test, lint]
     steps:
       - uses: actions/checkout@v4
@@ -174,6 +178,9 @@ jobs:
             # #210: -only-testing overrides plan skippedTests; use -skip-testing for canvas
             # edit/nudge smokes. Guides toggle + EditorAjarAccessibilityTreeTests (NFR-A11Y-001
             # read-only AX label walk, #219) stay on.
+            # maximum-test-execution-time-allowance 480: matches EditorAjarAccessibilityTreeTests
+            # executionTimeAllowance (8 min). Without this, xcodebuild clamps the test override
+            # to 120s and the dual-surface AX walk fails on CI as the tree grows.
             xcodebuild test \
               -project app/EditorAjar/EditorAjar.xcodeproj \
               -scheme EditorAjar \
@@ -185,7 +192,7 @@ jobs:
               -skip-testing:EditorAjarUITests/EditorAjarUISmokeTests/testFRTXT003EditsCanvasTitleWithKeyboardAndUndoRestoresText \
               -test-timeouts-enabled YES \
               -default-test-execution-time-allowance 60 \
-              -maximum-test-execution-time-allowance 120 \
+              -maximum-test-execution-time-allowance 480 \
               -resultBundlePath "$result_bundle" 2>&1 | tee "$log_path"
             status=${PIPESTATUS[0]}
             set -e

@@ -8,16 +8,26 @@ import XCTest
 /// The only interaction is the deterministic Help > Open Sample Project command. No editing,
 /// typing, or sheet interaction occurs. Every interactive AX role must carry a non-empty label;
 /// failures list identifier + role + frame.
+///
+/// Execution allowance is 8 minutes (XCTest rounds up to whole minutes). The AX tree grew
+/// substantially with inspector tabs, mixer, effects library, and title surfaces; a full
+/// dual-surface walk can exceed the default 2-minute cap on CI. CI must set
+/// `-maximum-test-execution-time-allowance` ≥ 480 so this override is not clamped.
 final class EditorAjarAccessibilityTreeTests: XCTestCase {
     private static let launchAttemptLimit = 3
     private static let launchRetryDelay: TimeInterval = 1
     private static let launchWindowTimeout: TimeInterval = 10
 
+    /// 8 minutes — dual-surface interactive AX walk (welcome + sample workspace).
+    override var executionTimeAllowance: TimeInterval {
+        get { 480 }
+        set { /* XCTest may assign; keep class-level floor via getter. */ }
+    }
+
     private var launchedApp: XCUIApplication?
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        executionTimeAllowance = 120
         launchedApp = try launchAppWithRetry()
     }
 
@@ -136,17 +146,19 @@ final class EditorAjarAccessibilityTreeTests: XCTestCase {
         //    track segments and thumb buttons surface as role=button with no labels.
         //    CI #219 macos-14: 6 unlabeled buttons at right edge (x≈1481, w=15) and
         //    bottom edge (y≈832, h=15). Descendant-of checks are awkward on a flat
-        //    per-type walk, so we collect scrollbar frames first and use containment.
+        //    per-type walk, so we collect scrollbar frames first and use containment —
+        //    cheap early skip before identifier/label attribute queries.
         // 4. AppKit's Help-menu search field (`_SC_SEARCH_FIELD`) — CI reported the injected
         //    role=searchField at (0,1058 352×22) with an empty label; apps never label it.
         // We do NOT exclude by missing identifier or by size alone beyond zero-area.
+        //
+        // Perf: `allElementsBoundByIndex` resolves each role query once (snapshot) instead of
+        // re-resolving `count` + `element(boundBy:)` per index. Assertion semantics unchanged.
         let scrollBarFrames = collectScrollBarFrames(in: app)
 
         for elementType in Self.interactiveElementTypes {
-            let query = app.descendants(matching: elementType)
-            let count = query.count
-            for index in 0..<count {
-                let element = query.element(boundBy: index)
+            let elements = app.descendants(matching: elementType).allElementsBoundByIndex
+            for element in elements {
                 guard element.exists else {
                     continue
                 }
@@ -157,13 +169,13 @@ final class EditorAjarAccessibilityTreeTests: XCTestCase {
                     continue
                 }
 
-                // System window chrome (traffic lights) is outside app control.
-                if isSystemWindowChrome(element) {
+                // NSScroller track/thumb chrome — frame-only, before attribute queries.
+                if isFrameContainedInAnyScrollBar(frame, scrollBarFrames: scrollBarFrames) {
                     continue
                 }
 
-                // NSScroller track/thumb chrome (see scrollBarFrames comment above).
-                if isFrameContainedInAnyScrollBar(frame, scrollBarFrames: scrollBarFrames) {
+                // System window chrome (traffic lights) is outside app control.
+                if isSystemWindowChrome(element) {
                     continue
                 }
 
@@ -205,12 +217,10 @@ final class EditorAjarAccessibilityTreeTests: XCTestCase {
 
     /// Frames of every `.scrollBar` in the app tree (used to exclude scroller chrome).
     private func collectScrollBarFrames(in app: XCUIApplication) -> [CGRect] {
-        let query = app.descendants(matching: .scrollBar)
-        let count = query.count
+        let elements = app.descendants(matching: .scrollBar).allElementsBoundByIndex
         var frames: [CGRect] = []
-        frames.reserveCapacity(count)
-        for index in 0..<count {
-            let element = query.element(boundBy: index)
+        frames.reserveCapacity(elements.count)
+        for element in elements {
             guard element.exists else {
                 continue
             }

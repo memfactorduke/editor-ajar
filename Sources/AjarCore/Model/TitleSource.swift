@@ -3,7 +3,7 @@
 import Foundation
 
 /// Horizontal alignment of text inside a title box (FR-TXT-001).
-public enum TitleTextAlignment: String, Codable, Equatable, Sendable {
+public enum TitleTextAlignment: String, Codable, CaseIterable, Equatable, Sendable {
     /// Flush left.
     case left
 
@@ -18,7 +18,7 @@ public enum TitleTextAlignment: String, Codable, Equatable, Sendable {
 }
 
 /// Font weight for a title text style (FR-TXT-001).
-public enum TitleFontWeight: String, Codable, Equatable, Sendable {
+public enum TitleFontWeight: String, Codable, CaseIterable, Equatable, Sendable {
     /// Ultra-light weight.
     case ultraLight
 

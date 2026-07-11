@@ -48,6 +48,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Toggle proxy / original playback | `⌥⌘P` | Header (FR-MED-004) |
 | Toggle audio mixer | `⌥⌘M` | Header + Audio menu (FR-AUD-003) |
 | Enqueue active sequence export | `⌃⇧⌘E` | Export menu / queue panel |
+| Insert title at playhead | `⌘T` | Title menu; topmost unlocked video track (or new track) |
 | Edit canvas title | `⌥⌘E` | Title menu (primary visible box) |
 | Nudge canvas title right / down | `⌥⌘→` / `⌥⌘↓` | Title menu (large step) |
 | Toggle action/title-safe guides | `⌥⌘G` | Program monitor overlay |
@@ -84,7 +85,7 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 6. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
 7. **Scopes panel** (when visible, `⌥⌘S`) → type picker → hide  
 8. **Transport** → Step Backward → Play/Pause → Step Forward → Scrub slider  
-9. **Inspector** → marker, or Transform/Color/Audio/Effects tabs when a clip is selected  
+9. **Inspector** → marker, or Transform/Color/Audio/Effects/Title tabs when a clip is selected  
 10. **Timeline toolbar** → tool buttons left-to-right  
 11. **Timeline tracks** → track state buttons → clips (waveforms / fade handles on audio) → keyframe dots when shown  
 12. **Mixer panel** (when visible) → per-track fader / pan / mute / solo → master fader / meter  
@@ -242,7 +243,7 @@ NSTextView / drag flakiness on headless CI). Labels for title boxes are covered 
 
 | Control | AX label | id / value |
 |---------|----------|------------|
-| Tab picker | Inspector tab | id: `Inspector Tab Picker` (Transform / Color / Audio) |
+| Tab picker | Inspector tab | id: `Inspector Tab Picker` (Transform / Color / Audio / Effects / Title) |
 | Panel | Transform Inspector | id: `Transform Inspector` |
 | Number fields | Position X, Scale X %, … | id: `Transform {title}` |
 | Keyframe toggles | Add/Delete {param} Keyframe | id: `Transform {param} Keyframe Toggle` |
@@ -313,6 +314,22 @@ already there, otherwise restores Transform so existing ui-smoke identifiers sta
 | Apply / Replace / Remove | Apply/Replace/Remove Transition | id: `Apply Transition` / `Remove Transition` |
 
 Effect parameters are **static in v1** (engine stack animation exists; no effect-keyframe UI yet). Transitions require two abutting clips; non-adjacent apply is a typed refusal (FR-FX-001).
+
+### Title inspector (title clip selected, Title tab) — FR-TXT-001/002/004
+
+| Control | AX label | id / value |
+|---------|----------|------------|
+| Panel | Title Inspector | id: `Title Inspector` |
+| Text box list / select | Select text box {n}, … | id: `Title Box {uuid}` |
+| Add Box / Remove Box | Add Box / Remove Box | id: `Title Add Box` / `Title Remove Box` |
+| Font family field | Font | id: `Title Font Family` (focus-gated) |
+| Font menu / weight / alignment | Font Menu / Weight / Alignment | ids: `Title Font Family Menu`, `Title Font Weight`, `Title Alignment` |
+| Size / tracking / leading sliders | Size, Tracking, Leading | id: `Title {field}` |
+| Fill / stroke / shadow / box / gradient RGB | {group} R/G/B | id: `Title {Target} {R\|G\|B}` |
+| Stroke / shadow / background / gradient toggles | Stroke, Drop Shadow, … | id: `Title Stroke Enabled`, … |
+| Animation preset kind / direction / Apply | Preset / Direction / Apply Preset | id: `Title Animation Preset Kind`, `Title Apply Animation Preset` |
+
+Style edits are undoable with per-gesture slider coalescing (same contract as Color). Multi-box selection stays in sync with the canvas overlay (`selectedCanvasTitleBoxReference`). Font-family free-text input is focus-gated via `textEditorFocusChanged` / `timelineTextEditingScope` (#240).
 
 ### Scopes panel (toggle `⌥⌘S`) — FR-COL-003
 
@@ -497,7 +514,7 @@ launch-time tree test.
 | Sequences | New Sequence, Close Sequence |
 | Markers | Add / Previous / Next / Delete Marker |
 | Clip | Copy/Paste Grade, Save Look, Apply Look…, Transition (apply kinds / Remove), Detach Audio |
-| Title | Edit Canvas Title, Nudge Title Right/Down |
+| Title | Insert Title (`⌘T`), Edit Canvas Title, Nudge Title Right/Down |
 | Export | Open export dialog, Export Active Sequence, Show/Hide Export Queue |
 | Help | Open Sample Project |
 

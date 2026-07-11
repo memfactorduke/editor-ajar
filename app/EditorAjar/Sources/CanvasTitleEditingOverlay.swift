@@ -34,16 +34,20 @@ enum CanvasTitleBoxEditor {
     static func copying(
         _ box: TitleTextBox,
         text: String? = nil,
-        origin: CanvasPoint? = nil
+        origin: CanvasPoint? = nil,
+        width: RationalValue? = nil,
+        height: RationalValue? = nil,
+        style: TitleTextStyle? = nil,
+        backgroundBox: TitleBackgroundBoxStyle?? = nil
     ) -> TitleTextBox {
         TitleTextBox(
             id: box.id,
             text: text ?? box.text,
             origin: origin ?? box.origin,
-            width: box.width,
-            height: box.height,
-            style: box.style,
-            backgroundBox: box.backgroundBox
+            width: width ?? box.width,
+            height: height ?? box.height,
+            style: style ?? box.style,
+            backgroundBox: backgroundBox ?? box.backgroundBox
         )
     }
 }

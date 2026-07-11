@@ -802,8 +802,10 @@ private struct InspectorPanel: View {
             } else if model.selectedTransformInspector != nil
                 || model.selectedColorInspector != nil
                 || model.selectedAudioClipInspector != nil
+                || model.selectedTitleInspector != nil
             {
-                // Transform tab hosts ClipPlaybackInspector (#245); Audio tab hosts gain/pan/fades.
+                // Transform hosts ClipPlaybackInspector (#245); Audio hosts gain/pan/fades;
+                // Title hosts typography / style (#244).
                 ClipInspectorTabs(model: model)
             } else {
                 DetailRow(
@@ -825,6 +827,10 @@ private struct InspectorPanel: View {
                 DetailRow(
                     label: AppString.localized("inspector.row.effects", "Effects"),
                     value: AppString.localized("inspector.effects.none", "Select one video clip")
+                )
+                DetailRow(
+                    label: AppString.localized("inspector.row.title", "Title"),
+                    value: AppString.localized("inspector.title.none", "Select a title clip")
                 )
             }
             Spacer(minLength: 0)
@@ -1927,6 +1933,20 @@ private struct ClipInspectorTabs: View {
                 if let effectsState = model.selectedEffectStackInspector {
                     EffectsInspector(state: effectsState, model: model)
                 }
+            case .title:
+                if let titleState = model.selectedTitleInspector {
+                    TitleInspector(state: titleState, model: model)
+                } else {
+                    Text(
+                        AppString.localized(
+                            "inspector.title.none",
+                            "Select a title clip"
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("Title Inspector Empty")
+                }
             }
         }
         .onAppear(perform: syncInspectorTabToSelection)
@@ -1935,15 +1955,19 @@ private struct ClipInspectorTabs: View {
         }
     }
 
-    /// Audio clips land on the Audio tab; leaving an audio selection returns to Transform so
-    /// existing ui-smoke identifiers (Transform Position X, etc.) stay reachable without extra clicks.
+    /// Audio clips land on the Audio tab; title clips on Title; leaving those selections returns
+    /// to Transform so existing ui-smoke identifiers stay reachable without extra clicks.
     private func syncInspectorTabToSelection() {
         if model.selectedAudioClipInspector != nil {
             if model.selectedClipInspectorTab != .audio {
                 model.selectedClipInspectorTab = .audio
             }
-        } else if model.selectedTransformInspector != nil || model.selectedColorInspector != nil {
+        } else if model.selectedTitleInspector != nil {
             if model.selectedClipInspectorTab == .audio {
+                model.selectedClipInspectorTab = .title
+            }
+        } else if model.selectedTransformInspector != nil || model.selectedColorInspector != nil {
+            if model.selectedClipInspectorTab == .audio || model.selectedClipInspectorTab == .title {
                 model.selectedClipInspectorTab = .transform
             }
         }
@@ -2805,8 +2829,15 @@ private struct DetailRow: View {
 ///
 /// While any scoped text field is focused, the timeline is blurred and plain-key / clipboard
 /// timeline shortcuts are inert, so typing can never cut, blade, or delete timeline content.
+/// Optional `onFocusChange` lets call sites hook the same focus-gating contract (e.g. disarm
+/// title-style undo coalescing when the font-family field loses focus).
+///
+/// Only **real** focus transitions notify the model / `onFocusChange`. No-op re-entries
+/// (same focused boolean for the same editor id) and disappear-while-already-blurred are
+/// ignored so SwiftUI focus flaps cannot split a continuous title-style undo step.
 struct TimelineTextEditingScope: ViewModifier {
     @ObservedObject var model: EditorAjarAppModel
+    var onFocusChange: ((Bool) -> Void)?
     @FocusState private var isFocused: Bool
     @State private var editorID = UUID()
 
@@ -2814,17 +2845,29 @@ struct TimelineTextEditingScope: ViewModifier {
         content
             .focused($isFocused)
             .onChange(of: isFocused) { _, focused in
-                model.textEditorFocusChanged(id: editorID, isFocused: focused)
+                // Model ignores no-ops; only forward side-effect hooks on a real flip.
+                if model.textEditorFocusChanged(id: editorID, isFocused: focused) {
+                    onFocusChange?(focused)
+                }
             }
             .onDisappear {
-                model.textEditorFocusChanged(id: editorID, isFocused: false)
+                // Treat disappear as blur only when this editor still holds focus membership.
+                if model.textEditorFocusChanged(id: editorID, isFocused: false) {
+                    onFocusChange?(false)
+                }
             }
     }
 }
 
 extension View {
     /// Marks a text field as a timeline-blurring text editing scope (#240 review, finding 1).
-    func timelineTextEditingScope(model: EditorAjarAppModel) -> some View {
-        modifier(TimelineTextEditingScope(model: model))
+    ///
+    /// - Parameter onFocusChange: Optional callback for the same focus transitions the gating
+    ///   contract already observes (gain/lose focus, including disappear-as-blur).
+    func timelineTextEditingScope(
+        model: EditorAjarAppModel,
+        onFocusChange: ((Bool) -> Void)? = nil
+    ) -> some View {
+        modifier(TimelineTextEditingScope(model: model, onFocusChange: onFocusChange))
     }
 }

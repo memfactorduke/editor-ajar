@@ -209,6 +209,24 @@ final class CompoundEditCommandTests: XCTestCase {
         ])
         XCTAssertEqual(mixed.actionName, "Multiple Edits")
         XCTAssertEqual(EditCommand.transaction([]).actionName, "Multiple Edits")
+
+        // FR-TXT-001 occupied-track insert: [addTrack, insertTitleClip] is one user gesture.
+        let title = try makeSampleTitle(seed: 7_408)
+        let titleInsertScaffold = EditCommand.transaction([
+            .addTrack(
+                sequenceID: fixture.sequenceID,
+                track: Track(id: try editUUID(9_001), kind: .video, items: [])
+            ),
+            .insertTitleClip(
+                sequenceID: fixture.sequenceID,
+                trackID: try editUUID(9_002),
+                clipID: try editUUID(9_003),
+                title: title,
+                timelineRange: try editRange(startFrame: 0, durationFrames: 12),
+                name: "Title"
+            )
+        ])
+        XCTAssertEqual(titleInsertScaffold.actionName, "Insert Title")
     }
 
     // MARK: - Fixtures

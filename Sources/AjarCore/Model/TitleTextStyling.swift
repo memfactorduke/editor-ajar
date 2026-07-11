@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /// Join shape used where two title-glyph outline segments meet (FR-TXT-002).
-public enum TitleStrokeJoin: String, Codable, Equatable, Sendable {
+public enum TitleStrokeJoin: String, Codable, CaseIterable, Equatable, Sendable {
     /// Extend the outside edges until they meet at a point.
     case miter
 
