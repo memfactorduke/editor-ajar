@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-11
+
 ### Added
 - Release acceptance gate (#236): `EditorAjarReleaseAcceptanceTests` walks the real
   user journey through `EditorAjarAppModel` APIs (new project defaults → import
