@@ -28,7 +28,7 @@ final class ProjectLookCodecTests: XCTestCase {
         )
         let storedLooks = try XCTUnwrap(projectObject["looks"] as? [[String: Any]])
 
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 12)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 13)
         XCTAssertEqual(storedLooks.count, 1)
         XCTAssertNil(mediaObject["looks"], "looks belong in project.json, not media.json")
 

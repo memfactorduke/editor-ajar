@@ -111,7 +111,7 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         XCTAssertTrue(model.project?.mediaPool.last?.metadata.isVariableFrameRate == true)
     }
 
-    func testFRMED003UnsupportedFormatSummaryUsesLocalizedClearGapMessage() async throws {
+    func testFRMED003UnsupportedFormatSurfacesFFmpegInstallGuidance() async throws {
         let root = try temporaryDirectory(named: "unsupported")
         defer { try? FileManager.default.removeItem(at: root) }
         let sourceURL = root.appendingPathComponent("archive.mkv")
@@ -119,7 +119,8 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         let pipeline = MediaImportPipeline(
             probe: AppModelUnsupportedImportProbe(),
             hasher: SHA256MediaFileHasher(),
-            bookmarkStore: AppModelImportBookmarkStore()
+            bookmarkStore: AppModelImportBookmarkStore(),
+            ffmpegTranscoder: AppModelUnavailableFFmpegTranscoder()
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
@@ -130,11 +131,20 @@ final class EditorAjarMediaImportAppModelTests: XCTestCase {
         await model.importMediaAndWait(from: [sourceURL])
 
         let failure = try XCTUnwrap(model.mediaImportSummary?.failed.first)
-        XCTAssertEqual(failure.sourceURL.lastPathComponent, "archive.mkv")
-        XCTAssertEqual(failure.error, .unsupportedFormat(sourceURL))
+        let rowFilename = failure.sourceURL.lastPathComponent
+        XCTAssertEqual(rowFilename, "archive.mkv")
+        XCTAssertEqual(
+            failure.error,
+            .ffmpegUnavailable(
+                url: sourceURL,
+                guidance: "Install FFmpeg 4 or newer with Homebrew: brew install ffmpeg"
+            )
+        )
         let message = AppString.mediaImportFailureMessage(for: failure.error)
-        XCTAssertTrue(message.contains("FFmpeg"))
-        XCTAssertTrue(message.localizedCaseInsensitiveContains("not available"))
+        XCTAssertEqual(
+            message,
+            "Install FFmpeg 4 or newer with Homebrew: brew install ffmpeg"
+        )
     }
 
     func testProgrammaticImportWithoutProjectPublishesTypedVisibleRefusal() async {
@@ -206,6 +216,19 @@ private struct AppModelImportProbe: MediaProbing {
 private struct AppModelUnsupportedImportProbe: MediaProbing {
     func probe(_ sourceURL: URL) async throws -> MediaProbeResult {
         throw MediaProbeError.unsupportedFormat(sourceURL)
+    }
+}
+
+private struct AppModelUnavailableFFmpegTranscoder: FFmpegImportTranscoding {
+    func transcode(
+        sourceURL: URL,
+        originalHash: ContentHash,
+        projectPackageURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> FFmpegTranscodeResult {
+        throw FFmpegTranscodeError.ffmpegUnavailable(
+            guidance: "Install FFmpeg 4 or newer with Homebrew: brew install ffmpeg"
+        )
     }
 }
 

@@ -87,8 +87,26 @@ public enum MediaRelinkDecision: Equatable, Sendable {
     /// The candidate is accepted and the complete replacement reference is ready to edit in.
     case relinked(MediaRef, match: MediaRelinkMatch)
 
+    /// A fallback import's original bytes matched and must be transcoded before relinking.
+    case matchedOriginalRequiresTranscode(MediaRelinkCandidate)
+
     /// The candidate needs an explicit hash-mismatch override before it may be accepted.
     case warning(MediaRelinkWarning)
+}
+
+/// Original-source identity retained when import creates a native working transcode.
+public struct MediaTranscodeProvenance: Codable, Hashable, Sendable {
+    /// User-selected source before import-boundary transcoding.
+    public let originalSourceURL: URL
+
+    /// SHA-256 of the original bytes; this remains the deduplication identity.
+    public let originalContentHash: ContentHash
+
+    /// Creates durable import provenance.
+    public init(originalSourceURL: URL, originalContentHash: ContentHash) {
+        self.originalSourceURL = originalSourceURL
+        self.originalContentHash = originalContentHash
+    }
 }
 
 /// A stable reference to original media in a project.
@@ -117,6 +135,9 @@ public struct MediaRef: Codable, Hashable, Sendable {
     /// Durable proxy lifecycle state (FR-MED-004). Generation progress is not stored here.
     public let proxyState: MediaProxyState
 
+    /// Original identity when `sourceURL` is an import-boundary working transcode.
+    public let transcodeProvenance: MediaTranscodeProvenance?
+
     private enum CodingKeys: String, CodingKey {
         case id
         case sourceURL
@@ -125,6 +146,7 @@ public struct MediaRef: Codable, Hashable, Sendable {
         case metadata
         case availability
         case proxyState
+        case transcodeProvenance
     }
 
     /// Creates a stable media reference.
@@ -135,7 +157,8 @@ public struct MediaRef: Codable, Hashable, Sendable {
         contentHash: ContentHash?,
         metadata: MediaMetadata,
         availability: MediaAvailability = .available,
-        proxyState: MediaProxyState = .none
+        proxyState: MediaProxyState = .none,
+        transcodeProvenance: MediaTranscodeProvenance? = nil
     ) {
         self.id = id
         self.sourceURL = sourceURL
@@ -144,6 +167,7 @@ public struct MediaRef: Codable, Hashable, Sendable {
         self.metadata = metadata
         self.availability = availability
         self.proxyState = proxyState
+        self.transcodeProvenance = transcodeProvenance
     }
 
     /// Decodes legacy references without availability / proxy keys as available / none.
@@ -161,6 +185,10 @@ public struct MediaRef: Codable, Hashable, Sendable {
             ) ?? .available
         proxyState =
             try container.decodeIfPresent(MediaProxyState.self, forKey: .proxyState) ?? .none
+        transcodeProvenance = try container.decodeIfPresent(
+            MediaTranscodeProvenance.self,
+            forKey: .transcodeProvenance
+        )
     }
 
     /// Encodes all durable media-reference fields.
@@ -173,6 +201,7 @@ public struct MediaRef: Codable, Hashable, Sendable {
         try container.encode(metadata, forKey: .metadata)
         try container.encode(availability, forKey: .availability)
         try container.encode(proxyState, forKey: .proxyState)
+        try container.encodeIfPresent(transcodeProvenance, forKey: .transcodeProvenance)
     }
 
     /// Whether the source is currently offline.
@@ -199,16 +228,23 @@ public struct MediaRef: Codable, Hashable, Sendable {
     /// override. Import owns metadata probing; relink changes where the existing project media is
     /// read from without silently changing clip duration, frame-rate, or color interpretation.
     public func relinked(to candidate: MediaRelinkCandidate) -> MediaRef {
+        if let provenance = transcodeProvenance,
+           candidate.contentHash == provenance.originalContentHash {
+            // The original is not itself a playable replacement. The typed decision API sends
+            // it through FFmpeg; direct callers remain safely unchanged.
+            return self
+        }
         // Relink invalidates any prior proxy of the old bytes; reset to `.none` so generation
         // re-runs against the new source (FR-MED-004 / FR-MED-007).
-        MediaRef(
+        return MediaRef(
             id: id,
             sourceURL: candidate.sourceURL,
             bookmark: candidate.bookmark,
             contentHash: candidate.contentHash ?? contentHash,
             metadata: metadata,
             availability: .available,
-            proxyState: .none
+            proxyState: .none,
+            transcodeProvenance: nil
         )
     }
 
@@ -225,7 +261,8 @@ public struct MediaRef: Codable, Hashable, Sendable {
             contentHash: candidate.contentHash ?? contentHash,
             metadata: metadata,
             availability: .available,
-            proxyState: proxyState
+            proxyState: proxyState,
+            transcodeProvenance: transcodeProvenance
         )
     }
 
@@ -242,6 +279,11 @@ public struct MediaRef: Codable, Hashable, Sendable {
                     reason: .candidateContentHashUnavailable
                 )
             )
+        }
+
+        if let provenance = transcodeProvenance,
+           provenance.originalContentHash == actualHash {
+            return .matchedOriginalRequiresTranscode(candidate)
         }
 
         if let contentHash, contentHash == actualHash {
@@ -277,7 +319,8 @@ public struct MediaRef: Codable, Hashable, Sendable {
             contentHash: contentHash,
             metadata: metadata,
             availability: availability,
-            proxyState: proxyState
+            proxyState: proxyState,
+            transcodeProvenance: transcodeProvenance
         )
     }
 
@@ -290,7 +333,8 @@ public struct MediaRef: Codable, Hashable, Sendable {
             contentHash: contentHash,
             metadata: metadata,
             availability: availability,
-            proxyState: proxyState
+            proxyState: proxyState,
+            transcodeProvenance: transcodeProvenance
         )
     }
 }

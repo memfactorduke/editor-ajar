@@ -119,6 +119,14 @@ private struct MediaImportProgressView: View {
                 return AppString.localized("import.progress.file", "Importing \(filename)")
             }
             return AppString.localized("import.progress.preparing", "Preparing import…")
+        case .transcoding:
+            if let filename = progress.currentFileURL?.lastPathComponent {
+                return AppString.localized(
+                    "import.progress.transcoding.file",
+                    "Transcoding \(filename)…"
+                )
+            }
+            return AppString.localized("import.progress.transcoding", "Transcoding media…")
         }
     }
 
@@ -180,6 +188,19 @@ struct EditorAjarMediaImportSummaryView: View {
                                 ImportSummaryRowValue(
                                     filename: item.sourceURL.lastPathComponent,
                                     detail: importedDetail(item.mediaReference)
+                                )
+                            }
+                        )
+                        ImportSummarySection(
+                            title: AppString.localized("import.summary.transcoded", "Transcoded"),
+                            systemImage: "arrow.triangle.2.circlepath",
+                            rows: summary.transcoded.map { item in
+                                ImportSummaryRowValue(
+                                    filename: item.sourceURL.lastPathComponent,
+                                    detail: AppString.localized(
+                                        "import.summary.transcoded.detail",
+                                        "Detected \(item.detectedCodec); converted to ProRes 422 + PCM in \(String(format: "%.1f", item.elapsedSeconds)) seconds"
+                                    )
                                 )
                             }
                         )

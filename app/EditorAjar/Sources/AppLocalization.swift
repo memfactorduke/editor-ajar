@@ -71,8 +71,17 @@ enum AppString {
         case .unsupportedFormat:
             return localized(
                 "import.failure.unsupportedFormat",
-                "This format is not supported by the native importer. The FFmpeg import fallback is not available in this build."
+                "This format could not be converted into working media."
             )
+        case .ffmpegUnavailable(_, let guidance):
+            return localized("import.failure.ffmpegUnavailable", "\(guidance)")
+        case .ffmpegFailed(_, let exitCode, let stderrTail):
+            return localized(
+                "import.failure.ffmpegFailed",
+                "FFmpeg could not convert this file (exit \(exitCode)): \(stderrTail)"
+            )
+        case .transcodeCancelled:
+            return localized("import.failure.transcodeCancelled", "The transcode was cancelled.")
         case .probingFailed(_, let reason):
             return localized(
                 "import.failure.probe",

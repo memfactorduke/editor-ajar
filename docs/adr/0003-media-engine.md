@@ -37,6 +37,19 @@ This keeps FFmpeg cleanly separable (a boundary component), which also simplifie
 - An invariant for CI/architecture: no FFmpeg calls on the playback pipeline (only at import/
   transcode and offline tooling).
 
+## Amendment — 2026-07-11: system FFmpeg distribution posture
+
+Editor Ajar does **not** bundle FFmpeg. The import boundary discovers an executable named
+`ffmpeg` on `PATH`, then checks the standard Homebrew locations `/opt/homebrew/bin` and
+`/usr/local/bin`. It runs `ffmpeg -version` and requires major version 4 or newer. When no
+supported binary is installed, import preserves a typed unsupported-format failure and gives the
+localized guidance `brew install ffmpeg`.
+
+Fallback sources are converted to edit-quality **ProRes 422** video plus PCM audio in MOV. ProRes
+Proxy is reserved for FR-MED-004's separately switchable optimized-media workflow; using it as the
+only fallback copy would unnecessarily reduce the quality of the durable working source. The
+native MOV then enters the ordinary AVFoundation playback path. FFmpeg remains import-only.
+
 ## Alternatives considered
 
 - **Apple-native only.** Simplest and fastest, but can't open formats users have; rejected for a

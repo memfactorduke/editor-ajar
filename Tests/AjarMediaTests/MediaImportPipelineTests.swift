@@ -4,6 +4,8 @@ import AjarCore
 import Foundation
 import XCTest
 
+// swiftlint:disable type_body_length
+
 @testable import AjarMedia
 
 final class MediaImportPipelineTests: XCTestCase {
@@ -188,30 +190,39 @@ final class MediaImportPipelineTests: XCTestCase {
         )
     }
 
-    func testFRMED003UnsupportedFormatReturnsTypedImportFailure() async throws {
+    func testFRMED003UnsupportedFormatRoutesToFallbackAndRetainsProvenance() async throws {
         let root = try temporaryDirectory(named: "unsupported")
         defer { try? FileManager.default.removeItem(at: root) }
         let sourceURL = root.appendingPathComponent("legacy.mkv")
         try Data("not native media".utf8).write(to: sourceURL)
+        let packageURL = root.appendingPathComponent("Project.ajar", isDirectory: true)
+        try FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
+        let outputURL = packageURL.appendingPathComponent("transcodes/working.mov")
+        let nativeResult = try constantProbeResult()
         let pipeline = MediaImportPipeline(
-            probe: StubMediaProbe(error: .unsupportedFormat(sourceURL)),
+            probe: RoutingMediaProbe(unsupportedURL: sourceURL, result: nativeResult),
             hasher: SHA256MediaFileHasher(),
-            bookmarkStore: TestImportBookmarkStore()
+            bookmarkStore: TestImportBookmarkStore(),
+            ffmpegTranscoder: StubFFmpegTranscoder(outputURL: outputURL)
         )
 
-        let batch = await pipeline.prepareImport(from: [sourceURL], existingMedia: [])
-
-        XCTAssertNil(batch.command)
-        XCTAssertEqual(batch.summary.imported, [])
-        XCTAssertEqual(
-            batch.summary.failed,
-            [
-                FailedMediaImportItem(
-                    sourceURL: sourceURL,
-                    error: .unsupportedFormat(sourceURL)
-                )
-            ]
+        let batch = await pipeline.prepareImport(
+            from: [sourceURL],
+            existingMedia: [],
+            projectPackageURL: packageURL
         )
+
+        let reference = try XCTUnwrap(batch.summary.imported.first?.mediaReference)
+        let originalHash = try SHA256MediaFileHasher().contentHash(of: sourceURL)
+        XCTAssertEqual(reference.sourceURL, outputURL)
+        XCTAssertEqual(reference.contentHash, originalHash)
+        XCTAssertEqual(reference.transcodeProvenance?.originalSourceURL, sourceURL)
+        XCTAssertEqual(reference.transcodeProvenance?.originalContentHash, originalHash)
+        XCTAssertEqual(batch.summary.transcoded.first?.detectedCodec, "vp9")
+        XCTAssertEqual(batch.summary.failed, [])
+
+        let encoded = try JSONEncoder().encode(reference)
+        XCTAssertEqual(try JSONDecoder().decode(MediaRef.self, from: encoded), reference)
     }
 
     func testFRMED003NativeProbeReportsUnsupportedFormatWithoutFFmpegFallback() async throws {
@@ -228,7 +239,48 @@ final class MediaImportPipelineTests: XCTestCase {
         let batch = await pipeline.prepareImport(from: [sourceURL], existingMedia: [])
 
         XCTAssertNil(batch.command)
-        XCTAssertEqual(batch.summary.failed.first?.error, .unsupportedFormat(sourceURL))
+        guard case .ffmpegUnavailable(_, let guidance) = batch.summary.failed.first?.error else {
+            return XCTFail("expected typed FFmpeg unavailable failure")
+        }
+        XCTAssertTrue(guidance.contains("brew install ffmpeg"))
+    }
+
+    func testFRMED003OriginalHashDedupSkipsFallback() async throws {
+        let root = try temporaryDirectory(named: "fallback-dedup")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = root.appendingPathComponent("same.mkv")
+        try Data("same unsupported bytes".utf8).write(to: sourceURL)
+        let hash = try SHA256MediaFileHasher().contentHash(of: sourceURL)
+        let existing = MediaRef(
+            id: UUID(),
+            sourceURL: root.appendingPathComponent("working.mov"),
+            contentHash: hash,
+            metadata: try constantProbeResult().metadata,
+            transcodeProvenance: MediaTranscodeProvenance(
+                originalSourceURL: sourceURL,
+                originalContentHash: hash
+            )
+        )
+        let counter = TranscodeCallCounter()
+        let pipeline = MediaImportPipeline(
+            probe: StubMediaProbe(error: .unsupportedFormat(sourceURL)),
+            hasher: SHA256MediaFileHasher(),
+            bookmarkStore: TestImportBookmarkStore(),
+            ffmpegTranscoder: StubFFmpegTranscoder(
+                outputURL: root.appendingPathComponent("should-not-exist.mov"),
+                counter: counter
+            )
+        )
+
+        let batch = await pipeline.prepareImport(
+            from: [sourceURL],
+            existingMedia: [existing],
+            projectPackageURL: root
+        )
+
+        XCTAssertEqual(batch.summary.skippedDuplicates.count, 1)
+        let callCount = await counter.value
+        XCTAssertEqual(callCount, 0)
     }
 
     func testFRMED010TimingStatisticsSortBFramePresentationOrderBeforeVFRDecision() {
@@ -354,6 +406,53 @@ private struct StubMediaProbe: MediaProbing {
     }
 }
 
+private struct RoutingMediaProbe: MediaProbing {
+    let unsupportedURL: URL
+    let result: MediaProbeResult
+
+    func probe(_ sourceURL: URL) async throws -> MediaProbeResult {
+        if sourceURL == unsupportedURL {
+            throw MediaProbeError.unsupportedFormat(sourceURL)
+        }
+        return result
+    }
+}
+
+private actor TranscodeCallCounter {
+    private(set) var value = 0
+    func increment() { value += 1 }
+}
+
+private struct StubFFmpegTranscoder: FFmpegImportTranscoding {
+    let outputURL: URL
+    let counter: TranscodeCallCounter?
+
+    init(outputURL: URL, counter: TranscodeCallCounter? = nil) {
+        self.outputURL = outputURL
+        self.counter = counter
+    }
+
+    func transcode(
+        sourceURL _: URL,
+        originalHash _: ContentHash,
+        projectPackageURL _: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> FFmpegTranscodeResult {
+        await counter?.increment()
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("native working movie".utf8).write(to: outputURL)
+        await progress(1)
+        return FFmpegTranscodeResult(
+            outputURL: outputURL,
+            detectedCodec: "vp9",
+            elapsedSeconds: 1.25
+        )
+    }
+}
+
 private struct TestImportBookmarkStore: MediaBookmarkStore {
     static func bookmark(for url: URL) -> Data {
         Data(url.standardizedFileURL.path.utf8)
@@ -382,3 +481,5 @@ private actor ProgressRecorder {
         values
     }
 }
+
+// swiftlint:enable type_body_length

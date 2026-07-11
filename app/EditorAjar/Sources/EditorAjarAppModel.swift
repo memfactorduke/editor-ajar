@@ -834,6 +834,7 @@ final class EditorAjarAppModel: ObservableObject {
         let batch = await mediaImportPipeline.prepareImport(
             from: urls,
             existingMedia: existingMedia,
+            projectPackageURL: projectPackageRootURL,
             progress: { [weak self] progress in
                 await self?.receiveMediaImportProgress(progress)
             }
@@ -917,6 +918,7 @@ final class EditorAjarAppModel: ObservableObject {
             imported: [],
             skippedDuplicates: summary.skippedDuplicates,
             vfrConformed: [],
+            transcoded: [],
             failed: summary.failed + updateFailures
         )
     }

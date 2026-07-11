@@ -7,7 +7,94 @@ import XCTest
 @testable import AjarMedia
 
 final class MediaRelinkCommandTests: XCTestCase {
-    func testFRMED007RelinkHashMatchPreparesStableIDBookmarkEdit() throws {
+    func testFRMED007TranscodedOriginalRelinkRebuildsWorkingCopyPreservesProvenance() async throws {
+        let root = try temporaryDirectory(named: "relink-transcoded")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let originalURL = root.appendingPathComponent("moved-original.mkv")
+        let bytes = Data("original fallback bytes".utf8)
+        try bytes.write(to: originalURL)
+        let hash = ContentHash.sha256(data: bytes)
+        let outputURL = root.appendingPathComponent("transcodes/rebuilt.mov")
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("working movie".utf8).write(to: outputURL)
+        let media = try fallbackMediaRef(hash: hash, root: root)
+        let workflow = MediaRelinkCommand(
+            hasher: SHA256MediaFileHasher(),
+            bookmarkStore: TestBookmarkStore(),
+            ffmpegTranscoder: StubRelinkTranscoder(resultURL: outputURL)
+        )
+
+        guard case .ready(let command, _) = try await workflow.prepare(
+            mediaReferenceID: media.id,
+            newFileURL: originalURL,
+            in: try makeProject(media: [media]),
+            projectPackageURL: root,
+            mismatchPolicy: .warn
+        ) else { return XCTFail("expected re-transcoded relink") }
+        guard case .updateMediaReferences(_, let replacements) = command else {
+            return XCTFail("expected media-reference update")
+        }
+        let replacement = try XCTUnwrap(replacements.first)
+        XCTAssertEqual(replacement.sourceURL, outputURL)
+        XCTAssertEqual(replacement.transcodeProvenance?.originalSourceURL, originalURL)
+        XCTAssertEqual(replacement.transcodeProvenance?.originalContentHash, hash)
+    }
+
+    func testFRMED007TranscodedOriginalRelinkFFmpegMissingLeavesReferenceUnchanged() async throws {
+        let root = try temporaryDirectory(named: "relink-ffmpeg-missing")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let originalURL = root.appendingPathComponent("moved-original.mkv")
+        let bytes = Data("original fallback bytes".utf8)
+        try bytes.write(to: originalURL)
+        let hash = ContentHash.sha256(data: bytes)
+        let media = try fallbackMediaRef(hash: hash, root: root)
+        let project = try makeProject(media: [media])
+        let workflow = MediaRelinkCommand(
+            hasher: SHA256MediaFileHasher(),
+            bookmarkStore: TestBookmarkStore(),
+            ffmpegTranscoder: MissingRelinkTranscoder()
+        )
+
+        do {
+            _ = try await workflow.prepare(
+                mediaReferenceID: media.id,
+                newFileURL: originalURL,
+                in: project,
+                projectPackageURL: root,
+                mismatchPolicy: .warn
+            )
+            XCTFail("expected typed FFmpeg unavailable error")
+        } catch let error as MediaRelinkCommandError {
+            XCTAssertEqual(
+                error,
+                .retranscodeFailed(.ffmpegUnavailable(guidance: "install ffmpeg"))
+            )
+        }
+        XCTAssertEqual(project.mediaPool.first, media)
+    }
+
+    private func fallbackMediaRef(hash: ContentHash, root: URL) throws -> MediaRef {
+        let base = try makeMediaRef(
+            sourceURL: root.appendingPathComponent("transcodes/old.mov"),
+            contentHash: hash,
+            availability: .offline
+        )
+        return MediaRef(
+            id: base.id,
+            sourceURL: base.sourceURL,
+            contentHash: hash,
+            metadata: base.metadata,
+            availability: .offline,
+            transcodeProvenance: MediaTranscodeProvenance(
+                originalSourceURL: root.appendingPathComponent("old-original.mkv"),
+                originalContentHash: hash
+            )
+        )
+    }
+    func testFRMED007RelinkHashMatchPreparesStableIDBookmarkEdit() async throws {
         let root = try temporaryDirectory(named: "relink-match")
         defer { try? FileManager.default.removeItem(at: root) }
         let candidateURL = root.appendingPathComponent("renamed.mov")
@@ -21,7 +108,7 @@ final class MediaRelinkCommandTests: XCTestCase {
         let project = try makeProject(media: [original])
         let workflow = makeRelinkCommand()
 
-        guard case .ready(let command, let match) = try workflow.prepare(
+        guard case .ready(let command, let match) = try await workflow.prepare(
             mediaReferenceID: original.id,
             newFileURL: candidateURL,
             in: project,
@@ -42,7 +129,7 @@ final class MediaRelinkCommandTests: XCTestCase {
         XCTAssertEqual(history.undo(), project)
     }
 
-    func testFRMED007RelinkHashMismatchWarnsThenExplicitOverrideUpdatesHash() throws {
+    func testFRMED007RelinkHashMismatchWarnsThenExplicitOverrideUpdatesHash() async throws {
         let root = try temporaryDirectory(named: "relink-mismatch")
         defer { try? FileManager.default.removeItem(at: root) }
         let candidateURL = root.appendingPathComponent("interview.mov")
@@ -56,7 +143,7 @@ final class MediaRelinkCommandTests: XCTestCase {
         let project = try makeProject(media: [original])
         let workflow = makeRelinkCommand()
 
-        guard case .warning(let warning) = try workflow.prepare(
+        guard case .warning(let warning) = try await workflow.prepare(
             mediaReferenceID: original.id,
             newFileURL: candidateURL,
             in: project,
@@ -70,7 +157,7 @@ final class MediaRelinkCommandTests: XCTestCase {
         XCTAssertEqual(expected, original.contentHash)
         XCTAssertEqual(actual, ContentHash.sha256(data: candidateBytes))
 
-        guard case .ready(let overrideCommand, let match) = try workflow.prepare(
+        guard case .ready(let overrideCommand, let match) = try await workflow.prepare(
             mediaReferenceID: original.id,
             newFileURL: candidateURL,
             in: project,
@@ -85,7 +172,7 @@ final class MediaRelinkCommandTests: XCTestCase {
         XCTAssertEqual(edited.mediaPool.first?.metadata, original.metadata)
     }
 
-    func testFRMED007RelinkMismatchWarnsBeforeBookmarkCreation() throws {
+    func testFRMED007RelinkMismatchWarnsBeforeBookmarkCreation() async throws {
         let root = try temporaryDirectory(named: "relink-warning-before-bookmark")
         defer { try? FileManager.default.removeItem(at: root) }
         let candidateURL = root.appendingPathComponent("interview.mov")
@@ -101,7 +188,7 @@ final class MediaRelinkCommandTests: XCTestCase {
             bookmarkStore: FailingBookmarkStore()
         )
 
-        guard case .warning(let warning) = try workflow.prepare(
+        guard case .warning(let warning) = try await workflow.prepare(
             mediaReferenceID: original.id,
             newFileURL: candidateURL,
             in: try makeProject(media: [original]),
@@ -194,6 +281,30 @@ final class MediaRelinkCommandTests: XCTestCase {
             hasher: SHA256MediaFileHasher(),
             bookmarkStore: TestBookmarkStore()
         )
+    }
+}
+
+private struct StubRelinkTranscoder: FFmpegImportTranscoding {
+    let resultURL: URL
+
+    func transcode(
+        sourceURL: URL,
+        originalHash: ContentHash,
+        projectPackageURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> FFmpegTranscodeResult {
+        FFmpegTranscodeResult(outputURL: resultURL, detectedCodec: "vp9", elapsedSeconds: 1)
+    }
+}
+
+private struct MissingRelinkTranscoder: FFmpegImportTranscoding {
+    func transcode(
+        sourceURL: URL,
+        originalHash: ContentHash,
+        projectPackageURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> FFmpegTranscodeResult {
+        throw FFmpegTranscodeError.ffmpegUnavailable(guidance: "install ffmpeg")
     }
 }
 

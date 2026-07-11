@@ -72,7 +72,6 @@
 		4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarLiveAudioCoordinator.swift; sourceTree = "<group>"; };
 		49C89179EB54CF3496FEC86D /* EditorAjarUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarUISmokeTests.swift; sourceTree = "<group>"; };
 		4B3331D5EA7AED5D0D63F83D /* EditorAjar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditorAjar.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		4D35FBA0CE8A6AA0F2845E61 /* editor-ajar */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar"; path = ../..; sourceTree = SOURCE_ROOT; };
 		535FF68DE6DDA5467F309039 /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLocalization.swift; sourceTree = "<group>"; };
 		64FE9E23EF9A44E444F2A7E3 /* EditorAjarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7DAA8F76C2C44C8920890DB3 /* EditorAjarExportDialogModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportDialogModel.swift; sourceTree = "<group>"; };
@@ -84,6 +83,7 @@
 		A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModelTests.swift; sourceTree = "<group>"; };
 		A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportQueueAppModelTests.swift; sourceTree = "<group>"; };
 		AE92A31AD23053909AB8286A /* EditorAjarDocumentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDocumentViews.swift; sourceTree = "<group>"; };
+		B18D46E119B1E7EF6629DF1A /* editor-ajar-wt-238 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-ajar-wt-238"; path = ../..; sourceTree = SOURCE_ROOT; };
 		B7B397BCAB3E49B3E54D1706 /* EditorAjarExportPresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportPresetStore.swift; sourceTree = "<group>"; };
 		D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramMetalView.swift; sourceTree = "<group>"; };
 		DAF934E19339DC9EEF4DB2EE /* EditorAjarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -110,6 +110,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		3515CBA41C5031917253259D /* editor-ajar */ = {
+			isa = PBXGroup;
+			children = (
+				B18D46E119B1E7EF6629DF1A /* editor-ajar-wt-238 */,
+			);
+			name = "editor-ajar";
+			sourceTree = "<group>";
+		};
 		434CAD8C2E31A62C2A1C11F5 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
@@ -135,7 +143,7 @@
 		6A726139FAEDF66281EE0298 = {
 			isa = PBXGroup;
 			children = (
-				E2F1B1AE384DA4CD60EEA89F /* Packages */,
+				3515CBA41C5031917253259D /* editor-ajar */,
 				6F7022CEA1657A2876E1F698 /* Sources */,
 				434CAD8C2E31A62C2A1C11F5 /* Tests */,
 				EFDECB95AA0FC7EA60DBC44E /* UITests */,
@@ -169,14 +177,6 @@
 				D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */,
 			);
 			path = Sources;
-			sourceTree = "<group>";
-		};
-		E2F1B1AE384DA4CD60EEA89F /* Packages */ = {
-			isa = PBXGroup;
-			children = (
-				4D35FBA0CE8A6AA0F2845E61 /* editor-ajar */,
-			);
-			name = Packages;
 			sourceTree = "<group>";
 		};
 		EFDECB95AA0FC7EA60DBC44E /* UITests */ = {
