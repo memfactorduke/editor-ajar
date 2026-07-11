@@ -51,6 +51,16 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Nudge canvas title right / down | `⌥⌘→` / `⌥⌘↓` | Title menu (large step) |
 | Toggle action/title-safe guides | `⌥⌘G` | Program monitor overlay |
 | Copy / Paste grade | `⌥⌘C` / `⌥⌘V` | Clip menu |
+| Toggle blade tool / blade selected clip | `B` / `⌘B` | Timeline / Clip menu |
+| Ripple delete / lift | `⇧⌫` / `⌫` | Timeline focus required |
+| Copy / cut / paste clips | `⌘C` / `⌘X` / `⌘V` | Timeline focus required; text editors keep native clipboard — all Clip-menu commands disable while any text field or the canvas title editor has keyboard focus, so plain-key and clipboard shortcuts always reach the editor |
+| Trim start / end to playhead | `[` / `]` | Clip menu |
+| Slip earlier / later | `⌥[` / `⌥]` | One-frame keyboard equivalent |
+| Slide earlier / later | `⌃⌥←` / `⌃⌥→` | One-frame keyboard equivalent |
+| Insert / overwrite / append media | `F9` / `F10` / `E` | Selected media-browser item |
+| Three-point insert / overwrite (fit marks) | `⇧F9` / `⇧F10` | Fits the media selection into the in/out marks (FR-TL-003); Clip menu |
+| Replace selected clip source | `⌥⌘R` | Selected media-browser item |
+| Select forward from playhead | `⇧⌘A` | Clip menu |
 | Save look | `⌥⌘L` | Clip menu |
 | Cancel (sheets / banner dismiss) | `Esc` | Export dialog, import summary, read-only dismiss, title edit |
 
@@ -265,6 +275,14 @@ non-real-time preview route. A UI toggle must not mutate or add work to the real
 | Clear Timeline Range | — | Clear Timeline Range | |
 | Snapping toggle | — | Enable/Disable Snapping | dynamic title |
 | Timeline ruler | drag scrub | Timeline ruler | value: playhead; markers as child buttons |
+| Clip selection | click / `⌘`-click | Clip {name} | Command-click toggles multi-selection |
+| Move clip | body drag; keyboard via cut/paste at playhead | Clip {name} | `⌥` momentarily unlinks; `⌃` disables snapping; vertical drag changes compatible unlocked track; dragging any clip in a multi-selection moves the whole selection (linked partners follow) in one undo step |
+| Ripple / roll trim | edge drag / `[` and `]` | Clip {name} | plain edge drag ripples; `⌘` edge drag rolls; `⌥` momentarily unlinks; menu has exact playhead trims |
+| Slip / slide | `⌥[` / `⌥]`; `⌃⌥←` / `⌃⌥→` | Clip menu | one-frame commands; repeat to adjust |
+| Blade tool | `B`, then click clip / `⌘B` | Toggle Blade Tool | mouse click splits at the pointer position; `⌘B` blades the selected clip at the playhead (keyboard / VoiceOver path); a linked A/V clip blades together in one undo step |
+| Three-point edit | `⇧F9` insert / `⇧F10` overwrite | Three-Point Insert/Overwrite Fit to Marks | fits the media-browser selection into the in/out marks; Clip menu; disabled without marks + selection |
+| Snap indicator | — | Snapped at frame {n} | playhead, markers, clip edges, and transform keyframes; `⌃` disables during drag |
+| Add/remove track | Sequence menu / Full Keyboard Access | menu item title | remove requires a selected empty track header |
 | Marker flag | click | Marker {name} | selection + color + frame + note |
 | Track lane | — | Video/Audio track n, …states | contain track buttons |
 | Enable/Lock/Hide/Mute/Solo | — | dynamic per track | value On/Off |

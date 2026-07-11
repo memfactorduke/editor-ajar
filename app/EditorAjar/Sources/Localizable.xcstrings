@@ -12,584 +12,6 @@
         }
       }
     },
-    "import.action": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import Media…"
-          }
-        }
-      }
-    },
-    "import.action.ax": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import media files or folders"
-          }
-        }
-      }
-    },
-    "import.action.help": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import media files or folders"
-          }
-        }
-      }
-    },
-    "import.failure.localFileRequired": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Only files and folders stored on this Mac can be imported."
-          }
-        }
-      }
-    },
-    "import.failure.bookmark": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Editor Ajar could not save permission to reopen this file: %@"
-          }
-        }
-      }
-    },
-    "import.failure.folderScan": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The folder could not be scanned: %@"
-          }
-        }
-      }
-    },
-    "import.failure.hash": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The file could not be fingerprinted: %@"
-          }
-        }
-      }
-    },
-    "import.failure.probe": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The file's media information could not be read: %@"
-          }
-        }
-      }
-    },
-    "import.failure.projectUpdate": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The file was prepared but could not be added to the project: %@"
-          }
-        }
-      }
-    },
-    "import.failure.projectUpdate.reason": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The open project rejected the import batch."
-          }
-        }
-      }
-    },
-    "import.failure.unavailable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The file or folder is missing or cannot be read."
-          }
-        }
-      }
-    },
-    "import.failure.ffmpegUnavailable": {
-      "extractionState": "manual",
-      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@" } } }
-    },
-    "import.failure.ffmpegFailed": {
-      "extractionState": "manual",
-      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "FFmpeg could not convert this file (exit %lld): %@" } } }
-    },
-    "import.failure.transcodeCancelled": {
-      "extractionState": "manual",
-      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The transcode was cancelled." } } }
-    },
-    "import.failure.unsupportedFormat": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This format could not be converted into working media."
-          }
-        }
-      }
-    },
-    "import.failure.vfrConform": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Variable frame rate was detected, but a stable playback rate could not be chosen."
-          }
-        }
-      }
-    },
-    "import.progress.discovering": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Scanning folders…"
-          }
-        }
-      }
-    },
-    "import.progress.transcoding": {
-      "extractionState": "manual",
-      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Transcoding media…" } } }
-    },
-    "import.progress.transcoding.file": {
-      "extractionState": "manual",
-      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Transcoding %@…" } } }
-    },
-    "import.picker.failed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Media selection failed: %@"
-          }
-        }
-      }
-    },
-    "import.progress.file": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Importing %@"
-          }
-        }
-      }
-    },
-    "import.progress.preparing": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Preparing import…"
-          }
-        }
-      }
-    },
-    "import.progress.value": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld of %lld files"
-          }
-        }
-      }
-    },
-    "import.status.applyFailed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Imported media could not be added to the project."
-          }
-        }
-      }
-    },
-    "import.status.complete": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import complete: %lld imported, %lld skipped, %lld failed"
-          }
-        }
-      }
-    },
-    "import.summary.audioOnly": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "audio only"
-          }
-        }
-      }
-    },
-    "import.summary.done": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Done"
-          }
-        }
-      }
-    },
-    "import.summary.done.ax": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Close media import summary"
-          }
-        }
-      }
-    },
-    "import.summary.duplicate.reason": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Same content is already in the media pool. The existing location and bookmark were kept."
-          }
-        }
-      }
-    },
-    "import.summary.duplicates": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skipped Duplicates"
-          }
-        }
-      }
-    },
-    "import.summary.empty": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No media files were found in the selection."
-          }
-        }
-      }
-    },
-    "import.summary.failed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed"
-          }
-        }
-      }
-    },
-    "import.summary.imported": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Imported"
-          }
-        }
-      }
-    },
-    "import.summary.imported.detail": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@, %@"
-          }
-        }
-      }
-    },
-    "import.summary.transcoded": {
-      "extractionState": "manual",
-      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Transcoded" } } }
-    },
-    "import.summary.transcoded.detail": {
-      "extractionState": "manual",
-      "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Detected %@; converted to ProRes 422 + PCM in %@ seconds" } } }
-    },
-    "import.summary.row.ax": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@: %@"
-          }
-        }
-      }
-    },
-    "import.summary.section.count": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (%lld)"
-          }
-        }
-      }
-    },
-    "import.summary.sheet.ax": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Media import summary"
-          }
-        }
-      }
-    },
-    "import.summary.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Media Import Summary"
-          }
-        }
-      }
-    },
-    "import.summary.vfrConformed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Variable Frame Rate Conformed"
-          }
-        }
-      }
-    },
-    "import.summary.vfr.reason": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stable timebase: %@"
-          }
-        }
-      }
-    },
-    "library.empty": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No project media"
-          }
-        }
-      }
-    },
-    "library.media.offline": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Offline"
-          }
-        }
-      }
-    },
-    "library.media.row.ax": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Media %@"
-          }
-        }
-      }
-    },
-    "library.media.unknown": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unknown media"
-          }
-        }
-      }
-    },
-    "menu.import.media": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import Media…"
-          }
-        }
-      }
-    },
-    "menu.import.media.ax": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import media files or folders"
-          }
-        }
-      }
-    },
-    "document.error.create": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not create the project: %@"}}}},
-    "document.error.detail.codec": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"The project data is damaged or uses an unsupported format."}}}},
-    "document.error.detail.fileOperation": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"A file operation failed for %@."}}}},
-    "document.error.detail.invalidExtension": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Choose an Editor Ajar project ending in .ajar."}}}},
-    "document.error.detail.noProject": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"No project is open."}}}},
-    "document.error.detail.notFound": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"The selected project could not be found."}}}},
-    "document.error.detail.notPackage": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"The selected .ajar item is not a project package."}}}},
-    "document.error.detail.noURL": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Choose a name and location for the project first."}}}},
-    "document.error.detail.persistence": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"The project package could not be read or written safely."}}}},
-    "document.error.detail.readOnlyNewerMinor": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Format %lld is newer than supported format %lld. Saving is unavailable."}}}},
-    "document.error.detail.unknown": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"An unexpected error occurred."}}}},
-    "document.error.detail.unsavedChanges": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"The current project has unsaved changes."}}}},
-    "document.error.dismiss": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"OK"}}}},
-    "document.error.open": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not open the project: %@"}}}},
-    "document.error.revert": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not revert the project: %@"}}}},
-    "document.error.sample": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not open the sample project: %@"}}}},
-    "document.error.save": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Could not save the project: %@"}}}},
-    "document.error.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Project Error"}}}},
-    "document.new.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Create a new project"}}}},
-    "document.new.help": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Create a project and choose its video and audio settings"}}}},
-    "document.new.sequenceName": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Sequence 1"}}}},
-    "document.new.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"New Project…"}}}},
-    "document.newSettings.audioRate": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Audio Rate"}}}},
-    "document.newSettings.audioRate.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Project audio sample rate"}}}},
-    "document.newSettings.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"New project settings"}}}},
-    "document.newSettings.cancel": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Cancel"}}}},
-    "document.newSettings.cancel.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Cancel new project"}}}},
-    "document.newSettings.colorSpace": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Color Space"}}}},
-    "document.newSettings.colorSpace.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Project color space"}}}},
-    "document.newSettings.create": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Create"}}}},
-    "document.newSettings.create.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Create new project"}}}},
-    "document.newSettings.frameRate": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Frame Rate"}}}},
-    "document.newSettings.frameRate.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Project frame rate"}}}},
-    "document.newSettings.resolution": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Resolution"}}}},
-    "document.newSettings.resolution.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Project resolution"}}}},
-    "document.newSettings.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"New Project"}}}},
-    "document.open.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open an existing project"}}}},
-    "document.open.help": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open an Editor Ajar project package"}}}},
-    "document.open.panelAction": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open"}}}},
-    "document.open.panelTitle": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Project"}}}},
-    "document.open.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open…"}}}},
-    "document.openRecent.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Recent projects"}}}},
-    "document.openRecent.empty": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"No Recent Projects"}}}},
-    "document.openRecent.item.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open recent project %@"}}}},
-    "document.openRecent.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Recent Projects"}}}},
-    "document.recovered.name": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Recovered Project"}}}},
-    "document.revert.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Revert project to its last saved version"}}}},
-    "document.revert.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Revert to Saved"}}}},
-    "document.revertConfirm.action": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Revert"}}}},
-    "document.revertConfirm.cancel": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Cancel"}}}},
-    "document.revertConfirm.message": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"All changes since the last save will be discarded."}}}},
-    "document.revertConfirm.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Revert to the last saved version?"}}}},
-    "document.sample.name": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Sample Project"}}}},
-    "document.save.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save project"}}}},
-    "document.save.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save"}}}},
-    "document.saveAs.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save project as"}}}},
-    "document.saveAs.panelAction": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save"}}}},
-    "document.saveAs.panelTitle": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save Project"}}}},
-    "document.saveAs.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save As…"}}}},
-    "document.settings.audioRate.khz441": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"44.1 kHz"}}}},
-    "document.settings.audioRate.khz48": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"48 kHz"}}}},
-    "document.settings.audioRate.khz96": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"96 kHz"}}}},
-    "document.settings.colorSpace.displayP3": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Display P3"}}}},
-    "document.settings.colorSpace.rec709": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Rec. 709"}}}},
-    "document.settings.colorSpace.sRGB": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"sRGB"}}}},
-    "document.settings.frameRate.fps23976": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"23.976 fps"}}}},
-    "document.settings.frameRate.fps24": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"24 fps"}}}},
-    "document.settings.frameRate.fps25": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"25 fps"}}}},
-    "document.settings.frameRate.fps2997": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"29.97 fps"}}}},
-    "document.settings.frameRate.fps30": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"30 fps"}}}},
-    "document.settings.frameRate.fps50": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"50 fps"}}}},
-    "document.settings.frameRate.fps5994": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"59.94 fps"}}}},
-    "document.settings.frameRate.fps60": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"60 fps"}}}},
-    "document.settings.resolution.fullHD": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Full HD — 1920 × 1080"}}}},
-    "document.settings.resolution.squareHD": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Square HD — 1080 × 1080"}}}},
-    "document.settings.resolution.ultraHD": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Ultra HD — 3840 × 2160"}}}},
-    "document.settings.resolution.verticalHD": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Vertical HD — 1080 × 1920"}}}},
-    "document.unsavedChanges.cancel": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Cancel"}}}},
-    "document.unsavedChanges.discard": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Discard Changes"}}}},
-    "document.unsavedChanges.message": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Your unsaved project changes will be lost if you continue without saving."}}}},
-    "document.unsavedChanges.save": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save"}}}},
-    "document.unsavedChanges.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Save changes before continuing?"}}}},
-    "document.untitled": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Untitled"}}}},
-    "help.openSampleProject.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open the Editor Ajar sample project"}}}},
-    "help.openSampleProject.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Sample Project"}}}},
-    "import.status.emptySelection": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"No media was selected for import."}}}},
-    "import.status.inProgress": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"A media import is already in progress."}}}},
-    "import.status.noProject": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Create or open a project before importing media."}}}},
-    "import.status.readOnly": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Media cannot be imported into a read-only project."}}}},
-    "status.autosaveFailed": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Autosave failed: %@"}}}},
-    "status.newProjectCreated": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"New project created"}}}},
-    "status.noProject": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Create a new project or open an existing project"}}}},
-    "status.projectOpened": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Opened %@"}}}},
-    "status.projectOpenedWithRecovery": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Opened project at the last recoverable edit"}}}},
-    "status.projectReverted": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Reverted to saved project"}}}},
-    "status.projectSaved": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Saved %@"}}}},
-    "welcome.ax": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Editor Ajar project welcome"}}}},
-    "welcome.subtitle": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Create a project or open an existing .ajar package."}}}},
-    "welcome.title": {"extractionState":"manual","localizations":{"en":{"stringUnit":{"state":"translated","value":"Welcome to Editor Ajar"}}}},
     "banner.readOnly.dismiss": {
       "extractionState": "manual",
       "localizations": {
@@ -949,6 +371,919 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit title text. Press Escape or Command-Return to finish. Press Tab for the next title box."
+          }
+        }
+      }
+    },
+    "document.error.create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not create the project: %@"
+          }
+        }
+      }
+    },
+    "document.error.detail.codec": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The project data is damaged or uses an unsupported format."
+          }
+        }
+      }
+    },
+    "document.error.detail.fileOperation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A file operation failed for %@."
+          }
+        }
+      }
+    },
+    "document.error.detail.invalidExtension": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an Editor Ajar project ending in .ajar."
+          }
+        }
+      }
+    },
+    "document.error.detail.noProject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No project is open."
+          }
+        }
+      }
+    },
+    "document.error.detail.noURL": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a name and location for the project first."
+          }
+        }
+      }
+    },
+    "document.error.detail.notFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected project could not be found."
+          }
+        }
+      }
+    },
+    "document.error.detail.notPackage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected .ajar item is not a project package."
+          }
+        }
+      }
+    },
+    "document.error.detail.persistence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The project package could not be read or written safely."
+          }
+        }
+      }
+    },
+    "document.error.detail.readOnlyNewerMinor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format %lld is newer than supported format %lld. Saving is unavailable."
+          }
+        }
+      }
+    },
+    "document.error.detail.unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An unexpected error occurred."
+          }
+        }
+      }
+    },
+    "document.error.detail.unsavedChanges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current project has unsaved changes."
+          }
+        }
+      }
+    },
+    "document.error.dismiss": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "document.error.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not open the project: %@"
+          }
+        }
+      }
+    },
+    "document.error.revert": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not revert the project: %@"
+          }
+        }
+      }
+    },
+    "document.error.sample": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not open the sample project: %@"
+          }
+        }
+      }
+    },
+    "document.error.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save the project: %@"
+          }
+        }
+      }
+    },
+    "document.error.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project Error"
+          }
+        }
+      }
+    },
+    "document.new.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a new project"
+          }
+        }
+      }
+    },
+    "document.new.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a project and choose its video and audio settings"
+          }
+        }
+      }
+    },
+    "document.new.sequenceName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sequence 1"
+          }
+        }
+      }
+    },
+    "document.new.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Project…"
+          }
+        }
+      }
+    },
+    "document.newSettings.audioRate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio Rate"
+          }
+        }
+      }
+    },
+    "document.newSettings.audioRate.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project audio sample rate"
+          }
+        }
+      }
+    },
+    "document.newSettings.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New project settings"
+          }
+        }
+      }
+    },
+    "document.newSettings.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "document.newSettings.cancel.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel new project"
+          }
+        }
+      }
+    },
+    "document.newSettings.colorSpace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color Space"
+          }
+        }
+      }
+    },
+    "document.newSettings.colorSpace.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project color space"
+          }
+        }
+      }
+    },
+    "document.newSettings.create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create"
+          }
+        }
+      }
+    },
+    "document.newSettings.create.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create new project"
+          }
+        }
+      }
+    },
+    "document.newSettings.frameRate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frame Rate"
+          }
+        }
+      }
+    },
+    "document.newSettings.frameRate.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project frame rate"
+          }
+        }
+      }
+    },
+    "document.newSettings.resolution": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resolution"
+          }
+        }
+      }
+    },
+    "document.newSettings.resolution.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project resolution"
+          }
+        }
+      }
+    },
+    "document.newSettings.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Project"
+          }
+        }
+      }
+    },
+    "document.open.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open an existing project"
+          }
+        }
+      }
+    },
+    "document.open.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open an Editor Ajar project package"
+          }
+        }
+      }
+    },
+    "document.open.panelAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
+    "document.open.panelTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Project"
+          }
+        }
+      }
+    },
+    "document.open.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open…"
+          }
+        }
+      }
+    },
+    "document.openRecent.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent projects"
+          }
+        }
+      }
+    },
+    "document.openRecent.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Recent Projects"
+          }
+        }
+      }
+    },
+    "document.openRecent.item.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open recent project %@"
+          }
+        }
+      }
+    },
+    "document.openRecent.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent Projects"
+          }
+        }
+      }
+    },
+    "document.recovered.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered Project"
+          }
+        }
+      }
+    },
+    "document.revert.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revert project to its last saved version"
+          }
+        }
+      }
+    },
+    "document.revert.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revert to Saved"
+          }
+        }
+      }
+    },
+    "document.revertConfirm.action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revert"
+          }
+        }
+      }
+    },
+    "document.revertConfirm.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "document.revertConfirm.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All changes since the last save will be discarded."
+          }
+        }
+      }
+    },
+    "document.revertConfirm.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revert to the last saved version?"
+          }
+        }
+      }
+    },
+    "document.sample.name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sample Project"
+          }
+        }
+      }
+    },
+    "document.save.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save project"
+          }
+        }
+      }
+    },
+    "document.save.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "document.saveAs.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save project as"
+          }
+        }
+      }
+    },
+    "document.saveAs.panelAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "document.saveAs.panelTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Project"
+          }
+        }
+      }
+    },
+    "document.saveAs.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save As…"
+          }
+        }
+      }
+    },
+    "document.settings.audioRate.khz441": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "44.1 kHz"
+          }
+        }
+      }
+    },
+    "document.settings.audioRate.khz48": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "48 kHz"
+          }
+        }
+      }
+    },
+    "document.settings.audioRate.khz96": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "96 kHz"
+          }
+        }
+      }
+    },
+    "document.settings.colorSpace.displayP3": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display P3"
+          }
+        }
+      }
+    },
+    "document.settings.colorSpace.rec709": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rec. 709"
+          }
+        }
+      }
+    },
+    "document.settings.colorSpace.sRGB": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sRGB"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps23976": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "23.976 fps"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps24": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 fps"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps25": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "25 fps"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps2997": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "29.97 fps"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps30": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 fps"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps50": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "50 fps"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps5994": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "59.94 fps"
+          }
+        }
+      }
+    },
+    "document.settings.frameRate.fps60": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "60 fps"
+          }
+        }
+      }
+    },
+    "document.settings.resolution.fullHD": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full HD — 1920 × 1080"
+          }
+        }
+      }
+    },
+    "document.settings.resolution.squareHD": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Square HD — 1080 × 1080"
+          }
+        }
+      }
+    },
+    "document.settings.resolution.ultraHD": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultra HD — 3840 × 2160"
+          }
+        }
+      }
+    },
+    "document.settings.resolution.verticalHD": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vertical HD — 1080 × 1920"
+          }
+        }
+      }
+    },
+    "document.unsavedChanges.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "document.unsavedChanges.discard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard Changes"
+          }
+        }
+      }
+    },
+    "document.unsavedChanges.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your unsaved project changes will be lost if you continue without saving."
+          }
+        }
+      }
+    },
+    "document.unsavedChanges.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "document.unsavedChanges.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save changes before continuing?"
+          }
+        }
+      }
+    },
+    "document.untitled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled"
           }
         }
       }
@@ -1448,6 +1783,534 @@
         }
       }
     },
+    "help.openSampleProject.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the Editor Ajar sample project"
+          }
+        }
+      }
+    },
+    "help.openSampleProject.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Sample Project"
+          }
+        }
+      }
+    },
+    "import.action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Media…"
+          }
+        }
+      }
+    },
+    "import.action.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import media files or folders"
+          }
+        }
+      }
+    },
+    "import.action.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import media files or folders"
+          }
+        }
+      }
+    },
+    "import.failure.bookmark": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor Ajar could not save permission to reopen this file: %@"
+          }
+        }
+      }
+    },
+    "import.failure.ffmpegFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FFmpeg could not convert this file (exit %lld): %@"
+          }
+        }
+      }
+    },
+    "import.failure.ffmpegUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@"
+          }
+        }
+      }
+    },
+    "import.failure.folderScan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder could not be scanned: %@"
+          }
+        }
+      }
+    },
+    "import.failure.hash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file could not be fingerprinted: %@"
+          }
+        }
+      }
+    },
+    "import.failure.localFileRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only files and folders stored on this Mac can be imported."
+          }
+        }
+      }
+    },
+    "import.failure.probe": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file's media information could not be read: %@"
+          }
+        }
+      }
+    },
+    "import.failure.projectUpdate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file was prepared but could not be added to the project: %@"
+          }
+        }
+      }
+    },
+    "import.failure.projectUpdate.reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The open project rejected the import batch."
+          }
+        }
+      }
+    },
+    "import.failure.transcodeCancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The transcode was cancelled."
+          }
+        }
+      }
+    },
+    "import.failure.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file or folder is missing or cannot be read."
+          }
+        }
+      }
+    },
+    "import.failure.unsupportedFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This format could not be converted into working media."
+          }
+        }
+      }
+    },
+    "import.failure.vfrConform": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variable frame rate was detected, but a stable playback rate could not be chosen."
+          }
+        }
+      }
+    },
+    "import.picker.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media selection failed: %@"
+          }
+        }
+      }
+    },
+    "import.progress.discovering": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanning folders…"
+          }
+        }
+      }
+    },
+    "import.progress.file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importing %@"
+          }
+        }
+      }
+    },
+    "import.progress.preparing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing import…"
+          }
+        }
+      }
+    },
+    "import.progress.transcoding": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcoding media…"
+          }
+        }
+      }
+    },
+    "import.progress.transcoding.file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcoding %@…"
+          }
+        }
+      }
+    },
+    "import.progress.value": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld of %lld files"
+          }
+        }
+      }
+    },
+    "import.status.applyFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported media could not be added to the project."
+          }
+        }
+      }
+    },
+    "import.status.complete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import complete: %lld imported, %lld skipped, %lld failed"
+          }
+        }
+      }
+    },
+    "import.status.emptySelection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No media was selected for import."
+          }
+        }
+      }
+    },
+    "import.status.inProgress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A media import is already in progress."
+          }
+        }
+      }
+    },
+    "import.status.noProject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create or open a project before importing media."
+          }
+        }
+      }
+    },
+    "import.status.readOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media cannot be imported into a read-only project."
+          }
+        }
+      }
+    },
+    "import.summary.audioOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audio only"
+          }
+        }
+      }
+    },
+    "import.summary.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "import.summary.done.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close media import summary"
+          }
+        }
+      }
+    },
+    "import.summary.duplicate.reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same content is already in the media pool. The existing location and bookmark were kept."
+          }
+        }
+      }
+    },
+    "import.summary.duplicates": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped Duplicates"
+          }
+        }
+      }
+    },
+    "import.summary.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No media files were found in the selection."
+          }
+        }
+      }
+    },
+    "import.summary.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
+    "import.summary.imported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported"
+          }
+        }
+      }
+    },
+    "import.summary.imported.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@"
+          }
+        }
+      }
+    },
+    "import.summary.row.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %@"
+          }
+        }
+      }
+    },
+    "import.summary.section.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (%lld)"
+          }
+        }
+      }
+    },
+    "import.summary.sheet.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media import summary"
+          }
+        }
+      }
+    },
+    "import.summary.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media Import Summary"
+          }
+        }
+      }
+    },
+    "import.summary.transcoded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcoded"
+          }
+        }
+      }
+    },
+    "import.summary.transcoded.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detected %@; converted to ProRes 422 + PCM in %@ seconds"
+          }
+        }
+      }
+    },
+    "import.summary.vfr.reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stable timebase: %@"
+          }
+        }
+      }
+    },
+    "import.summary.vfrConformed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variable Frame Rate Conformed"
+          }
+        }
+      }
+    },
     "inspector.marker.heading": {
       "extractionState": "manual",
       "localizations": {
@@ -1591,6 +2454,17 @@
         }
       }
     },
+    "library.codec": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codec"
+          }
+        }
+      }
+    },
     "library.effects": {
       "extractionState": "manual",
       "localizations": {
@@ -1598,6 +2472,116 @@
           "stringUnit": {
             "state": "translated",
             "value": "Effects"
+          }
+        }
+      }
+    },
+    "library.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No project media"
+          }
+        }
+      }
+    },
+    "library.filter.all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
+    "library.filter.allCodecs": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All codecs"
+          }
+        }
+      }
+    },
+    "library.filter.offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        }
+      }
+    },
+    "library.filter.proxyPending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy pending"
+          }
+        }
+      }
+    },
+    "library.filter.proxyReady": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy ready"
+          }
+        }
+      }
+    },
+    "library.layout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media layout"
+          }
+        }
+      }
+    },
+    "library.media.offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        }
+      }
+    },
+    "library.media.row.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Media %@"
+          }
+        }
+      }
+    },
+    "library.media.unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown media"
           }
         }
       }
@@ -1620,6 +2604,204 @@
           "stringUnit": {
             "state": "translated",
             "value": "Project Media"
+          }
+        }
+      }
+    },
+    "library.proxy.generate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate"
+          }
+        }
+      }
+    },
+    "library.proxy.regenerate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regenerate"
+          }
+        }
+      }
+    },
+    "library.relink": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relink…"
+          }
+        }
+      }
+    },
+    "library.relink.bookmark": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor Ajar could not save permission to reopen this file: %@"
+          }
+        }
+      }
+    },
+    "library.relink.duplicateMediaID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The project has more than one media reference with the same id."
+          }
+        }
+      }
+    },
+    "library.relink.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relink failed: %1$@"
+          }
+        }
+      }
+    },
+    "library.relink.folderScan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder could not be scanned for matching media."
+          }
+        }
+      }
+    },
+    "library.relink.folderUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected folder is missing or cannot be read."
+          }
+        }
+      }
+    },
+    "library.relink.hash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file could not be fingerprinted: %@"
+          }
+        }
+      }
+    },
+    "library.relink.localFileRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only files stored on this Mac can be used for relink."
+          }
+        }
+      }
+    },
+    "library.relink.mediaMissing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The media reference to relink is no longer in the project."
+          }
+        }
+      }
+    },
+    "library.relink.mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relink file does not match the original media"
+          }
+        }
+      }
+    },
+    "library.relink.retranscode.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rebuilding working media for relink was cancelled."
+          }
+        }
+      }
+    },
+    "library.relink.retranscode.ffmpegFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FFmpeg could not rebuild working media for relink (exit %lld): %@"
+          }
+        }
+      }
+    },
+    "library.relink.retranscode.timedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rebuilding working media for relink timed out: %@"
+          }
+        }
+      }
+    },
+    "library.relink.retranscode.transactionFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not rebuild working media for relink: %@"
+          }
+        }
+      }
+    },
+    "library.search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search media"
+          }
+        }
+      }
+    },
+    "library.state": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "State"
           }
         }
       }
@@ -1877,6 +3059,50 @@
         }
       }
     },
+    "menu.clip.threePointInsert": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three-Point Insert (Fit Marks)"
+          }
+        }
+      }
+    },
+    "menu.clip.threePointInsert.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three-Point Insert Fit to Marks"
+          }
+        }
+      }
+    },
+    "menu.clip.threePointOverwrite": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three-Point Overwrite (Fit Marks)"
+          }
+        }
+      }
+    },
+    "menu.clip.threePointOverwrite.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three-Point Overwrite Fit to Marks"
+          }
+        }
+      }
+    },
     "menu.clip.title": {
       "extractionState": "manual",
       "localizations": {
@@ -1972,6 +3198,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Export"
+          }
+        }
+      }
+    },
+    "menu.import.media": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Media…"
+          }
+        }
+      }
+    },
+    "menu.import.media.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import media files or folders"
           }
         }
       }
@@ -2306,6 +3554,17 @@
         }
       }
     },
+    "status.autosaveFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autosave failed: %@"
+          }
+        }
+      }
+    },
     "status.loadingSampleProject": {
       "extractionState": "manual",
       "localizations": {
@@ -2317,6 +3576,28 @@
         }
       }
     },
+    "status.newProjectCreated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New project created"
+          }
+        }
+      }
+    },
+    "status.noProject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a new project or open an existing project"
+          }
+        }
+      }
+    },
     "status.originalPlaybackOn": {
       "extractionState": "manual",
       "localizations": {
@@ -2324,6 +3605,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Original playback on"
+          }
+        }
+      }
+    },
+    "status.projectOpened": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opened %@"
+          }
+        }
+      }
+    },
+    "status.projectOpenedWithRecovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opened project at the last recoverable edit"
+          }
+        }
+      }
+    },
+    "status.projectReverted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reverted to saved project"
+          }
+        }
+      }
+    },
+    "status.projectSaved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved %@"
           }
         }
       }
@@ -3274,6 +4599,39 @@
         }
       }
     },
+    "welcome.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editor Ajar project welcome"
+          }
+        }
+      }
+    },
+    "welcome.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a project or open an existing .ajar package."
+          }
+        }
+      }
+    },
+    "welcome.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to Editor Ajar"
+          }
+        }
+      }
+    },
     "workspace.header.export": {
       "extractionState": "manual",
       "localizations": {
@@ -3406,31 +4764,6 @@
         }
       }
     },
-    "library.codec": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Codec" } } } },
-    "library.filter.all": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "All" } } } },
-    "library.filter.allCodecs": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "All codecs" } } } },
-    "library.filter.offline": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Offline" } } } },
-    "library.filter.proxyPending": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Proxy pending" } } } },
-    "library.filter.proxyReady": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Proxy ready" } } } },
-    "library.layout": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media layout" } } } },
-    "library.proxy.generate": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Generate" } } } },
-    "library.proxy.regenerate": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Regenerate" } } } },
-    "library.relink": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Relink…" } } } },
-    "library.relink.failed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Relink failed: %1$@" } } } },
-    "library.relink.mismatch": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Relink file does not match the original media" } } } },
-    "library.relink.mediaMissing": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The media reference to relink is no longer in the project." } } } },
-    "library.relink.duplicateMediaID": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The project has more than one media reference with the same id." } } } },
-    "library.relink.localFileRequired": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Only files stored on this Mac can be used for relink." } } } },
-    "library.relink.folderUnavailable": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The selected folder is missing or cannot be read." } } } },
-    "library.relink.hash": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The file could not be fingerprinted: %@" } } } },
-    "library.relink.bookmark": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Editor Ajar could not save permission to reopen this file: %@" } } } },
-    "library.relink.folderScan": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The folder could not be scanned for matching media." } } } },
-    "library.relink.retranscode.ffmpegFailed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "FFmpeg could not rebuild working media for relink (exit %lld): %@" } } } },
-    "library.relink.retranscode.cancelled": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Rebuilding working media for relink was cancelled." } } } },
-    "library.relink.retranscode.timedOut": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Rebuilding working media for relink timed out: %@" } } } },
-    "library.relink.retranscode.transactionFailed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Could not rebuild working media for relink: %@" } } } },
-    "library.search": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Search media" } } } },
-    "library.state": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "State" } } } },
     "inspector.playback.title": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Clip Playback" } } } },
     "inspector.playback.ax": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Clip Playback Inspector" } } } },
     "inspector.playback.speed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Speed %" } } } },
@@ -3459,6 +4792,27 @@
     "menu.clip.reverse.disable": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Disable Reverse" } } } },
     "menu.clip.freeze.enable": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Enable Freeze Frame" } } } },
     "menu.clip.freeze.disable": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Disable Freeze Frame" } } } },
+    "menu.clip.blade": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Blade at Playhead" } } } },
+    "menu.clip.rippleDelete": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Ripple Delete" } } } },
+    "menu.clip.lift": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Lift" } } } },
+    "menu.clip.copy": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Copy Clips" } } } },
+    "menu.clip.cut": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cut Clips" } } } },
+    "menu.clip.paste": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Paste Clips" } } } },
+    "menu.clip.trimStart": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Trim Start to Playhead" } } } },
+    "menu.clip.trimEnd": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Trim End to Playhead" } } } },
+    "menu.clip.slipEarlier": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Slip Clip Earlier One Frame" } } } },
+    "menu.clip.slipLater": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Slip Clip Later One Frame" } } } },
+    "menu.clip.slideEarlier": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Slide Clip Earlier One Frame" } } } },
+    "menu.clip.slideLater": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Slide Clip Later One Frame" } } } },
+    "menu.clip.selectForward": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Select Forward from Playhead" } } } },
+    "menu.clip.insert": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Insert Selected Media" } } } },
+    "menu.clip.overwrite": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Overwrite with Selected Media" } } } },
+    "menu.clip.append": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Append Selected Media" } } } },
+    "menu.clip.replace": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Replace with Selected Media" } } } },
+    "menu.sequences.addVideoTrack": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Add Video Track" } } } },
+    "menu.sequences.addAudioTrack": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Add Audio Track" } } } },
+    "menu.sequences.removeTrack": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Remove Selected Empty Track" } } } },
+    "menu.clip.applyLook.item": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Apply Look %@" } } } },
     "workspace.proxyToggle.proxyOn.ax": {
       "extractionState": "manual",
       "localizations": {

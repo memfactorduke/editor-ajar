@@ -171,6 +171,14 @@ public extension EditCommand {
             case .consolidate:
                 return "Consolidate Media"
             }
+        case .transaction(let commands):
+            // A transaction reads as its shared sub-command name when uniform (e.g. a multi-clip
+            // ripple delete undoes as "Ripple Delete"), otherwise as a generic grouped label.
+            let names = Set(commands.map(\.actionName))
+            if let only = names.first, names.count == 1 {
+                return only
+            }
+            return "Multiple Edits"
         }
     }
 }

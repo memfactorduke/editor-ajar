@@ -909,6 +909,80 @@ final class EditorAjarAppModelTests: XCTestCase {
         )
     }
 
+    func testIssue240TimelineFocusGatesClipboardAndDelete() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let selection = try sampleLinkedSelection(in: model)
+        model.selectClip(trackID: selection.videoTrackID, clipID: selection.videoClip.id, mode: .replace)
+
+        XCTAssertFalse(model.copyTimelineClips())
+        XCTAssertFalse(model.liftSelection())
+        model.focusTimeline()
+        XCTAssertTrue(model.copyTimelineClips())
+        model.blurTimeline()
+        XCTAssertFalse(model.pasteTimelineClips())
+    }
+
+    func testIssue240CommandClickToggleAndSelectForward() throws {
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let references = TimelineInteraction.clipReferences(in: sequence)
+        let first = try XCTUnwrap(references.first)
+        model.selectClip(trackID: first.trackID, clipID: first.clipID, mode: .toggle)
+        XCTAssertTrue(model.isClipSelected(first))
+        model.selectClip(trackID: first.trackID, clipID: first.clipID, mode: .toggle)
+        XCTAssertFalse(model.isClipSelected(first))
+
+        model.scrub(to: 0)
+        model.selectForwardFromPlayhead()
+        XCTAssertEqual(model.timelineSelectedClipCount, references.count)
+    }
+
+    func testIssue240BladeAtPlayheadIsOneUndoableEdit() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let selection = try sampleLinkedSelection(in: model)
+        model.selectClip(trackID: selection.videoTrackID, clipID: selection.videoClip.id, mode: .replace)
+        model.scrub(to: 20)
+        let before = model.project
+        XCTAssertTrue(model.bladeSelectedClipAtPlayhead())
+        XCTAssertNotEqual(model.project, before)
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    func testIssue240AddAndRemoveEmptyTrack() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let before = try XCTUnwrap(model.activeSequence).videoTracks.count
+        XCTAssertTrue(model.addTrack(kind: .video))
+        let track = try XCTUnwrap(model.activeSequence?.videoTracks.last)
+        XCTAssertEqual(model.activeSequence?.videoTracks.count, before + 1)
+        model.selectTimelineTrack(track.id)
+        XCTAssertTrue(model.removeSelectedEmptyTrack())
+        XCTAssertEqual(model.activeSequence?.videoTracks.count, before)
+    }
+
+    func testIssue240SnapTargetsIncludePlayheadAndTransformKeyframes() throws {
+        let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let targets = TimelineInteraction.snapTargets(in: sequence, playheadFrame: 17)
+        XCTAssertTrue(targets.contains { $0.frame == 17 && $0.kind == .playhead })
+
+        // A transform keyframe becomes a snap target so scrubbing/dragging snaps to it (FR-TL-006).
+        try selectSampleVideoClip(in: model)
+        model.scrub(to: 17)
+        XCTAssertTrue(model.addSelectedTransformKeyframe(parameter: .position, atFrame: 17))
+        model.scrub(to: 0)
+        let keyframeTargets = TimelineInteraction.snapTargets(
+            in: try XCTUnwrap(model.activeSequence), playheadFrame: 0
+        )
+        XCTAssertTrue(keyframeTargets.contains { target in
+            guard case .keyframe = target.kind else { return false }
+            return target.frame == 17
+        })
+
+        XCTAssertEqual(model.snappedTimelineFrame(16, momentarilyDisabled: false), 17)
+        XCTAssertEqual(model.snappedTimelineFrame(16, momentarilyDisabled: true), 16)
+    }
+
     func testFRTL009AppTrimAndDetachAudioRouteThroughEditHistory() throws {
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
@@ -1610,6 +1684,608 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertTrue(recovered.isComplete)
         XCTAssertEqual(recovered.latestCommandCount, 1)
         XCTAssertEqual(recovered.project, model.project)
+    }
+
+    // MARK: - #240 timeline gesture closures (blade pointer, multi-move, groups, three-point)
+
+    /// Blade tool splits at the pointer position, not the playhead (FR-TL-004, #240).
+    func testIssue240BladeToolSplitsAtPointerNotPlayhead() throws {
+        let fixture = try makeControlledTimelineProject(videoStarts: [0], durationFrames: 90)
+        let model = try makeModel(loading: fixture.project)
+        let reference = try XCTUnwrap(model.timelineClipLayouts(for: firstVideoTrack(model)).first).reference
+        model.focusTimeline()
+        model.scrub(to: 5)
+        let pixelsPerFrame = model.timelineState.pixelsPerFrame
+        let before = model.project
+
+        XCTAssertTrue(model.bladeClip(reference: reference, atTimelineX: 20 * pixelsPerFrame))
+
+        let clips = videoClips(model)
+        XCTAssertEqual(clips.count, 2)
+        let left = try XCTUnwrap(clips.first)
+        let right = try XCTUnwrap(clips.last)
+        try assertFrameRange(left.timelineRange, startFrame: 0, durationFrames: 20, frameRate: fixture.frameRate)
+        try assertFrameRange(right.timelineRange, startFrame: 20, durationFrames: 70, frameRate: fixture.frameRate)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// A linked A/V blade splits video and its audio together in exactly one undo step (FR-TL-009).
+    func testIssue240LinkedAVBladeIsSingleUndoStep() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let selection = try sampleLinkedSelection(in: model)
+        let reference = TimelineClipReference(
+            trackID: selection.videoTrackID, clipID: selection.videoClip.id
+        )
+        let before = model.project
+
+        XCTAssertTrue(model.bladeClip(reference: reference, atFrame: 30))
+
+        let sequence = try XCTUnwrap(model.activeSequence)
+        XCTAssertEqual(sequence.videoTracks[0].items.count, 2)
+        XCTAssertEqual(sequence.audioTracks[0].items.count, 2)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// Multi-selection move shifts the whole selection, with linked partners following, in one step.
+    func testIssue240MultiSelectionMoveMovesWholeSelectionLinkedInOneStep() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let frameRate = sequence.timebase
+        let v1 = try firstClip(in: sequence.videoTracks[0])
+        let v2 = try firstClip(in: sequence.videoTracks[1])
+        model.focusTimeline()
+        model.selectClip(trackID: sequence.videoTracks[0].id, clipID: v1.id, mode: .replace)
+        model.selectClip(trackID: sequence.videoTracks[1].id, clipID: v2.id, mode: .toggle)
+        XCTAssertEqual(model.timelineSelectedClipCount, 2)
+        let before = model.project
+
+        XCTAssertTrue(model.moveSelectedClips(byFrames: 5, linkedClipEditMode: .linked))
+
+        let moved = try XCTUnwrap(model.activeSequence)
+        try assertFrameRange(try firstClip(in: moved.videoTracks[0]).timelineRange, startFrame: 5, durationFrames: 90, frameRate: frameRate)
+        try assertFrameRange(try firstClip(in: moved.videoTracks[1]).timelineRange, startFrame: 5, durationFrames: 60, frameRate: frameRate)
+        // The unselected linked audio partner of V1 follows the move.
+        try assertFrameRange(try firstClip(in: moved.audioTracks[0]).timelineRange, startFrame: 5, durationFrames: 90, frameRate: frameRate)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// The momentary-unlink modifier keeps a linked partner in place during a multi-selection move.
+    func testIssue240MultiSelectionMoveUnlinkedLeavesPartner() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let frameRate = sequence.timebase
+        let v1 = try firstClip(in: sequence.videoTracks[0])
+        let v2 = try firstClip(in: sequence.videoTracks[1])
+        model.focusTimeline()
+        model.selectClip(trackID: sequence.videoTracks[0].id, clipID: v1.id, mode: .replace)
+        model.selectClip(trackID: sequence.videoTracks[1].id, clipID: v2.id, mode: .toggle)
+
+        XCTAssertTrue(model.moveSelectedClips(byFrames: 5, linkedClipEditMode: .unlinked))
+
+        let moved = try XCTUnwrap(model.activeSequence)
+        try assertFrameRange(try firstClip(in: moved.videoTracks[0]).timelineRange, startFrame: 5, durationFrames: 90, frameRate: frameRate)
+        // Audio partner stays put because the move was unlinked.
+        try assertFrameRange(try firstClip(in: moved.audioTracks[0]).timelineRange, startFrame: 0, durationFrames: 90, frameRate: frameRate)
+    }
+
+    /// A multi-clip ripple delete is a single undo step (#240).
+    func testIssue240MultiClipRippleDeleteIsSingleUndoStep() throws {
+        let fixture = try makeControlledTimelineProject(videoStarts: [0, 10, 20], durationFrames: 10)
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        selectAllVideoClips(model)
+        XCTAssertEqual(model.timelineSelectedClipCount, 3)
+        let before = model.project
+
+        XCTAssertTrue(model.rippleDeleteSelection())
+        XCTAssertTrue(videoClips(model).isEmpty)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// A multi-clip lift is a single undo step and leaves gaps (#240).
+    func testIssue240MultiClipLiftIsSingleUndoStep() throws {
+        let fixture = try makeControlledTimelineProject(videoStarts: [0, 20], durationFrames: 10)
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        selectAllVideoClips(model)
+        let before = model.project
+
+        XCTAssertTrue(model.liftSelection())
+        XCTAssertTrue(videoClips(model).isEmpty)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// Pasting several clipboard items is a single undo step, gated on timeline focus (#240).
+    func testIssue240PasteIsSingleUndoStepAndFocusGated() throws {
+        // Clips spaced so a paste at the playhead lands in free timeline without overlapping.
+        let fixture = try makeControlledTimelineProject(videoStarts: [0, 60], durationFrames: 10)
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        selectAllVideoClips(model)
+        XCTAssertTrue(model.copyTimelineClips())
+
+        model.blurTimeline()
+        XCTAssertFalse(model.pasteTimelineClips())
+
+        model.focusTimeline()
+        model.scrub(to: 20)
+        let before = model.project
+        XCTAssertTrue(model.pasteTimelineClips())
+        XCTAssertEqual(videoClips(model).count, 4)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// Three-point insert fits the browser selection into the marked range and undoes in one step.
+    func testFRTL003ThreePointInsertFitsMarkedRangeAndUndoes() throws {
+        let fixture = try makeControlledTimelineProject(videoStarts: [], durationFrames: 10)
+        let model = try makeModel(loading: fixture.project)
+        model.setSelectedMediaIDs([fixture.mediaID])
+        model.scrub(to: 10)
+        model.setTimelineRangeIn()
+        model.scrub(to: 30)
+        model.setTimelineRangeOut()
+        XCTAssertTrue(model.canPerformThreePointEdit)
+        let before = model.project
+
+        XCTAssertTrue(model.performThreePointEdit(mode: .insert))
+        let clips = videoClips(model)
+        XCTAssertEqual(clips.count, 1)
+        let inserted = try XCTUnwrap(clips.first)
+        try assertFrameRange(inserted.timelineRange, startFrame: 10, durationFrames: 20, frameRate: fixture.frameRate)
+        try assertFrameRange(inserted.sourceRange, startFrame: 0, durationFrames: 20, frameRate: fixture.frameRate)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// Three-point overwrite fits the marked range and undoes in one step.
+    func testFRTL003ThreePointOverwriteFitsMarkedRangeAndUndoes() throws {
+        let fixture = try makeControlledTimelineProject(videoStarts: [], durationFrames: 10)
+        let model = try makeModel(loading: fixture.project)
+        model.setSelectedMediaIDs([fixture.mediaID])
+        model.scrub(to: 5)
+        model.setTimelineRangeIn()
+        model.scrub(to: 45)
+        model.setTimelineRangeOut()
+        let before = model.project
+
+        XCTAssertTrue(model.performThreePointEdit(mode: .overwrite))
+        let clips = videoClips(model)
+        XCTAssertEqual(clips.count, 1)
+        let placed = try XCTUnwrap(clips.first)
+        try assertFrameRange(placed.timelineRange, startFrame: 5, durationFrames: 40, frameRate: fixture.frameRate)
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// Three-point editing refuses without both timeline marks and a media selection (FR-TL-003).
+    func testFRTL003ThreePointRefusesWithoutMarksOrSelection() throws {
+        let fixture = try makeControlledTimelineProject(videoStarts: [], durationFrames: 10)
+        let model = try makeModel(loading: fixture.project)
+
+        // No marks, no selection.
+        XCTAssertFalse(model.canPerformThreePointEdit)
+        XCTAssertFalse(model.performThreePointEdit(mode: .insert))
+
+        // Marks but no browser selection.
+        model.scrub(to: 10)
+        model.setTimelineRangeIn()
+        model.scrub(to: 30)
+        model.setTimelineRangeOut()
+        XCTAssertFalse(model.canPerformThreePointEdit)
+        XCTAssertFalse(model.performThreePointEdit(mode: .insert))
+
+        // Selection but inverted/empty marks.
+        model.setSelectedMediaIDs([fixture.mediaID])
+        model.clearTimelineRange()
+        model.scrub(to: 30)
+        model.setTimelineRangeIn()
+        model.scrub(to: 10)
+        model.setTimelineRangeOut()
+        XCTAssertFalse(model.canPerformThreePointEdit)
+        XCTAssertFalse(model.performThreePointEdit(mode: .overwrite))
+    }
+
+    /// #240 review finding 1: while a text field has keyboard focus, ⌘X-equivalent cut (and every
+    /// destructive or plain-key timeline gesture) refuses, so typing can never delete a clip.
+    /// Models the exact focus-flag transitions the UI performs via `timelineTextEditingScope`.
+    func testIssue240ReviewTextFieldFocusRefusesCutAndPlainKeyGestures() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let selection = try sampleLinkedSelection(in: model)
+        model.selectClip(trackID: selection.videoTrackID, clipID: selection.videoClip.id, mode: .replace)
+        model.focusTimeline()
+        XCTAssertTrue(model.copyTimelineClips())
+
+        // A transform/marker/search field gains focus — the scenario where ⌘X must cut text.
+        let editorID = UUID()
+        model.textEditorFocusChanged(id: editorID, isFocused: true)
+        XCTAssertTrue(model.isTextEditingActive)
+        XCTAssertFalse(model.timelineHasFocus)
+
+        let before = model.project
+        XCTAssertFalse(model.cutTimelineClips())
+        XCTAssertFalse(model.copyTimelineClips())
+        XCTAssertFalse(model.liftSelection())
+        XCTAssertFalse(model.rippleDeleteSelection())
+        XCTAssertFalse(model.pasteTimelineClips())
+        XCTAssertFalse(model.trimSelectedClipToPlayhead(edge: .trailing))
+        XCTAssertFalse(model.slipSelectedClip(byFrames: 1))
+        XCTAssertFalse(model.slideSelectedClip(byFrames: 1))
+        XCTAssertFalse(model.bladeSelectedClipAtPlayhead())
+        model.toggleBladeTool()
+        XCTAssertEqual(model.timelineTool, .selection)
+        model.setTimelineRangeIn()
+        XCTAssertNil(model.timelineState.selectionInFrame)
+        model.selectForwardFromPlayhead()
+        XCTAssertFalse(model.timelineHasFocus)
+        XCTAssertEqual(model.project, before)
+
+        // Focus moving directly between two fields must not drop the gate (gain before loss).
+        let secondEditorID = UUID()
+        model.textEditorFocusChanged(id: secondEditorID, isFocused: true)
+        model.textEditorFocusChanged(id: editorID, isFocused: false)
+        XCTAssertTrue(model.isTextEditingActive)
+        XCTAssertFalse(model.cutTimelineClips())
+
+        // Leaving text editing and refocusing the timeline restores the gestures.
+        model.textEditorFocusChanged(id: secondEditorID, isFocused: false)
+        XCTAssertFalse(model.isTextEditingActive)
+        model.focusTimeline()
+        XCTAssertTrue(model.cutTimelineClips())
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    /// #240 review finding 1 (canvas variant): the canvas title text editor also gates gestures.
+    func testIssue240ReviewCanvasTitleEditingRefusesDestructiveGestures() throws {
+        let model = EditorAjarAppModel(autosaveIntervalSeconds: 0, opensSampleProjectWhenNoRecovery: true)
+        let selection = try sampleLinkedSelection(in: model)
+        model.selectClip(trackID: selection.videoTrackID, clipID: selection.videoClip.id, mode: .replace)
+        model.focusTimeline()
+
+        XCTAssertTrue(model.editPrimaryCanvasTitleBox())
+        XCTAssertTrue(model.isTextEditingActive)
+        let before = model.project
+        XCTAssertFalse(model.cutTimelineClips())
+        XCTAssertFalse(model.liftSelection())
+        XCTAssertEqual(model.project, before)
+        model.endCanvasTitleTextEditing()
+        XCTAssertFalse(model.isTextEditingActive)
+    }
+
+    /// #240 review finding 5: pasted clips never keep the source link group. A pasted A/V pair
+    /// shares one fresh group (linked to each other, not to the originals).
+    func testIssue240ReviewPasteAssignsFreshLinkGroupsPerPastedSet() throws {
+        let fixture = try makeLinkedPairProject()
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        model.selectClip(trackID: fixture.videoTrackID, clipID: fixture.videoClipID, mode: .replace)
+        model.selectClip(trackID: fixture.audioTrackID, clipID: fixture.audioClipID, mode: .toggle)
+        XCTAssertTrue(model.copyTimelineClips())
+        model.scrub(to: 20)
+        XCTAssertTrue(model.pasteTimelineClips())
+
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let pastedVideo = try XCTUnwrap(
+            clipStarting(atFrame: 20, in: sequence.videoTracks[0], frameRate: fixture.frameRate)
+        )
+        let pastedAudio = try XCTUnwrap(
+            clipStarting(atFrame: 20, in: sequence.audioTracks[0], frameRate: fixture.frameRate)
+        )
+        let pastedGroup = try XCTUnwrap(pastedVideo.linkGroupID)
+        XCTAssertEqual(pastedAudio.linkGroupID, pastedGroup)
+        XCTAssertNotEqual(pastedGroup, fixture.linkGroupID)
+
+        // Moving the pasted pair drags its own partner, never the source clips.
+        model.selectClip(trackID: fixture.videoTrackID, clipID: pastedVideo.id, mode: .replace)
+        XCTAssertTrue(model.moveSelectedClip(toStartFrame: 35, linkedClipEditMode: .linked))
+        let moved = try XCTUnwrap(model.activeSequence)
+        XCTAssertNotNil(clipStarting(atFrame: 35, in: moved.videoTracks[0], frameRate: fixture.frameRate))
+        XCTAssertNotNil(clipStarting(atFrame: 35, in: moved.audioTracks[0], frameRate: fixture.frameRate))
+        let originalVideo = try XCTUnwrap(
+            clipStarting(atFrame: 0, in: moved.videoTracks[0], frameRate: fixture.frameRate)
+        )
+        let originalAudio = try XCTUnwrap(
+            clipStarting(atFrame: 0, in: moved.audioTracks[0], frameRate: fixture.frameRate)
+        )
+        XCTAssertEqual(originalVideo.id, fixture.videoClipID)
+        XCTAssertEqual(originalAudio.id, fixture.audioClipID)
+        XCTAssertEqual(originalVideo.linkGroupID, fixture.linkGroupID)
+    }
+
+    /// #240 review finding 5: pasting a single member of a linked pair unlinks the copy.
+    func testIssue240ReviewPastingLoneLinkedMemberUnlinksTheCopy() throws {
+        let fixture = try makeLinkedPairProject()
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        model.selectClip(trackID: fixture.videoTrackID, clipID: fixture.videoClipID, mode: .replace)
+        XCTAssertTrue(model.copyTimelineClips())
+        model.scrub(to: 20)
+        XCTAssertTrue(model.pasteTimelineClips())
+
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let pasted = try XCTUnwrap(
+            clipStarting(atFrame: 20, in: sequence.videoTracks[0], frameRate: fixture.frameRate)
+        )
+        XCTAssertNil(pasted.linkGroupID)
+        // The original audio partner is untouched at frame 0.
+        let originalAudio = try XCTUnwrap(
+            clipStarting(atFrame: 0, in: sequence.audioTracks[0], frameRate: fixture.frameRate)
+        )
+        XCTAssertEqual(originalAudio.linkGroupID, fixture.linkGroupID)
+    }
+
+    // MARK: - #240 test fixtures
+
+    private struct ControlledTimelineFixture {
+        let project: Project
+        let frameRate: FrameRate
+        let sequenceID: UUID
+        let videoTrackID: UUID
+        let mediaID: UUID
+    }
+
+    private func makeControlledTimelineProject(
+        videoStarts: [Int64],
+        durationFrames: Int64
+    ) throws -> ControlledTimelineFixture {
+        let frameRate = try FrameRate(frames: 30)
+        let spacerFrames: Int64 = 120
+        let mediaID = UUID()
+        let media = MediaRef(
+            id: mediaID,
+            sourceURL: URL(fileURLWithPath: "/media/controlled-\(mediaID.uuidString).mov"),
+            contentHash: ContentHash.sha256(data: Data(mediaID.uuidString.utf8)),
+            metadata: MediaMetadata(
+                codecID: "h264",
+                pixelDimensions: PixelDimensions(width: 1_920, height: 1_080),
+                frameRate: frameRate,
+                duration: try frameRate.duration(ofFrames: spacerFrames),
+                colorSpace: .rec709,
+                audioChannelLayout: nil,
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        // A background audio clip establishes a long enough sequence duration that the playhead
+        // (and thus timeline in/out marks) can reach the mark frames these tests use.
+        let audioMediaID = UUID()
+        let audioMedia = MediaRef(
+            id: audioMediaID,
+            sourceURL: URL(fileURLWithPath: "/media/controlled-\(audioMediaID.uuidString).wav"),
+            contentHash: ContentHash.sha256(data: Data(audioMediaID.uuidString.utf8)),
+            metadata: MediaMetadata(
+                codecID: "pcm",
+                pixelDimensions: nil,
+                frameRate: nil,
+                duration: try frameRate.duration(ofFrames: spacerFrames),
+                colorSpace: .unspecified,
+                audioChannelLayout: AudioChannelLayout(channelCount: 2, layoutTag: "stereo"),
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        let spacerDuration = try frameRate.duration(ofFrames: spacerFrames)
+        let audioSpacer = Clip(
+            id: UUID(),
+            source: .media(id: audioMediaID),
+            sourceRange: try TimeRange(start: .zero, duration: spacerDuration),
+            timelineRange: try TimeRange(start: .zero, duration: spacerDuration),
+            kind: .audio,
+            name: "Spacer"
+        )
+        let sourceDuration = try frameRate.duration(ofFrames: durationFrames)
+        let clips: [TimelineItem] = try videoStarts.map { start in
+            .clip(Clip(
+                id: UUID(),
+                source: .media(id: mediaID),
+                sourceRange: try TimeRange(start: .zero, duration: sourceDuration),
+                timelineRange: try TimeRange(
+                    start: try RationalTime.atFrame(start, frameRate: frameRate),
+                    duration: sourceDuration
+                ),
+                kind: .video,
+                name: "Clip \(start)"
+            ))
+        }
+        let videoTrackID = UUID()
+        let sequenceID = UUID()
+        let sequence = Sequence(
+            id: sequenceID,
+            name: "Controlled",
+            videoTracks: [Track(id: videoTrackID, kind: .video, items: clips)],
+            audioTracks: [Track(id: UUID(), kind: .audio, items: [.clip(audioSpacer)])],
+            markers: [],
+            timebase: frameRate
+        )
+        let project = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            settings: ProjectSettings(
+                frameRate: frameRate,
+                resolution: PixelDimensions(width: 1_920, height: 1_080),
+                colorSpace: .rec709,
+                audioSampleRate: 48_000
+            ),
+            mediaPool: [media, audioMedia],
+            sequences: [sequence]
+        )
+        return ControlledTimelineFixture(
+            project: project,
+            frameRate: frameRate,
+            sequenceID: sequenceID,
+            videoTrackID: videoTrackID,
+            mediaID: mediaID
+        )
+    }
+
+    private struct LinkedPairFixture {
+        let project: Project
+        let frameRate: FrameRate
+        let videoTrackID: UUID
+        let audioTrackID: UUID
+        let videoClipID: UUID
+        let audioClipID: UUID
+        let linkGroupID: UUID
+    }
+
+    /// Linked A/V pair at [0, 10) plus an unlinked video clip at [60, 70) so the sequence is long
+    /// enough for the playhead to reach paste targets in the middle.
+    private func makeLinkedPairProject() throws -> LinkedPairFixture {
+        let frameRate = try FrameRate(frames: 30)
+        let mediaID = UUID()
+        let media = MediaRef(
+            id: mediaID,
+            sourceURL: URL(fileURLWithPath: "/media/linked-\(mediaID.uuidString).mov"),
+            contentHash: ContentHash.sha256(data: Data(mediaID.uuidString.utf8)),
+            metadata: MediaMetadata(
+                codecID: "h264",
+                pixelDimensions: PixelDimensions(width: 1_920, height: 1_080),
+                frameRate: frameRate,
+                duration: try frameRate.duration(ofFrames: 120),
+                colorSpace: .rec709,
+                audioChannelLayout: AudioChannelLayout(channelCount: 2, layoutTag: "stereo"),
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        let clipDuration = try frameRate.duration(ofFrames: 10)
+        let pairRange = try TimeRange(start: .zero, duration: clipDuration)
+        let linkGroupID = UUID()
+        let videoClipID = UUID()
+        let audioClipID = UUID()
+        let videoClip = Clip(
+            id: videoClipID,
+            source: .media(id: mediaID),
+            sourceRange: pairRange,
+            timelineRange: pairRange,
+            kind: .video,
+            name: "Linked Video",
+            linkGroupID: linkGroupID
+        )
+        let audioClip = Clip(
+            id: audioClipID,
+            source: .media(id: mediaID),
+            sourceRange: pairRange,
+            timelineRange: pairRange,
+            kind: .audio,
+            name: "Linked Audio",
+            linkGroupID: linkGroupID
+        )
+        let tailClip = Clip(
+            id: UUID(),
+            source: .media(id: mediaID),
+            sourceRange: pairRange,
+            timelineRange: try TimeRange(
+                start: try RationalTime.atFrame(60, frameRate: frameRate),
+                duration: clipDuration
+            ),
+            kind: .video,
+            name: "Tail"
+        )
+        let videoTrackID = UUID()
+        let audioTrackID = UUID()
+        let sequence = Sequence(
+            id: UUID(),
+            name: "Linked Pair",
+            videoTracks: [
+                Track(id: videoTrackID, kind: .video, items: [.clip(videoClip), .clip(tailClip)])
+            ],
+            audioTracks: [
+                Track(id: audioTrackID, kind: .audio, items: [.clip(audioClip)])
+            ],
+            markers: [],
+            timebase: frameRate
+        )
+        let project = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            settings: ProjectSettings(
+                frameRate: frameRate,
+                resolution: PixelDimensions(width: 1_920, height: 1_080),
+                colorSpace: .rec709,
+                audioSampleRate: 48_000
+            ),
+            mediaPool: [media],
+            sequences: [sequence]
+        )
+        return LinkedPairFixture(
+            project: project,
+            frameRate: frameRate,
+            videoTrackID: videoTrackID,
+            audioTrackID: audioTrackID,
+            videoClipID: videoClipID,
+            audioClipID: audioClipID,
+            linkGroupID: linkGroupID
+        )
+    }
+
+    private func clipStarting(atFrame frame: Int64, in track: Track, frameRate: FrameRate) -> Clip? {
+        for item in track.items {
+            guard case .clip(let clip) = item,
+                  let startFrame = try? clip.timelineRange.start.frameIndex(
+                    at: frameRate,
+                    rounding: .nearestOrAwayFromZero
+                  ),
+                  startFrame == frame
+            else {
+                continue
+            }
+            return clip
+        }
+        return nil
+    }
+
+    private func makeModel(loading project: Project) throws -> EditorAjarAppModel {
+        let packageURL = try temporaryAutosavePackageURL(named: "Issue240-\(UUID().uuidString).ajar")
+        try AjarAutosaveStore.writeSnapshot(
+            project,
+            appliedCommandCount: 0,
+            openMode: .editable,
+            to: packageURL
+        )
+        let model = EditorAjarAppModel(
+            autosavePackageURL: packageURL,
+            autosaveIntervalSeconds: 0
+        )
+        return model
+    }
+
+    private func firstVideoTrack(_ model: EditorAjarAppModel) -> Track {
+        model.activeSequence?.videoTracks.first ?? Track(id: UUID(), kind: .video, items: [])
+    }
+
+    private func videoClips(_ model: EditorAjarAppModel) -> [Clip] {
+        guard let track = model.activeSequence?.videoTracks.first else { return [] }
+        return track.items.compactMap { item in
+            guard case .clip(let clip) = item else { return nil }
+            return clip
+        }
+    }
+
+    private func selectAllVideoClips(_ model: EditorAjarAppModel) {
+        guard let track = model.activeSequence?.videoTracks.first else { return }
+        var replaced = false
+        for item in track.items {
+            guard case .clip(let clip) = item else { continue }
+            model.selectClip(
+                trackID: track.id,
+                clipID: clip.id,
+                mode: replaced ? .toggle : .replace
+            )
+            replaced = true
+        }
     }
 
     private func makeInteractionSequence() throws -> AjarCore.Sequence {

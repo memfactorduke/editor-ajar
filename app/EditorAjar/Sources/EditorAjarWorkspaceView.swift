@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -771,6 +772,7 @@ private struct MarkerInspector: View {
                 )
             )
             .textFieldStyle(.roundedBorder)
+            .timelineTextEditingScope(model: model)
             .accessibilityLabel(AppString.localized("marker.name", "Marker Name"))
             .accessibilityIdentifier("Marker Name")
 
@@ -897,6 +899,15 @@ private struct TimelineView: View {
             PanelTitle(AppString.localized("timeline.title", "Timeline"))
             Spacer()
             TimelineToolButton(
+                title: model.timelineTool == .blade
+                    ? AppString.localized("timeline.tool.selection", "Use Selection Tool")
+                    : AppString.localized("timeline.tool.blade", "Use Blade Tool"),
+                identifier: "Toggle Blade Tool",
+                systemImage: "scissors"
+            ) { model.toggleBladeTool() }
+            .keyboardShortcut("b", modifiers: [])
+            .disabled(model.isTextEditingActive)
+            TimelineToolButton(
                 title: AppString.localized("timeline.tool.addMarker", "Add Marker"),
                 identifier: "Add Marker",
                 systemImage: "flag.fill"
@@ -989,6 +1000,7 @@ private struct TimelineView: View {
                 model.setTimelineRangeIn()
             }
             .keyboardShortcut("i", modifiers: [])
+            .disabled(model.isTextEditingActive)
             TimelineToolButton(
                 title: AppString.localized("timeline.tool.setRangeOut", "Set Range Out"),
                 identifier: "Set Range Out",
@@ -997,6 +1009,7 @@ private struct TimelineView: View {
                 model.setTimelineRangeOut()
             }
             .keyboardShortcut("o", modifiers: [])
+            .disabled(model.isTextEditingActive)
             TimelineToolButton(
                 title: AppString.localized("timeline.tool.clearRange", "Clear Timeline Range"),
                 identifier: "Clear Timeline Range",
@@ -1023,6 +1036,7 @@ private struct TimelineView: View {
             Text(AppString.localized(
                 "timeline.footer.selectedCount", "\(model.timelineSelectedClipCount) selected"
             ))
+            if let feedback = model.timelineGestureFeedback { Text(feedback) }
             Spacer()
             Text(model.loadMessage)
         }
@@ -1388,6 +1402,8 @@ private struct TrackLane: View {
             }
         }
         .frame(width: TimelineLayoutMetrics.trackHeaderWidth, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { model.selectTimelineTrack(row.track.id) }
     }
 
     private var timelineContent: some View {
@@ -1398,6 +1414,7 @@ private struct TrackLane: View {
                 TimelineClipBlock(
                     layout: layout,
                     isSelected: model.isClipSelected(layout.reference),
+                    model: model,
                     keyframeLanes: transformKeyframeLanes(for: layout),
                     pixelsPerFrame: model.timelineState.pixelsPerFrame,
                     addKeyframe: { parameter, frame in
@@ -1414,10 +1431,16 @@ private struct TrackLane: View {
                         model.deleteSelectedTransformKeyframe(parameter: parameter, atFrame: frame)
                     }
                 ) {
+                    model.focusTimeline()
+                    if model.timelineTool == .blade {
+                        // Pointer-position blade is handled by the block's spatial-tap gesture
+                        // (#240); keyboard / VoiceOver activation blades at the playhead via ⌘B.
+                        return
+                    }
                     model.selectClip(
                         trackID: layout.reference.trackID,
                         clipID: layout.reference.clipID,
-                        mode: .replace
+                        mode: NSEvent.modifierFlags.contains(.command) ? .toggle : .replace
                     )
                 }
                 .frame(
@@ -1430,6 +1453,15 @@ private struct TrackLane: View {
                 .fill(Color.accentColor.opacity(0.75))
                 .frame(width: 2)
                 .offset(x: model.timelineXPosition(for: model.playheadFrame))
+            if let snapFrame = model.timelineSnapIndicatorFrame {
+                Rectangle()
+                    .fill(Color.yellow)
+                    .frame(width: 2)
+                    .offset(x: model.timelineXPosition(for: snapFrame))
+                    .accessibilityLabel(AppString.localized(
+                        "timeline.snapIndicator.ax", "Snapped at frame \(snapFrame)"
+                    ))
+            }
         }
         .frame(
             width: max(1, timelineContentWidth), height: max(24, model.timelineState.laneHeight - 8)
@@ -1450,12 +1482,18 @@ private struct TrackLane: View {
 private struct TimelineClipBlock: View {
     let layout: TimelineClipLayout
     let isSelected: Bool
+    @ObservedObject var model: EditorAjarAppModel
     let keyframeLanes: [TransformKeyframeLane]
     let pixelsPerFrame: Double
     let addKeyframe: (ClipTransformParameter, Int64) -> Void
     let moveKeyframe: (ClipTransformParameter, Int64, Int64) -> Void
     let deleteKeyframe: (ClipTransformParameter, Int64) -> Void
     let action: () -> Void
+
+    @State private var dragStartFrame: Int64?
+    /// Set while a trim-handle drag is in flight so the clip-body move gesture stays inert
+    /// (#240 review, finding 3): one edge drag is one trim, never trim + move.
+    @State private var activeTrimEdge: TimelineTrimEdge?
 
     var body: some View {
         VStack(spacing: 2) {
@@ -1492,6 +1530,10 @@ private struct TimelineClipBlock: View {
                 "\(selectionState), frames \(layout.startFrame)-\(layout.endFrame)"
             ))
             .accessibilityIdentifier("Timeline clip \(layout.reference.clipID.uuidString)")
+            .simultaneousGesture(moveGesture)
+            .highPriorityGesture(model.timelineTool == .blade ? bladeTapGesture : nil)
+            .overlay(alignment: .leading) { trimHandle(edge: .leading) }
+            .overlay(alignment: .trailing) { trimHandle(edge: .trailing) }
 
             if !keyframeLanes.isEmpty {
                 TransformKeyframeLanesView(
@@ -1504,6 +1546,108 @@ private struct TimelineClipBlock: View {
                 )
             }
         }
+    }
+
+    private var bladeTapGesture: some Gesture {
+        // Blade tool splits at the exact pointer position (#240). Local x maps to a timeline
+        // frame through the clip's on-screen origin and the current zoom.
+        SpatialTapGesture(coordinateSpace: .local)
+            .onEnded { value in
+                model.focusTimeline()
+                _ = model.bladeClip(
+                    reference: layout.reference,
+                    atTimelineX: layout.xPosition + value.location.x
+                )
+            }
+    }
+
+    private var moveGesture: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                if dragStartFrame == nil {
+                    // A drag that began on a trim handle is a trim, never a move (#240 review,
+                    // finding 3). The handle's gesture (2px threshold) recognizes before this
+                    // one (4px), so the flag is already set when a handle drag reaches here.
+                    guard activeTrimEdge == nil else { return }
+                    dragStartFrame = layout.startFrame
+                    if !isSelected {
+                        model.selectClip(trackID: layout.reference.trackID,
+                                         clipID: layout.reference.clipID, mode: .replace)
+                    }
+                }
+                guard activeTrimEdge == nil else { return }
+                let delta = Int64((value.translation.width / max(1, pixelsPerFrame)).rounded())
+                let proposed = max(0, layout.startFrame + delta)
+                let disabled = NSEvent.modifierFlags.contains(.control)
+                let frame = model.snappedTimelineFrame(proposed, momentarilyDisabled: disabled)
+                model.previewTimelineGesture(frame: frame, snapped: frame != proposed)
+            }
+            .onEnded { value in
+                // Trim drags suppress the move entirely: either the trim is still active, or it
+                // ended without this gesture's onChanged ever arming dragStartFrame.
+                guard activeTrimEdge == nil, dragStartFrame != nil else {
+                    dragStartFrame = nil
+                    return
+                }
+                let delta = Int64((value.translation.width / max(1, pixelsPerFrame)).rounded())
+                let proposed = max(0, layout.startFrame + delta)
+                let frame = model.snappedTimelineFrame(
+                    proposed, momentarilyDisabled: NSEvent.modifierFlags.contains(.control)
+                )
+                let linkMode: LinkedClipEditMode = NSEvent.modifierFlags.contains(.option) ? .unlinked : .linked
+                if model.timelineSelectedClipCount > 1 {
+                    // Move the whole selection by the dragged clip's snapped delta in one undo
+                    // step (#240); vertical track changes stay a single-clip affordance.
+                    _ = model.moveSelectedClips(
+                        byFrames: frame - layout.startFrame,
+                        linkedClipEditMode: linkMode
+                    )
+                } else {
+                    let laneOffset = Int((value.translation.height / max(1, model.timelineState.laneHeight)).rounded())
+                    let destination = model.compatibleTrackID(for: layout.reference, verticalLaneOffset: laneOffset)
+                    _ = model.moveSelectedClip(toStartFrame: frame, destinationTrackID: destination,
+                                               linkedClipEditMode: linkMode)
+                }
+                dragStartFrame = nil
+                model.cancelTimelineGesture()
+            }
+    }
+
+    private func trimHandle(edge: TimelineTrimEdge) -> some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 7)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 2).onChanged { value in
+                    activeTrimEdge = edge
+                    let base = edge == .leading ? layout.startFrame : layout.endFrame
+                    let delta = Int64((value.translation.width / max(1, pixelsPerFrame)).rounded())
+                    let proposed = max(0, base + delta)
+                    let frame = model.snappedTimelineFrame(
+                        proposed, momentarilyDisabled: NSEvent.modifierFlags.contains(.control)
+                    )
+                    model.previewTimelineGesture(frame: frame, snapped: frame != proposed)
+                }.onEnded { value in
+                    let base = edge == .leading ? layout.startFrame : layout.endFrame
+                    let delta = Int64((value.translation.width / max(1, pixelsPerFrame)).rounded())
+                    let frame = model.snappedTimelineFrame(
+                        max(0, base + delta),
+                        momentarilyDisabled: NSEvent.modifierFlags.contains(.control)
+                    )
+                    if NSEvent.modifierFlags.contains(.command) {
+                        _ = model.rollSelectedClip(edge: edge, toFrame: frame)
+                    } else {
+                        let linkMode: LinkedClipEditMode = NSEvent.modifierFlags.contains(.option)
+                            ? .unlinked : .linked
+                        _ = model.rippleTrimSelectedClip(edge: edge, toFrame: frame,
+                                                         linkedClipEditMode: linkMode)
+                    }
+                    activeTrimEdge = nil
+                    model.cancelTimelineGesture()
+                }
+            )
+            .accessibilityHidden(true)
     }
 
     private var selectionState: String {
@@ -1625,6 +1769,7 @@ private struct TransformNumberField: View {
                 )
             )
             .textFieldStyle(.roundedBorder)
+            .timelineTextEditingScope(model: model)
             .accessibilityLabel(field.localizedTitle)
             .accessibilityIdentifier(field.accessibilityIdentifier)
         }
@@ -1714,6 +1859,7 @@ private struct TrackCompositingInspector: View {
                 )
             )
             .textFieldStyle(.roundedBorder)
+            .timelineTextEditingScope(model: model)
             .accessibilityLabel(AppString.localized("track.opacityPercent.ax", "Track Opacity Percent"))
             .accessibilityIdentifier("Track Opacity Percent")
             Picker(
@@ -2195,5 +2341,33 @@ private struct DetailRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label), \(value)")
+    }
+}
+
+/// Reports a text field's keyboard focus to the app model (#240 review, finding 1).
+///
+/// While any scoped text field is focused, the timeline is blurred and plain-key / clipboard
+/// timeline shortcuts are inert, so typing can never cut, blade, or delete timeline content.
+struct TimelineTextEditingScope: ViewModifier {
+    @ObservedObject var model: EditorAjarAppModel
+    @FocusState private var isFocused: Bool
+    @State private var editorID = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .focused($isFocused)
+            .onChange(of: isFocused) { _, focused in
+                model.textEditorFocusChanged(id: editorID, isFocused: focused)
+            }
+            .onDisappear {
+                model.textEditorFocusChanged(id: editorID, isFocused: false)
+            }
+    }
+}
+
+extension View {
+    /// Marks a text field as a timeline-blurring text editing scope (#240 review, finding 1).
+    func timelineTextEditingScope(model: EditorAjarAppModel) -> some View {
+        modifier(TimelineTextEditingScope(model: model))
     }
 }
