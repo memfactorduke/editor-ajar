@@ -49,6 +49,9 @@ targets:
                 - ajar
     sources:
       - path: Sources
+      # Asset catalog (AppIcon.appiconset). Do not hand-edit the generated .xcodeproj —
+      # regenerate with xcodegen after changing this list (see README).
+      - path: Resources
     dependencies:
       - package: EditorAjarPackage
         product: AjarCore

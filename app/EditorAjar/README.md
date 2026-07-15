@@ -32,6 +32,31 @@ To regenerate the project after editing `project.yml`:
 xcodegen --spec app/EditorAjar/project.yml --project app/EditorAjar
 ```
 
+## App icon
+
+The product icon master lives at `Brand/AppIcon-1024.png` (opaque, full-bleed 1024×1024;
+system applies the rounded mask — no manual corner transparency). Artwork was generated
+specifically for Editor Ajar with the built-in OpenAI image-generation tool from an original
+prompt; it contains no third-party art or marks. See [Brand/README.md](Brand/README.md).
+
+**Prerequisites** for icon scripts: macOS `sips`, `python3`, `shasum`, `file` (and for
+compiled-app checks: `/usr/bin/assetutil`, `iconutil`, `/usr/libexec/PlistBuddy`).
+
+Regenerate every macOS `AppIcon.appiconset` PNG from the master (high-quality `sips`
+resampling). This is reproducible generation on macOS — not a claim of cross-OS
+byte-identical `sips` output. Integrity is the committed SHA-256 manifest:
+
+```sh
+scripts/generate-app-icon.sh
+scripts/generate-app-icon.sh --write-hashes   # intentional hash refresh only
+scripts/verify-app-icon.sh                    # structure + shasum -a 256 -c
+```
+
+The offline verifier is also run from `scripts/lint.sh` / CI lint. The asset catalog is under
+`Resources/Assets.xcassets` and is wired through `project.yml` (`Resources` source path +
+`ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon`). After changing that wiring, re-run xcodegen —
+never hand-edit the generated `.xcodeproj` as the source of truth.
+
 Command-line verification:
 
 ```sh
