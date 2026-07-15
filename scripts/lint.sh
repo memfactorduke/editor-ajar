@@ -3,6 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# App identity assets (#265): master + AppIcon.appiconset integrity (offline).
+bash scripts/verify-app-icon.sh
+
 if command -v swiftlint >/dev/null 2>&1; then
   swiftlint --strict
 else

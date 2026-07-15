@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Real macOS app icon and product identity (#265): approved 1024×1024 master under
+  `app/EditorAjar/Brand/`, reproducible `scripts/generate-app-icon.sh` (high-quality macOS
+  `sips` resampling into `Resources/Assets.xcassets/AppIcon.appiconset`; not claimed cross-OS
+  byte-identical), committed `Brand/AppIcon.sha256` full-file integrity, XcodeGen-wired asset
+  catalog, offline `scripts/verify-app-icon.sh` on the lint/CI path, compiled-app checks via
+  `scripts/verify-compiled-app-icon.sh` (`AppIcon.icns` + `assetutil` AppIcon renditions) used by
+  the release verifier, and app-bundle tests for `CFBundleIconName`, `NSImage(named: AppIcon)`,
+  and Assets.car renditions. Artwork is original to Editor Ajar (no third-party marks);
+  full-bleed opaque master — system applies the rounded mask. Requires `sips`, `python3`, and
+  `shasum` for icon scripts.
 - Consumer-release packaging foundation (#263): a reproducible arm64/macOS 14 Release archive,
   explicitly test-only unsigned artifact, fail-closed Developer ID hardened-runtime signing and
   notarization path, deterministic bundle verifier, tag-aware GitHub release workflow, and an

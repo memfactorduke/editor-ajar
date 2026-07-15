@@ -32,6 +32,10 @@ Expected final output has this shape:
 
 ```text
 OK: unsigned/test-only label present; no Developer ID signature accepted.
+OK: CFBundleIconName=AppIcon
+OK: AppIcon.icns decodes to N PNG representation(s)
+OK: Assets.car contains AppIcon with all 10 macOS Icon Image renditions
+VERIFIED: compiled AppIcon present in EditorAjar.app
 OK: bundle version 1.1.0 (build 1) matches release version 1.1.0.
 OK: minimum macOS 14.0 and architectures [arm64] match SPEC.
 VERIFIED: EditorAjar-1.1.0-macOS-arm64-UNSIGNED-TEST-ONLY.zip (unsigned)

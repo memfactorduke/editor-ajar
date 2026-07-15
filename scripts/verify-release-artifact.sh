@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 usage() {
   cat <<'EOF'
 Usage: scripts/verify-release-artifact.sh --artifact PATH --version X.Y.Z --mode unsigned|production
@@ -158,6 +160,11 @@ else
   cat "$gatekeeper_output"
   echo "OK: Developer ID signature, hardened runtime, stapling, and Gatekeeper accepted."
 fi
+
+# App identity (#265): compiled AppIcon must be present in the packaged app
+# (Info.plist name, decodable AppIcon.icns, Assets.car with all macOS renditions).
+# Checks the compiled artifact only — never the source tree.
+"$script_dir/verify-compiled-app-icon.sh" --app "$app"
 
 echo "OK: bundle version $bundle_version (build $build_number) matches release version $version."
 echo "OK: minimum macOS $minimum_macos and architectures [$architectures] match SPEC."
