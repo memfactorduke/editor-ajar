@@ -11,15 +11,24 @@ struct EditorAjarRootView: View {
     let shouldCloseWindow: () -> Bool
 
     var body: some View {
-        Group {
-            if model.project == nil {
-                EditorAjarWelcomeView(
-                    model: model,
-                    presentOpenPanel: presentOpenPanel,
-                    openRecentProject: openRecentProject
-                )
-            } else {
-                EditorAjarWorkspaceView(model: model)
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if model.project == nil {
+                    EditorAjarWelcomeView(
+                        model: model,
+                        presentOpenPanel: presentOpenPanel,
+                        openRecentProject: openRecentProject
+                    )
+                } else {
+                    EditorAjarWorkspaceView(model: model)
+                }
+            }
+
+            if model.isConsolidatingMedia {
+                EditorAjarMediaConsolidationProgressView(model: model)
+                    .padding(16)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(10)
             }
         }
         .frame(minWidth: 1_100, minHeight: 720)
@@ -36,6 +45,31 @@ struct EditorAjarRootView: View {
             .keyboardShortcut(.defaultAction)
         } message: {
             Text(model.documentErrorMessage ?? "")
+        }
+        .alert(
+            AppString.localized(
+                "document.warning.saveAsCleanup.title",
+                "Project Saved with Cleanup Warning"
+            ),
+            isPresented: documentWarningPresented
+        ) {
+            Button(AppString.localized("document.warning.dismiss", "OK")) {
+                model.dismissDocumentWarning()
+            }
+            .keyboardShortcut(.defaultAction)
+        } message: {
+            Text(model.documentWarningMessage ?? "")
+        }
+        .alert(
+            AppString.localized("consolidate.summary.title", "Media Consolidation"),
+            isPresented: mediaConsolidationSummaryPresented
+        ) {
+            Button(AppString.localized("consolidate.summary.dismiss", "OK")) {
+                model.dismissMediaConsolidationSummary()
+            }
+            .keyboardShortcut(.defaultAction)
+        } message: {
+            Text(model.mediaConsolidationSummaryMessage ?? "")
         }
         .background(
             EditorAjarWindowStateBridge(
@@ -64,6 +98,28 @@ struct EditorAjarRootView: View {
             set: { isPresented in
                 if !isPresented {
                     model.dismissDocumentError()
+                }
+            }
+        )
+    }
+
+    private var mediaConsolidationSummaryPresented: Binding<Bool> {
+        Binding(
+            get: { model.mediaConsolidationSummaryMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    model.dismissMediaConsolidationSummary()
+                }
+            }
+        )
+    }
+
+    private var documentWarningPresented: Binding<Bool> {
+        Binding(
+            get: { model.documentWarningMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    model.dismissDocumentWarning()
                 }
             }
         )

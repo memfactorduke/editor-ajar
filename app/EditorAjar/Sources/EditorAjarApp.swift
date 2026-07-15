@@ -125,6 +125,20 @@ struct EditorAjarApp: App {
                 .accessibilityLabel(
                     AppString.localized("menu.import.media.ax", "Import media files or folders")
                 )
+
+                Divider()
+
+                Button(AppString.localized("consolidate.menu.title", "Consolidate Media…")) {
+                    beginMediaConsolidationFlow()
+                }
+                .disabled(!model.canRequestMediaConsolidation)
+                .accessibilityLabel(
+                    AppString.localized(
+                        "consolidate.menu.ax",
+                        "Consolidate project media into the saved project package"
+                    )
+                )
+                .accessibilityIdentifier("Consolidate Media")
             }
             CommandGroup(replacing: .saveItem) {
                 Button(AppString.localized("document.save.title", "Save")) {
@@ -742,6 +756,39 @@ struct EditorAjarApp: App {
         } catch {
             model.presentDocumentError(error, operation: .revert)
         }
+    }
+
+    private func beginMediaConsolidationFlow() {
+        // Untitled projects first use the existing Save As implementation. Only a successfully
+        // published `.ajar` package may become the fixed consolidation destination.
+        if model.documentURL == nil, !presentSavePanel() {
+            return
+        }
+        guard let confirmation = model.mediaConsolidationConfirmation else {
+            _ = model.startMediaConsolidation()
+            return
+        }
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = AppString.localized(
+            "consolidate.confirm.title",
+            "Consolidate project media?"
+        )
+        alert.informativeText = confirmation.informativeText
+        alert.addButton(
+            withTitle: AppString.localized(
+                "consolidate.confirm.action",
+                "Consolidate"
+            ))
+        alert.addButton(
+            withTitle: AppString.localized(
+                "consolidate.confirm.cancel",
+                "Cancel"
+            ))
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+        _ = model.startMediaConsolidation()
     }
 }
 

@@ -573,6 +573,50 @@
         }
       }
     },
+    "document.warning.dismiss": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "document.warning.saveAsCleanup.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project Saved with Cleanup Warning"
+          }
+        }
+      }
+    },
+    "document.warning.saveAsCleanupSkipped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The project was saved successfully and is now using %@. Automatic cleanup was skipped safely because the older folder changed. No folder was identified as safe to delete."
+          }
+        }
+      }
+    },
+    "document.warning.saveAsRetainedCleanup": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The project was saved and is now using %@, but an older retained package could not be removed safely. It was left as %@ for manual cleanup or recovery."
+          }
+        }
+      }
+    },
     "document.new.ax": {
       "extractionState": "manual",
       "localizations": {
@@ -5831,6 +5875,62 @@
     "title.field.gradientAngle": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Gradient Angle" } } } },
     "title.field.leading": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Leading" } } } },
     "title.field.shadowBlur": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Shadow Blur" } } } },
+    "consolidate.confirm.action": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidate" } } } },
+    "consolidate.confirm.cancel": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cancel" } } } },
+    "consolidate.confirm.message.one": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Copy 1 media file to %@. Originals are never deleted." } } } },
+    "consolidate.confirm.message.many": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Copy %lld media files to %@. Originals are never deleted." } } } },
+    "consolidate.count.files.one": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%lld of 1 file" } } } },
+    "consolidate.count.files.many": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%lld of %lld files" } } } },
+    "consolidate.count.references.one": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "That reference was updated as one undoable change." } } } },
+    "consolidate.count.references.many": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Those %lld references were updated as one undoable change." } } } },
+    "consolidate.count.references.zero": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "No references were changed." } } } },
+    "consolidate.confirm.title": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidate project media?" } } } },
+    "consolidate.failure.bookmark": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The copy of %@ could not be authorized for reopening." } } } },
+    "consolidate.failure.cancelled": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@ was canceled." } } } },
+    "consolidate.failure.changed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@ changed since import." } } } },
+    "consolidate.failure.cleanup": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "An unpublished temporary copy for %@ could not be removed safely. Consolidation stopped without deleting it." } } } },
+    "consolidate.failure.copy": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@ could not be copied safely." } } } },
+    "consolidate.failure.copyMismatch": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The copy of %@ failed verification and was not published." } } } },
+    "consolidate.failure.duplicate": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The project contains ambiguous media references." } } } },
+    "consolidate.failure.hash": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@ could not be verified." } } } },
+    "consolidate.failure.mediaDirectory": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The project media folder is unavailable or unsafe." } } } },
+    "consolidate.failure.offline": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@ is unavailable." } } } },
+    "consolidate.failure.package": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The saved project package is unavailable." } } } },
+    "consolidate.failure.packageBusy": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "This project is already consolidating media in another window or process. Wait for it to finish and try again." } } } },
+    "consolidate.failure.packageLock": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The project media folder could not be locked safely." } } } },
+    "consolidate.failure.readOnly": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The project is read-only." } } } },
+    "consolidate.failure.unknown": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The project package was unavailable." } } } },
+    "consolidate.failure.staleCleanup": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Temporary media cleanup for %@ needs attention. Consolidation stopped without deleting the uncertain item." } } } },
+    "consolidate.failure.publicationSync": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The copy of %@ is present, but safe storage could not be confirmed, so its reference was not changed." } } } },
+    "consolidate.failure.sourceProtection": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media safety could not verify %@. Consolidation stopped before temporary files were cleaned up." } } } },
+    "consolidate.failure.unsafeSource": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%@ is not a safe regular file." } } } },
+    "consolidate.menu.ax": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidate project media into the saved project package" } } } },
+    "consolidate.menu.title": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidate Media…" } } } },
+    "consolidate.progress.ax": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media consolidation progress" } } } },
+    "consolidate.progress.cancel": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cancel" } } } },
+    "consolidate.progress.cancel.ax": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cancel media consolidation" } } } },
+    "consolidate.progress.count.one": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%lld of 1 file complete" } } } },
+    "consolidate.progress.count.many": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%lld of %lld files complete" } } } },
+    "consolidate.progress.originals": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Original files are never deleted." } } } },
+    "consolidate.progress.title": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidating Media" } } } },
+    "consolidate.progress.overlay.ax": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media consolidation controls. The editor remains available." } } } },
+    "consolidate.progress.value.one": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%lld of 1 file" } } } },
+    "consolidate.progress.value.many": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "%lld of %lld files" } } } },
+    "consolidate.refusal.inProgress": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media consolidation is already in progress." } } } },
+    "consolidate.refusal.mustSave": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Save the project before consolidating media." } } } },
+    "consolidate.refusal.noMedia": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The project has no media to consolidate." } } } },
+    "consolidate.refusal.noProject": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Create or open a project before consolidating media." } } } },
+    "consolidate.refusal.projectChanged": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Project media changed before consolidation could be applied." } } } },
+    "consolidate.refusal.readOnly": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media cannot be consolidated in a read-only project." } } } },
+    "consolidate.summary.applyFailed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media copies were left safely in the project, but references were not changed because a different project or media set is now open. Originals were not deleted." } } } },
+    "consolidate.summary.cancelled": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidation canceled before %@, after %@. %@ Originals were not deleted." } } } },
+    "consolidate.summary.cancelled.none": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidation canceled before any references changed, after %@. Originals were not deleted." } } } },
+    "consolidate.summary.complete": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidated %@ into %@. %@ Originals were not deleted." } } } },
+    "consolidate.summary.dismiss": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "OK" } } } },
+    "consolidate.summary.failed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media could not be consolidated. %@ Originals were not deleted." } } } },
+    "consolidate.summary.partialFailure": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Consolidated %@. %@ %@ Originals were not deleted." } } } },
+    "consolidate.summary.title": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Media Consolidation" } } } },
+    "document.error.detail.consolidationInProgress": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Wait for media consolidation to finish, or cancel it first." } } } },
     "title.field.shadowOffsetX": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Shadow X" } } } },
     "title.field.shadowOffsetY": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Shadow Y" } } } },
     "title.field.shadowOpacity": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Shadow Opacity" } } } },

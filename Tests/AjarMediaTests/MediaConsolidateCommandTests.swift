@@ -29,7 +29,7 @@ final class MediaConsolidateCommandTests: XCTestCase {  // swiftlint:disable:thi
             contentHash: ContentHash.sha256(data: secondBytes)
         )
         let project = try makeProject(media: [first, second])
-        let progress = ProgressRecorder()
+        let progress = ConsolidationProgressRecorder()
         let command = makeConsolidateCommand()
 
         let result = try command.prepare(
@@ -41,8 +41,11 @@ final class MediaConsolidateCommandTests: XCTestCase {  // swiftlint:disable:thi
 
         XCTAssertTrue(result.isComplete)
         XCTAssertEqual(result.consolidatedMediaIDs, [first.id, second.id])
-        XCTAssertEqual(progress.updates.map(\.completedFileCount), [0, 1, 2])
-        XCTAssertEqual(progress.updates.map(\.totalFileCount), [2, 2, 2])
+        let completedUpdates = progress.updates.filter {
+            $0.destinationURL != nil || $0.mediaID == nil
+        }
+        XCTAssertEqual(completedUpdates.map(\.completedFileCount), [0, 1, 2])
+        XCTAssertEqual(completedUpdates.map(\.totalFileCount), [2, 2, 2])
         XCTAssertTrue(
             result.publishedFileURLs.allSatisfy {
                 $0.deletingLastPathComponent() == package.appendingPathComponent("media")
@@ -248,7 +251,7 @@ final class MediaConsolidateCommandTests: XCTestCase {  // swiftlint:disable:thi
             at: package.appendingPathComponent("media"),
             includingPropertiesForKeys: nil
         )
-        XCTAssertTrue(published.isEmpty)
+        XCTAssertTrue(published.allSatisfy { $0.lastPathComponent == ".ajar-consolidation.lock" })
         XCTAssertEqual(try Data(contentsOf: targetURL), bytes)
     }
 
@@ -281,7 +284,7 @@ final class MediaConsolidateCommandTests: XCTestCase {  // swiftlint:disable:thi
             at: package.appendingPathComponent("media"),
             includingPropertiesForKeys: nil
         )
-        XCTAssertTrue(published.isEmpty)
+        XCTAssertTrue(published.allSatisfy { $0.lastPathComponent == ".ajar-consolidation.lock" })
         XCTAssertEqual(try Data(contentsOf: sourceURL), bytes)
     }
 
@@ -317,7 +320,8 @@ final class MediaConsolidateCommandTests: XCTestCase {  // swiftlint:disable:thi
             at: package.appendingPathComponent("media"),
             includingPropertiesForKeys: nil
         )
-        XCTAssertEqual(files.count, 1)
+        let mediaFiles = files.filter { $0.lastPathComponent != ".ajar-consolidation.lock" }
+        XCTAssertEqual(mediaFiles.count, 1)
     }
 
     func testFRMED008ConsolidateRejectsMediaDirectorySymlink() throws {
@@ -391,14 +395,6 @@ final class MediaConsolidateCommandTests: XCTestCase {  // swiftlint:disable:thi
             bookmarkStore: bookmarks,
             fileOperations: fileOperations
         )
-    }
-}
-
-private final class ProgressRecorder: ConsolidateProgress {
-    private(set) var updates: [ConsolidateProgressUpdate] = []
-
-    func consolidateDidUpdate(_ progress: ConsolidateProgressUpdate) {
-        updates.append(progress)
     }
 }
 

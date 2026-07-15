@@ -268,3 +268,108 @@ final class MediaReferenceEditCommandTests: XCTestCase {
         XCTAssertEqual(merged.mediaPool.first?.availability, .available)
     }
 }
+
+extension MediaReferenceEditCommandTests {
+    func testFRMED008SaveAsMediaRebaseKeepsMidClipInsertUndoRedoCoherent() throws {
+        let fixture = try makeEditFixture(seed: 21_807)
+        let original = try XCTUnwrap(fixture.project.mediaPool.first)
+        let oldPackageReference = original.consolidated(
+            to: MediaRelinkCandidate(
+                sourceURL: URL(fileURLWithPath: "/Old.ajar/media/interview.mov"),
+                contentHash: original.contentHash,
+                bookmark: Data("old package bookmark".utf8)
+            )
+        )
+        let newPackageReference = oldPackageReference.consolidated(
+            to: MediaRelinkCandidate(
+                sourceURL: URL(fileURLWithPath: "/New.ajar/media/interview.mov"),
+                contentHash: original.contentHash,
+                bookmark: Data("new package bookmark".utf8)
+            )
+        )
+        var history = EditHistory(project: fixture.project)
+        _ = try history.apply(
+            .updateMediaReferences(kind: .consolidate, replacements: [oldPackageReference])
+        )
+        let insertedClip = try makeEditClip(
+            id: try editUUID(21_807_901),
+            mediaID: fixture.mediaID,
+            startFrame: 9,
+            durationFrames: 5
+        )
+        let afterInsert = try history.apply(
+            .insertClip(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clip: insertedClip
+            )
+        )
+        _ = history.undo()
+
+        let rebased = try history.rebaseMediaReferences(
+            expected: [oldPackageReference],
+            rebased: [newPackageReference]
+        )
+
+        XCTAssertEqual(rebased.mediaPool, [newPackageReference])
+        XCTAssertEqual(history.undoCount, 1)
+        XCTAssertEqual(history.redoCount, 1)
+        XCTAssertEqual(history.undo()?.mediaPool, [original])
+        XCTAssertEqual(try history.redo()?.mediaPool, [newPackageReference])
+        let insertRedone = try history.redo()
+        XCTAssertEqual(insertRedone?.mediaPool, [newPackageReference])
+        XCTAssertEqual(insertRedone?.sequences, afterInsert.sequences)
+    }
+
+    func testFRMED008PackageMediaRebaseUsesStableIDAndHistoricalLocation() throws {
+        let fixture = try makeEditFixture(seed: 21_808)
+        let original = try XCTUnwrap(fixture.project.mediaPool.first)
+        let firstOld = original.consolidated(
+            to: MediaRelinkCandidate(
+                sourceURL: URL(fileURLWithPath: "/Old.ajar/media/first.mov"),
+                contentHash: original.contentHash,
+                bookmark: Data("first old bookmark".utf8)
+            )
+        )
+        let secondOld = original.consolidated(
+            to: MediaRelinkCandidate(
+                sourceURL: URL(fileURLWithPath: "/Old.ajar/media/second.mov"),
+                contentHash: original.contentHash,
+                bookmark: Data("second old bookmark".utf8)
+            )
+        )
+        let firstNew = firstOld.consolidated(
+            to: MediaRelinkCandidate(
+                sourceURL: URL(fileURLWithPath: "/New.ajar/media/first.mov"),
+                contentHash: original.contentHash,
+                bookmark: Data("first new bookmark".utf8)
+            )
+        )
+        let secondNew = secondOld.consolidated(
+            to: MediaRelinkCandidate(
+                sourceURL: URL(fileURLWithPath: "/New.ajar/media/second.mov"),
+                contentHash: original.contentHash,
+                bookmark: Data("second new bookmark".utf8)
+            )
+        )
+        var history = EditHistory(project: fixture.project)
+        _ = try history.apply(
+            .updateMediaReferences(kind: .consolidate, replacements: [firstOld])
+        )
+        _ = try history.apply(.updateMediaReferences(kind: .relink, replacements: [secondOld]))
+
+        XCTAssertTrue(history.persistenceMediaReferences.contains(firstOld))
+        XCTAssertTrue(history.persistenceMediaReferences.contains(secondOld))
+        XCTAssertEqual(
+            try history.rebaseMediaReferences(
+                expected: [firstOld, secondOld],
+                rebased: [firstNew, secondNew]
+            ).mediaPool,
+            [secondNew]
+        )
+        XCTAssertEqual(history.undo()?.mediaPool, [firstNew])
+        XCTAssertEqual(history.undo()?.mediaPool, [original])
+        XCTAssertEqual(try history.redo()?.mediaPool, [firstNew])
+        XCTAssertEqual(try history.redo()?.mediaPool, [secondNew])
+    }
+}

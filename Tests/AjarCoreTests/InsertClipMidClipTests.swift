@@ -22,14 +22,12 @@ final class InsertClipMidClipTests: XCTestCase {
             durationFrames: 5
         )
 
-        let edited = try apply(
-            .insertClip(
-                sequenceID: fixture.sequenceID,
-                trackID: fixture.videoTrackID,
-                clip: insertClip
-            ),
-            to: fixture.project
+        let command = EditCommand.insertClip(
+            sequenceID: fixture.sequenceID,
+            trackID: fixture.videoTrackID,
+            clip: insertClip
         )
+        let edited = try apply(command, to: fixture.project)
 
         XCTAssertEqual(edited.validate(), .valid)
         let track = try projectTrack(edited, fixture: fixture)
@@ -58,6 +56,11 @@ final class InsertClipMidClipTests: XCTestCase {
         )
         XCTAssertEqual(right.timelineRange.start, try editTime(14))
         XCTAssertEqual(right.timelineRange.duration, try editTime(1))
+        XCTAssertEqual(
+            try apply(command, to: fixture.project),
+            edited,
+            "the implicit split ID must be stable when edit history replays insertClip"
+        )
     }
 
     /// Insert whose timeline range would previously have overlapped an existing clip now

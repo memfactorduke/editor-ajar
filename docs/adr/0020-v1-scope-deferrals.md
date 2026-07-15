@@ -22,6 +22,24 @@ FR-PROJ-002's rolling keep-N version snapshots are **not** deferred. They shippe
 newest-ten retention policy and are covered by
 `app/EditorAjar/Tests/EditorAjarDocumentLifecycleTests.swift`.
 
+FR-MED-008 is no longer deferred. Issue #267 delivers its consumer workflow without changing the
+project storage model: saved projects copy into their own `.ajar/media` directory, while untitled
+projects use the existing Save As flow before confirmation. The confirmation states the exact
+destination/count and that originals are never deleted. Hash/copy work runs off-main with
+determinate progress and cancellation checks across copy/reuse/collision hashing. Temporary
+publication is atomic; failed cleanup is visible. An exclusive cross-process package-media lock is
+held before stale cleanup and throughout consolidation. Only exact Editor Ajar transaction names
+are retried, using identity-checked, directory-relative, non-recursive unlinking that never follows
+symlinks. Interrupted removal uses a separate non-swept quarantine namespace with durable file
+identity evidence; a missing match or restore collision stops consolidation and preserves the
+uncertain entries. A nonmodal overlay leaves the editor usable, while session and package identity
+guards prevent stale reference application. Successful files are rewritten in one undoable
+change, including partial runs. `AjarCore` remains platform-pure.
+Save As stages and hash-verifies only durable media already owned by the source package, rebases
+current and retained-version references to the published destination, and creates final bookmarks
+after publication. External originals are not copied, and a failed copy or finalization does not
+replace the selected destination.
+
 ## Decision
 
 We will ship v1 without the following app surfaces and complete them in v1.x. “Engine status” is
@@ -40,7 +58,6 @@ feature from the app.
 | FR-CMP-003 | Effects, transforms, speed, and keyframes can be applied to a compound clip as a whole. | The sequence-backed clip model and render graph support whole-compound processing (`CompoundRenderGraphTests`, `DecomposeCompoundClipFidelityTests`); UI absent. | Users cannot select and adjust a compound as a unit. | Expose compound-level inspector and timeline operations. |
 | FR-CMP-004 | “Decompose” / break apart back into component clips in place. | Undoable engine command complete (`DecomposeCompoundClipCommandTests`, `DecomposeCompoundClipFidelityTests`); app action absent. | Users cannot break apart a compound in the app. | Add the validated, undoable Decompose action. |
 | FR-CMP-005 | Nested compound clips with cycle detection (a compound can never contain itself — enforced in `AjarCore`). | Engine complete, including cycle validation (`CompoundClipModelTests`, `ProjectCompoundValidation.swift`). | Nested compounds are unavailable because compound creation/editing UI is deferred. | Enable nesting through the compound UI while preserving the existing cycle error. |
-| FR-MED-008 | Reference originals in place by default (no forced copy/import-into-library); optional “consolidate media” to a project folder. | Reference-in-place ships; consolidation engine is complete (`Tests/AjarMediaTests/MediaConsolidateCommandTests.swift`), but no app workflow exists. | v1 projects reference originals; users cannot gather them into one folder from the app. | Add destination choice, progress, cancellation/error reporting, and the consolidate action. |
 | FR-AUD-004 | **Ducking:** automatically lower music under dialogue/voice (sidechain-style, keyframe-baked or live). | Core/audio engine complete (`AudioDuckingModelTests`, `OfflineAudioDuckingTests`, golden-audio ducking fixtures); app setup UI absent. | Users cannot configure automatic dialogue-over-music ducking. | Add source/target selection and threshold, reduction, attack, hold, and release controls. |
 | FR-COL-006 | **HDR awareness:** open and tone-map HDR (HLG/PQ, Rec.2020) sources to an SDR timeline; HDR timeline + export. | Not complete: ADR-0010 defines the intended pipeline, but HDR ingest/tone-map still requires engine and validation work. HDR timeline/export was already v1.x. | v1 supports the documented SDR/Display-P3 path, not an HDR-source workflow. | Implement tagged HDR ingest, deterministic tone mapping to SDR, visual/golden validation, then HDR timeline/export. |
 
@@ -67,8 +84,8 @@ An unmeasured assertion that playback “feels fast” does not satisfy this con
   this ADR through their v1.x markers.
 - Project files and engine models should remain forward-compatible with the later v1.x UI work;
   v1 must not add placeholder controls that imply an unavailable operation works.
-- Users lose advanced animation, free-form mask drawing, compound workflows, consolidation,
-  ducking setup, and HDR input in v1. Release notes must say so plainly.
+- Users lose advanced animation, free-form mask drawing, compound workflows, ducking setup, and
+  HDR input in v1. Release notes must say so plainly. Consolidation is no longer in this list.
 - FR-PLAY-004/007 are not unconditional schedule cuts. Acceptance now carries a measurable
   performance-evidence obligation after cache wiring.
 - FR-PROJ-002 remains shipped and must not appear in v1.x scope lists.
@@ -97,4 +114,4 @@ features unnecessary for v1, but only post-wiring measurements can establish tha
 - [ADR-0009: Render graph and caching](0009-render-graph-and-caching.md)
 - [ADR-0010: Color management](0010-color-management.md)
 - [ADR-0012: Concurrency and threading](0012-concurrency-and-threading.md)
-- Issues #233, #239–#247
+- Issues #233, #239–#247, #267

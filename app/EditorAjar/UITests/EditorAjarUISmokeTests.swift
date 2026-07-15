@@ -79,6 +79,21 @@ final class EditorAjarUISmokeTests: XCTestCase {
         )
     }
 
+    func testFRMED008FileMenuExposesAccessibleConsolidateAction() throws {
+        let app = try XCTUnwrap(launchedApp)
+        openSampleProjectFromHelp(in: app)
+
+        let fileMenu = app.menuBars.menuBarItems["File"]
+        XCTAssertTrue(fileMenu.waitForExistence(timeout: 5))
+        fileMenu.click()
+        let consolidate = app.menuItems["Consolidate Media…"]
+        XCTAssertTrue(consolidate.waitForExistence(timeout: 5))
+        XCTAssertTrue(consolidate.isEnabled)
+        // Xcode 15.4 can leave XCUIElement.label empty for NSMenuItem even though
+        // the human-readable title above resolves through the accessibility query.
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
     // #210 / NFR-A11Y-001 canvas edit smoke — **local-only**.
     //
     // Why not un-gated for CI (honest verdict): this path depends on NSTextView first-responder
