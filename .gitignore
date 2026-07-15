@@ -38,6 +38,7 @@ fastlane/Preview.html
 # Render/proxy caches and benchmark output are large + machine-local.
 /.ajar-cache/
 /Benchmarks/results/
+/dist/
 /Tests/Fixtures/_actual/     # rendered frames produced during a test run
 /Tests/Fixtures/_diff/       # golden-vs-actual diff images
 /Tests/Fixtures/golden/**/_actual/

@@ -27,6 +27,8 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Editor Ajar
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.video
         NSHighResolutionCapable: true
@@ -61,7 +63,9 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: "1.1.0"
         PRODUCT_BUNDLE_IDENTIFIER: org.editorajar.EditorAjar
         PRODUCT_NAME: EditorAjar
   EditorAjarTests:

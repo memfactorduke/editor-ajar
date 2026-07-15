@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Consumer-release packaging foundation (#263): a reproducible arm64/macOS 14 Release archive,
+  explicitly test-only unsigned artifact, fail-closed Developer ID hardened-runtime signing and
+  notarization path, deterministic bundle verifier, tag-aware GitHub release workflow, and an
+  operator guide covering credentials, verification, publishing, and rollback.
+
 ## [1.0.0] - 2026-07-11
 
 ### Added

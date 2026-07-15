@@ -21,9 +21,10 @@ The generated project is checked in:
 open app/EditorAjar/EditorAjar.xcodeproj
 ```
 
-Then select the `EditorAjar` scheme and run it. The shell opens a synthetic single-clip
-`AjarCore.Project`, decodes it through `AjarMedia`, renders it through `AjarRender`, and presents
-the resulting Metal texture in the program monitor.
+Then select the `EditorAjar` scheme and run it. The app opens its document editor, where **File →
+New Project…** creates a project and **File → Open…** reopens an `.ajar` package. Import media with
+**File → Import Media…**; playback is decoded through `AjarMedia`, rendered through `AjarRender`,
+and presented as a Metal texture in the program monitor.
 
 To regenerate the project after editing `project.yml`:
 
@@ -42,6 +43,20 @@ xcodebuild -project app/EditorAjar/EditorAjar.xcodeproj -scheme EditorAjar \
 xcodebuild -project app/EditorAjar/EditorAjar.xcodeproj -scheme EditorAjar \
   -testPlan EditorAjarLocal -destination 'platform=macOS' test
 ```
+
+## Release packaging
+
+Normal Xcode builds remain unsigned and need no Apple account. To build and validate the
+explicitly non-consumer local release artifact:
+
+```sh
+scripts/package-release.sh --mode unsigned --version 1.1.0
+```
+
+The production mode is opt-in, requires a clean release-tag checkout plus Developer ID and
+notarization credentials, and fails before producing an artifact when any production prerequisite
+is missing. See [the release operator guide](../../docs/RELEASING.md) for credential names,
+verification output, publishing, and rollback.
 
 The `EditorAjar` scheme includes the XCUITest smoke target. **EditorAjarCI** (scheme default /
 CI) skips flaky canvas edit/nudge cases (#210) but keeps the safe-area guides toggle smoke.

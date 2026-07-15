@@ -1,0 +1,265 @@
+name: Consumer Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing protected tag to build (vX.Y.Z)
+        required: true
+        type: string
+      mode:
+        description: Dry run emits only an unsigned test artifact; production signs and publishes
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: consumer-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate protected release tag
+    runs-on: macos-14
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+      version: ${{ steps.metadata.outputs.version }}
+      mode: ${{ steps.metadata.outputs.mode }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Validate exact tag and release mode
+        id: metadata
+        shell: bash
+        env:
+          DISPATCH_RELEASE_TAG: ${{ inputs.release_tag }}
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            tag="$GITHUB_REF_NAME"
+            mode="production"
+          else
+            tag="$DISPATCH_RELEASE_TAG"
+            mode="$DISPATCH_MODE"
+          fi
+
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Release tag must be vX.Y.Z"
+            exit 1
+          }
+          [[ "$mode" == "dry-run" || "$mode" == "production" ]] || {
+            echo "::error::Release mode must be dry-run or production"
+            exit 1
+          }
+
+          tag_ref="refs/tags/$tag"
+          git show-ref --verify --quiet "$tag_ref" || {
+            echo "::error::$tag is not an exact Git tag"
+            exit 1
+          }
+          tag_commit=$(git rev-parse "${tag_ref}^{commit}")
+          head_commit=$(git rev-parse HEAD)
+          [[ "$tag_commit" == "$head_commit" ]] || {
+            echo "::error::Checked-out commit does not match $tag_ref"
+            exit 1
+          }
+
+          version=${tag#v}
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "mode=$mode" >>"$GITHUB_OUTPUT"
+
+  dry-run:
+    name: Package unsigned test artifact
+    needs: validate
+    if: needs.validate.outputs.mode == 'dry-run'
+    runs-on: macos-14
+    timeout-minutes: 60
+    environment: release-dry-run
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: refs/tags/${{ needs.validate.outputs.tag }}
+
+      - name: Build deterministic unsigned test package
+        shell: bash
+        run: |
+          scripts/package-release.sh \
+            --mode unsigned \
+            --version "${{ needs.validate.outputs.version }}" \
+            --build-number "$GITHUB_RUN_NUMBER"
+
+      - name: Preserve unsigned test package as workflow evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: editor-ajar-${{ needs.validate.outputs.version }}-dry-run
+          path: dist/*-UNSIGNED-TEST-ONLY.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  production:
+    name: Sign, notarize, and publish consumer release
+    needs: validate
+    if: needs.validate.outputs.mode == 'production'
+    runs-on: macos-14
+    timeout-minutes: 60
+    environment: consumer-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: refs/tags/${{ needs.validate.outputs.tag }}
+
+      - name: Require every production credential
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          for variable in \
+            APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 \
+            APPLE_DEVELOPER_ID_APPLICATION_P12_PASSWORD \
+            APPLE_TEAM_ID \
+            APPLE_NOTARY_KEY_P8_BASE64 \
+            APPLE_NOTARY_KEY_ID \
+            APPLE_NOTARY_ISSUER_ID; do
+            value="${!variable:-}"
+            if [[ -z "${value//[[:space:]]/}" ]]; then
+              echo "::error::Missing required GitHub Actions secret: $variable"
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID identity into temporary keychain
+        shell: bash
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/editor-ajar-signing.keychain-db"
+          certificate="$RUNNER_TEMP/editor-ajar-developer-id.p12"
+          notary_key="$RUNNER_TEMP/editor-ajar-notary-key.p8"
+          previous_keychains="$RUNNER_TEMP/editor-ajar-previous-keychains.txt"
+          keychain_password=$(openssl rand -hex 32)
+          echo "::add-mask::$keychain_password"
+
+          printf '%s' "$CERTIFICATE_BASE64" | base64 -D >"$certificate"
+          printf '%s' "$NOTARY_KEY_BASE64" | base64 -D >"$notary_key"
+          chmod 600 "$certificate" "$notary_key"
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$keychain_password" "$keychain"
+          security list-keychains -d user \
+            | sed -E 's/^[[:space:]]*"([^"]+)"[[:space:]]*$/\1/' \
+            >"$previous_keychains"
+          keychains=("$keychain")
+          while IFS= read -r existing_keychain; do
+            [[ -n "$existing_keychain" ]] && keychains+=("$existing_keychain")
+          done <"$previous_keychains"
+          security list-keychains -d user -s "${keychains[@]}"
+
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | grep -F "Developer ID Application:" \
+            | grep -F "($TEAM_ID)" \
+            | sed -n 's/^[^"]*"\([^"]*\)".*/\1/p' \
+            | head -n 1)
+          [[ -n "$identity" ]] || {
+            echo "::error::Imported certificate is not a Developer ID Application identity for APPLE_TEAM_ID"
+            exit 1
+          }
+
+          echo "APPLE_SIGNING_IDENTITY=$identity" >>"$GITHUB_ENV"
+          echo "APPLE_SIGNING_KEYCHAIN=$keychain" >>"$GITHUB_ENV"
+          echo "APPLE_TEAM_ID=$TEAM_ID" >>"$GITHUB_ENV"
+          echo "APPLE_NOTARY_KEY_PATH=$notary_key" >>"$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN=$keychain" >>"$GITHUB_ENV"
+          echo "PREVIOUS_KEYCHAINS_PATH=$previous_keychains" >>"$GITHUB_ENV"
+
+      - name: Build, sign, notarize, staple, and verify production package
+        shell: bash
+        env:
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          scripts/package-release.sh \
+            --mode production \
+            --release-tag "${{ needs.validate.outputs.tag }}" \
+            --build-number "$GITHUB_RUN_NUMBER"
+
+      - name: Refuse replacement and publish verified production asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.validate.outputs.tag }}"
+          version="${{ needs.validate.outputs.version }}"
+          artifact="dist/EditorAjar-${version}-macOS-arm64.zip"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::A GitHub release already exists for $tag; refusing to overwrite it or its assets."
+            exit 1
+          fi
+          gh release create "$tag" "$artifact" \
+            --draft \
+            --verify-tag \
+            --generate-notes \
+            --title "Editor Ajar $version"
+          gh release edit "$tag" --draft=false
+
+      - name: Restore keychains and remove temporary signing material
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          previous_keychains=()
+          previous_keychains_path="${PREVIOUS_KEYCHAINS_PATH:-$RUNNER_TEMP/editor-ajar-previous-keychains.txt}"
+          if [[ -f "$previous_keychains_path" ]]; then
+            while IFS= read -r existing_keychain; do
+              [[ -n "$existing_keychain" ]] && previous_keychains+=("$existing_keychain")
+            done <"$previous_keychains_path"
+          fi
+          if (( ${#previous_keychains[@]} > 0 )); then
+            security list-keychains -d user -s "${previous_keychains[@]}"
+          fi
+          keychain="${SIGNING_KEYCHAIN:-$RUNNER_TEMP/editor-ajar-signing.keychain-db}"
+          security delete-keychain "$keychain" 2>/dev/null
+          rm -f \
+            "$RUNNER_TEMP/editor-ajar-developer-id.p12" \
+            "$RUNNER_TEMP/editor-ajar-notary-key.p8" \
+            "$RUNNER_TEMP/editor-ajar-previous-keychains.txt"
