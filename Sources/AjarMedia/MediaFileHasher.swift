@@ -8,6 +8,28 @@ import Foundation
 public protocol MediaFileHashing {
     /// Computes the SHA-256 hash of a local file's bytes.
     func contentHash(of fileURL: URL) throws -> ContentHash
+
+    /// Computes the hash while cooperatively checking for cancellation between 1 MiB reads.
+    func contentHash(
+        of fileURL: URL,
+        isCancelled: @escaping @Sendable () -> Bool
+    ) throws -> ContentHash
+}
+
+public extension MediaFileHashing {
+    func contentHash(
+        of fileURL: URL,
+        isCancelled: @escaping @Sendable () -> Bool
+    ) throws -> ContentHash {
+        if isCancelled() {
+            throw CancellationError()
+        }
+        let hash = try contentHash(of: fileURL)
+        if isCancelled() {
+            throw CancellationError()
+        }
+        return hash
+    }
 }
 
 /// Typed file-hashing failures.
@@ -29,7 +51,16 @@ public struct SHA256MediaFileHasher: MediaFileHashing, Sendable {
     /// Creates the production file hasher.
     public init() {}
 
+    /// Streams the file into a SHA-256 digest.
     public func contentHash(of fileURL: URL) throws -> ContentHash {
+        try contentHash(of: fileURL, isCancelled: { false })
+    }
+
+    /// Streams the file into a SHA-256 digest while checking for cooperative cancellation.
+    public func contentHash(
+        of fileURL: URL,
+        isCancelled: @escaping @Sendable () -> Bool
+    ) throws -> ContentHash {
         guard fileURL.isFileURL else {
             throw MediaFileHashError.sourceMustBeFileURL(fileURL)
         }
@@ -56,9 +87,27 @@ public struct SHA256MediaFileHasher: MediaFileHashing, Sendable {
 
         var digest = CryptoKit.SHA256()
         do {
-            while let data = try handle.read(upToCount: Self.readChunkSize), !data.isEmpty {
+            if isCancelled() {
+                throw CancellationError()
+            }
+            while true {
+                if isCancelled() {
+                    throw CancellationError()
+                }
+                guard let data = try handle.read(upToCount: Self.readChunkSize), !data.isEmpty
+                else {
+                    break
+                }
+                if isCancelled() {
+                    throw CancellationError()
+                }
                 digest.update(data: data)
             }
+            if isCancelled() {
+                throw CancellationError()
+            }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             throw MediaFileHashError.readFailed(
                 url: fileURL,

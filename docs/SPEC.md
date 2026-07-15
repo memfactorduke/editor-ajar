@@ -133,7 +133,7 @@ reference machine and gate every merge (see [PERFORMANCE](PERFORMANCE.md), ADR-0
 | FR-MED-005 | Media pool / browser: thumbnails, hover-scrub preview, list & grid views, metadata (codec, resolution, fps, duration, color space), search and filter. | v1 |
 | FR-MED-006 | Bins / folders to organize media; user-defined tags and ratings; smart collections by metadata. | v1.x |
 | FR-MED-007 | Relink workflow when source media moves; clear "media offline" state that never blocks the app. | v1 |
-| FR-MED-008 | Reference originals in place by default (no forced copy/import-into-library); optional "consolidate media" to a project folder. | v1.x[^adr-0020] |
+| FR-MED-008 | Reference originals in place by default (no forced copy/import-into-library); optional "consolidate media" to a project folder. | v1.1 |
 | FR-MED-009 | Audio waveform + video thumbnail extraction is incremental and cached on disk; never blocks the UI. | v1 |
 | FR-MED-010 | Detect and surface variable-frame-rate sources; conform to a stable timebase on import. | v1 |
 

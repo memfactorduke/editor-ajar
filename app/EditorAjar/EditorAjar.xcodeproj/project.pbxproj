@@ -20,6 +20,7 @@
 		27AC5FC45DA5EF355A9DB6A4 /* EditorAjarWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E91360F760DF82F58AA1348 /* EditorAjarWorkspaceView.swift */; };
 		286A6C459BA6D3E87E6E0876 /* EditorAjarColorTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D2D94CFD6620E614A5FB71 /* EditorAjarColorTypes.swift */; };
 		32C022A66891270FC71E1D4E /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 535FF68DE6DDA5467F309039 /* AppLocalization.swift */; };
+		32EE42DAE82FD81B88715EB3 /* EditorAjarMediaConsolidationSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC5D57E1691008E167566CD /* EditorAjarMediaConsolidationSummaryTests.swift */; };
 		3A246BF62A10B5DED981A4E7 /* EditorAjarAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */; };
 		3A42D8AAC784E8A48A0B2882 /* MediaPreviewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81C89CEDF112C4BB96B1DF1 /* MediaPreviewCache.swift */; };
 		3C06D3ACA96C0714C211702C /* EditorAjarLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C129A432C60CF2C95005DE /* EditorAjarLocalizationTests.swift */; };
@@ -31,7 +32,9 @@
 		4B37B435C4E09BC2B3D1C844 /* AjarCore in Frameworks */ = {isa = PBXBuildFile; productRef = 85C3D209033711447AA4FAA9 /* AjarCore */; };
 		4CF000AB9597027E9BE77933 /* EditorAjarEffectsInspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FBF155D2EB057CB5664670B /* EditorAjarEffectsInspectorViews.swift */; };
 		564651141114E8BC36D979C7 /* EditorAjarDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10B37ECA3BAA33EF7A7FEF96 /* EditorAjarDocumentStore.swift */; };
+		56A267A9015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A267A8015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAs.swift */; };
 		5698420F32B8A798256E2A15 /* EditorAjarAppIconTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16CF84F0F74E4C51E71E2635 /* EditorAjarAppIconTests.swift */; };
+		56A267AB015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A267AA015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAsTests.swift */; };
 		5F81FCEB82A63EC85F3996A6 /* EditorAjarAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */; };
 		5FD25C168A644F1D7D7D373C /* ProgramMetalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */; };
 		6082F352D841A69BBB3C4432 /* AudioClipInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB9D82E8B078CC4C4C51D63 /* AudioClipInspectorView.swift */; };
@@ -39,6 +42,7 @@
 		65D1B3635182F92F410B1A5D /* EditorAjarAppModel+Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFFEDB5AFB02CF6D41016B56 /* EditorAjarAppModel+Color.swift */; };
 		6653EE21E97F97F4A1337738 /* EditorAjarDisplayLinkDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F110E27EF88FDB73589888A /* EditorAjarDisplayLinkDriver.swift */; };
 		668859A516DF395B27997893 /* MediaBrowserModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4918CB04549E69A2DA033C9 /* MediaBrowserModel.swift */; };
+		6B83B31366329622B48F7BAF /* EditorAjarMediaConsolidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F99F8B7DA10A588B41C31533 /* EditorAjarMediaConsolidationTests.swift */; };
 		6C5EFECCC919C8FA75EF5745 /* MediaBrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DC8542CE997AA86110B61E /* MediaBrowserTests.swift */; };
 		7201169AECE491F20E567C3F /* MixerPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC204DFCA63D53BFAB58A8F /* MixerPanelView.swift */; };
 		76992C808148BFDD103AC033 /* ExportQueuePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1208F41DB2872AAFEB4908DE /* ExportQueuePanel.swift */; };
@@ -67,6 +71,7 @@
 		E06DD6EA42B16AF32C5F5EDA /* EditorAjarLiveAudioCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */; };
 		E6D687BC1C07CE3C51931A4A /* EditorAjarIssue246AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F95903632A39A8E24C51C50 /* EditorAjarIssue246AppModelTests.swift */; };
 		E7C7BE013E7FE7B4B3D56F5F /* EditorAjarScopesPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4AB4BF3E056ED1EA913F7D /* EditorAjarScopesPanel.swift */; };
+		EFBC235263FA2631C8BD8680 /* EditorAjarMediaConsolidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF050D2E3A36E887038D390 /* EditorAjarMediaConsolidation.swift */; };
 		F6D10E1573E2C5428D7006DE /* EditorAjarExportDialogModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DAA8F76C2C44C8920890DB3 /* EditorAjarExportDialogModel.swift */; };
 		FC9D4A20A4F11FFF59E51CF9 /* EditorAjarTitleTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76DF418314728BCA0AECD5AA /* EditorAjarTitleTypes.swift */; };
 		FF92728078D2828BEA1E8C21 /* EditorAjarExportQueueAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */; };
@@ -110,9 +115,12 @@
 		4B3331D5EA7AED5D0D63F83D /* EditorAjar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EditorAjar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4D4AB4BF3E056ED1EA913F7D /* EditorAjarScopesPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarScopesPanel.swift; sourceTree = "<group>"; };
 		535FF68DE6DDA5467F309039 /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLocalization.swift; sourceTree = "<group>"; };
+		56A267A8015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarPackageMediaSaveAs.swift; sourceTree = "<group>"; };
+		56A267AA015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarPackageMediaSaveAsTests.swift; sourceTree = "<group>"; };
 		563047ECED5592333B6D5BC8 /* EditorAjarMixerMeterPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarMixerMeterPublisher.swift; sourceTree = "<group>"; };
 		5BC204DFCA63D53BFAB58A8F /* MixerPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixerPanelView.swift; sourceTree = "<group>"; };
 		5D97253116A9B64FDADB9CD6 /* EditorAjarEffectsLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarEffectsLibraryView.swift; sourceTree = "<group>"; };
+		5EC5D57E1691008E167566CD /* EditorAjarMediaConsolidationSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarMediaConsolidationSummaryTests.swift; sourceTree = "<group>"; };
 		613A5D8A43CA9784AFF44173 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		64FE9E23EF9A44E444F2A7E3 /* EditorAjarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6CDE551B40DFEAFF21834E46 /* AudioMixUISupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMixUISupport.swift; sourceTree = "<group>"; };
@@ -148,9 +156,11 @@
 		E4918CB04549E69A2DA033C9 /* MediaBrowserModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBrowserModel.swift; sourceTree = "<group>"; };
 		E7D2D94CFD6620E614A5FB71 /* EditorAjarColorTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarColorTypes.swift; sourceTree = "<group>"; };
 		EDD23BF031574B09CE28C0EA /* EditorAjarDocumentLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarDocumentLifecycleTests.swift; sourceTree = "<group>"; };
+		EEF050D2E3A36E887038D390 /* EditorAjarMediaConsolidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarMediaConsolidation.swift; sourceTree = "<group>"; };
 		EFFEDB5AFB02CF6D41016B56 /* EditorAjarAppModel+Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EditorAjarAppModel+Color.swift"; sourceTree = "<group>"; };
 		F63E695E37C17D158B921AE3 /* EditorAjarAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModel.swift; sourceTree = "<group>"; };
 		F6E2A9996CA6E7ABFFA6C91A /* EditorAjarMediaImportAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarMediaImportAppModelTests.swift; sourceTree = "<group>"; };
+		F99F8B7DA10A588B41C31533 /* EditorAjarMediaConsolidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarMediaConsolidationTests.swift; sourceTree = "<group>"; };
 		FAD0E295D4D75205756419E8 /* EditorAjarColorInspectorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarColorInspectorViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -190,6 +200,9 @@
 				A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */,
 				0F95903632A39A8E24C51C50 /* EditorAjarIssue246AppModelTests.swift */,
 				28C129A432C60CF2C95005DE /* EditorAjarLocalizationTests.swift */,
+				5EC5D57E1691008E167566CD /* EditorAjarMediaConsolidationSummaryTests.swift */,
+				F99F8B7DA10A588B41C31533 /* EditorAjarMediaConsolidationTests.swift */,
+				56A267AA015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAsTests.swift */,
 				F6E2A9996CA6E7ABFFA6C91A /* EditorAjarMediaImportAppModelTests.swift */,
 				043B5F1AE1187CFBE8BA6C88 /* EditorAjarReleaseAcceptanceTests.swift */,
 				8B1A9B85B357222D571AA8DF /* EditorAjarRenderPipelineCacheTests.swift */,
@@ -247,6 +260,8 @@
 				B7B397BCAB3E49B3E54D1706 /* EditorAjarExportPresetStore.swift */,
 				07E765A9F0A9CAED2B6A7198 /* EditorAjarExportQueueController.swift */,
 				4004C1F15E8AF35BF8833F54 /* EditorAjarLiveAudioCoordinator.swift */,
+				EEF050D2E3A36E887038D390 /* EditorAjarMediaConsolidation.swift */,
+				56A267A8015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAs.swift */,
 				29652B040E1E3958E84BE3F6 /* EditorAjarMediaImportViews.swift */,
 				563047ECED5592333B6D5BC8 /* EditorAjarMixerMeterPublisher.swift */,
 				DCFA6C6935E779909C66E11A /* EditorAjarNewProjectSettings.swift */,
@@ -434,6 +449,8 @@
 				D557662377F941720635621B /* EditorAjarExportPresetStore.swift in Sources */,
 				A34A4BEDBC84D704C0891449 /* EditorAjarExportQueueController.swift in Sources */,
 				E06DD6EA42B16AF32C5F5EDA /* EditorAjarLiveAudioCoordinator.swift in Sources */,
+				EFBC235263FA2631C8BD8680 /* EditorAjarMediaConsolidation.swift in Sources */,
+				56A267A9015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAs.swift in Sources */,
 				BF51D7ACEC73A0FE1087A20E /* EditorAjarMediaImportViews.swift in Sources */,
 				0FE7E57B55724EC569416E4E /* EditorAjarMixerMeterPublisher.swift in Sources */,
 				77444F64B877AEF4C7D4FC6A /* EditorAjarNewProjectSettings.swift in Sources */,
@@ -476,6 +493,9 @@
 				FF92728078D2828BEA1E8C21 /* EditorAjarExportQueueAppModelTests.swift in Sources */,
 				E6D687BC1C07CE3C51931A4A /* EditorAjarIssue246AppModelTests.swift in Sources */,
 				3C06D3ACA96C0714C211702C /* EditorAjarLocalizationTests.swift in Sources */,
+				32EE42DAE82FD81B88715EB3 /* EditorAjarMediaConsolidationSummaryTests.swift in Sources */,
+				6B83B31366329622B48F7BAF /* EditorAjarMediaConsolidationTests.swift in Sources */,
+				56A267AB015B4E2BB7AD0271 /* EditorAjarPackageMediaSaveAsTests.swift in Sources */,
 				7A5FACECC05715D930D2E260 /* EditorAjarMediaImportAppModelTests.swift in Sources */,
 				9B8F53B6A36006FB11F00533 /* EditorAjarReleaseAcceptanceTests.swift in Sources */,
 				DD862AA4083BD3FF6639BCB8 /* EditorAjarRenderPipelineCacheTests.swift in Sources */,

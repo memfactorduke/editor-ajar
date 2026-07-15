@@ -55,16 +55,65 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         let packageURL = workspace.packageURL(named: "ReleaseAcceptance.ajar")
         try model.saveProjectAs(to: packageURL)
         XCTAssertFalse(model.isDocumentDirty)
+
+        XCTAssertTrue(model.startMediaConsolidation())
+        let consolidationCompleted = await waitUntil(timeout: 30) {
+            !model.isConsolidatingMedia
+        }
+        XCTAssertTrue(consolidationCompleted, "media consolidation did not finish in time")
+        XCTAssertNil(model.mediaConsolidationError)
+        let mediaDirectory = packageURL.appendingPathComponent("media", isDirectory: true)
+        XCTAssertTrue(
+            try XCTUnwrap(model.project).mediaPool.allSatisfy {
+                $0.sourceURL?.deletingLastPathComponent().standardizedFileURL
+                    == mediaDirectory.standardizedFileURL
+            },
+            "every release-acceptance reference should point into the saved package"
+        )
+        for originalURL in [media.videoURL, media.stillURL, media.audioURL] {
+            XCTAssertTrue(
+                FileManager.default.fileExists(atPath: originalURL.path),
+                "consolidation must never delete original media"
+            )
+        }
+        try model.saveProject()
+        XCTAssertFalse(model.isDocumentDirty)
+
+        let undoBeforePackageSaveAs = model.editHistory?.undoCount
+        let copiedPackageURL = workspace.packageURL(named: "ReleaseAcceptanceCopy.ajar")
+        try model.saveProjectAs(to: copiedPackageURL)
+        XCTAssertEqual(model.editHistory?.undoCount, undoBeforePackageSaveAs)
+        XCTAssertTrue(
+            try XCTUnwrap(model.project).mediaPool.allSatisfy {
+                $0.sourceURL?.deletingLastPathComponent().standardizedFileURL
+                    == copiedPackageURL.appendingPathComponent("media").standardizedFileURL
+            }
+        )
+        try assertHistoryRoundTripsAfterSaveAs(
+            model.editHistory,
+            expectedProject: try XCTUnwrap(model.project)
+        )
+        for snapshotURL in try EditorAjarDocumentStore(
+            bookmarkStore: AcceptanceBookmarkStore()
+        ).versionSnapshotURLs(in: copiedPackageURL) {
+            let snapshot = try EditorAjarDocumentStore(
+                bookmarkStore: AcceptanceBookmarkStore()
+            ).revert(at: snapshotURL).project
+            XCTAssertTrue(
+                snapshot.mediaPool.allSatisfy {
+                    $0.sourceURL?.deletingLastPathComponent().standardizedFileURL
+                        != packageURL.appendingPathComponent("media").standardizedFileURL
+                }
+            )
+        }
+        try FileManager.default.removeItem(at: packageURL)
+
         let savedProject = try XCTUnwrap(model.project)
         let sequence = try XCTUnwrap(model.activeSequence)
         let expectedExportFrames = try exportFrameCount(for: sequence)
 
-        let reopened = EditorAjarAppModel(
-            autosaveIntervalSeconds: 0,
-            recentProjectsUserDefaults: workspace.userDefaults,
-            recentProjectsStorageKey: workspace.recentProjectsStorageKey
-        )
-        try reopened.openProject(at: packageURL)
+        let reopened = try makeModel(workspace: workspace)
+        try reopened.openProject(at: copiedPackageURL)
         XCTAssertEqual(
             reopened.project,
             savedProject,
@@ -171,16 +220,28 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
     // MARK: - Journey steps
 
     private func makeModel(workspace: AcceptanceWorkspace) throws -> EditorAjarAppModel {
+        let bookmarkStore = AcceptanceBookmarkStore()
         let pipeline = MediaImportPipeline(
             probe: AcceptanceImportProbe(
                 audioResult: try audioOnlyProbeResult(frameCount: syntheticFrameCount)
             ),
             hasher: SHA256MediaFileHasher(),
-            bookmarkStore: AcceptanceBookmarkStore()
+            bookmarkStore: bookmarkStore
         )
+        let consolidationRunner = EditorAjarDefaultMediaConsolidationRunner { request in
+            try MediaConsolidateCommand(bookmarkStore: bookmarkStore).prepare(
+                project: request.project,
+                openMode: request.openMode,
+                projectPackageURL: request.packageURL,
+                progress: AcceptanceConsolidationProgress(request.progress),
+                isCancelled: request.isCancelled
+            )
+        }
         return EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
             mediaImportPipeline: pipeline,
+            mediaConsolidationRunner: consolidationRunner,
+            documentStore: EditorAjarDocumentStore(bookmarkStore: bookmarkStore),
             recentProjectsUserDefaults: workspace.userDefaults,
             recentProjectsStorageKey: workspace.recentProjectsStorageKey
         )
@@ -393,6 +454,16 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
     }
 
     // MARK: - Assertions / helpers
+
+    private func assertHistoryRoundTripsAfterSaveAs(
+        _ savedHistory: EditHistory?,
+        expectedProject: Project
+    ) throws {
+        var history = try XCTUnwrap(savedHistory)
+        while history.undo() != nil {}
+        while try history.redo() != nil {}
+        XCTAssertEqual(history.currentProject, expectedProject)
+    }
 
     private func assertNonTrivialContent(_ frames: [ExportDecodedBGRAFrame]) {
         XCTAssertFalse(frames.isEmpty)
@@ -640,6 +711,18 @@ private struct AcceptanceBookmarkStore: MediaBookmarkStore {
             throw MediaBookmarkError.resolutionFailed(reason: "invalid acceptance bookmark")
         }
         return MediaBookmarkResolution(url: URL(fileURLWithPath: path), isStale: false)
+    }
+}
+
+private final class AcceptanceConsolidationProgress: ConsolidateProgress, @unchecked Sendable {
+    private let receive: @Sendable (ConsolidateProgressUpdate) -> Void
+
+    init(_ receive: @escaping @Sendable (ConsolidateProgressUpdate) -> Void) {
+        self.receive = receive
+    }
+
+    func consolidateDidUpdate(_ progress: ConsolidateProgressUpdate) {
+        receive(progress)
     }
 }
 

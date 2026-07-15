@@ -454,10 +454,14 @@ Toggled with `⌃⌘E`; empty list is the default when opened.
   list to attach none/generating/ready/failed labels to (state is durable on `MediaRef` and
   becomes visible once a media list lands).
 
-## 12. Relink / consolidate (#218 / #246)
+## 12. Relink / consolidate (#218 / #246 / #267)
 
-FR-MED-007 recovery UI (single-file + batch) is in the media browser and workspace. Consolidate
-still has no dedicated progress chrome; engine commands remain in `AjarMedia`.
+FR-MED-007 recovery UI (single-file + batch) is in the media browser and workspace. FR-MED-008
+consolidation is discoverable in File and uses the existing document/save and `AjarMedia` command
+paths. Untitled projects open Save As before confirmation. A compact nonmodal overlay appears at
+the top-right of the workspace; only the overlay's own bounds intercept input, so transport,
+scrubbing, and editing remain usable elsewhere. It offers keyboard/VoiceOver cancellation.
+Confirmation and every outcome state say that originals are never deleted.
 
 | Control | Shortcut | AX label | value / hint |
 |---------|----------|----------|--------------|
@@ -466,6 +470,11 @@ still has no dedicated progress chrome; engine commands remain in `AjarMedia`.
 | Hash-mismatch alert | Default = Override | Media Does Not Match | Override (destructive) / Cancel; Override re-prepares with `.override` |
 | Batch relink summary sheet | Return / Esc | Batch relink summary | id: `Batch Relink Summary`; relinked / unmatched counts + filenames |
 | Close batch summary | Return | Done | id: `Close Batch Relink Summary` |
+| Consolidate Media… | Full Keyboard Access | Consolidate project media into the saved project package | File menu; disabled for read-only/no project/no media/running |
+| Consolidation controls overlay | — | Media consolidation controls. The editor remains available. | id: `Media Consolidation Nonmodal Overlay`; compact nonmodal container |
+| Consolidation progress | — | Media consolidation progress | id: `Media Consolidation Progress`; determinate file + byte fraction; does not make the window modal |
+| Cancel consolidation | Esc | Cancel media consolidation | id: `Cancel Media Consolidation`; cooperative cancellation |
+| Consolidation summary | Return | Media Consolidation | exact completed/total result; partial success is one undoable reference rewrite |
 
 Provenance-aware single-file relink that must re-transcode surfaces FFmpeg install/failure
 messages through the same typed mapping as import (`library.relink.retranscode.*` / import
@@ -509,7 +518,7 @@ launch-time tree test.
 
 | Menu | Items (labels) |
 |------|----------------|
-| File | New Project (`⌘N`), Open, Recent Projects, Import Media… (`⌘I`), Save, Save As, Revert to Saved |
+| File | New Project (`⌘N`), Open, Recent Projects, Import Media… (`⌘I`), Consolidate Media…, Save, Save As, Revert to Saved |
 | Edit | Undo / Redo (dynamic titles) |
 | Sequences | New Sequence, Close Sequence |
 | Markers | Add / Previous / Next / Delete Marker |

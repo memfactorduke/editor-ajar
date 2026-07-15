@@ -24,6 +24,9 @@ enum EditorAjarDocumentLifecycleError: Error, Equatable {
 
     /// A save path was requested for a newer-minor read-only open.
     case projectOpenedReadOnly(AjarProjectReadOnlyReason)
+
+    /// Retargeting or replacing the document while package media is being copied is unsafe.
+    case mediaConsolidationInProgress
 }
 
 /// Typed reasons a requested media import did not start.
@@ -32,6 +35,17 @@ enum EditorAjarMediaImportError: Error, Equatable {
     case projectReadOnly
     case importInProgress
     case emptySelection
+}
+
+/// Typed reasons a requested consumer consolidation did not start.
+enum EditorAjarMediaConsolidationError: Error, Equatable {
+    case noProject
+    case projectReadOnly
+    case noMedia
+    case projectMustBeSaved
+    case consolidationInProgress
+    case mediaReferencesChanged
+    case projectUpdateFailed
 }
 
 /// User-facing context for localized document errors.
@@ -57,6 +71,8 @@ final class EditorAjarAppModel: ObservableObject {
     @Published var newProjectSettings = EditorAjarNewProjectSettings.sensibleDefaults
     /// Localized document-operation failure shown by the root view.
     @Published private(set) var documentErrorMessage: String?
+    /// Nonfatal warning shown after a committed Save As retains old cleanup data.
+    @Published private(set) var documentWarningMessage: String?
     @Published private(set) var isPlaying = false
     @Published private(set) var playheadFrame: Int64 = 0
     @Published private(set) var durationFrames: Int64 = 1
@@ -139,6 +155,12 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Most recent programmatic import refusal, cleared when a batch starts.
     @Published private(set) var mediaImportError: EditorAjarMediaImportError?
+
+    /// Consumer consolidation runs independently of the main actor and reports determinate progress.
+    @Published var isConsolidatingMedia = false
+    @Published var mediaConsolidationProgress: EditorAjarMediaConsolidationProgress?
+    @Published var mediaConsolidationSummaryMessage: String?
+    @Published var mediaConsolidationError: EditorAjarMediaConsolidationError?
 
     /// Browser-owned regeneratable preview bytes, keyed by stable media id (FR-MED-009).
     @Published private(set) var mediaThumbnailData: [UUID: Data] = [:]
@@ -231,6 +253,7 @@ final class EditorAjarAppModel: ObservableObject {
     private let exportPresetStore: EditorAjarExportPresetStore
     private let mediaImportPipeline: MediaImportPipeline
     private let documentStore: EditorAjarDocumentStore
+    let mediaConsolidationRunner: any EditorAjarMediaConsolidationRunning
     private let recentProjectsStore: EditorAjarRecentProjectsStore
     private var savedProjectBaseline: Project?
     private var unsavedDocumentName: String?
@@ -246,10 +269,13 @@ final class EditorAjarAppModel: ObservableObject {
     private var autosaveWriteTask: Task<Void, Never>?
     private var mediaResolutionTask: Task<Void, Never>?
     private var mediaImportTask: Task<Void, Never>?
+    var mediaConsolidationTask: Task<Void, Never>?
+    var projectSessionGeneration: UInt64 = 0
     private var mediaHoverTask: Task<Void, Never>?
     private var mediaHoverMediaID: UUID?
     private var mediaPreviewTasks: [UUID: Task<Void, Never>] = [:]
     private var mediaPreviewCache: MediaPreviewCache?
+    private let automaticallyResolvesMediaReferences: Bool
     private var autosaveCommandCount = 0
     private var renderGeneration = 0
     private var sequenceContexts: [UUID: SequenceEditingContext] = [:]
@@ -293,12 +319,15 @@ final class EditorAjarAppModel: ObservableObject {
         exportPresetStoreURL: URL? = nil,
         exportQueueController: EditorAjarExportQueueController? = nil,
         mediaImportPipeline: MediaImportPipeline? = nil,
+        mediaConsolidationRunner: (any EditorAjarMediaConsolidationRunning)? = nil,
         documentStore: EditorAjarDocumentStore = EditorAjarDocumentStore(),
         recentProjectsUserDefaults: UserDefaults = .standard,
         recentProjectsStorageKey: String = "document.recentProjects",
-        opensSampleProjectWhenNoRecovery: Bool = false
+        opensSampleProjectWhenNoRecovery: Bool = false,
+        automaticallyResolvesMediaReferences: Bool = true
     ) {
         self.autosaveIntervalSeconds = autosaveIntervalSeconds
+        self.automaticallyResolvesMediaReferences = automaticallyResolvesMediaReferences
         autosavePackageRootURL = autosavePackageURL
         if let autosavePackageURL {
             autosaveCoordinator = EditorAjarAutosaveCoordinator(packageURL: autosavePackageURL)
@@ -317,6 +346,9 @@ final class EditorAjarAppModel: ObservableObject {
         recentProjectURLs = recentProjectsStore.load()
         self.exportQueueController = exportQueueController ?? EditorAjarExportQueueController()
         self.mediaImportPipeline = mediaImportPipeline ?? MediaImportPipeline()
+        self.mediaConsolidationRunner =
+            mediaConsolidationRunner
+            ?? EditorAjarDefaultMediaConsolidationRunner()
         proxyGenerationQueue = ProxyGenerationQueue(
             sessionFactory: Self.makeProxySessionFactory()
         )
@@ -428,7 +460,7 @@ final class EditorAjarAppModel: ObservableObject {
         startProxyQueueObservation()
         reloadExportPresets()
         requestRenderForCurrentFrame()
-        if let initialLoadResult {
+        if let initialLoadResult, automaticallyResolvesMediaReferences {
             startMediaResolution(for: initialLoadResult)
         }
     }
@@ -449,12 +481,12 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Whether Save As is available for this session.
     var canSaveProjectAs: Bool {
-        project != nil && projectOpenMode.allowsEditing
+        project != nil && projectOpenMode.allowsEditing && !isConsolidatingMedia
     }
 
     /// Whether Revert can discard edits back to an on-disk package.
     var canRevertProject: Bool {
-        documentURL != nil && isDocumentDirty
+        documentURL != nil && isDocumentDirty && !isConsolidatingMedia
     }
 
     /// Presents the FR-PROJ-003 settings sheet with sensible defaults.
@@ -494,6 +526,8 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Waits for the latest queued recovery write/removal before the process terminates.
     func finishPendingDocumentWrites() async {
+        mediaConsolidationTask?.cancel()
+        await mediaConsolidationTask?.value
         await autosaveWriteTask?.value
     }
 
@@ -599,7 +633,7 @@ final class EditorAjarAppModel: ObservableObject {
         didSave(project: project, at: documentURL)
     }
 
-    /// Saves to a new package, cloning non-identity sidecars from the current package first.
+    /// Saves to a new package, carrying durable package media and canonical sidecars forward.
     func saveProjectAs(to destinationURL: URL) throws {
         guard let project else {
             throw EditorAjarDocumentLifecycleError.noProject
@@ -607,19 +641,39 @@ final class EditorAjarAppModel: ObservableObject {
         try requireEditableSaveMode()
         let standardizedURL = destinationURL.standardizedFileURL
         let newScope = EditorAjarSecurityScopedAccess(url: standardizedURL)
-        try documentStore.saveAs(
+        let saveAsResult = try documentStore.saveAs(
             project: project,
+            editHistory: editHistory,
             openMode: projectOpenMode,
             appliedCommandCount: autosaveCommandCount,
             sourceURL: documentURL,
             destinationURL: standardizedURL
         )
+        self.project = saveAsResult.project
+        editHistory = saveAsResult.editHistory
         documentSecurityScope = newScope
-        didSave(project: project, at: standardizedURL)
+        didSave(project: saveAsResult.project, at: standardizedURL)
+        switch saveAsResult.cleanupWarning {
+        case .retainedPackage(let retainedURL, _):
+            documentWarningMessage = AppString.localized(
+                "document.warning.saveAsRetainedCleanup",
+                "The project was saved and is now using \(standardizedURL.deletingPathExtension().lastPathComponent), but an older retained package could not be removed safely. It was left as \(retainedURL.lastPathComponent) for manual cleanup or recovery."
+            )
+        case .skippedSafely:
+            documentWarningMessage = AppString.localized(
+                "document.warning.saveAsCleanupSkipped",
+                "The project was saved successfully and is now using \(standardizedURL.deletingPathExtension().lastPathComponent). Automatic cleanup was skipped safely because the older folder changed. No folder was identified as safe to delete."
+            )
+        case nil:
+            documentWarningMessage = nil
+        }
     }
 
     /// Discards unsaved edits and reloads only the explicit saved bytes (no journal replay).
     func revertProject() throws {
+        guard !isConsolidatingMedia else {
+            throw EditorAjarDocumentLifecycleError.mediaConsolidationInProgress
+        }
         guard let documentURL else {
             throw EditorAjarDocumentLifecycleError.documentHasNoURL
         }
@@ -669,6 +723,11 @@ final class EditorAjarAppModel: ObservableObject {
     /// Dismisses the document-operation alert.
     func dismissDocumentError() {
         documentErrorMessage = nil
+    }
+
+    /// Dismisses a nonfatal document warning without changing the committed document session.
+    func dismissDocumentWarning() {
+        documentWarningMessage = nil
     }
 
     // MARK: - Export dialog (FR-EXP-003 / FR-EXP-004)
@@ -832,6 +891,7 @@ final class EditorAjarAppModel: ObservableObject {
         autosaveWriteTask?.cancel()
         mediaResolutionTask?.cancel()
         mediaImportTask?.cancel()
+        mediaConsolidationTask?.cancel()
         proxyObserveTask?.cancel()
     }
 
@@ -866,6 +926,7 @@ final class EditorAjarAppModel: ObservableObject {
     /// Whether File > Import Media and drag/drop may start a new batch.
     var canImportMedia: Bool {
         project != nil && projectOpenMode.allowsEditing && !isImportingMedia
+            && !isConsolidatingMedia
     }
 
     /// Presents the multi-select file/folder picker.
@@ -1162,7 +1223,7 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Save / autosave gate: blocked for read-only opens (FR-PROJ-005 / ADR-0018).
     var canSaveProject: Bool {
-        project != nil && projectOpenMode.allowsEditing
+        project != nil && projectOpenMode.allowsEditing && !isConsolidatingMedia
     }
 
     /// Dismisses the read-only workspace banner (keyboard-reachable from the banner control).
@@ -3666,6 +3727,9 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func refuseReplacementWhenDirty() throws {
+        if isConsolidatingMedia {
+            throw EditorAjarDocumentLifecycleError.mediaConsolidationInProgress
+        }
         if isDocumentDirty, !mayDiscardChangesForNextReplacement {
             throw EditorAjarDocumentLifecycleError.unsavedChanges
         }
@@ -3673,6 +3737,9 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func requireEditableSaveMode() throws {
+        if isConsolidatingMedia {
+            throw EditorAjarDocumentLifecycleError.mediaConsolidationInProgress
+        }
         if case .readOnly(let reason) = projectOpenMode {
             throw EditorAjarDocumentLifecycleError.projectOpenedReadOnly(reason)
         }
@@ -3708,6 +3775,11 @@ final class EditorAjarAppModel: ObservableObject {
                         "Format \(found) is newer than supported format \(supported). Saving is unavailable."
                     )
                 }
+            case .mediaConsolidationInProgress:
+                return AppString.localized(
+                    "document.error.detail.consolidationInProgress",
+                    "Wait for media consolidation to finish, or cancel it first."
+                )
             }
         }
 
@@ -3738,7 +3810,9 @@ final class EditorAjarAppModel: ObservableObject {
                     "document.error.detail.persistence",
                     "The project package could not be read or written safely."
                 )
-            case .fileOperation(let path, _):
+            case .fileOperation(let path, _),
+                .saveAsDestinationChanged(let path, _),
+                .saveAsSynchronization(let path, _, _):
                 return AppString.localized(
                     "document.error.detail.fileOperation",
                     "A file operation failed for \(URL(fileURLWithPath: path).lastPathComponent)."
@@ -3774,6 +3848,7 @@ final class EditorAjarAppModel: ObservableObject {
         savedBaseline: Project?,
         unsavedName: String?
     ) {
+        projectSessionGeneration &+= 1
         displayLinkDriver?.stop()
         audioCoordinator?.stop()
         mediaResolutionTask?.cancel()
@@ -3844,7 +3919,9 @@ final class EditorAjarAppModel: ObservableObject {
         bindRenderPackageRoot()
         startAutosaveLoop()
         requestRenderForCurrentFrame()
-        startMediaResolution(for: loadResult)
+        if automaticallyResolvesMediaReferences {
+            startMediaResolution(for: loadResult)
+        }
     }
 
     private func refreshDirtyState() {
@@ -3935,6 +4012,15 @@ final class EditorAjarAppModel: ObservableObject {
     /// Test seam: package root used by proxy/relink re-transcode paths.
     func setProjectPackageRootForTesting(_ url: URL?) {
         projectPackageRootURL = url
+    }
+
+    func replaceProjectSessionForTesting(_ project: Project, documentURL: URL?) {
+        installProjectSession(
+            .editable(project),
+            documentURL: documentURL,
+            savedBaseline: project,
+            unsavedName: nil
+        )
     }
 
     private func displayLinkTick(_ deltaSeconds: Double) {

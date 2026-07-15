@@ -192,6 +192,16 @@ clean supported Apple Silicon Mac. Pipeline code alone does not satisfy this ext
 
 ## Post-1.0 (v1.x / future)
 
+**FR-MED-008 consumer consolidation is complete (#267, 2026-07-15).** File > Consolidate Media…
+uses the existing Save As/document package flow and `AjarMedia.MediaConsolidateCommand`; copies to
+the saved `.ajar/media` directory off-main with determinate progress, cancellation through copy and
+reuse verification, locked identity-safe retryable cleanup, a nonmodal progress overlay, guarded
+session application, localized named outcomes, and one undoable partial-success-safe reference
+rewrite. Save As copies and rebases durable package-owned media without copying external originals,
+so the new project does not depend on its previous package. Originals are never deleted. Release
+acceptance verifies consolidate, Save As, removal of the old package, reopen, and export with the
+rewritten package references.
+
 Plugin API (ADR-0013, FR-FX-006), expanded effects, optical-flow slow-mo, HDR timeline
 (FR-COL-006), smart bins (FR-MED-006), adjustment layers (FR-TL-013), title templates
 (FR-TXT-006), corner-pin (FR-XFORM-006), animated masks/roto (FR-COMP-004), GIF export

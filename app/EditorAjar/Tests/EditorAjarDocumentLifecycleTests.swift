@@ -73,6 +73,184 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertFalse(model.isDocumentDirty)
     }
 
+    func testFRPROJ002SaveAsAdoptsCommittedReplacementWithRetainedCleanupWarning() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let sourceURL = fixture.packageURL(named: "Source.ajar")
+        let destinationURL = fixture.packageURL(named: "Destination.ajar")
+        let retainedBytes = Data("app model retained cleanup data".utf8)
+        let store = EditorAjarDocumentStore(
+            saveAsCleanupDirectoryDevice: { directoryURL, actualDevice in
+                directoryURL.lastPathComponent == "retained-child"
+                    ? actualDevice &+ 1
+                    : actualDevice
+            }
+        )
+        let model = fixture.makeModel(documentStore: store)
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: sourceURL)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        let retainedChild = destinationURL.appendingPathComponent(
+            "retained-child",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: retainedChild,
+            withIntermediateDirectories: false
+        )
+        try retainedBytes.write(to: retainedChild.appendingPathComponent("must-survive.txt"))
+        XCTAssertTrue(model.addSequence())
+        let committedProject = try XCTUnwrap(model.project)
+        let undoCount = model.editHistory?.undoCount
+
+        try model.saveProjectAs(to: destinationURL)
+
+        XCTAssertEqual(model.documentURL, destinationURL.standardizedFileURL)
+        XCTAssertEqual(model.project, committedProject)
+        XCTAssertEqual(model.editHistory?.undoCount, undoCount)
+        XCTAssertFalse(model.isDocumentDirty)
+        XCTAssertNotNil(model.documentWarningMessage)
+        XCTAssertTrue(model.documentWarningMessage?.contains("The project was saved") == true)
+        XCTAssertTrue(model.documentWarningMessage?.contains("Destination") == true)
+        let reopened = fixture.makeModel()
+        try reopened.openProject(at: destinationURL)
+        XCTAssertEqual(reopened.project, committedProject)
+
+        model.undo()
+        XCTAssertNotEqual(model.project, committedProject)
+        XCTAssertTrue(model.isDocumentDirty)
+        model.redo()
+        XCTAssertEqual(model.project, committedProject)
+        XCTAssertFalse(model.isDocumentDirty)
+
+        let retainedCleanupURL = try XCTUnwrap(
+            FileManager.default.contentsOfDirectory(
+                at: fixture.rootURL,
+                includingPropertiesForKeys: nil
+            ).first { $0.lastPathComponent.hasSuffix(".cleanup") }
+        )
+        XCTAssertEqual(
+            try Data(
+                contentsOf: retainedCleanupURL.appendingPathComponent(
+                    "retained-child/must-survive.txt"
+                )
+            ),
+            retainedBytes
+        )
+        XCTAssertTrue(
+            model.documentWarningMessage?.contains(retainedCleanupURL.lastPathComponent) == true,
+            "a verified retained package warning should identify its exact quarantine name"
+        )
+        model.dismissDocumentWarning()
+        XCTAssertNil(model.documentWarningMessage)
+    }
+
+    func testFRPROJ002SaveAsWarnsWithoutLocationAfterUnexpectedCleanupEntryIsRestored() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let sourceURL = fixture.packageURL(named: "Source.ajar")
+        let destinationURL = fixture.packageURL(named: "Destination.ajar")
+        let preservedPreviousDestination = fixture.packageURL(
+            named: "Preserved-Previous-Destination.ajar"
+        )
+        let unrelatedBytes = Data("app model cleanup substitution".utf8)
+        var restoredUnexpectedURL: URL?
+        let store = EditorAjarDocumentStore(
+            saveAsWillQuarantineCleanup: { cleanupSourceURL in
+                restoredUnexpectedURL = cleanupSourceURL
+                try FileManager.default.moveItem(
+                    at: cleanupSourceURL,
+                    to: preservedPreviousDestination
+                )
+                try FileManager.default.createDirectory(
+                    at: cleanupSourceURL,
+                    withIntermediateDirectories: false
+                )
+                try unrelatedBytes.write(
+                    to: cleanupSourceURL.appendingPathComponent("must-survive.txt")
+                )
+            }
+        )
+        let model = fixture.makeModel(documentStore: store)
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: sourceURL)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        XCTAssertTrue(model.addSequence())
+        let committedProject = try XCTUnwrap(model.project)
+
+        try model.saveProjectAs(to: destinationURL)
+
+        XCTAssertEqual(model.documentURL, destinationURL.standardizedFileURL)
+        XCTAssertEqual(model.project, committedProject)
+        XCTAssertFalse(model.isDocumentDirty)
+        XCTAssertTrue(
+            model.documentWarningMessage?.contains(
+                "Automatic cleanup was skipped safely because the older folder changed"
+            ) == true
+        )
+        XCTAssertTrue(
+            model.documentWarningMessage?.contains(
+                "No folder was identified as safe to delete"
+            ) == true
+        )
+        let exactRestoredURL = try XCTUnwrap(restoredUnexpectedURL)
+        XCTAssertFalse(
+            model.documentWarningMessage?.contains(exactRestoredURL.lastPathComponent) == true
+        )
+        XCTAssertFalse(
+            model.documentWarningMessage?.contains(fixture.rootURL.lastPathComponent) == true
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: exactRestoredURL.appendingPathComponent("must-survive.txt")),
+            unrelatedBytes
+        )
+        let reopened = fixture.makeModel()
+        try reopened.openProject(at: destinationURL)
+        XCTAssertEqual(reopened.project, committedProject)
+    }
+
+    func testFRPROJ002SaveAsWarnsWithoutLocationWhenCleanupParentValidationFails() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let sourceURL = fixture.packageURL(named: "Source.ajar")
+        let destinationURL = fixture.packageURL(named: "Destination.ajar")
+        var didReachParentValidation = false
+        let store = EditorAjarDocumentStore(
+            saveAsWillValidatePreviousDestinationCleanup: {
+                didReachParentValidation = true
+                throw EditorAjarDocumentStoreError.saveAsDestinationChanged(
+                    path: fixture.rootURL.path,
+                    reason: "injected pre-quarantine parent validation refusal"
+                )
+            }
+        )
+        let model = fixture.makeModel(documentStore: store)
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: sourceURL)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        XCTAssertTrue(model.addSequence())
+        let committedProject = try XCTUnwrap(model.project)
+
+        try model.saveProjectAs(to: destinationURL)
+
+        XCTAssertTrue(didReachParentValidation)
+        XCTAssertEqual(model.documentURL, destinationURL.standardizedFileURL)
+        XCTAssertEqual(model.project, committedProject)
+        XCTAssertFalse(model.isDocumentDirty)
+        XCTAssertTrue(
+            model.documentWarningMessage?.contains(
+                "Automatic cleanup was skipped safely because the older folder changed"
+            ) == true
+        )
+        XCTAssertFalse(
+            model.documentWarningMessage?.contains(fixture.rootURL.lastPathComponent) == true
+        )
+        let reopened = fixture.makeModel()
+        try reopened.openProject(at: destinationURL)
+        XCTAssertEqual(reopened.project, committedProject)
+        XCTAssertEqual(try fixture.stagingPackages().count, 1)
+    }
+
     func testFRPROJ002RevertDiscardsUnsavedEditsAndHistory() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
@@ -589,10 +767,20 @@ private struct DocumentLifecycleFixture {
         rootURL.appendingPathComponent(name, isDirectory: true)
     }
 
+    func stagingPackages() throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(
+            at: rootURL,
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasSuffix(".staging") }
+    }
+
     @MainActor
-    func makeModel() -> EditorAjarAppModel {
+    func makeModel(
+        documentStore: EditorAjarDocumentStore = EditorAjarDocumentStore()
+    ) -> EditorAjarAppModel {
         EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
+            documentStore: documentStore,
             recentProjectsUserDefaults: userDefaults,
             recentProjectsStorageKey: recentProjectsStorageKey
         )

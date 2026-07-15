@@ -42,6 +42,11 @@ final class EditorAjarLocalizationTests: XCTestCase {
         let expected: [String: String] = [
             "app.name": "Editor Ajar",
             "document.open.title": "Open…",
+            "document.warning.saveAsCleanup.title": "Project Saved with Cleanup Warning",
+            "document.warning.saveAsCleanupSkipped":
+                "The project was saved successfully and is now using %@. Automatic cleanup was skipped safely because the older folder changed. No folder was identified as safe to delete.",
+            "document.warning.saveAsRetainedCleanup":
+                "The project was saved and is now using %@, but an older retained package could not be removed safely. It was left as %@ for manual cleanup or recovery.",
             "document.newSettings.title": "New Project",
             "welcome.title": "Welcome to Editor Ajar",
             "workspace.header.export": "Export…",
@@ -57,12 +62,23 @@ final class EditorAjarLocalizationTests: XCTestCase {
             "import.failure.projectUpdate.reason": "The open project rejected the import batch.",
             "import.failure.unsupportedFormat":
                 "This format could not be converted into working media.",
+            "consolidate.menu.title": "Consolidate Media…",
+            "consolidate.progress.cancel.ax": "Cancel media consolidation",
+            "consolidate.failure.packageBusy":
+                "This project is already consolidating media in another window or process. Wait for it to finish and try again.",
+            "consolidate.failure.staleCleanup":
+                "Temporary media cleanup for %@ needs attention. Consolidation stopped without deleting the uncertain item.",
+            "consolidate.failure.publicationSync":
+                "The copy of %@ is present, but safe storage could not be confirmed, so its reference was not changed.",
+            "consolidate.failure.sourceProtection":
+                "Media safety could not verify %@. Consolidation stopped before temporary files were cleaned up.",
+            "consolidate.summary.title": "Media Consolidation",
             "library.panel.ax":
                 "Media and effects panel. Drop media files or folders here to import.",
             "marker.color.red": "Red",
             "blend.normal": "Normal",
             "transform.param.position": "Position",
-            "state.selected": "Selected",
+            "state.selected": "Selected"
         ]
         for (key, english) in expected {
             XCTAssertEqual(
@@ -103,6 +119,34 @@ final class EditorAjarLocalizationTests: XCTestCase {
                 "Import complete: \(3) imported, \(1) skipped, \(2) failed"
             ),
             "Import complete: 3 imported, 1 skipped, 2 failed"
+        )
+        XCTAssertEqual(
+            AppString.localized(
+                "consolidate.confirm.message.many",
+                "Copy \(2) media files to \("/Project.ajar/media"). Originals are never deleted."
+            ),
+            "Copy 2 media files to /Project.ajar/media. Originals are never deleted."
+        )
+        XCTAssertEqual(
+            AppString.localized(
+                "consolidate.confirm.message.one",
+                "Copy 1 media file to \("/Project.ajar/media"). Originals are never deleted."
+            ),
+            "Copy 1 media file to /Project.ajar/media. Originals are never deleted."
+        )
+        XCTAssertEqual(
+            AppString.localized(
+                "consolidate.failure.staleCleanup",
+                "Temporary media cleanup for \("source.mov") needs attention. Consolidation stopped without deleting the uncertain item."
+            ),
+            "Temporary media cleanup for source.mov needs attention. Consolidation stopped without deleting the uncertain item."
+        )
+        XCTAssertEqual(
+            AppString.localized(
+                "consolidate.failure.sourceProtection",
+                "Media safety could not verify \("source.mov"). Consolidation stopped before temporary files were cleaned up."
+            ),
+            "Media safety could not verify source.mov. Consolidation stopped before temporary files were cleaned up."
         )
     }
 

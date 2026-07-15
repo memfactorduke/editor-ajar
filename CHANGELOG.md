@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Consumer media consolidation (#267): File > Consolidate Media… copies referenced originals into
+  the saved project's `.ajar/media` directory after an exact destination/count confirmation;
+  untitled projects use the existing Save As flow first. Copy/hash work stays off-main with
+  determinate per-file progress and cooperative cancellation through copy, reuse, and collision
+  verification. Atomic `.ajar-partial-*` publication uses a cross-process package-media lock and
+  identity-safe, no-follow stale cleanup. Interrupted removals carry durable recovery evidence in
+  a separate, non-swept quarantine namespace; uncertain entries are preserved and reported.
+  Successful references apply as one undoable edit even after partial completion; originals are
+  never deleted. Save As copies and rebases only durable package-owned media, so a consolidated
+  project remains self-contained if its previous package is removed; external originals stay in
+  place. Revert and stale-session result application are guarded. A compact nonmodal,
+  VoiceOver-labelled progress overlay leaves playback and editing available. Includes named,
+  localized failure summaries with correct one-file grammar, engine atomicity/cancellation tests,
+  app-model coverage, release-acceptance consolidate/save/reopen/export verification, and a
+  File-menu UI accessibility smoke.
+
 - Real macOS app icon and product identity (#265): approved 1024×1024 master under
   `app/EditorAjar/Brand/`, reproducible `scripts/generate-app-icon.sh` (high-quality macOS
   `sips` resampling into `Resources/Assets.xcassets/AppIcon.appiconset`; not claimed cross-OS

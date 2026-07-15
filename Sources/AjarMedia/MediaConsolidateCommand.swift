@@ -17,17 +17,27 @@ public struct ConsolidateProgressUpdate: Equatable, Sendable {
     /// Published package URL most recently completed, absent for the initial zero update.
     public let destinationURL: URL?
 
+    /// Bytes copied for the file currently being prepared.
+    public let copiedByteCount: Int64
+
+    /// Exact source byte count for the file currently being prepared.
+    public let totalByteCount: Int64
+
     /// Creates a progress update.
     public init(
         completedFileCount: Int,
         totalFileCount: Int,
         mediaID: UUID?,
-        destinationURL: URL?
+        destinationURL: URL?,
+        copiedByteCount: Int64 = 0,
+        totalByteCount: Int64 = 0
     ) {
         self.completedFileCount = completedFileCount
         self.totalFileCount = totalFileCount
         self.mediaID = mediaID
         self.destinationURL = destinationURL
+        self.copiedByteCount = copiedByteCount
+        self.totalByteCount = totalByteCount
     }
 }
 
@@ -56,10 +66,27 @@ public enum MediaConsolidateCommandError: Error, Equatable, Sendable {
 
     /// The package's `media` entry is not a real directory (for example, it is a symlink).
     case unsafeMediaDirectory(URL)
+
+    /// A stale transaction file could not be removed safely before copying began.
+    case stalePartialCleanupFailed(url: URL, mediaID: UUID?, reason: String)
+
+    /// A referenced source or bookmark could not be identified safely before stale cleanup.
+    case protectedSourceUnavailable(mediaID: UUID, url: URL?, reason: String)
+
+    /// Another command or process is already consolidating this package.
+    case packageBusy(URL)
+
+    /// The package consolidation lock could not be opened safely.
+    case packageLockFailed(url: URL, reason: String)
 }
 
 /// Why one original could not complete consolidation.
 public enum MediaConsolidateFailureReason: Equatable, Sendable {
+    /// The user cancelled before this file could be published.
+    case cancelled
+
+    /// An unpublished transaction file could not be removed after cancellation or failure.
+    case partialCleanupFailed(url: URL, reason: String)
     /// The original was offline or otherwise unresolvable.
     case sourceResolutionFailed(MediaReferenceResolutionFailure)
 
@@ -77,6 +104,9 @@ public enum MediaConsolidateFailureReason: Equatable, Sendable {
 
     /// Temp-copy or atomic publication failed.
     case copyFailed(sourceURL: URL, destinationURL: URL, reason: String)
+
+    /// The copy was atomically published, but its directory entry could not be made durable.
+    case publicationSyncFailed(destinationURL: URL, reason: String)
 
     /// The copied file could not receive a new security-scoped bookmark.
     case bookmarkCreationFailed(url: URL, reason: String)
@@ -135,11 +165,13 @@ public struct MediaConsolidateResult: Equatable, Sendable {
 
 /// Copies originals into `<project>.ajar/media/` and prepares one undoable reference rewrite.
 public struct MediaConsolidateCommand {
-    private let resolver: MediaReferenceResolver
-    private let hasher: any MediaFileHashing
-    private let bookmarkStore: any MediaBookmarkStore
-    private let fileOperations: any ConsolidateFileOperations
-    private let fileManager: FileManager
+    let resolver: MediaReferenceResolver
+    let hasher: any MediaFileHashing
+    let bookmarkStore: any MediaBookmarkStore
+    let fileOperations: any ConsolidateFileOperations
+    let fileManager: FileManager
+    let packageLocking: any ConsolidatePackageLocking
+    let protectedSourceIdentity: (URL) throws -> ConsolidateFileIdentity?
 
     /// Creates the production consolidate command.
     public init() {
@@ -153,7 +185,27 @@ public struct MediaConsolidateCommand {
             hasher: SHA256MediaFileHasher(),
             bookmarkStore: bookmarkStore,
             fileOperations: DefaultConsolidateFileOperations(fileManager: fileManager),
-            fileManager: fileManager
+            fileManager: fileManager,
+            packageLocking: POSIXConsolidatePackageLocking()
+        )
+    }
+
+    /// Creates a command with an injected bookmark boundary and production filesystem safety.
+    public init(
+        bookmarkStore: any MediaBookmarkStore,
+        hasher: any MediaFileHashing = SHA256MediaFileHasher()
+    ) {
+        let fileManager = FileManager.default
+        self.init(
+            resolver: MediaReferenceResolver(
+                bookmarkStore: bookmarkStore,
+                fileManager: fileManager
+            ),
+            hasher: hasher,
+            bookmarkStore: bookmarkStore,
+            fileOperations: DefaultConsolidateFileOperations(fileManager: fileManager),
+            fileManager: fileManager,
+            packageLocking: POSIXConsolidatePackageLocking()
         )
     }
 
@@ -162,13 +214,18 @@ public struct MediaConsolidateCommand {
         hasher: any MediaFileHashing,
         bookmarkStore: any MediaBookmarkStore,
         fileOperations: any ConsolidateFileOperations,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        packageLocking: any ConsolidatePackageLocking = POSIXConsolidatePackageLocking(),
+        protectedSourceIdentity: @escaping (URL) throws -> ConsolidateFileIdentity? =
+            ConsolidateFileIdentity.followingSymlinks
     ) {
         self.resolver = resolver
         self.hasher = hasher
         self.bookmarkStore = bookmarkStore
         self.fileOperations = fileOperations
         self.fileManager = fileManager
+        self.packageLocking = packageLocking
+        self.protectedSourceIdentity = protectedSourceIdentity
     }
 
     /// Copies each source through a same-directory temporary file, publishing atomically.
@@ -180,17 +237,10 @@ public struct MediaConsolidateCommand {
         project: Project,
         openMode: AjarProjectOpenMode,
         projectPackageURL: URL,
-        progress: (any ConsolidateProgress)? = nil
+        progress: (any ConsolidateProgress)? = nil,
+        isCancelled: @escaping @Sendable () -> Bool = { false }
     ) throws -> MediaConsolidateResult {
-        if let duplicateID = firstDuplicateMediaReferenceID(in: project.mediaPool) {
-            throw MediaConsolidateCommandError.duplicateMediaReferenceID(duplicateID)
-        }
-        if case .readOnly(let reason) = openMode {
-            throw MediaConsolidateCommandError.projectOpenedReadOnly(reason)
-        }
-        guard projectPackageURL.isFileURL else {
-            throw MediaConsolidateCommandError.packageMustBeFileURL(projectPackageURL)
-        }
+        try validateRequest(project, openMode: openMode, projectPackageURL: projectPackageURL)
         let startedPackageScope = projectPackageURL.startAccessingSecurityScopedResource()
         defer {
             if startedPackageScope {
@@ -201,12 +251,38 @@ public struct MediaConsolidateCommand {
             packageURL: projectPackageURL,
             openMode: openMode
         )
+        let packageLock = try acquirePackageLock(
+            mediaDirectory: mediaDirectory,
+            projectPackageURL: projectPackageURL
+        )
+        defer { packageLock.release() }
+        try recoverInterruptedPartialCleanup(from: mediaDirectory)
+        let protectedSources = try protectedMediaSources(in: project)
+        try removeStalePartialFiles(
+            from: mediaDirectory,
+            protecting: protectedSources
+        )
         let total = project.mediaPool.count
         reportInitialProgress(total: total, progress: progress)
 
         var prepared: [PreparedConsolidation] = []
         for media in project.mediaPool {
-            switch prepareMedia(media, mediaDirectory: mediaDirectory) {
+            if isCancelled() {
+                return makeResult(
+                    prepared: prepared,
+                    failure: MediaConsolidateFailure(mediaID: media.id, reason: .cancelled)
+                )
+            }
+            switch prepareMedia(
+                media,
+                context: ConsolidatePreparationContext(
+                    mediaDirectory: mediaDirectory,
+                    completedFileCount: prepared.count,
+                    totalFileCount: total,
+                    progress: progress,
+                    isCancelled: isCancelled
+                )
+            ) {
             case .success(let item):
                 prepared.append(item)
                 progress?.consolidateDidUpdate(
@@ -214,7 +290,9 @@ public struct MediaConsolidateCommand {
                         completedFileCount: prepared.count,
                         totalFileCount: total,
                         mediaID: media.id,
-                        destinationURL: item.destinationURL
+                        destinationURL: item.destinationURL,
+                        copiedByteCount: item.byteCount,
+                        totalByteCount: item.byteCount
                     )
                 )
             case .failure(let failure):
@@ -224,245 +302,36 @@ public struct MediaConsolidateCommand {
         return makeResult(prepared: prepared, failure: nil)
     }
 
-    private func firstDuplicateMediaReferenceID(in media: [MediaRef]) -> UUID? {
-        var seen = Set<UUID>()
-        for reference in media where !seen.insert(reference.id).inserted {
-            return reference.id
+    private func acquirePackageLock(
+        mediaDirectory: URL,
+        projectPackageURL: URL
+    ) throws -> any ConsolidatePackageLock {
+        do {
+            return try packageLocking.acquire(mediaDirectory: mediaDirectory)
+        } catch ConsolidatePackageLockError.busy {
+            throw MediaConsolidateCommandError.packageBusy(projectPackageURL)
+        } catch {
+            throw MediaConsolidateCommandError.packageLockFailed(
+                url: projectPackageURL,
+                reason: String(describing: error)
+            )
         }
-        return nil
     }
 
-    private func prepareMediaDirectory(
-        packageURL: URL,
-        openMode: AjarProjectOpenMode
-    ) throws -> URL {
+    private func validateRequest(
+        _ project: Project,
+        openMode: AjarProjectOpenMode,
+        projectPackageURL: URL
+    ) throws {
+        if let duplicateID = firstDuplicateMediaReferenceID(in: project.mediaPool) {
+            throw MediaConsolidateCommandError.duplicateMediaReferenceID(duplicateID)
+        }
         if case .readOnly(let reason) = openMode {
             throw MediaConsolidateCommandError.projectOpenedReadOnly(reason)
         }
-        guard packageURL.isFileURL else {
-            throw MediaConsolidateCommandError.packageMustBeFileURL(packageURL)
-        }
-        var isDirectory: ObjCBool = false
-        guard
-            fileManager.fileExists(atPath: packageURL.path, isDirectory: &isDirectory),
-            isDirectory.boolValue
-        else {
-            throw MediaConsolidateCommandError.packageDirectoryUnavailable(packageURL)
-        }
-
-        let mediaDirectory = packageURL.appendingPathComponent("media", isDirectory: true)
-        do {
-            try fileOperations.createDirectory(at: mediaDirectory)
-        } catch {
-            throw MediaConsolidateCommandError.mediaDirectoryCreationFailed(
-                url: mediaDirectory,
-                reason: String(describing: error)
-            )
-        }
-        do {
-            guard try fileOperations.isDirectory(at: mediaDirectory) else {
-                throw MediaConsolidateCommandError.unsafeMediaDirectory(mediaDirectory)
-            }
-        } catch let error as MediaConsolidateCommandError {
-            throw error
-        } catch {
-            throw MediaConsolidateCommandError.mediaDirectoryCreationFailed(
-                url: mediaDirectory,
-                reason: String(describing: error)
-            )
-        }
-        return mediaDirectory
-    }
-
-    private func reportInitialProgress(
-        total: Int,
-        progress: (any ConsolidateProgress)?
-    ) {
-        progress?.consolidateDidUpdate(
-            ConsolidateProgressUpdate(
-                completedFileCount: 0,
-                totalFileCount: total,
-                mediaID: nil,
-                destinationURL: nil
-            )
-        )
-    }
-
-    private func prepareMedia(
-        _ media: MediaRef,
-        mediaDirectory: URL
-    ) -> Result<PreparedConsolidation, MediaConsolidateFailure> {
-        do {
-            return .success(try prepareMediaThrowing(media, mediaDirectory: mediaDirectory))
-        } catch let failure as MediaConsolidateFailure {
-            return .failure(failure)
-        } catch {
-            return .failure(missingSourceFailure(for: media))
+        guard projectPackageURL.isFileURL else {
+            throw MediaConsolidateCommandError.packageMustBeFileURL(projectPackageURL)
         }
     }
 
-    private func prepareMediaThrowing(
-        _ media: MediaRef,
-        mediaDirectory: URL
-    ) throws -> PreparedConsolidation {
-        let resolved = try resolvedMedia(media)
-        let actualHash = try validatedHash(for: media, sourceURL: resolved.sourceURL)
-        let destinationURL = try publishedDestination(
-            for: media,
-            sourceURL: resolved.sourceURL,
-            contentHash: actualHash,
-            mediaDirectory: mediaDirectory
-        )
-        let replacement = try bookmarkedReplacement(
-            resolved.reference,
-            mediaID: media.id,
-            destinationURL: destinationURL,
-            contentHash: actualHash
-        )
-        return PreparedConsolidation(reference: replacement, destinationURL: destinationURL)
-    }
-
-    private func resolvedMedia(_ media: MediaRef) throws -> ResolvedConsolidation {
-        switch resolver.resolve(media) {
-        case .resolved(let reference, let sourceURL):
-            return ResolvedConsolidation(reference: reference, sourceURL: sourceURL)
-        case .offline(_, let failure):
-            throw MediaConsolidateFailure(
-                mediaID: media.id,
-                reason: .sourceResolutionFailed(failure)
-            )
-        }
-    }
-
-    private func validatedHash(
-        for media: MediaRef,
-        sourceURL: URL
-    ) throws -> ContentHash {
-        let actualHash: ContentHash
-        do {
-            actualHash = try hasher.contentHash(of: sourceURL)
-        } catch {
-            throw MediaConsolidateFailure(
-                mediaID: media.id,
-                reason: .hashingFailed(url: sourceURL, reason: String(describing: error))
-            )
-        }
-        if let expected = media.contentHash, expected != actualHash {
-            throw MediaConsolidateFailure(
-                mediaID: media.id,
-                reason: .sourceContentHashMismatch(expected: expected, actual: actualHash)
-            )
-        }
-        return actualHash
-    }
-
-    private func publishedDestination(
-        for media: MediaRef,
-        sourceURL: URL,
-        contentHash: ContentHash,
-        mediaDirectory: URL
-    ) throws -> URL {
-        do {
-            return try ConsolidatePublisher(
-                hasher: hasher,
-                fileOperations: fileOperations
-            ).publish(
-                sourceURL: sourceURL,
-                mediaID: media.id,
-                contentHash: contentHash,
-                mediaDirectory: mediaDirectory
-            )
-        } catch let copyFailure as ConsolidateCopyFailure {
-            let reason: MediaConsolidateFailureReason
-            switch copyFailure.reason {
-            case .sourceNotRegularFile(let url):
-                reason = .sourceNotRegularFile(url)
-            case .copiedContentHashMismatch(let expected, let actual):
-                reason = .copiedContentHashMismatch(expected: expected, actual: actual)
-            case .temporaryNotRegularFile, .operationFailed:
-                reason = .copyFailed(
-                    sourceURL: sourceURL,
-                    destinationURL: copyFailure.destinationURL,
-                    reason: String(describing: copyFailure.reason)
-                )
-            }
-            throw MediaConsolidateFailure(
-                mediaID: media.id,
-                reason: reason
-            )
-        } catch {
-            throw MediaConsolidateFailure(
-                mediaID: media.id,
-                reason: .copyFailed(
-                    sourceURL: sourceURL,
-                    destinationURL: mediaDirectory,
-                    reason: String(describing: error)
-                )
-            )
-        }
-    }
-
-    private func bookmarkedReplacement(
-        _ resolved: MediaRef,
-        mediaID: UUID,
-        destinationURL: URL,
-        contentHash: ContentHash
-    ) throws -> MediaRef {
-        do {
-            let bookmark = try bookmarkStore.createBookmark(for: destinationURL)
-            // Consolidate is a same-bytes package copy (hash-validated). Preserve proxyState so
-            // ready proxies remain valid; genuine relink still resets via `MediaRef.relinked`.
-            return resolved.consolidated(
-                to: MediaRelinkCandidate(
-                    sourceURL: destinationURL,
-                    contentHash: contentHash,
-                    bookmark: bookmark
-                )
-            )
-        } catch {
-            throw MediaConsolidateFailure(
-                mediaID: mediaID,
-                reason: .bookmarkCreationFailed(
-                    url: destinationURL,
-                    reason: String(describing: error)
-                )
-            )
-        }
-    }
-
-    private func missingSourceFailure(for media: MediaRef) -> MediaConsolidateFailure {
-        return MediaConsolidateFailure(
-            mediaID: media.id,
-            reason: .sourceResolutionFailed(
-                .sourceMissing(mediaID: media.id, lastKnownURL: media.sourceURL)
-            )
-        )
-    }
-
-    private func makeResult(
-        prepared: [PreparedConsolidation],
-        failure: MediaConsolidateFailure?
-    ) -> MediaConsolidateResult {
-        let replacements = prepared.map(\.reference)
-        let command =
-            prepared.isEmpty
-            ? nil
-            : EditCommand.updateMediaReferences(kind: .consolidate, replacements: replacements)
-        return MediaConsolidateResult(
-            command: command,
-            publishedFileURLs: prepared.map(\.destinationURL),
-            consolidatedMediaIDs: prepared.map(\.reference.id),
-            failure: failure
-        )
-    }
-}
-
-private struct PreparedConsolidation {
-    let reference: MediaRef
-    let destinationURL: URL
-}
-
-private struct ResolvedConsolidation {
-    let reference: MediaRef
-    let sourceURL: URL
 }
