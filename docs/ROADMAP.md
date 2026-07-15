@@ -160,7 +160,7 @@ ADR-0020 scope) delivered the full usable editor; #236's release-acceptance jour
 import -> edit -> grade -> title -> mix -> save -> reopen -> export -> decode-verify) gates every
 PR via CI. Release evidence on the v1.0.0 tag notes.
 
-## M11 — v1 app-surface completion and acceptance *(planned)*
+## M11 — v1 app-surface completion and acceptance *(complete)*
 
 **Goal:** complete the shippable v1 editing surface and record the intentional v1.x boundary.
 **Scope decision:** [ADR-0020](adr/0020-v1-scope-deferrals.md) records the advanced app-surface
@@ -169,6 +169,24 @@ FR-PLAY-004/007 deferral conditional on measured performance after #245 wires th
 cache. The acceptance evidence must be recorded on #247 or its PR before the ADR is Accepted.
 **Work items:** #240–#247.
 **Depends on:** M10.
+
+**Current status: COMPLETE (2026-07-11, v1.0.0).** Issues #240–#247 delivered the accepted v1
+surface and recorded the intentional v1.x boundary in ADR-0020. The release-acceptance journey
+continues to gate every PR.
+
+## M12 — consumer distribution foundation *(pipeline complete; external credentials pending)*
+
+**Goal:** turn the source release into a reproducible macOS consumer artifact without requiring
+Apple credentials for ordinary contributors.
+**Delivers:** version/tag and platform validation; a clearly marked unsigned test package; opt-in
+Developer ID signing with hardened runtime; notarization, stapling, `codesign`, `spctl`, and
+`stapler` verification; and a tag-aware GitHub release workflow that refuses to replace an
+existing release asset.
+**Work item:** #263.
+**External exit gate:** provision the Apple Developer ID and App Store Connect notarization
+credentials, run the production workflow, and prove the resulting download passes Gatekeeper on a
+clean supported Apple Silicon Mac. Pipeline code alone does not satisfy this external gate.
+**Depends on:** M11.
 
 ---
 

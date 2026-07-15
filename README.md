@@ -8,15 +8,15 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
-![Status](https://img.shields.io/badge/status-pre--alpha%20scaffold-orange)
+![Status](https://img.shields.io/badge/status-v1%20source%20release-blue)
 
 </div>
 
 ---
 
-> **Status: pre-alpha.** This repository is currently the **scaffold** — the specification, the
-> architecture decisions, and the skeleton. The implementation is built milestone by milestone per
-> the [roadmap](docs/ROADMAP.md). Nothing here edits video *yet*.
+> **Status:** the v1 editor implementation and release-acceptance journey are complete. The source
+> builds today; an ordinary-user download is a separate signed and notarized release gate. See
+> [Release packaging](#release-packaging) for the exact distinction.
 
 ## Why
 
@@ -30,13 +30,18 @@ Two priorities sit above everything else (they are merge gates, not slogans):
 - **Stability** — never crash, never lose work.
 - **Performance** — real-time playback and instant scrubbing at the [target specs](docs/PERFORMANCE.md).
 
-## What it will do (v1)
+## What v1 does
 
-Multi-track timeline editing · all transforms (move, **zoom**, **rotate**, crop, opacity) ·
-full **keyframing** with a curve editor · **chroma key / green screen**, masks & blend modes ·
-**compound clips** (nesting) · color correction, scopes & LUTs · multitrack audio with a mixer,
-fades & ducking · titles & animated text · effects & transitions · speed ramping · proxies &
-background rendering · hardware-accelerated export (H.264 / HEVC / ProRes).
+The current app exposes multi-track timeline editing; move, zoom, rotate, crop, and opacity
+transforms; parameter keyframes; chroma/luma keying, rectangle/ellipse masks, and blend modes;
+color correction, scopes, and LUTs; multitrack mixing and fades; titles and animated text; effects
+and transitions; constant-speed, reverse, and freeze controls; proxies and cached playback; and
+hardware-accelerated H.264, HEVC, and ProRes export.
+
+Some deeper engine capabilities do not yet have consumer-facing controls. The curve editor, speed
+ramp editor, compound-clip workflows, free-form mask drawing, automatic ducking setup, media
+consolidation, background-render scheduling, and HDR ingest/export are explicitly tracked for
+v1.x in [ADR-0020](docs/adr/0020-v1-scope-deferrals.md). We do not present those as shipped UI.
 
 The complete, requirement-by-requirement definition is in **[docs/SPEC.md](docs/SPEC.md)**.
 
@@ -83,6 +88,27 @@ swift test         # run the test suites
 ```
 
 The `app/EditorAjar` Xcode project is added at [milestone M2](docs/ROADMAP.md).
+
+To build the macOS app itself without Apple credentials:
+
+```bash
+xcodebuild -project app/EditorAjar/EditorAjar.xcodeproj -scheme EditorAjar \
+  -configuration Release -destination 'generic/platform=macOS' CODE_SIGNING_ALLOWED=NO build
+```
+
+## Release packaging
+
+The reproducible local packaging path builds a macOS 14+, arm64 Release app and emits an artifact
+whose filename and included warning identify it as unsuitable for consumers:
+
+```bash
+scripts/package-release.sh --mode unsigned --version 1.1.0
+```
+
+Signed consumer artifacts are produced only by the fail-closed Developer ID + hardened-runtime +
+notarization path. Exact credentials, production steps, verification output, and rollback are in
+**[docs/RELEASING.md](docs/RELEASING.md)**. Until a real production artifact passes Gatekeeper on a
+clean supported Mac, a source tag is not the same thing as a consumer-ready release.
 
 ## How it's built
 
