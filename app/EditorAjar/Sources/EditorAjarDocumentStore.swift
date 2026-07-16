@@ -47,7 +47,7 @@ enum EditorAjarDocumentStoreError: Error, Equatable {
     /// The destination or its parent changed after Save As validation.
     case saveAsDestinationChanged(path: String, reason: String)
 
-    /// A Save As durability boundary could not be synchronized.
+    /// A package durability boundary could not be synchronized.
     case saveAsSynchronization(path: String, operation: String, code: Int32)
 }
 
@@ -168,6 +168,8 @@ struct EditorAjarDefaultSaveAsSynchronizer: EditorAjarSaveAsSynchronizing {
                 code: errno == 0 ? EINVAL : errno
             )
         }
+        // `fsync` alone permits a drive to reorder later writes across power loss on macOS.
+        // F_FULLFSYNC is the platform's strict durability and write-ordering boundary.
         while Darwin.fcntl(descriptor, F_FULLFSYNC) != 0 {
             let code = errno
             if code == EINTR {
@@ -1700,18 +1702,33 @@ private extension EditorAjarDocumentStore {
     /// mixed canonical generation if a later project/media replacement is only partly durable.
     func synchronizePublishedRecovery(in packageURL: URL) throws {
         let recoveryURL = packageURL.appendingPathComponent("recovery", isDirectory: true)
-        for name in [
+        try synchronizeRecoveryDirectory(recoveryURL, requiringTransactionMarker: true)
+        try saveAsSynchronizer.synchronizeDirectory(at: packageURL, descriptor: nil)
+    }
+
+    func synchronizeRecoveryDirectory(
+        _ recoveryURL: URL,
+        requiringTransactionMarker: Bool
+    ) throws {
+        var names = [
             "snapshot.json",
             "manifest.json",
             "edit-journal.jsonl",
-            "save-transaction.json",
-        ] {
+        ]
+        let markerName = "save-transaction.json"
+        if requiringTransactionMarker
+            || fileManager.fileExists(
+                atPath: recoveryURL.appendingPathComponent(markerName).path
+            )
+        {
+            names.append(markerName)
+        }
+        for name in names {
             try saveAsSynchronizer.synchronizeFile(
                 at: recoveryURL.appendingPathComponent(name)
             )
         }
         try saveAsSynchronizer.synchronizeDirectory(at: recoveryURL, descriptor: nil)
-        try saveAsSynchronizer.synchronizeDirectory(at: packageURL, descriptor: nil)
     }
 
     func publishStagedDirectory(
@@ -1738,6 +1755,9 @@ private extension EditorAjarDocumentStore {
     }
 
     func restoreCanonicalContents(from rollbackURL: URL, to destinationURL: URL) throws {
+        // The rollback copy itself is newly written data. Make it durable before any atomic
+        // replacement consumes/moves its files and directories.
+        try synchronizeSaveAsPackage(at: rollbackURL)
         for name in ["project.json", "media.json"] {
             let backup = rollbackURL.appendingPathComponent(name)
             if fileManager.fileExists(atPath: backup.path) {

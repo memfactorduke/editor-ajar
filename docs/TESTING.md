@@ -180,12 +180,13 @@ back together. A symlink fixture proves Save never follows a package recovery en
 outside the document. A split-generation canonical pair proves Open falls back to the matching
 complete recovery envelope only when a unique Save marker binds the exact canonical transition and
 every authoritative recovery file. The suite verifies that those files, `recovery/`, and the package
-directory are synchronized before canonical publication, and that a synchronization failure rolls
-the transaction back. Corrupting the marker's manifest or restoring a stale marker while only the
-unchanged media file matches must fail closed. Addition and removal fixtures cover both old/new
-canonical file orderings that later replacements can leave after power loss. A valid recovery stays
-dirty until it is saved again (FR-PROJ-002, NFR-STAB-002). The repair Save must retain only decodable
-version snapshots and must not archive the split pair.
+directory cross macOS `F_FULLFSYNC` ordering barriers before canonical publication. An injected
+barrier failure must restore recovery while preserving the canonical files' bytes and file numbers,
+proving those saved files were not needlessly republished. Corrupting the marker's manifest or
+restoring a stale marker while only the unchanged media file matches must fail closed. Addition and
+removal fixtures cover both old/new canonical file orderings that later replacements can leave after
+power loss. A valid recovery stays dirty until it is saved again (FR-PROJ-002, NFR-STAB-002). The
+repair Save must retain only decodable version snapshots and must not archive the split pair.
 
 ### Hardware-only extension
 

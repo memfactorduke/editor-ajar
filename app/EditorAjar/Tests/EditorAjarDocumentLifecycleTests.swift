@@ -645,17 +645,18 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
 
         XCTAssertEqual(projectObservedAtBoundary, attemptedProject)
         XCTAssertEqual(canonicalBytesObservedAtBoundary, previousProjectBytes)
+        let publicationEvents: [InPlaceSaveSynchronizationEvents.Event] = [
+            .file(recoveryURL.appendingPathComponent("snapshot.json").path),
+            .file(recoveryURL.appendingPathComponent("manifest.json").path),
+            .file(recoveryURL.appendingPathComponent("edit-journal.jsonl").path),
+            .file(recoveryURL.appendingPathComponent("save-transaction.json").path),
+            .directory(recoveryURL.path),
+            .directory(packageURL.path),
+            .recoveryPublished,
+        ]
         XCTAssertEqual(
-            synchronizationEvents.values,
-            [
-                .file(recoveryURL.appendingPathComponent("snapshot.json").path),
-                .file(recoveryURL.appendingPathComponent("manifest.json").path),
-                .file(recoveryURL.appendingPathComponent("edit-journal.jsonl").path),
-                .file(recoveryURL.appendingPathComponent("save-transaction.json").path),
-                .directory(recoveryURL.path),
-                .directory(packageURL.path),
-                .recoveryPublished,
-            ]
+            Array(synchronizationEvents.values.prefix(publicationEvents.count)),
+            publicationEvents
         )
         XCTAssertEqual(
             try AjarAutosaveStore.recoverProject(from: packageURL).project,
@@ -693,6 +694,12 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         )
         let previousRecoveryBytes = try Data(
             contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")
+        )
+        let previousProjectFileNumber = try fileNumber(
+            at: packageURL.appendingPathComponent("project.json")
+        )
+        let previousMediaFileNumber = try fileNumber(
+            at: packageURL.appendingPathComponent("media.json")
         )
 
         XCTAssertTrue(model.addSequence())
@@ -735,6 +742,14 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertEqual(
             try Data(contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")),
             previousRecoveryBytes
+        )
+        XCTAssertEqual(
+            try fileNumber(at: packageURL.appendingPathComponent("project.json")),
+            previousProjectFileNumber
+        )
+        XCTAssertEqual(
+            try fileNumber(at: packageURL.appendingPathComponent("media.json")),
+            previousMediaFileNumber
         )
         XCTAssertEqual(
             try AjarAutosaveStore.recoverProject(from: packageURL).project,
@@ -1272,6 +1287,11 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         try DocumentLifecycleFixture()
     }
 
+    private func fileNumber(at url: URL) throws -> UInt64 {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try XCTUnwrap((attributes[.systemFileNumber] as? NSNumber)?.uint64Value)
+    }
+
     private func writeHigherMinorPackage(
         project: Project,
         schemaMinor: Int,
@@ -1357,9 +1377,11 @@ private final class InPlaceSaveSynchronizationEvents {
 
     var values: [Event] = []
     let failingDirectoryURL: URL?
+    var remainingDirectoryFailures: Int
 
     init(failingDirectoryURL: URL? = nil) {
         self.failingDirectoryURL = failingDirectoryURL
+        remainingDirectoryFailures = failingDirectoryURL == nil ? 0 : 1
     }
 }
 
@@ -1372,7 +1394,10 @@ private struct RecordingInPlaceSaveSynchronizer: EditorAjarSaveAsSynchronizing {
 
     func synchronizeDirectory(at url: URL, descriptor _: Int32?) throws {
         events.values.append(.directory(url.path))
-        if url.standardizedFileURL == events.failingDirectoryURL?.standardizedFileURL {
+        if url.standardizedFileURL == events.failingDirectoryURL?.standardizedFileURL,
+            events.remainingDirectoryFailures > 0
+        {
+            events.remainingDirectoryFailures -= 1
             throw EditorAjarDocumentStoreError.saveAsSynchronization(
                 path: url.path,
                 operation: "injected in-place Save directory synchronization failure",
