@@ -1710,19 +1710,20 @@ private extension EditorAjarDocumentStore {
         _ recoveryURL: URL,
         requiringTransactionMarker: Bool
     ) throws {
-        var names = [
+        let authoritativeNames = [
             "snapshot.json",
             "manifest.json",
             "edit-journal.jsonl",
         ]
         let markerName = "save-transaction.json"
-        if requiringTransactionMarker
-            || fileManager.fileExists(
-                atPath: recoveryURL.appendingPathComponent(markerName).path
-            )
-        {
-            names.append(markerName)
-        }
+        let candidateNames = authoritativeNames + [markerName]
+        let names = requiringTransactionMarker
+            ? candidateNames
+            : candidateNames.filter { name in
+                fileManager.fileExists(
+                    atPath: recoveryURL.appendingPathComponent(name).path
+                )
+            }
         for name in names {
             try saveAsSynchronizer.synchronizeFile(
                 at: recoveryURL.appendingPathComponent(name)

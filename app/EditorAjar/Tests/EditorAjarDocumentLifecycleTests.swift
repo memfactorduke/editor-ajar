@@ -686,6 +686,10 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             to: packageURL
         )
         try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
+        let previousManifestURL = packageURL.appendingPathComponent("recovery/manifest.json")
+        let previousJournalURL = packageURL.appendingPathComponent("recovery/edit-journal.jsonl")
+        try FileManager.default.removeItem(at: previousManifestURL)
+        try FileManager.default.removeItem(at: previousJournalURL)
         let previousProjectBytes = try Data(
             contentsOf: packageURL.appendingPathComponent("project.json")
         )
@@ -755,6 +759,8 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             try AjarAutosaveStore.recoverProject(from: packageURL).project,
             previousProject
         )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: previousManifestURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: previousJournalURL.path))
         XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
 
