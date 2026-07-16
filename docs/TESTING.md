@@ -35,13 +35,17 @@ watching every diff. If it's not tested, it's not done.
 
 ### 2b. Export golden (FR-EXP-007)
 
-- `ajar golden-export [Tests/Fixtures/golden-export]` runs movie/still cases through the real
-  `ExportSession`, decodes the output, and compares to the **live** render-path delivery BGRA
-  (not a stored PNG reference for movie codecs).
+- `ajar golden-export [Tests/Fixtures/golden-export]` runs movie, still, and animated-GIF cases
+  through the real export sessions, decodes the output, and compares to the **live** render-path
+  delivery BGRA (not a stored PNG reference for encoded formats).
 - Tolerances are codec-banded in `ExportGoldenTolerance` (ProRes near-lossless; H.264/HEVC lossy;
-  still PNG bit-exact). H.264/HEVC skip cleanly when the hardware encoder is unavailable.
+  still PNG bit-exact; GIF palette quantization bounded after black compositing). H.264/HEVC skip
+  cleanly when the hardware encoder is unavailable. GIF is a hard gate: every frame, dimension,
+  loop policy, and cumulative-centisecond delay is verified and never capability-skipped.
 - Determinism tests hash decoded pixel buffers (and PCM when present) across two exports — never
   container bytes.
+- GIF import remains intentionally first-frame-only; these tests cover animated export and must not
+  be interpreted as animated-GIF playback support.
 
 ## 3. Determinism rules (what makes the above possible)
 

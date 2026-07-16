@@ -37,6 +37,14 @@ final class GoldenExportCommandTests: XCTestCase {
             diagnostic
         )
         XCTAssertTrue(
+            output.lines.contains { $0.contains("PASS export-animated-gif-title") },
+            diagnostic
+        )
+        XCTAssertFalse(
+            output.lines.contains { $0.contains("SKIP export-animated-gif-title") },
+            "GIF uses ImageIO and must be a hard pass, not a hardware-encoder skip"
+        )
+        XCTAssertTrue(
             output.lines.contains { $0.contains("PASS export-h264-title") }
                 || output.lines.contains { $0.contains("SKIP export-h264-title") },
             diagnostic

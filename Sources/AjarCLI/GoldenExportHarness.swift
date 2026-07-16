@@ -97,7 +97,7 @@ public enum GoldenExportHarness {
         )
     }
 
-    private enum CaseOutcome {
+    enum CaseOutcome {
         case passed(String)
         case skipped(String)
         case failed(String)
@@ -135,6 +135,8 @@ public enum GoldenExportHarness {
             return try await runMovieCase(manifest: manifest)
         case .stillPNG:
             return try await runStillPNGCase(manifest: manifest)
+        case .animatedGIF:
+            return try await runAnimatedGIFCase(manifest: manifest)
         }
     }
 
@@ -308,7 +310,7 @@ public enum GoldenExportHarness {
 }
 
 /// Optional CI diagnosis hook for `AJAR_GOLDEN_EXPORT_DUMP=<dir>`.
-private enum GoldenExportFrameDumper {
+enum GoldenExportFrameDumper {
     static func dumpIfRequested(
         manifestID: String,
         actual: [ExportDecodedBGRAFrame],
@@ -386,6 +388,7 @@ struct GoldenExportManifest: Codable, Equatable, Sendable {
     enum Mode: String, Codable, Equatable, Sendable {
         case movie
         case stillPNG
+        case animatedGIF
     }
 
     let schemaVersion: Int

@@ -60,6 +60,18 @@ public enum ExportError: Error, Equatable, Sendable, CustomStringConvertible {
     /// Still-frame image encoding failed.
     case stillFrameWriteFailed(String)
 
+    /// Animated-GIF settings cannot be represented safely by ImageIO.
+    case invalidAnimatedGIFSettings(AnimatedGIFExportSettingsValidationError)
+
+    /// An animated-GIF image destination could not be prepared.
+    case animatedGIFDestinationCreationFailed(String)
+
+    /// One rendered frame could not be added to the animated GIF.
+    case animatedGIFFrameWriteFailed(frameIndex: Int64, reason: String)
+
+    /// ImageIO could not finalize the animated GIF.
+    case animatedGIFFinalizeFailed(String)
+
     /// Audio-only export failed before or during container write.
     case audioOnlyExportFailed(String)
 
@@ -152,6 +164,14 @@ public enum ExportError: Error, Equatable, Sendable, CustomStringConvertible {
             "still-frame time \(time) is outside the sequence timeline"
         case .stillFrameWriteFailed(let reason):
             "still-frame write failed: \(reason)"
+        case .invalidAnimatedGIFSettings(let error):
+            "invalid animated GIF settings: \(error)"
+        case .animatedGIFDestinationCreationFailed(let reason):
+            "animated GIF destination creation failed: \(reason)"
+        case .animatedGIFFrameWriteFailed(let frameIndex, let reason):
+            "animated GIF frame \(frameIndex) write failed: \(reason)"
+        case .animatedGIFFinalizeFailed(let reason):
+            "animated GIF finalization failed: \(reason)"
         case .audioOnlyExportFailed(let reason):
             "audio-only export failed: \(reason)"
         case .colorSpaceMismatch(let project, let export):

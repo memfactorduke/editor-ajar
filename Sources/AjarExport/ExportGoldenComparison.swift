@@ -69,6 +69,9 @@ public struct ExportDecodedBGRAFrame: Equatable, Sendable {
 ///   so CI VMs without a free H.264/HEVC session skip rather than fail.
 /// - **Still PNG (bit-exact):** FR-EXP-004 PNG stills are lossless containers of the delivery
 ///   BGRA buffer. After decode with the same delivery color space, every byte must match.
+/// - **Animated GIF (palette-lossy):** ImageIO converts source delivery pixels to an indexed
+///   sRGB palette. The max-delta 12 / MAE 0.5 band leaves OS palette headroom while still catching
+///   wrong frames, frame order, and color-conversion regressions.
 public struct ExportGoldenTolerance: Equatable, Sendable {
     /// Maximum allowed absolute per-channel byte difference at any pixel.
     public let maximumChannelDelta: UInt8
@@ -121,6 +124,13 @@ public struct ExportGoldenTolerance: Equatable, Sendable {
         maximumChannelDelta: 0,
         maximumMeanAbsoluteError: 0,
         requireExactMatch: true
+    )
+
+    /// Indexed-sRGB ImageIO GIF band, pinned from the animated-title fixture (FR-EXP-006).
+    public static let animatedGIFPaletteLossy = ExportGoldenTolerance(
+        maximumChannelDelta: 12,
+        maximumMeanAbsoluteError: 0.5,
+        requireExactMatch: false
     )
 
     /// Default band for a video codec used by the golden-export harness.
