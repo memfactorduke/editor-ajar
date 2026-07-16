@@ -300,6 +300,9 @@ referenced sequence tabs, localized refusals, and whole-compound inspector editi
 | FR-EXP-007 | Export is deterministic and uses original (not proxy) media; verified by golden-frame export tests. | v1 |
 | FR-EXP-008 | Direct upload to YouTube and similar. | future |
 
+The FR-EXP-006 ImageIO engine and all-frame CI golden are complete in #275. The requirement remains
+open until the consumer export dialog and heterogeneous background queue can submit GIF jobs.
+
 ### 6.14 Project & document model — area `PROJ`
 
 | ID | Requirement | Tag |

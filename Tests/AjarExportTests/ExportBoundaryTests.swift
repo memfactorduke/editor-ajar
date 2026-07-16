@@ -91,6 +91,35 @@ final class ExportBoundaryTests: XCTestCase {
         )
     }
 
+    func testFREXP006CodecFreeImageDeliveryTagsOddBGRARaster() throws {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            nil,
+            31,
+            33,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        XCTAssertEqual(status, kCVReturnSuccess)
+        let buffer = try XCTUnwrap(pixelBuffer)
+
+        try ExportColorTagging.attach(to: buffer, colorSpace: .displayP3)
+
+        XCTAssertEqual(
+            CVBufferCopyAttachment(buffer, kCVImageBufferColorPrimariesKey, nil) as? String,
+            kCVImageBufferColorPrimaries_P3_D65 as String
+        )
+        XCTAssertEqual(
+            CVBufferCopyAttachment(buffer, kCVImageBufferTransferFunctionKey, nil) as? String,
+            kCVImageBufferTransferFunction_sRGB as String
+        )
+        XCTAssertNil(
+            CVBufferCopyAttachment(buffer, kCVImageBufferAlphaChannelModeKey, nil),
+            "codec-free image delivery must not pretend to be ProRes 4444"
+        )
+    }
+
     func testNFRSTAB002MapsNativeAVFoundationDiskFullToTheRequestedURL() {
         let destinationURL = URL(fileURLWithPath: "/tmp/user-selected.mov")
         let error = NSError(

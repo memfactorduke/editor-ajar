@@ -45,8 +45,7 @@ enum ExportColorTagging {
 
     static func attach(
         to pixelBuffer: CVPixelBuffer,
-        colorSpace: ExportColorSpace,
-        codec: ExportVideoCodec
+        colorSpace: ExportColorSpace
     ) throws {
         let primaries: CFString
         let transfer: CFString
@@ -86,6 +85,14 @@ enum ExportColorTagging {
             try cgColorSpace(for: colorSpace),
             .shouldPropagate
         )
+    }
+
+    static func attach(
+        to pixelBuffer: CVPixelBuffer,
+        colorSpace: ExportColorSpace,
+        codec: ExportVideoCodec
+    ) throws {
+        try attach(to: pixelBuffer, colorSpace: colorSpace)
         if codec == .proRes4444 {
             CVBufferSetAttachment(
                 pixelBuffer,

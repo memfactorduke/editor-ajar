@@ -30,6 +30,8 @@ final class GoldenFixtureManifestDecodeTests: XCTestCase {
                 do {
                     if root.lastPathComponent == "golden-audio" {
                         _ = try GoldenAudioManifest.load(from: manifestURL)
+                    } else if root.lastPathComponent == "golden-export" {
+                        _ = try GoldenExportManifest.load(from: manifestURL)
                     } else {
                         let manifest = try GoldenFrameManifest.load(from: manifestURL)
                         decodedFrameIDs.insert(manifest.id)
@@ -67,7 +69,8 @@ final class GoldenFixtureManifestDecodeTests: XCTestCase {
         let fixturesRoot = testsDirectory.appendingPathComponent("Fixtures")
         let roots = [
             fixturesRoot.appendingPathComponent("golden"),
-            fixturesRoot.appendingPathComponent("golden-audio")
+            fixturesRoot.appendingPathComponent("golden-audio"),
+            fixturesRoot.appendingPathComponent("golden-export")
         ]
         for root in roots {
             var isDirectory: ObjCBool = false

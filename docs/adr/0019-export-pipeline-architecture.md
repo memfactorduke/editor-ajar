@@ -28,8 +28,8 @@ and a typed lifecycle rather than direct writes to the user's destination.
 ### Module and framework boundary
 
 We add a macOS `AjarExport` module. It depends on `AjarCore`, `AjarRender`, and `AjarAudio` and owns
-AVFoundation, VideoToolbox, Core Video, and export-only Accelerate/vImage delivery conversion.
-`AjarCore` remains pure.
+AVFoundation, VideoToolbox, Core Video, ImageIO, and export-only Accelerate/vImage delivery
+conversion. `AjarCore` remains pure.
 
 `AjarExport` does not depend on `AjarMedia`. Instead, it accepts an injected source-texture provider
 whose contract requires original-media frames. The app or CLI may adapt `AjarMedia` decoding to that
@@ -61,6 +61,24 @@ stay sequential and CPU-deterministic.
 
 The source provider prepares each graph from original media. Proxy selection is outside the export
 module and does not satisfy this contract (FR-EXP-007).
+
+### Animated-image pull (FR-EXP-006)
+
+Animated GIF uses a distinct `AnimatedGIFExportSession` and ImageIO writer rather than pretending
+GIF is an AVFoundation movie codec. The session captures the same immutable project, sequence,
+range, and original-only source provider as movie export. It samples exact rational frame times and
+rounds the total frame count upward. GIF delays are integral centiseconds, so cumulative exact
+duration is rounded at each frame boundary; each stored delay is the difference between adjacent
+rounded boundaries. This bounds total timing drift instead of rounding every frame independently.
+
+ImageIO receives owned sRGB BGRA images. Display-P3 source pixels are converted to sRGB before
+palette generation. GIF has only one-bit transparency, so fully transparent pixels remain
+transparent while partially covered premultiplied pixels are composited against black and written
+opaque. This makes antialiased title edges deterministic across ImageIO versions and avoids an
+implicit, platform-dependent alpha threshold. Loop metadata is omitted for play-once output and a
+loop count of zero means forever. The v1.x engine accepts 1...100 fps and odd raster dimensions;
+the consumer export dialog and heterogeneous background-queue adapter are separate integration
+work.
 
 ### Proxy exclusion audit hook (FR-EXP-007 / FR-MED-004)
 
@@ -120,6 +138,8 @@ live render-path delivery expectation with codec-banded tolerances:
 - **H.264 / HEVC:** lossy band; capability-gated skip via
   `ExportError.isHardwareEncoderUnavailable` (VT statuses -12902…-12906 wrapping pattern).
 - **Still PNG:** bit-exact vs delivery BGRA (FR-EXP-004 path).
+- **Animated GIF:** every decoded frame, raster, loop policy, and centisecond delay is checked;
+  palette quantization uses a bounded BGRA tolerance after both sides are composited over black.
 
 Determinism hashes **decoded** pixel buffers (and PCM when present), never container bytes —
 encoder timestamps may differ across runs. See `ExportGoldenComparison.swift` for the exact bands.
@@ -134,11 +154,12 @@ backpressure. This is the non-real-time mixer; the live audio callback is never 
 
 ### Lifecycle, cancellation, and atomic publication
 
-`ExportSession` is one-shot and exposes `ready → preparing → writing → finishing → completed`, with
-`cancelling`, `cancelled`, and `failed` terminal paths for the future FR-EXP-005 queue. Cancellation
-is checked before and after audio preparation, between frames/sample chunks, after GPU awaits,
-during writer backpressure, and before atomic publication. A later queue owns scheduling, progress,
-pause policy, and session cancellation; this ADR defines the engine lifecycle it drives.
+`ExportSession` and `AnimatedGIFExportSession` are one-shot and expose
+`ready → preparing → writing → finishing → completed`, with `cancelling`, `cancelled`, and `failed`
+terminal paths. Cancellation is checked before and after audio preparation, between frames/sample
+chunks, after GPU awaits, during writer backpressure, around GIF append/finalization, and before
+atomic publication. The queue owns scheduling, progress, pause policy, and session cancellation;
+this ADR defines the engine lifecycle it drives.
 
 The writer always targets a hidden unique temporary file in the destination directory. Only a fully
 finished container is renamed/replaced onto the requested URL. Cancellation or any error cancels the

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "export-animated-gif-title",
+  "requirements": ["FR-EXP-006", "FR-EXP-007", "ADR-0019"],
+  "mode": "animatedGIF",
+  "frameCount": 12,
+  "width": 64,
+  "height": 64,
+  "includeAudio": false
+}

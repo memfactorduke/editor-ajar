@@ -16,7 +16,9 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider,
     ExportGraphSourceAuditing {
     private let project: Project
     private let sequence: Sequence
-    private let videoSettings: ExportVideoSettings
+    private let deliveryResolution: PixelDimensions
+    private let deliveryColorSpace: ExportColorSpace
+    private let deliveryCodec: ExportVideoCodec?
     private let sourceProvider: any ExportRenderSourceProvider
     private let executor: MetalRenderExecutor
     private let device: MTLDevice
@@ -32,45 +34,32 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider,
         return lastRenderedExportSourceTiersStorage
     }
 
-    /// Creates a provider with the default Metal device.
-    public convenience init(
+    init(
         project: Project,
         sequence: Sequence,
-        videoSettings: ExportVideoSettings,
-        sourceProvider: any ExportRenderSourceProvider
-    ) throws {
-        guard let device = MTLCreateSystemDefaultDevice() else {
-            throw ExportError.frameRenderFailed(
-                frameIndex: 0,
-                reason: "Metal device unavailable"
-            )
-        }
-        try self.init(
-            project: project,
-            sequence: sequence,
-            videoSettings: videoSettings,
-            sourceProvider: sourceProvider,
-            device: device
-        )
-    }
-
-    /// Creates a provider on an explicit Metal device for CLI and test runners.
-    public init(
-        project: Project,
-        sequence: Sequence,
-        videoSettings: ExportVideoSettings,
+        resolution: PixelDimensions,
+        colorSpace: ExportColorSpace,
+        codec: ExportVideoCodec?,
         sourceProvider: any ExportRenderSourceProvider,
         device: MTLDevice
     ) throws {
-        guard project.settings.colorSpace == videoSettings.colorSpace.mediaColorSpace else {
+        let validDimensionRange = 1...16_384
+        guard validDimensionRange.contains(resolution.width),
+              validDimensionRange.contains(resolution.height)
+        else {
+            throw ExportError.invalidSettings(.resolutionOutOfRange(resolution))
+        }
+        guard project.settings.colorSpace == colorSpace.mediaColorSpace else {
             throw ExportError.colorSpaceMismatch(
                 project: project.settings.colorSpace,
-                export: videoSettings.colorSpace
+                export: colorSpace
             )
         }
         self.project = project
         self.sequence = sequence
-        self.videoSettings = videoSettings
+        deliveryResolution = resolution
+        deliveryColorSpace = colorSpace
+        deliveryCodec = codec
         self.sourceProvider = sourceProvider
         self.device = device
         do {
@@ -102,6 +91,15 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider,
         at timelineTime: RationalTime,
         into pixelBuffer: CVPixelBuffer
     ) async throws {
+        guard CVPixelBufferGetWidth(pixelBuffer) == deliveryResolution.width,
+              CVPixelBufferGetHeight(pixelBuffer) == deliveryResolution.height
+        else {
+            throw ExportError.frameRenderFailed(
+                frameIndex: 0,
+                reason: "delivery pixel buffer dimensions do not match "
+                    + "\(deliveryResolution.width)x\(deliveryResolution.height)"
+            )
+        }
         // ADR-0019 / FR-EXP-007: export never selects proxy files, even when the project
         // prefers proxy playback and a ready proxy is on disk.
         let graph = try buildRenderGraph(
@@ -117,9 +115,9 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider,
                 reason: "export graph selected proxy media (FR-EXP-007 / ADR-0019)"
             )
         }
-        lock.lock()
-        lastRenderedExportSourceTiersStorage = observedTiers
-        lock.unlock()
+        lock.withLock {
+            lastRenderedExportSourceTiersStorage = observedTiers
+        }
 
         try await sourceProvider.prepare(graph: graph)
         let frame = try executor.render(
@@ -134,11 +132,15 @@ public final class RenderGraphExportFrameProvider: ExportVideoFrameProvider,
         try await frame.waitForCompletion()
 
         let readback = try await readbackPresentedRGBA16F(texture: frame.texture)
-        try ExportColorTagging.attach(
-            to: pixelBuffer,
-            colorSpace: videoSettings.colorSpace,
-            codec: videoSettings.codec
-        )
+        if let deliveryCodec {
+            try ExportColorTagging.attach(
+                to: pixelBuffer,
+                colorSpace: deliveryColorSpace,
+                codec: deliveryCodec
+            )
+        } else {
+            try ExportColorTagging.attach(to: pixelBuffer, colorSpace: deliveryColorSpace)
+        }
         try convertReadback(readback, into: pixelBuffer)
     }
 

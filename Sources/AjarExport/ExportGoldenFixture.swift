@@ -40,6 +40,7 @@ public struct ExportGoldenFixture: Sendable {
         frameRate: FrameRate? = nil,
         colorSpace: ExportColorSpace = .rec709,
         includeAudio: Bool = false,
+        animatedTitle: Bool = false,
         directoryURL: URL? = nil
     ) throws {
         guard MTLCreateSystemDefaultDevice() != nil else {
@@ -65,7 +66,8 @@ public struct ExportGoldenFixture: Sendable {
             mediaID: mediaID,
             frameRate: resolvedFrameRate,
             range: range,
-            includeAudio: includeAudio
+            includeAudio: includeAudio,
+            animatedTitle: animatedTitle
         )
         project = Self.makeProject(
             sequence: sequence,
@@ -148,6 +150,39 @@ public struct ExportGoldenFixture: Sendable {
         return (result, session)
     }
 
+    /// Runs one animated-GIF export through the production ImageIO session boundary.
+    public func exportAnimatedGIF(
+        to destinationURL: URL,
+        loopPolicy: AnimatedGIFLoopPolicy = .forever
+    ) async throws -> (result: ExportResult, session: AnimatedGIFExportSession) {
+        let settings = try AnimatedGIFExportSettings(
+            resolution: project.settings.resolution,
+            frameRate: sequence.timebase,
+            sourceColorSpace: colorSpace,
+            loopPolicy: loopPolicy
+        )
+        let request = try AnimatedGIFExportRequest(
+            project: project,
+            sequenceID: sequence.id,
+            range: range,
+            destinationURL: destinationURL,
+            settings: settings
+        )
+        let frameProvider = try RenderGraphExportFrameProvider(
+            project: project,
+            sequence: sequence,
+            resolution: settings.resolution,
+            colorSpace: settings.sourceColorSpace,
+            sourceProvider: SourceLessExportProvider()
+        )
+        let session = AnimatedGIFExportSession(
+            request: request,
+            frameProvider: frameProvider
+        )
+        let result = try await session.run()
+        return (result, session)
+    }
+
     /// Renders delivery-path BGRA expectations for every export frame (pre-encode reference).
     ///
     /// Uses the 8-bit BGRA delivery packing (same path as H.264 encoder input / still PNG).
@@ -162,19 +197,24 @@ public struct ExportGoldenFixture: Sendable {
         resolution: PixelDimensions? = nil,
         colorSpace: ExportColorSpace? = nil
     ) async throws -> [ExportDecodedBGRAFrame] {
+        try await renderExpectedRawBGRAFrames(
+            resolution: resolution,
+            colorSpace: colorSpace
+        ).map { $0.flattenedOverOpaqueBlack() }
+    }
+
+    /// Renders unflattened BGRA expectations for image formats that preserve transparency.
+    public func renderExpectedRawBGRAFrames(
+        resolution: PixelDimensions? = nil,
+        colorSpace: ExportColorSpace? = nil
+    ) async throws -> [ExportDecodedBGRAFrame] {
         let resolvedResolution = resolution ?? project.settings.resolution
         let resolvedColorSpace = colorSpace ?? self.colorSpace
-        let expectationSettings = try ExportVideoSettings(
-            codec: .h264,
-            resolution: resolvedResolution,
-            frameRate: sequence.timebase,
-            averageBitRate: 1_000_000,
-            colorSpace: resolvedColorSpace
-        )
         let expectationProvider = try RenderGraphExportFrameProvider(
             project: project,
             sequence: sequence,
-            videoSettings: expectationSettings,
+            resolution: resolvedResolution,
+            colorSpace: resolvedColorSpace,
             sourceProvider: SourceLessExportProvider()
         )
         var frames: [ExportDecodedBGRAFrame] = []
@@ -188,8 +228,7 @@ public struct ExportGoldenFixture: Sendable {
                 height: resolvedResolution.height
             )
             try await expectationProvider.renderFrame(at: timelineTime, into: pixelBuffer)
-            let packed = try ExportMovieDecoder.packedBGRA8Frame(from: pixelBuffer)
-            frames.append(packed.flattenedOverOpaqueBlack())
+            frames.append(try ExportMovieDecoder.packedBGRA8Frame(from: pixelBuffer))
         }
         return frames
     }
@@ -228,25 +267,40 @@ public struct ExportGoldenFixture: Sendable {
         )
         return try ExportMovieDecoder.packedBGRA8Frame(from: buffer)
     }
+}
 
-    // MARK: - Construction
+// MARK: - Construction
 
-    private static func makeSequence(
+private extension ExportGoldenFixture {
+    static func makeSequence(
         mediaID: UUID,
         frameRate: FrameRate,
         range: TimeRange,
-        includeAudio: Bool
+        includeAudio: Bool,
+        animatedTitle: Bool
     ) throws -> Sequence {
+        let revealFraction: Animatable<RationalValue>
+        if animatedTitle {
+            revealFraction = try Animatable(
+                base: .one,
+                keyframes: [
+                    Keyframe(time: range.start, value: .zero, interpolation: .linear),
+                    Keyframe(time: try range.end(), value: .one, interpolation: .hold)
+                ]
+            )
+        } else {
+            revealFraction = .constant(.one)
+        }
         let title = TitleSource(boxes: [
             TitleTextBox(
                 id: UUID(),
-                text: "EXP7",
+                text: animatedTitle ? "GIF-EXPORT-12" : "EXP7",
                 origin: CanvasPoint(x: RationalValue(4), y: RationalValue(4)),
                 width: RationalValue(56),
                 height: RationalValue(24),
                 style: TitleTextStyle(fontSize: RationalValue(14))
             )
-        ])
+        ], revealFraction: revealFraction)
         // timelineRange == export range [0, frameCount) so sample times 0…frameCount-1 inclusive
         // (half-open) all hit the static title — last-frame golden failures are not clip-end misses.
         let videoClip = Clip(
@@ -283,7 +337,7 @@ public struct ExportGoldenFixture: Sendable {
         )
     }
 
-    private static func makeProject(
+    static func makeProject(
         sequence: Sequence,
         mediaID: UUID,
         duration: RationalTime,
@@ -313,7 +367,7 @@ public struct ExportGoldenFixture: Sendable {
         )
     }
 
-    private static func makeAudioProvider(
+    static func makeAudioProvider(
         mediaID: UUID,
         duration: RationalTime
     ) throws -> InMemoryAudioSourceProvider {
@@ -329,7 +383,7 @@ public struct ExportGoldenFixture: Sendable {
         return InMemoryAudioSourceProvider(sources: [mediaID: source])
     }
 
-    private static func makeBGRAPixelBuffer(width: Int, height: Int) throws -> CVPixelBuffer {
+    static func makeBGRAPixelBuffer(width: Int, height: Int) throws -> CVPixelBuffer {
         var buffer: CVPixelBuffer?
         let status = CVPixelBufferCreate(
             nil,

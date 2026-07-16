@@ -201,9 +201,11 @@ seek latency (NFR-PERF-005).
   timebase, FR-MED-010), color space, and channel layout; store on the `MediaRef`.
 - **Encode/export (`AjarExport`, EXP):** exact sequential frame pulls execute the render graph;
   the offline mixer supplies audio; VideoToolbox hardware encoders handle H.264/HEVC and
-  AVAssetWriter handles ProRes/muxing. Output is converted and tagged per ADR-0010, then atomically
-  published. Original-media texture providers are injected; proxies do not satisfy the export
-  contract (FR-EXP-007, ADR-0019).
+  AVAssetWriter handles ProRes/muxing. A separate ImageIO session writes animated GIF frames with
+  cumulative centisecond timing and explicit sRGB/binary-alpha conversion. Movie and animated
+  sessions share the render provider, transactional publication, and the same exact-time,
+  original-only graph contract; still/GIF delivery uses its codec-free image initializer. Output is
+  converted and tagged per ADR-0010, then atomically published (FR-EXP-006/007, ADR-0019).
 - **Licensing:** FFmpeg is integrated as a GPL-compatible component consistent with the
   project license (ADR-0004); the boundary keeps it cleanly separable.
 

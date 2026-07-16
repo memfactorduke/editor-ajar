@@ -93,6 +93,29 @@ final class StillFrameExportTests: XCTestCase {
         XCTAssertGreaterThan(size?.intValue ?? 0, 32)
     }
 
+    func testFREXP004StillFramePNGAcceptsOddRaster() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else {
+            throw XCTSkip("Metal device unavailable on this runner")
+        }
+
+        let resolution = PixelDimensions(width: 31, height: 33)
+        let fixture = try StillFixture(resolution: resolution)
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        let request = try fixture.makeRequest(format: .png)
+
+        try await StillFrameExporter.export(
+            request: request,
+            sourceProvider: SourceLessExportProvider()
+        )
+
+        let decoded = try StillFrameExporter.decodeStillBGRA8(
+            from: request.destinationURL,
+            colorSpace: request.colorSpace
+        )
+        XCTAssertEqual(decoded.width, resolution.width)
+        XCTAssertEqual(decoded.height, resolution.height)
+    }
+
     func testFREXP004StillFrameRejectsTimeOutsideTimeline() throws {
         let fixture = try StillFixture()
         let pastEnd = try RationalTime.atFrame(100, frameRate: fixture.frameRate)
@@ -192,7 +215,10 @@ private struct StillFixture {
     let resolution: PixelDimensions
     let time: RationalTime
 
-    init(fileExtension: String = "png") throws {
+    init(
+        fileExtension: String = "png",
+        resolution: PixelDimensions = PixelDimensions(width: 32, height: 32)
+    ) throws {
         directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(
             "ajar-still-\(UUID().uuidString)",
             isDirectory: true
@@ -203,7 +229,7 @@ private struct StillFixture {
         )
         destinationURL = directoryURL.appendingPathComponent("still.\(fileExtension)")
         frameRate = try FrameRate(frames: 30)
-        resolution = PixelDimensions(width: 32, height: 32)
+        self.resolution = resolution
         let duration = try frameRate.duration(ofFrames: 30)
         let range = try TimeRange(start: .zero, duration: duration)
         time = try RationalTime.atFrame(5, frameRate: frameRate)

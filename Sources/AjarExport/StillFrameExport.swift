@@ -85,17 +85,13 @@ public struct StillFrameExportRequest: Sendable {
         }
 
         let resolvedResolution = resolution ?? project.settings.resolution
-        do {
-            // Reuse ExportVideoSettings validation for raster bounds / even dimensions.
-            _ = try ExportVideoSettings(
-                codec: .h264,
-                resolution: resolvedResolution,
-                frameRate: sequence.timebase,
-                averageBitRate: 1_000_000,
-                colorSpace: resolvedColorSpace
+        let validDimensionRange = 2...16_384
+        guard validDimensionRange.contains(resolvedResolution.width),
+              validDimensionRange.contains(resolvedResolution.height)
+        else {
+            throw ExportError.invalidSettings(
+                .resolutionOutOfRange(resolvedResolution)
             )
-        } catch let error as ExportSettingsValidationError {
-            throw ExportError.invalidSettings(error)
         }
 
         self.project = project
@@ -122,25 +118,13 @@ public enum StillFrameExporter {
             throw ExportError.sequenceNotFound(request.sequenceID)
         }
 
-        let videoSettings: ExportVideoSettings
-        do {
-            videoSettings = try ExportVideoSettings(
-                codec: .h264,
-                resolution: request.resolution,
-                frameRate: sequence.timebase,
-                averageBitRate: 1_000_000,
-                colorSpace: request.colorSpace
-            )
-        } catch let error as ExportSettingsValidationError {
-            throw ExportError.invalidSettings(error)
-        }
-
         let frameProvider: RenderGraphExportFrameProvider
         if let device {
             frameProvider = try RenderGraphExportFrameProvider(
                 project: request.project,
                 sequence: sequence,
-                videoSettings: videoSettings,
+                resolution: request.resolution,
+                colorSpace: request.colorSpace,
                 sourceProvider: sourceProvider,
                 device: device
             )
@@ -148,7 +132,8 @@ public enum StillFrameExporter {
             frameProvider = try RenderGraphExportFrameProvider(
                 project: request.project,
                 sequence: sequence,
-                videoSettings: videoSettings,
+                resolution: request.resolution,
+                colorSpace: request.colorSpace,
                 sourceProvider: sourceProvider
             )
         }
@@ -208,19 +193,13 @@ public enum StillFrameExporter {
         else {
             throw ExportError.sequenceNotFound(request.sequenceID)
         }
-        let videoSettings = try ExportVideoSettings(
-            codec: .h264,
-            resolution: request.resolution,
-            frameRate: sequence.timebase,
-            averageBitRate: 1_000_000,
-            colorSpace: request.colorSpace
-        )
         let frameProvider: RenderGraphExportFrameProvider
         if let device {
             frameProvider = try RenderGraphExportFrameProvider(
                 project: request.project,
                 sequence: sequence,
-                videoSettings: videoSettings,
+                resolution: request.resolution,
+                colorSpace: request.colorSpace,
                 sourceProvider: sourceProvider,
                 device: device
             )
@@ -228,7 +207,8 @@ public enum StillFrameExporter {
             frameProvider = try RenderGraphExportFrameProvider(
                 project: request.project,
                 sequence: sequence,
-                videoSettings: videoSettings,
+                resolution: request.resolution,
+                colorSpace: request.colorSpace,
                 sourceProvider: sourceProvider
             )
         }
@@ -268,7 +248,15 @@ enum StillFrameImageWriter {
         colorSpace: ExportColorSpace,
         to url: URL
     ) throws {
-        let cgImage = try makeCGImage(from: pixelBuffer, colorSpace: colorSpace)
+        let cgImage: CGImage
+        do {
+            cgImage = try BGRAImageBridge.makeOwnedCGImage(
+                from: pixelBuffer,
+                colorSpace: colorSpace
+            )
+        } catch {
+            throw ExportError.stillFrameWriteFailed(String(describing: error))
+        }
         let type = utType(for: format)
         guard let destination = CGImageDestinationCreateWithURL(
             url as CFURL,
@@ -344,65 +332,11 @@ enum StillFrameImageWriter {
 
     /// Copies tightly packed BGRA8 from a 32BGRA pixel buffer (row-by-row; ignores padding).
     static func packedBGRA8(from pixelBuffer: CVPixelBuffer) throws -> Data {
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        let status = CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        guard status == kCVReturnSuccess else {
-            throw ExportError.stillFrameWriteFailed("could not lock still pixel buffer")
+        do {
+            return try BGRAImageBridge.packedBGRA8(from: pixelBuffer)
+        } catch {
+            throw ExportError.stillFrameWriteFailed(String(describing: error))
         }
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else {
-            throw ExportError.stillFrameWriteFailed("still pixel buffer has no base address")
-        }
-        let srcRowBytes = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        let dstRowBytes = width * 4
-        var data = Data(count: dstRowBytes * height)
-        data.withUnsafeMutableBytes { raw in
-            guard let dstBase = raw.baseAddress else {
-                return
-            }
-            for row in 0..<height {
-                let src = base.advanced(by: row * srcRowBytes)
-                let dst = dstBase.advanced(by: row * dstRowBytes)
-                memcpy(dst, src, dstRowBytes)
-            }
-        }
-        return data
-    }
-
-    /// Creates a CGImage tagged with the export delivery color space (ADR-0019).
-    private static func makeCGImage(
-        from pixelBuffer: CVPixelBuffer,
-        colorSpace: ExportColorSpace
-    ) throws -> CGImage {
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        let status = CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        guard status == kCVReturnSuccess else {
-            throw ExportError.stillFrameWriteFailed("could not lock still pixel buffer")
-        }
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else {
-            throw ExportError.stillFrameWriteFailed("still pixel buffer has no base address")
-        }
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        // ADR-0019: tag stills with the delivery space, not a hardcoded sRGB label.
-        let cgColorSpace = try ExportColorTagging.cgColorSpace(for: colorSpace)
-        guard let context = CGContext(
-            data: base,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: cgColorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-                | CGBitmapInfo.byteOrder32Little.rawValue
-        ), let image = context.makeImage() else {
-            throw ExportError.stillFrameWriteFailed("could not create CGImage from BGRA buffer")
-        }
-        return image
     }
 
     private static func utType(for format: StillImageFormat) -> String {

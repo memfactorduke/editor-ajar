@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Animated GIF export engine foundation (#275, FR-EXP-006): a dedicated ImageIO session samples the
+  production render graph at exact rational times, accumulates integral-centisecond frame delays,
+  writes play-once or forever loop policy, converts tagged Rec.709/Display-P3 SDR pixels to sRGB,
+  and applies a deterministic binary-alpha policy before palette generation. It shares the
+  original-media audit, cancellation lifecycle, progress, and same-directory atomic publication
+  guarantees of movie export without inventing a fake video codec. Unit coverage includes odd
+  dimensions, fractional frame rates, timing, loops, color, transparency, cancellation, and failure
+  cleanup; the hard CI golden decodes and checks all 12 animated title frames. Consumer export-dialog
+  and heterogeneous background-queue integration remain follow-up work; GIF import is still
+  intentionally first-frame-only.
+
 - Complete compound-clip app workflow (#269, FR-CMP-001…005): localized, VoiceOver-labelled Clip
   menu actions Make (`⌥G`), Open, and Decompose (`⇧⌘G`) reuse the atomic `AjarCore` commands.
   Make expands every selected linked A/V group, rejects locked/read-only/text-editing/no-video and

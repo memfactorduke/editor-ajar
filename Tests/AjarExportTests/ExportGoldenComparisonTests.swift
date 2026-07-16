@@ -20,6 +20,9 @@ final class ExportGoldenComparisonTests: XCTestCase {
         XCTAssertEqual(ExportGoldenTolerance.hevcLossy.maximumChannelDelta, 48)
         XCTAssertTrue(ExportGoldenTolerance.stillPNGBitExact.requireExactMatch)
         XCTAssertEqual(ExportGoldenTolerance.stillPNGBitExact.maximumChannelDelta, 0)
+        XCTAssertEqual(ExportGoldenTolerance.animatedGIFPaletteLossy.maximumChannelDelta, 12)
+        XCTAssertEqual(ExportGoldenTolerance.animatedGIFPaletteLossy.maximumMeanAbsoluteError, 0.5)
+        XCTAssertFalse(ExportGoldenTolerance.animatedGIFPaletteLossy.requireExactMatch)
 
         XCTAssertEqual(ExportGoldenTolerance.forVideoCodec(.proRes422), .proRes422NearLossless)
         XCTAssertEqual(ExportGoldenTolerance.forVideoCodec(.h264), .h264Lossy)
