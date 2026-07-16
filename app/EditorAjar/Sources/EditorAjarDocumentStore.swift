@@ -71,6 +71,13 @@ private struct EditorAjarCanonicalGeneration: Codable, Equatable, Sendable {
     let media: ContentHash
 }
 
+/// Hashes of every authoritative recovery file consumed when reconstructing a project.
+private struct EditorAjarRecoveryGeneration: Codable, Equatable, Sendable {
+    let snapshot: ContentHash
+    let manifest: ContentHash
+    let journal: ContentHash
+}
+
 /// Recovery-side proof for the exact before/after generations of one in-place Save.
 ///
 /// The random identifier makes each marker unique even when a no-op Save produces identical
@@ -82,12 +89,18 @@ private struct EditorAjarSaveTransactionMarker: Codable, Equatable, Sendable {
     let generationID: UUID
     let previous: EditorAjarCanonicalGeneration
     let saved: EditorAjarCanonicalGeneration
+    let recovery: EditorAjarRecoveryGeneration
 
-    init(previous: EditorAjarCanonicalGeneration, saved: EditorAjarCanonicalGeneration) {
+    init(
+        previous: EditorAjarCanonicalGeneration,
+        saved: EditorAjarCanonicalGeneration,
+        recovery: EditorAjarRecoveryGeneration
+    ) {
         schemaVersion = Self.currentSchemaVersion
         generationID = UUID()
         self.previous = previous
         self.saved = saved
+        self.recovery = recovery
     }
 }
 
@@ -1342,7 +1355,7 @@ private extension EditorAjarDocumentStore {
     /// Recovers the complete staged checkpoint when a crash leaves the top-level canonical pair
     /// split across two Save generations. Recovery must carry a marker for this exact Save, its
     /// snapshot must match the marker's complete saved generation, and the canonical pair must be
-    /// one of the states reachable in the recovery -> project -> media publication order.
+    /// the exact project-published/media-pending state in the recovery -> project -> media order.
     func recoverInterruptedSave(at packageURL: URL) throws -> EditorAjarOpenedDocument? {
         let recoverySnapshotURL = packageURL.appendingPathComponent(
             "recovery/snapshot.json"
@@ -1363,6 +1376,9 @@ private extension EditorAjarDocumentStore {
         guard marker.schemaVersion == EditorAjarSaveTransactionMarker.currentSchemaVersion else {
             return nil
         }
+        guard try recoveryGeneration(in: packageURL) == marker.recovery else {
+            return nil
+        }
         let snapshot = try AjarAutosaveStore.readSnapshot(
             from: packageURL,
             fileManager: fileManager
@@ -1376,13 +1392,9 @@ private extension EditorAjarDocumentStore {
         }
 
         let canonical = try canonicalGeneration(in: packageURL)
-        let projectPublished = EditorAjarCanonicalGeneration(
-            project: marker.saved.project,
-            media: marker.previous.media
-        )
-        guard canonical == marker.previous
-            || canonical == projectPublished
-            || canonical == marker.saved
+        guard marker.previous.media != marker.saved.media,
+              canonical.project == marker.saved.project,
+              canonical.media == marker.previous.media
         else {
             return nil
         }
@@ -1536,7 +1548,8 @@ private extension EditorAjarDocumentStore {
     func stageSaveTransactionMarker(sourceURL: URL, stagingURL: URL) throws {
         let marker = EditorAjarSaveTransactionMarker(
             previous: try canonicalGeneration(in: sourceURL),
-            saved: try canonicalGeneration(in: stagingURL)
+            saved: try canonicalGeneration(in: stagingURL),
+            recovery: try recoveryGeneration(in: stagingURL)
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -1561,6 +1574,21 @@ private extension EditorAjarDocumentStore {
         EditorAjarCanonicalGeneration(
             project: ContentHash.sha256(data: projectJSON),
             media: ContentHash.sha256(data: mediaJSON)
+        )
+    }
+
+    func recoveryGeneration(in packageURL: URL) throws -> EditorAjarRecoveryGeneration {
+        let recoveryURL = packageURL.appendingPathComponent("recovery", isDirectory: true)
+        return try EditorAjarRecoveryGeneration(
+            snapshot: ContentHash.sha256(
+                data: Data(contentsOf: recoveryURL.appendingPathComponent("snapshot.json"))
+            ),
+            manifest: ContentHash.sha256(
+                data: Data(contentsOf: recoveryURL.appendingPathComponent("manifest.json"))
+            ),
+            journal: ContentHash.sha256(
+                data: Data(contentsOf: recoveryURL.appendingPathComponent("edit-journal.jsonl"))
+            )
         )
     }
 
@@ -1610,8 +1638,8 @@ private extension EditorAjarDocumentStore {
             }
 
             didBeginPublishing = true
-            // Recovery moves first. If the process stops before the canonical files finish, open
-            // can recover the project being saved instead of allowing an older checkpoint to win.
+            // Recovery and its generation marker move first. If the process stops after project
+            // publication but before media, open can prove and recover that exact transition.
             try publishStagedDirectory(
                 named: "recovery",
                 from: stagingURL,

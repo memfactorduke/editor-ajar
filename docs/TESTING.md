@@ -178,9 +178,11 @@ explicit Save, then proves reopen selects the newly saved canonical project. An 
 after staged contents publish verifies that canonical files and the prior recovery checkpoint roll
 back together. A symlink fixture proves Save never follows a package recovery entry to write
 outside the document. A split-generation canonical pair proves Open falls back to the matching
-complete recovery envelope and keeps the document dirty until it is saved again (FR-PROJ-002,
-NFR-STAB-002). The repair Save must retain only decodable version snapshots and must not archive the
-split pair.
+complete recovery envelope only when a unique Save marker binds the exact canonical transition and
+every authoritative recovery file. Corrupting that marker's manifest or restoring a stale marker
+while only the unchanged media file matches must fail closed. A valid recovery stays dirty until it
+is saved again (FR-PROJ-002, NFR-STAB-002). The repair Save must retain only decodable version
+snapshots and must not archive the split pair.
 
 ### Hardware-only extension
 

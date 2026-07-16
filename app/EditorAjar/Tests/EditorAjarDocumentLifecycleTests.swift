@@ -732,6 +732,18 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             )
         )
 
+        let driftedRecoveryPackageURL = fixture.packageURL(named: "DriftedRecovery.ajar")
+        try FileManager.default.copyItem(
+            at: interruptedPackageURL,
+            to: driftedRecoveryPackageURL
+        )
+        try Data("tampered manifest".utf8).write(
+            to: driftedRecoveryPackageURL.appendingPathComponent("recovery/manifest.json")
+        )
+        let driftedReopen = fixture.makeModel()
+        XCTAssertThrowsError(try driftedReopen.openProject(at: driftedRecoveryPackageURL))
+        XCTAssertNil(driftedReopen.project)
+
         let reopened = fixture.makeModel()
         try reopened.openProject(at: interruptedPackageURL)
 

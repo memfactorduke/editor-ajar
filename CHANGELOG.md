@@ -60,9 +60,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   history, and recovery publish as one rollback-covered transaction; cache data and unknown
   recovery sidecars remain intact if present. Recovery publishes first for crash safety, and Save
   refuses a symlinked recovery directory instead of following it outside the package. If a crash
-  splits the canonical JSON pair across Save generations, Open uses the matching complete recovery
-  checkpoint and requires a fresh Save; the broken pair is never promoted into version history
-  (#271, FR-PROJ-002, NFR-STAB-002).
+  splits the canonical JSON pair across Save generations, Open requires a unique transaction marker
+  whose hashes bind every recovery file and the exact old-to-new canonical transition before using
+  the complete checkpoint. A merely unchanged `media.json` can no longer make stale recovery look
+  current. Recovered documents require a fresh Save, and the broken pair is never promoted into
+  version history (#271, FR-PROJ-002, NFR-STAB-002).
 
 ## [1.0.0] - 2026-07-11
 
