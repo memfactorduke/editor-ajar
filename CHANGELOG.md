@@ -52,6 +52,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notarization path, deterministic bundle verifier, tag-aware GitHub release workflow, and an
   operator guide covering credentials, verification, publishing, and rollback.
 
+### Fixed
+
+- Explicit in-place Save now rebases package-local crash recovery to the same project and command
+  count as the newly published canonical files, with an empty journal. This prevents an older
+  `recovery/snapshot.json` from overriding newer saved work on reopen. Canonical files, version
+  history, and recovery publish as one rollback-covered transaction; cache data and unknown
+  recovery sidecars remain intact if present. Recovery publishes first for crash safety, and Save
+  refuses a symlinked recovery directory instead of following it outside the package. If a crash
+  splits the canonical JSON pair across Save generations, Open uses the matching complete recovery
+  checkpoint and requires a fresh Save; the broken pair is never promoted into version history
+  (#271, FR-PROJ-002, NFR-STAB-002).
+
 ## [1.0.0] - 2026-07-11
 
 ### Added

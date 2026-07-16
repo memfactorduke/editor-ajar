@@ -579,7 +579,7 @@ final class EditorAjarAppModel: ObservableObject {
         )
         documentSecurityScope = scope
         recentProjectURLs = recentProjectsStore.record(standardizedURL)
-        loadMessage = opened.recoveryIssues.isEmpty
+        loadMessage = opened.recoveryIssues.isEmpty && !opened.recoveredFromInterruptedSave
             ? AppString.localized(
                 "status.projectOpened",
                 "Opened \(standardizedURL.deletingPathExtension().lastPathComponent)"

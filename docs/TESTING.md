@@ -173,6 +173,15 @@ is deterministic, CI-runnable, and diagnostic on failure. Implementation:
    decode with `ExportMovieDecoder`, and assert frame count + non-trivial pixel content.
 10. **Undo-count sanity** on the pre-save edit history (non-empty multi-step journey).
 
+Document lifecycle coverage additionally seeds an older package-local recovery snapshot before an
+explicit Save, then proves reopen selects the newly saved canonical project. An injected failure
+after staged contents publish verifies that canonical files and the prior recovery checkpoint roll
+back together. A symlink fixture proves Save never follows a package recovery entry to write
+outside the document. A split-generation canonical pair proves Open falls back to the matching
+complete recovery envelope and keeps the document dirty until it is saved again (FR-PROJ-002,
+NFR-STAB-002). The repair Save must retain only decodable version snapshots and must not archive the
+split pair.
+
 ### Hardware-only extension
 
 `testReleaseAcceptanceH264ExportHardwareOnly` repeats a compact edit path and enqueues an H.264

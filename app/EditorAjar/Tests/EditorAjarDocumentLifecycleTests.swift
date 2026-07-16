@@ -459,7 +459,7 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertFalse(siblings.contains { $0.lastPathComponent.hasSuffix(".staging") })
     }
 
-    func testFRPROJ002SavePublishesCanonicalFilesWithoutReplacingCachesOrRecovery() throws {
+    func testFRPROJ002SaveRebasesRecoveryWithoutReplacingCachesOrRecoverySidecars() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
         let packageURL = fixture.packageURL(named: "InPlace.ajar")
@@ -484,6 +484,333 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
 
         XCTAssertEqual(try Data(contentsOf: cacheURL), Data("cache".utf8))
         XCTAssertEqual(try Data(contentsOf: recoveryURL), Data("recovery".utf8))
+        let recovery = try AjarAutosaveStore.recoverProject(from: packageURL)
+        XCTAssertEqual(recovery.project, model.project)
+        XCTAssertEqual(recovery.appliedJournalEntryCount, 0)
+    }
+
+    func testFRPROJ002NFRSTAB002ExplicitSaveRebasesStalePackageRecovery() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "StaleRecovery.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        XCTAssertTrue(model.addSequence())
+        let staleRecoveryProject = try XCTUnwrap(model.project)
+        try AjarAutosaveStore.writeSnapshot(
+            staleRecoveryProject,
+            appliedCommandCount: 1,
+            openMode: .editable,
+            to: packageURL
+        )
+        try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
+
+        XCTAssertTrue(model.addSequence())
+        let explicitlySavedProject = try XCTUnwrap(model.project)
+        XCTAssertNotEqual(explicitlySavedProject, staleRecoveryProject)
+        try model.saveProject()
+
+        let reopened = fixture.makeModel()
+        try reopened.openProject(at: packageURL)
+
+        XCTAssertEqual(reopened.project, explicitlySavedProject)
+        XCTAssertFalse(reopened.isDocumentDirty)
+        let recovery = try AjarAutosaveStore.recoverProject(from: packageURL)
+        XCTAssertEqual(recovery.project, explicitlySavedProject)
+        XCTAssertEqual(recovery.appliedJournalEntryCount, 0)
+    }
+
+    func testNFRSTAB002FailedSaveAfterPublicationRollsBackCanonicalAndRecovery() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "RecoveryRollback.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        XCTAssertTrue(model.addSequence())
+        let previousProject = try XCTUnwrap(model.project)
+        try AjarAutosaveStore.writeSnapshot(
+            previousProject,
+            appliedCommandCount: 1,
+            openMode: .editable,
+            to: packageURL
+        )
+        try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
+        let previousProjectBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("project.json")
+        )
+        let previousMediaBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("media.json")
+        )
+        let previousRecoveryBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")
+        )
+
+        XCTAssertTrue(model.addSequence())
+        let attemptedProject = try XCTUnwrap(model.project)
+        let store = EditorAjarDocumentStore(
+            saveDidPublishContents: {
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: packageURL.path,
+                    reason: "injected post-publication failure"
+                )
+            }
+        )
+
+        XCTAssertThrowsError(
+            try store.save(
+                project: attemptedProject,
+                openMode: .editable,
+                appliedCommandCount: 2,
+                to: packageURL
+            )
+        )
+
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("project.json")),
+            previousProjectBytes
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("media.json")),
+            previousMediaBytes
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")),
+            previousRecoveryBytes
+        )
+        XCTAssertEqual(
+            try AjarAutosaveStore.recoverProject(from: packageURL).project,
+            previousProject
+        )
+        XCTAssertTrue(try fixture.stagingPackages().isEmpty)
+    }
+
+    func testNFRSTAB002RecoveryPublishesBeforeCanonicalAndBoundaryFailureRollsBack() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "RecoveryFirst.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        XCTAssertTrue(model.addSequence())
+        let previousProject = try XCTUnwrap(model.project)
+        try AjarAutosaveStore.writeSnapshot(
+            previousProject,
+            appliedCommandCount: 1,
+            openMode: .editable,
+            to: packageURL
+        )
+        try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
+        let previousProjectBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("project.json")
+        )
+
+        XCTAssertTrue(model.addSequence())
+        let attemptedProject = try XCTUnwrap(model.project)
+        var projectObservedAtBoundary: Project?
+        var canonicalBytesObservedAtBoundary: Data?
+        let store = EditorAjarDocumentStore(
+            saveDidPublishRecovery: {
+                projectObservedAtBoundary = try AjarAutosaveStore.recoverProject(
+                    from: packageURL
+                ).project
+                canonicalBytesObservedAtBoundary = try Data(
+                    contentsOf: packageURL.appendingPathComponent("project.json")
+                )
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: packageURL.path,
+                    reason: "injected recovery-first boundary failure"
+                )
+            }
+        )
+
+        XCTAssertThrowsError(
+            try store.save(
+                project: attemptedProject,
+                openMode: .editable,
+                appliedCommandCount: 2,
+                to: packageURL
+            )
+        )
+
+        XCTAssertEqual(projectObservedAtBoundary, attemptedProject)
+        XCTAssertEqual(canonicalBytesObservedAtBoundary, previousProjectBytes)
+        XCTAssertEqual(
+            try AjarAutosaveStore.recoverProject(from: packageURL).project,
+            previousProject
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("project.json")),
+            previousProjectBytes
+        )
+        XCTAssertTrue(try fixture.stagingPackages().isEmpty)
+    }
+
+    func testNFRSTAB002OpenRecoversCanonicalPairSplitByInterruptedSave() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "SplitCanonicalPair.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+        XCTAssertTrue(model.addSequence())
+        try model.saveProject()
+        let store = EditorAjarDocumentStore()
+        let validVersionsBeforeInterruption = try store.versionSnapshotURLs(in: packageURL)
+        XCTAssertEqual(validVersionsBeforeInterruption.count, 1)
+        let previousMediaBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("media.json")
+        )
+
+        let duration = try RationalTime(value: 1, timescale: 1)
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: fixture.rootURL.appendingPathComponent("interrupted.mov"),
+            contentHash: ContentHash.sha256(data: Data("interrupted media".utf8)),
+            metadata: MediaMetadata(
+                codecID: "prores422",
+                pixelDimensions: PixelDimensions(width: 1_920, height: 1_080),
+                frameRate: try FrameRate(frames: 30),
+                duration: duration,
+                colorSpace: .rec709,
+                audioChannelLayout: nil,
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        XCTAssertTrue(model.applyEditForTesting(.addMediaReferences([media])))
+        let sequence = try XCTUnwrap(model.project?.sequences.first)
+        let track = try XCTUnwrap(sequence.videoTracks.first)
+        let range = try TimeRange(start: .zero, duration: duration)
+        XCTAssertTrue(
+            model.applyEditForTesting(
+                .addClip(
+                    sequenceID: sequence.id,
+                    trackID: track.id,
+                    clip: Clip(
+                        id: UUID(),
+                        source: .media(id: media.id),
+                        sourceRange: range,
+                        timelineRange: range,
+                        kind: .video,
+                        name: "Interrupted Save Clip"
+                    )
+                )
+            )
+        )
+        let interruptedSaveProject = try XCTUnwrap(model.project)
+
+        // Simulate process loss after recovery and project.json publish, but before media.json.
+        try AjarAutosaveStore.writeSnapshot(
+            interruptedSaveProject,
+            appliedCommandCount: 2,
+            openMode: .editable,
+            to: packageURL
+        )
+        try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
+        try previousMediaBytes.write(
+            to: packageURL.appendingPathComponent("media.json")
+        )
+        XCTAssertThrowsError(
+            try AjarProjectCodec.decode(
+                projectJSON: Data(
+                    contentsOf: packageURL.appendingPathComponent("project.json")
+                ),
+                mediaJSON: Data(
+                    contentsOf: packageURL.appendingPathComponent("media.json")
+                )
+            )
+        )
+
+        let reopened = fixture.makeModel()
+        try reopened.openProject(at: packageURL)
+
+        XCTAssertEqual(reopened.project, interruptedSaveProject)
+        XCTAssertTrue(reopened.isDocumentDirty)
+        XCTAssertEqual(reopened.loadMessage, "Opened project at the last recoverable edit")
+
+        try reopened.saveProject()
+        XCTAssertFalse(reopened.isDocumentDirty)
+        let versionsAfterRepair = try store.versionSnapshotURLs(in: packageURL)
+        XCTAssertEqual(versionsAfterRepair, validVersionsBeforeInterruption)
+        for versionURL in versionsAfterRepair {
+            XCTAssertNoThrow(
+                try AjarProjectCodec.decode(
+                    projectJSON: Data(
+                        contentsOf: versionURL.appendingPathComponent("project.json")
+                    ),
+                    mediaJSON: Data(
+                        contentsOf: versionURL.appendingPathComponent("media.json")
+                    )
+                )
+            )
+        }
+        let cleanReopen = fixture.makeModel()
+        try cleanReopen.openProject(at: packageURL)
+        XCTAssertEqual(cleanReopen.project, interruptedSaveProject)
+        XCTAssertFalse(cleanReopen.isDocumentDirty)
+    }
+
+    func testNFRSTAB002OpenRejectsUnrelatedRecoveryForCorruptCanonicalPair() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "UnrelatedRecovery.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        XCTAssertTrue(model.addSequence())
+        try AjarAutosaveStore.writeSnapshot(
+            try XCTUnwrap(model.project),
+            appliedCommandCount: 1,
+            openMode: .editable,
+            to: packageURL
+        )
+        try Data("unrelated corrupt project".utf8).write(
+            to: packageURL.appendingPathComponent("project.json")
+        )
+        try Data("unrelated corrupt media".utf8).write(
+            to: packageURL.appendingPathComponent("media.json")
+        )
+
+        let reopened = fixture.makeModel()
+        XCTAssertThrowsError(try reopened.openProject(at: packageURL))
+        XCTAssertNil(reopened.project)
+    }
+
+    func testNFRSTAB002SaveRejectsSymlinkedRecoveryWithoutWritingOutsidePackage() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "SymlinkedRecovery.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        let externalRecoveryURL = fixture.rootURL.appendingPathComponent(
+            "ExternalRecovery",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: externalRecoveryURL,
+            withIntermediateDirectories: true
+        )
+        let externalSnapshotURL = externalRecoveryURL.appendingPathComponent("snapshot.json")
+        let externalBytes = Data("must remain unchanged".utf8)
+        try externalBytes.write(to: externalSnapshotURL)
+        try FileManager.default.createSymbolicLink(
+            at: packageURL.appendingPathComponent("recovery"),
+            withDestinationURL: externalRecoveryURL
+        )
+
+        XCTAssertTrue(model.addSequence())
+        XCTAssertThrowsError(try model.saveProject())
+
+        XCTAssertEqual(try Data(contentsOf: externalSnapshotURL), externalBytes)
+        XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
 
     func testFRPROJ002SaveAsCopiesCanonicalHistoryButNotRegeneratableCachesOrRecovery() throws {

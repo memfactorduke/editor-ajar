@@ -11,10 +11,17 @@ struct EditorAjarOpenedDocument {
     let loadResult: AjarProjectLoadResult
 
     /// Last explicitly saved state used for exact dirty-state comparisons.
-    let savedBaseline: Project
+    ///
+    /// `nil` means canonical publication was interrupted and the recovered project must be saved
+    /// again before it can be treated as a complete explicit Save.
+    let savedBaseline: Project?
 
     /// Best-effort recovery warnings, if a journal stopped at its last good command.
     let recoveryIssues: [AjarRecoveryIssue]
+
+    /// The canonical pair could not be decoded, but a matching recovery checkpoint preserved the
+    /// interrupted Save. The app surfaces recovery status and keeps the document dirty.
+    let recoveredFromInterruptedSave: Bool
 }
 
 /// Typed app-layer failures for `.ajar` document operations.
@@ -927,6 +934,8 @@ struct EditorAjarDocumentStore {
 
     private let fileManager: FileManager
     private let packageMediaSaveAs: EditorAjarPackageMediaSaveAs
+    private let saveDidPublishRecovery: () throws -> Void
+    private let saveDidPublishContents: () throws -> Void
     private let saveAsSynchronizer: any EditorAjarSaveAsSynchronizing
     private let saveAsWillPublish: () throws -> Void
     private let saveAsDidRevalidatePublication: () throws -> Void
@@ -942,6 +951,8 @@ struct EditorAjarDocumentStore {
         mediaHasher: any MediaFileHashing = SHA256MediaFileHasher(),
         mediaFileCopier: any EditorAjarPackageMediaFileCopying =
             EditorAjarDefaultPackageMediaFileCopier(),
+        saveDidPublishRecovery: @escaping () throws -> Void = {},
+        saveDidPublishContents: @escaping () throws -> Void = {},
         saveAsSynchronizer: any EditorAjarSaveAsSynchronizing =
             EditorAjarDefaultSaveAsSynchronizer(),
         saveAsWillPublish: @escaping () throws -> Void = {},
@@ -955,6 +966,8 @@ struct EditorAjarDocumentStore {
         }
     ) {
         self.fileManager = fileManager
+        self.saveDidPublishRecovery = saveDidPublishRecovery
+        self.saveDidPublishContents = saveDidPublishContents
         self.saveAsSynchronizer = saveAsSynchronizer
         self.saveAsWillPublish = saveAsWillPublish
         self.saveAsDidRevalidatePublication = saveAsDidRevalidatePublication
@@ -978,7 +991,15 @@ struct EditorAjarDocumentStore {
     /// opens and the existing recovery behavior (FR-PROJ-005 / ADR-0018).
     func open(at packageURL: URL) throws -> EditorAjarOpenedDocument {
         try validateExistingPackage(packageURL)
-        let baseline = try loadCanonicalPackage(at: packageURL)
+        let baseline: AjarProjectLoadResult
+        do {
+            baseline = try loadCanonicalPackage(at: packageURL)
+        } catch {
+            if let recovered = try? recoverInterruptedSave(at: packageURL) {
+                return recovered
+            }
+            throw error
+        }
 
         // Canonical package bytes are the authority for open mode. A stale recovery envelope
         // written by an older build must never turn a newer-minor canonical document back into an
@@ -988,7 +1009,8 @@ struct EditorAjarDocumentStore {
             return EditorAjarOpenedDocument(
                 loadResult: baseline,
                 savedBaseline: baseline.project,
-                recoveryIssues: []
+                recoveryIssues: [],
+                recoveredFromInterruptedSave: false
             )
         }
 
@@ -1000,7 +1022,8 @@ struct EditorAjarDocumentStore {
             return EditorAjarOpenedDocument(
                 loadResult: recovery.loadResult,
                 savedBaseline: baseline.project,
-                recoveryIssues: recovery.issues
+                recoveryIssues: recovery.issues,
+                recoveredFromInterruptedSave: false
             )
         } catch let error as AjarProjectCodecError {
             throw EditorAjarDocumentStoreError.codec(error)
@@ -1015,10 +1038,13 @@ struct EditorAjarDocumentStore {
     }
 
     /// Saves over the current package, snapshotting the previous saved bytes first.
+    ///
+    /// Package-local recovery is rebased to the same project before publication so an older
+    /// checkpoint cannot override the explicit Save on the next open.
     func save(
         project: Project,
         openMode: AjarProjectOpenMode,
-        appliedCommandCount _: Int,
+        appliedCommandCount: Int,
         to packageURL: URL
     ) throws {
         try validatePackageExtension(packageURL)
@@ -1030,6 +1056,13 @@ struct EditorAjarDocumentStore {
                 openMode: openMode,
                 sourceURL: packageURL,
                 to: stagingURL
+            )
+            try stageSavedRecovery(
+                project: project,
+                openMode: openMode,
+                appliedCommandCount: appliedCommandCount,
+                sourceURL: packageURL,
+                stagingURL: stagingURL
             )
             try publishCanonicalContents(
                 stagingURL: stagingURL,
@@ -1277,6 +1310,45 @@ private extension EditorAjarDocumentStore {
         }
     }
 
+    /// Recovers the complete staged checkpoint when a crash leaves the top-level canonical pair
+    /// split across two Save generations. At least one canonical file must byte-match the recovery
+    /// envelope, tying this fallback to the recovery-first publication transaction.
+    func recoverInterruptedSave(at packageURL: URL) throws -> EditorAjarOpenedDocument? {
+        let recoverySnapshotURL = packageURL.appendingPathComponent(
+            "recovery/snapshot.json"
+        )
+        guard fileManager.isReadableFile(atPath: recoverySnapshotURL.path) else {
+            return nil
+        }
+
+        let snapshot = try AjarAutosaveStore.readSnapshot(
+            from: packageURL,
+            fileManager: fileManager
+        )
+        let canonicalProject = try? Data(
+            contentsOf: packageURL.appendingPathComponent("project.json")
+        )
+        let canonicalMedia = try? Data(
+            contentsOf: packageURL.appendingPathComponent("media.json")
+        )
+        guard canonicalProject == snapshot.package.projectJSON
+            || canonicalMedia == snapshot.package.mediaJSON
+        else {
+            return nil
+        }
+
+        let recovery = try AjarAutosaveStore.recoverProject(
+            from: packageURL,
+            fileManager: fileManager
+        )
+        return EditorAjarOpenedDocument(
+            loadResult: recovery.loadResult,
+            savedBaseline: nil,
+            recoveryIssues: recovery.issues,
+            recoveredFromInterruptedSave: true
+        )
+    }
+
     func stagePackageContents(
         project: Project,
         persistenceMediaReferences: [MediaRef]? = nil,
@@ -1356,6 +1428,70 @@ private extension EditorAjarDocumentStore {
         try fileManager.copyItem(at: sourceFileURL, to: targetURL.appendingPathComponent(name))
     }
 
+    /// Stages a recovery checkpoint aligned with the canonical bytes and clears its edit journal.
+    func stageSavedRecovery(
+        project: Project,
+        openMode: AjarProjectOpenMode,
+        appliedCommandCount: Int,
+        sourceURL: URL,
+        stagingURL: URL
+    ) throws {
+        let sourceRecoveryURL = sourceURL.appendingPathComponent(
+            "recovery",
+            isDirectory: true
+        )
+        let stagedRecoveryURL = stagingURL.appendingPathComponent(
+            "recovery",
+            isDirectory: true
+        )
+        if fileManager.fileExists(atPath: sourceRecoveryURL.path) {
+            try validateRecoveryDirectoryIsNotSymbolicLink(sourceRecoveryURL)
+            try fileManager.createDirectory(
+                at: stagedRecoveryURL,
+                withIntermediateDirectories: false
+            )
+            let authoritativeNames = Set([
+                "manifest.json",
+                "snapshot.json",
+                "edit-journal.jsonl",
+            ])
+            for sidecarURL in try fileManager.contentsOfDirectory(
+                at: sourceRecoveryURL,
+                includingPropertiesForKeys: nil
+            ) where !authoritativeNames.contains(sidecarURL.lastPathComponent) {
+                try fileManager.copyItem(
+                    at: sidecarURL,
+                    to: stagedRecoveryURL.appendingPathComponent(sidecarURL.lastPathComponent)
+                )
+            }
+        }
+        try AjarAutosaveStore.writeSnapshot(
+            project,
+            appliedCommandCount: appliedCommandCount,
+            openMode: openMode,
+            to: stagingURL,
+            fileManager: fileManager
+        )
+        try AjarAutosaveStore.replaceJournal(
+            with: [],
+            in: stagingURL,
+            fileManager: fileManager
+        )
+    }
+
+    /// Rejects a recovery symlink before staging so autosave writers never follow it outside the
+    /// project package. The staging recovery directory is always created independently.
+    func validateRecoveryDirectoryIsNotSymbolicLink(_ recoveryURL: URL) throws {
+        var information = stat()
+        let result = recoveryURL.path.withCString { lstat($0, &information) }
+        guard result == 0, information.st_mode & S_IFMT == S_IFDIR else {
+            throw EditorAjarDocumentStoreError.fileOperation(
+                path: recoveryURL.path,
+                reason: "The recovery entry is a symlink or is not a directory."
+            )
+        }
+    }
+
     func publishCanonicalContents(stagingURL: URL, destinationURL: URL) throws {
         let rollbackURL = makeStagingURL(for: destinationURL)
         try fileManager.createDirectory(at: rollbackURL, withIntermediateDirectories: true)
@@ -1377,11 +1513,30 @@ private extension EditorAjarDocumentStore {
                     to: rollbackURL.appendingPathComponent("versions", isDirectory: true)
                 )
             }
+            let destinationRecoveryURL = destinationURL.appendingPathComponent(
+                "recovery",
+                isDirectory: true
+            )
+            if fileManager.fileExists(atPath: destinationRecoveryURL.path) {
+                try fileManager.copyItem(
+                    at: destinationRecoveryURL,
+                    to: rollbackURL.appendingPathComponent("recovery", isDirectory: true)
+                )
+            }
 
             didBeginPublishing = true
+            // Recovery moves first. If the process stops before the canonical files finish, open
+            // can recover the project being saved instead of allowing an older checkpoint to win.
+            try publishStagedDirectory(
+                named: "recovery",
+                from: stagingURL,
+                to: destinationURL
+            )
+            try saveDidPublishRecovery()
             try publishStagedFile(named: "project.json", from: stagingURL, to: destinationURL)
             try publishStagedFile(named: "media.json", from: stagingURL, to: destinationURL)
             try publishStagedVersions(from: stagingURL, to: destinationURL)
+            try saveDidPublishContents()
             try? fileManager.removeItem(at: stagingURL)
             try? fileManager.removeItem(at: rollbackURL)
         } catch {
@@ -1402,23 +1557,34 @@ private extension EditorAjarDocumentStore {
     }
 
     func publishStagedVersions(from stagingURL: URL, to destinationURL: URL) throws {
-        let stagedVersionsURL = stagingURL.appendingPathComponent("versions", isDirectory: true)
-        guard fileManager.fileExists(atPath: stagedVersionsURL.path) else {
+        try publishStagedDirectory(named: "versions", from: stagingURL, to: destinationURL)
+    }
+
+    func publishStagedDirectory(
+        named name: String,
+        from stagingURL: URL,
+        to destinationURL: URL
+    ) throws {
+        let stagedDirectoryURL = stagingURL.appendingPathComponent(name, isDirectory: true)
+        guard fileManager.fileExists(atPath: stagedDirectoryURL.path) else {
             return
         }
-        let destinationVersionsURL = destinationURL.appendingPathComponent(
-            "versions",
+        let destinationDirectoryURL = destinationURL.appendingPathComponent(
+            name,
             isDirectory: true
         )
-        if fileManager.fileExists(atPath: destinationVersionsURL.path) {
-            _ = try fileManager.replaceItemAt(destinationVersionsURL, withItemAt: stagedVersionsURL)
+        if fileManager.fileExists(atPath: destinationDirectoryURL.path) {
+            _ = try fileManager.replaceItemAt(
+                destinationDirectoryURL,
+                withItemAt: stagedDirectoryURL
+            )
         } else {
-            try fileManager.moveItem(at: stagedVersionsURL, to: destinationVersionsURL)
+            try fileManager.moveItem(at: stagedDirectoryURL, to: destinationDirectoryURL)
         }
     }
 
     func restoreCanonicalContents(from rollbackURL: URL, to destinationURL: URL) throws {
-        for name in ["project.json", "media.json", "versions"] {
+        for name in ["project.json", "media.json", "versions", "recovery"] {
             let destination = destinationURL.appendingPathComponent(name)
             let backup = rollbackURL.appendingPathComponent(name)
             if fileManager.fileExists(atPath: destination.path) {
@@ -1438,6 +1604,16 @@ private extension EditorAjarDocumentStore {
         else {
             return
         }
+        let projectData = try Data(contentsOf: projectURL)
+        let mediaData = try Data(contentsOf: mediaURL)
+        guard (try? AjarProjectCodec.decode(
+            projectJSON: projectData,
+            mediaJSON: mediaData
+        )) != nil else {
+            // A crash can leave the two canonical files from different Save generations. Recovery
+            // repairs that state; version history must never archive or retain the invalid pair.
+            return
+        }
 
         let versionsURL = packageURL.appendingPathComponent("versions", isDirectory: true)
         try fileManager.createDirectory(at: versionsURL, withIntermediateDirectories: true)
@@ -1449,12 +1625,12 @@ private extension EditorAjarDocumentStore {
         do {
             try fileManager.createDirectory(at: snapshotURL, withIntermediateDirectories: true)
             try AjarAtomicFileWriter.write(
-                Data(contentsOf: projectURL),
+                projectData,
                 to: snapshotURL.appendingPathComponent("project.json"),
                 fileManager: fileManager
             )
             try AjarAtomicFileWriter.write(
-                Data(contentsOf: mediaURL),
+                mediaData,
                 to: snapshotURL.appendingPathComponent("media.json"),
                 fileManager: fileManager
             )
