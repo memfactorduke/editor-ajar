@@ -62,6 +62,10 @@ final class EditorAjarLocalizationTests: XCTestCase {
                 "The selection crosses an audio ducking boundary. Include every affected ducking track or change the ducking setup first.",
             "compound.decompose.refusal.attributes":
                 "Remove compound-level transforms, effects, keyframes, time remapping, reverse or freeze settings, audio adjustments, and nested track keyframes before decomposing.",
+            "timeline.placement.refusal.linkedPartial":
+                "This edit would move or replace only part of a linked audio/video group. Target both linked tracks, move to a cut, or detach the clips first. The project was not changed.",
+            "status.audioPlaybackReady": "Audio playback ready",
+            "status.audioPlaybackUnavailable": "Audio playback unavailable: %@",
             "sequence.close.refusal.referenced":
                 "This sequence is used by a compound clip. Decompose every instance before removing it.",
             "transport.play": "Play",

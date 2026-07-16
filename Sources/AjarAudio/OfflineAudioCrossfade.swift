@@ -45,6 +45,52 @@ extension OfflineAudioMixer {
         return try add(clipEnd, trailing.duration)
     }
 
+    /// Whether `clip` contributes any samples to `range`, including its outgoing crossfade tail.
+    ///
+    /// Source planning, the main mix pass, and sidechain detection all use this predicate before
+    /// asking a provider for media. Keeping the half-open overlap rule here prevents an off-range
+    /// clip from triggering decode work (or a decode failure) on one path but not the others.
+    static func clipIntersectsMixRange(_ clip: Clip, range: TimeRange) throws -> Bool {
+        let rangeEnd = try end(of: range)
+        let clipEnd = try mixWindowEnd(of: clip)
+        return clip.timelineRange.start < rangeEnd && range.start < clipEnd
+    }
+
+    /// Source-time hull needed to mix the part of `clip` that intersects `renderRange`.
+    ///
+    /// Constant-rate, reverse, freeze, and monotonic FR-SPD-002 mappings are bounded by their
+    /// exact endpoint source times. Pitch-corrected WSOLA is the intentional exception: its output
+    /// depends on stretching the complete effective source stream, so it retains that full window.
+    /// The result is clamped to `effectiveSourceWindow` so reverse tails can never request negative
+    /// media time and every caller follows the same ADR-0015 crossfade handle rule.
+    static func requiredSourceWindow(
+        for clip: Clip,
+        renderRange: TimeRange
+    ) throws -> TimeRange? {
+        guard try clipIntersectsMixRange(clip, range: renderRange) else {
+            return nil
+        }
+        if clip.audioMix.retimeMode == .pitchCorrected {
+            guard !clip.freezeFrame, clip.timeRemap == nil else {
+                throw AudioRenderError.pitchCorrectedRetimeUnsupported(clipID: clip.id)
+            }
+            return try effectiveSourceWindow(for: clip)
+        }
+
+        let intersectionStart = max(clip.timelineRange.start, renderRange.start)
+        let intersectionEnd = min(try mixWindowEnd(of: clip), try end(of: renderRange))
+        let firstSourceTime = try clipSourceTime(clip, at: intersectionStart)
+        let lastSourceTime = try clipSourceTime(clip, at: intersectionEnd)
+        let effective = try effectiveSourceWindow(for: clip)
+        let effectiveEnd = try end(of: effective)
+        let sourceStart = max(min(firstSourceTime, lastSourceTime), effective.start)
+        let sourceEnd = min(max(firstSourceTime, lastSourceTime), effectiveEnd)
+        return try makeTimeRange(
+            start: sourceStart,
+            duration: max(sourceEnd, sourceStart).subtracting(sourceStart)
+        )
+    }
+
     /// ADR-0015 §3 effective audio read window: `sourceRange` extended by the source-time image
     /// of the trailing crossfade tail under the clip's constant-rate mapping. Forward clips
     /// extend past `sourceRange.end`, `reverse` clips extend before `sourceRange.start`
@@ -82,11 +128,12 @@ extension OfflineAudioMixer {
     /// `cos(πx/2)`/`sin(πx/2)` for `equalPower` and `1 - x`/`x` for `linear`.
     static func crossfadeGainMultiplier(clip: Clip, renderTime: RationalTime) throws -> Double {
         let clipEnd = try end(of: clip.timelineRange)
-        if let trailing = clip.audioMix.trailingCrossfade, trailing.duration > .zero,
-            renderTime >= clipEnd {
-            let elapsed = try subtract(renderTime, clipEnd)
-            let fraction = try crossfadeFraction(elapsed: elapsed, duration: trailing.duration)
-            return trailing.curve.value(at: 1 - fraction)
+        if let trailing = clip.audioMix.trailingCrossfade, renderTime >= clipEnd {
+            if trailing.duration > .zero {
+                let elapsed = try subtract(renderTime, clipEnd)
+                let fraction = try crossfadeFraction(elapsed: elapsed, duration: trailing.duration)
+                return trailing.curve.value(at: 1 - fraction)
+            }
         }
         if let leading = clip.audioMix.leadingCrossfade, leading.duration > .zero {
             let localTime = try subtract(renderTime, clip.timelineRange.start)
@@ -137,9 +184,10 @@ extension OfflineAudioMixer {
             sourceTime: sourceTime,
             allowsTailBeforeSourceStart: isTailFrame
         )
-        if isTailFrame, let declaredEnd = state.declaredTailSourceEndFrame,
-            framePosition >= declaredEnd {
-            return nil
+        if let declaredEnd = state.declaredTailSourceEndFrame {
+            if isTailFrame && framePosition >= declaredEnd {
+                return nil
+            }
         }
         return framePosition
     }
@@ -207,13 +255,14 @@ extension OfflineAudioMixer {
         guard try end(of: context.range) > clipEnd, context.range.start < tailEnd else {
             return
         }
-        guard let tailWindow = try tailSourceWindow(for: clip, trailing: trailing) else {
+        guard let neededWindow = try requiredSourceWindow(for: clip, renderRange: context.range)
+        else {
             return
         }
 
         let declaredEnd = media.metadata.duration
-        let neededStart = max(tailWindow.start, .zero)
-        let neededEnd = min(tailWindow.end, declaredEnd)
+        let neededStart = max(neededWindow.start, .zero)
+        let neededEnd = min(try end(of: neededWindow), declaredEnd)
         guard neededStart < neededEnd else {
             return
         }

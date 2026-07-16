@@ -155,7 +155,8 @@ final class OfflineAudioCrossfadeMixerTests: XCTestCase {
             return CompoundAudioSourceKey(
                 sequenceID: sequenceID,
                 sourceRange: window.range,
-                format: crossfadeRenderFormat
+                format: crossfadeRenderFormat,
+                renderPath: []
             )
         }
 

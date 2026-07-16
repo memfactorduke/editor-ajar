@@ -583,6 +583,18 @@ public actor MediaImportPipeline {
             return failedResult(for: fileURL, error: error)
         }
 
+        let playableContentHash: ContentHash?
+        if transcodeResult != nil {
+            switch contentHashResult(for: playableURL) {
+            case .success(let hash):
+                playableContentHash = hash
+            case .failure(let error):
+                return failedResult(for: fileURL, error: error)
+            }
+        } else {
+            playableContentHash = nil
+        }
+
         let reference = MediaRef(
             id: makeMediaID(),
             sourceURL: playableURL,
@@ -592,7 +604,8 @@ public actor MediaImportPipeline {
             transcodeProvenance: transcodeResult.map { _ in
                 MediaTranscodeProvenance(
                     originalSourceURL: fileURL,
-                    originalContentHash: contentHash
+                    originalContentHash: contentHash,
+                    playableContentHash: playableContentHash
                 )
             }
         )

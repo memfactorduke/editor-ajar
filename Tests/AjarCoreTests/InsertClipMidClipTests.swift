@@ -111,4 +111,41 @@ final class InsertClipMidClipTests: XCTestCase {
         XCTAssertEqual(right.timelineRange.start, try editTime(9))
         XCTAssertEqual(right.timelineRange.duration, try editTime(5))
     }
+
+    /// A track-local implicit split cannot preserve a linked A/V topology. The higher-level app
+    /// prepares this as an explicit blade/relink/insert transaction; direct reducer callers get a
+    /// typed refusal and no partial undo entry instead of a silently detached right half.
+    func testFRTL009TrackLocalInsertRefusesImplicitLinkedSplitAtomically() throws {
+        let fixture = try makeLinkedEditFixture(seed: 291)
+        let inserted = try makeEditClip(
+            id: try editUUID(291_001),
+            mediaID: fixture.mediaID,
+            startFrame: 5,
+            durationFrames: 4
+        )
+        let cut = try editTime(5)
+        let command = EditCommand.transaction([
+            .renameSequence(sequenceID: fixture.sequenceID, name: "Would be partial"),
+            .insertClip(
+                sequenceID: fixture.sequenceID,
+                trackID: fixture.videoTrackID,
+                clip: inserted
+            )
+        ])
+        var history = EditHistory(project: fixture.project)
+
+        XCTAssertThrowsError(try history.apply(command)) { error in
+            XCTAssertEqual(
+                error as? EditReducerError,
+                .invalidEdit(
+                    .insertWouldSplitLinkedClip(
+                        clipID: fixture.videoClipID,
+                        linkGroupID: fixture.linkGroupID,
+                        atTime: cut
+                    ))
+            )
+        }
+        XCTAssertEqual(history.currentProject, fixture.project)
+        XCTAssertEqual(history.undoCount, 0)
+    }
 }

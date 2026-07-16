@@ -10,6 +10,7 @@ struct OfflinePeakFrameContext {
 
 extension OfflineAudioMixer {
     static func duckingMultipliersByTrackID(
+        renderPath: OfflineAudioRenderPath = [],
         rules: [AudioDuckingRule],
         tracks: [Track],
         context: OfflineMixContext,
@@ -24,27 +25,48 @@ extension OfflineAudioMixer {
         var multipliersByTargetID: [UUID: [Double]] = [:]
         var peaksByTriggerID: [UUID: [Double]] = [:]
 
-        for rule in rules {
+        for (ruleIndex, rule) in rules.enumerated() {
+            try context.cancellationCheck()
             guard let triggerTrack = tracksByID[rule.triggerTrackID] else {
                 continue
             }
 
             let triggerPeaks = try cachedPeakLevels(
                 for: triggerTrack,
+                renderPath: renderPath,
                 context: context,
                 environment: &environment,
                 peaksByTriggerID: &peaksByTriggerID,
                 nestingDepth: nestingDepth
             )
+            let continuationKey = OfflineDuckingContinuationKey(
+                renderPath: renderPath,
+                ruleIndex: ruleIndex
+            )
+            let previous = environment.continuation.duckingStates[continuationKey]
+            var envelope =
+                previous?.envelope(at: context.range.start) ?? OfflineDuckingEnvelopeState()
+            var envelopeHistory = OfflineDuckingEnvelopeHistory()
             let ruleMultipliers = try duckingEnvelopeMultipliers(
                 levels: triggerPeaks,
                 rule: rule,
-                format: context.format
+                format: context.format,
+                envelope: &envelope,
+                history: &envelopeHistory,
+                cancellationCheck: context.cancellationCheck
             )
+            environment.continuation.duckingStates[continuationKey] =
+                try OfflineDuckingContinuationState(
+                    range: context.range,
+                    sampleRate: context.format.sampleRate,
+                    history: envelopeHistory
+                )
             for targetTrackID in Set(rule.targetTrackIDs) where tracksByID[targetTrackID] != nil {
-                var targetMultipliers = multipliersByTargetID[targetTrackID]
+                var targetMultipliers =
+                    multipliersByTargetID[targetTrackID]
                     ?? Array(repeating: 1, count: context.frameCount)
                 for outputFrame in targetMultipliers.indices {
+                    try context.checkCancellation(atFrame: outputFrame)
                     targetMultipliers[outputFrame] *= ruleMultipliers[outputFrame]
                 }
                 multipliersByTargetID[targetTrackID] = targetMultipliers
@@ -54,8 +76,10 @@ extension OfflineAudioMixer {
         return multipliersByTargetID
     }
 
+    // swiftlint:disable:next function_parameter_count
     static func cachedPeakLevels(
         for triggerTrack: Track,
+        renderPath: OfflineAudioRenderPath,
         context: OfflineMixContext,
         environment: inout OfflineAudioRenderEnvironment,
         peaksByTriggerID: inout [UUID: [Double]],
@@ -67,6 +91,7 @@ extension OfflineAudioMixer {
 
         let peaks = try trackPeakLevels(
             triggerTrack,
+            renderPath: renderPath,
             context: context,
             environment: &environment,
             nestingDepth: nestingDepth
@@ -77,21 +102,38 @@ extension OfflineAudioMixer {
 
     static func trackPeakLevels(
         _ track: Track,
+        renderPath: OfflineAudioRenderPath,
         context: OfflineMixContext,
         environment: inout OfflineAudioRenderEnvironment,
         nestingDepth: Int
     ) throws -> [Double] {
         var levels = Array(repeating: Double(0), count: context.frameCount)
-        for item in track.items {
+        for (itemIndex, item) in track.items.enumerated() {
+            try context.cancellationCheck()
             guard case .clip(let clip) = item, clip.kind == .audio else {
+                continue
+            }
+            guard
+                let sourceWindow = try requiredSourceWindow(
+                    for: clip,
+                    renderRange: context.range
+                )
+            else {
                 continue
             }
 
             let source = try sourceBuffer(
                 for: clip,
+                requiredSourceWindow: sourceWindow,
                 context: context,
                 environment: &environment,
-                nestingDepth: nestingDepth
+                nestingDepth: nestingDepth,
+                renderPath: clipOccurrenceRenderPath(
+                    renderPath,
+                    trackID: track.id,
+                    itemIndex: itemIndex,
+                    clipID: clip.id
+                )
             )
             try peakClipLevels(
                 state: retimedClipMixState(
@@ -123,6 +165,7 @@ extension OfflineAudioMixer {
         }
 
         for outputFrame in intersection {
+            try context.checkCancellation(atFrame: outputFrame)
             try peakClipFrame(
                 state: state,
                 levels: &levels,
@@ -147,20 +190,23 @@ extension OfflineAudioMixer {
         // mixer plays (ADR-0015 §2/§7): reverse tails read backward past `sourceRange.start`,
         // and a tail past the declared media end is silence — so ducking can never fire on
         // audio the mix does not play (FR-AUD-002, FR-AUD-004).
-        guard let sourceFrame = try resolvedSourceFramePosition(
-            state: state,
-            renderTime: renderTime
-        ) else {
+        guard
+            let sourceFrame = try resolvedSourceFramePosition(
+                state: state,
+                renderTime: renderTime
+            )
+        else {
             return
         }
         // Crossfade tails stay in the trigger envelope at their ADR-0015 §4 ramped level.
         let crossfadeGain = try crossfadeGainMultiplier(clip: clip, renderTime: renderTime)
-        let gain = gainMultiplier(
-            clip: clip,
-            track: state.track,
-            renderTime: renderTime,
-            localTime: localTime
-        ) * crossfadeGain
+        let gain =
+            gainMultiplier(
+                clip: clip,
+                track: state.track,
+                renderTime: renderTime,
+                localTime: localTime
+            ) * crossfadeGain
         let pan = panValue(clip: clip, track: state.track, renderTime: renderTime)
 
         var peak = Double(0)
@@ -171,7 +217,8 @@ extension OfflineAudioMixer {
                 outputChannel: outputChannel,
                 outputChannelCount: frame.mix.format.channelCount
             )
-            let panned = Double(abs(sourceSample))
+            let panned =
+                Double(abs(sourceSample))
                 * panMultiplier(pan: pan, channel: outputChannel, format: frame.mix.format)
             peak = max(peak, panned * gain)
         }
@@ -183,7 +230,29 @@ extension OfflineAudioMixer {
     static func duckingEnvelopeMultipliers(
         levels: [Double],
         rule: AudioDuckingRule,
-        format: AudioRenderFormat
+        format: AudioRenderFormat,
+        cancellationCheck: AudioRenderCancellationCheck = {}
+    ) throws -> [Double] {
+        var envelope = OfflineDuckingEnvelopeState()
+        var history = OfflineDuckingEnvelopeHistory()
+        return try duckingEnvelopeMultipliers(
+            levels: levels,
+            rule: rule,
+            format: format,
+            envelope: &envelope,
+            history: &history,
+            cancellationCheck: cancellationCheck
+        )
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    static func duckingEnvelopeMultipliers(
+        levels: [Double],
+        rule: AudioDuckingRule,
+        format: AudioRenderFormat,
+        envelope: inout OfflineDuckingEnvelopeState,
+        history: inout OfflineDuckingEnvelopeHistory,
+        cancellationCheck: AudioRenderCancellationCheck
     ) throws -> [Double] {
         let reductionGain = clamped01(rule.reductionGain.doubleValue)
         let threshold = max(0, rule.threshold.doubleValue)
@@ -193,10 +262,14 @@ extension OfflineAudioMixer {
 
         var multipliers: [Double] = []
         multipliers.reserveCapacity(levels.count)
-        var duckingAmount = Double(0)
-        var holdRemaining = 0
+        var duckingAmount = envelope.amount
+        var holdRemaining = envelope.holdRemaining
+        history.append(envelope)
 
-        for level in levels {
+        for (frame, level) in levels.enumerated() {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             if level > threshold {
                 holdRemaining = holdFrames
                 duckingAmount = rampUp(duckingAmount, attackFrames: attackFrames)
@@ -207,8 +280,16 @@ extension OfflineAudioMixer {
             }
 
             multipliers.append(1 - ((1 - reductionGain) * duckingAmount))
+            history.append(
+                OfflineDuckingEnvelopeState(
+                    amount: duckingAmount,
+                    holdRemaining: holdRemaining
+                )
+            )
         }
 
+        envelope.amount = duckingAmount
+        envelope.holdRemaining = holdRemaining
         return multipliers
     }
 

@@ -48,6 +48,24 @@ enum EditorAjarMediaConsolidationError: Error, Equatable {
     case projectUpdateFailed
 }
 
+/// Typed reason a placement was refused before it could damage an existing linked A/V group.
+enum EditorAjarTimelinePlacementSafetyError: Error, Equatable {
+    /// A command would affect one member of a link group without affecting every other member.
+    case linkGroupNotFullyTargeted(linkGroupID: UUID)
+
+    /// A linked partner is on a locked track and therefore cannot participate in the edit.
+    case linkedPartnerTrackLocked(linkGroupID: UUID, trackID: UUID)
+
+    /// Exact range arithmetic failed while proving that every linked member would be affected.
+    case linkGroupRangeCouldNotBeVerified(linkGroupID: UUID)
+
+    /// The safety preflight itself could not complete, so mutation remains disallowed.
+    case placementCouldNotBeVerified
+
+    /// A linked insert crosses members that cannot be bladed together at one cut.
+    case linkedMembersDoNotShareInsertCut(linkGroupID: UUID?)
+}
+
 /// User-facing context for localized document errors.
 enum EditorAjarDocumentOperation {
     case create
@@ -55,6 +73,11 @@ enum EditorAjarDocumentOperation {
     case save
     case revert
     case sample
+}
+
+private struct MediaPreviewTaskKey: Hashable {
+    let mediaID: UUID
+    let kind: MediaPreviewKind
 }
 
 @MainActor
@@ -131,6 +154,12 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Latest off-RT mixer meter snapshot (nil until first measure).
     @Published private(set) var mixerMeterSnapshot: MixerMeterSnapshot?
+
+    /// Most recent typed live-playback preparation/render/output failure.
+    @Published private(set) var audioPlaybackError: EditorAjarAudioPipelineError?
+
+    /// Most recent typed offline-meter preparation/render failure.
+    @Published private(set) var mixerMeterError: EditorAjarAudioPipelineError?
 
     /// Background export queue bridge (FR-EXP-005). Observe this for job list updates.
     let exportQueueController: EditorAjarExportQueueController
@@ -270,10 +299,11 @@ final class EditorAjarAppModel: ObservableObject {
     private var mediaResolutionTask: Task<Void, Never>?
     private var mediaImportTask: Task<Void, Never>?
     var mediaConsolidationTask: Task<Void, Never>?
+    private var renderTask: Task<Void, Never>?
     var projectSessionGeneration: UInt64 = 0
     private var mediaHoverTask: Task<Void, Never>?
     private var mediaHoverMediaID: UUID?
-    private var mediaPreviewTasks: [UUID: Task<Void, Never>] = [:]
+    private var mediaPreviewTasks: [MediaPreviewTaskKey: Task<Void, Never>] = [:]
     private var mediaPreviewCache: MediaPreviewCache?
     private let automaticallyResolvesMediaReferences: Bool
     private var autosaveCommandCount = 0
@@ -287,10 +317,18 @@ final class EditorAjarAppModel: ObservableObject {
     private var mayDiscardChangesForNextReplacement = false
     /// Active continuous fader/pan/fade gesture for one-undo coalescing.
     private var audioMixGestureKey: AudioMixGestureKey?
+    /// Status text displaced by a live-audio failure, restored only when that exact error clears.
+    private var loadMessageBeforeAudioPlaybackError: String?
+    private var audioPlaybackStatusMessage: String?
     /// Offline meter publisher (never touches the RT audio callback).
-    private lazy var mixerMeterPublisher = EditorAjarMixerMeterPublisher { [weak self] snapshot in
-        self?.mixerMeterSnapshot = snapshot
-    }
+    private lazy var mixerMeterPublisher = EditorAjarMixerMeterPublisher(
+        publish: { [weak self] snapshot in
+            self?.mixerMeterSnapshot = snapshot
+        },
+        publishError: { [weak self] error in
+            self?.mixerMeterError = error
+        }
+    )
     /// Accumulates display-link delta for ~30 Hz live meter refresh while playing (FR-AUD-003).
     private var mixerMeterPlaybackRefreshAccumulator: Double = 0
     private static let mixerMeterPlaybackRefreshIntervalSeconds: Double = 1.0 / 30.0
@@ -451,6 +489,23 @@ final class EditorAjarAppModel: ObservableObject {
 
         displayLinkDriver = EditorAjarDisplayLinkDriver { [weak self] deltaSeconds in
             self?.displayLinkTick(deltaSeconds)
+        }
+        if let liveAudioCoordinator = self.audioCoordinator as? EditorAjarLiveAudioCoordinator {
+            liveAudioCoordinator.setEventHandler { [weak self] event in
+                guard let self else {
+                    return
+                }
+                switch event {
+                case .planPublished:
+                    self.clearAudioPlaybackErrorAfterPlanPublished()
+                    if self.isPlaying, self.playbackRate == 1 {
+                        self.displayLinkDriver?.start()
+                    }
+                case .failed(let error):
+                    self.pauseForAudioPlaybackFailure()
+                    self.surfaceAudioPlaybackError(error)
+                }
+            }
         }
         // Only checkpoint editable sessions — read-only must never rewrite package bytes.
         if let project, projectOpenMode.allowsEditing {
@@ -893,6 +948,16 @@ final class EditorAjarAppModel: ObservableObject {
         mediaImportTask?.cancel()
         mediaConsolidationTask?.cancel()
         proxyObserveTask?.cancel()
+        renderTask?.cancel()
+        mediaHoverTask?.cancel()
+        for task in mediaPreviewTasks.values {
+            task.cancel()
+        }
+        if let mediaPreviewCache {
+            Task {
+                await mediaPreviewCache.cancelAll()
+            }
+        }
     }
 
     private func startMediaResolution(for loadResult: AjarProjectLoadResult) {
@@ -1809,12 +1874,18 @@ final class EditorAjarAppModel: ObservableObject {
     func shuttleForward() {
         playbackController?.shuttleForward()
         isPlaying = true
+        let waitsForPreparedAudio = playbackRate == 1
+            && audioCoordinator is EditorAjarLiveAudioCoordinator
+            && project != nil
+            && activeSequence != nil
         if playbackRate == 1 {
             startAudioPlayback()
         } else {
             stopAudioPlayback()
         }
-        displayLinkDriver?.start()
+        if !waitsForPreparedAudio {
+            displayLinkDriver?.start()
+        }
     }
 
     func toggleLoopRange() {
@@ -3011,32 +3082,59 @@ final class EditorAjarAppModel: ObservableObject {
     @discardableResult
     func bladeClip(reference: TimelineClipReference, atFrame frame: Int64) -> Bool {
         guard let sequence = activeSequence,
-              let time = try? RationalTime.atFrame(frame, frameRate: sequence.timebase)
+              let time = try? RationalTime.atFrame(frame, frameRate: sequence.timebase),
+              let selectedClip = Self.clip(reference, in: sequence)
         else { return false }
-        // A linked A/V clip blades together with its partners in one undo step (#240): the same
-        // timeline cut is applied to every partner that spans it, atomically.
-        var commands: [EditCommand] = [
-            .bladeClip(
-                sequenceID: sequence.id,
-                trackID: reference.trackID,
-                clipID: reference.clipID,
-                atTime: time,
-                rightClipID: UUID()
-            )
-        ]
-        for partner in linkedPartnerReferences(of: reference) {
-            guard let clip = Self.clip(partner, in: sequence),
-                  let end = try? clip.timelineRange.end(),
-                  clip.timelineRange.start < time, time < end
+
+        let references: [TimelineClipReference]
+        if selectedClip.linkGroupID == nil {
+            references = [reference]
+        } else {
+            references = [reference] + linkedPartnerReferences(of: reference)
+            // A malformed one-member group or a group without both essences cannot be split
+            // safely. Refuse instead of leaving a dangling link identity.
+            let linkedClips = references.compactMap { Self.clip($0, in: sequence) }
+            guard linkedClips.count == references.count,
+                  linkedClips.contains(where: { $0.kind == .video }),
+                  linkedClips.contains(where: { $0.kind == .audio })
+            else { return false }
+        }
+
+        // Every group member must span this exact cut and live on an unlocked track. Skipping one
+        // partner would leave the left group out of sync. The right halves receive one fresh group
+        // in the same atomic transaction, so left and right can be edited independently afterward.
+        var commands: [EditCommand] = []
+        var rightReferences: [ClipReference] = []
+        for candidate in references {
+            guard let track = (sequence.videoTracks + sequence.audioTracks).first(where: {
+                $0.id == candidate.trackID
+            }),
+                !track.locked,
+                let clip = Self.clip(candidate, in: sequence),
+                let end = try? clip.timelineRange.end(),
+                clip.timelineRange.start < time,
+                time < end
             else {
-                continue
+                return false
             }
+            let rightClipID = UUID()
             commands.append(.bladeClip(
                 sequenceID: sequence.id,
-                trackID: partner.trackID,
-                clipID: partner.clipID,
+                trackID: candidate.trackID,
+                clipID: candidate.clipID,
                 atTime: time,
-                rightClipID: UUID()
+                rightClipID: rightClipID
+            ))
+            rightReferences.append(ClipReference(
+                trackID: candidate.trackID,
+                clipID: rightClipID
+            ))
+        }
+        if selectedClip.linkGroupID != nil {
+            commands.append(.linkClips(
+                sequenceID: sequence.id,
+                linkGroupID: UUID(),
+                clips: rightReferences
             ))
         }
         return applyEditGroup(commands)
@@ -3053,14 +3151,47 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func applyDestructiveSelectionEdit(ripple: Bool) -> Bool {
-        guard timelineHasFocus, !isTextEditingActive, let sequence = activeSequence else { return false }
-        let references = timelineState.selectedClips.sorted { $0.clipID.uuidString < $1.clipID.uuidString }
-        guard !references.isEmpty else { return false }
-        // One undo step per gesture (#240): a multi-clip delete/lift is one atomic transaction.
+        guard timelineHasFocus, !isTextEditingActive, let sequence = activeSequence else {
+            return false
+        }
+        var referenceSet = timelineState.selectedClips
+        guard !referenceSet.isEmpty else { return false }
+        for reference in timelineState.selectedClips {
+            referenceSet.formUnion(linkedPartnerReferences(of: reference))
+        }
+        let references = referenceSet.sorted {
+            if $0.trackID == $1.trackID {
+                return $0.clipID.uuidString < $1.clipID.uuidString
+            }
+            return $0.trackID.uuidString < $1.trackID.uuidString
+        }
+        let tracks = sequence.videoTracks + sequence.audioTracks
+        guard references.allSatisfy({ reference in
+            tracks.contains(where: { track in
+                track.id == reference.trackID
+                    && !track.locked
+                    && track.items.contains(where: { item in
+                        guard case .clip(let clip) = item else { return false }
+                        return clip.id == reference.clipID
+                    })
+            })
+        }) else {
+            return false
+        }
+        // Linked partners are expanded, deduplicated, and applied in one transaction. The core
+        // validates the final group topology before this gesture can enter undo history.
         let commands = references.map { reference -> EditCommand in
             ripple
-                ? .rippleDeleteClip(sequenceID: sequence.id, trackID: reference.trackID, clipID: reference.clipID)
-                : .liftClip(sequenceID: sequence.id, trackID: reference.trackID, clipID: reference.clipID)
+                ? .rippleDeleteClip(
+                    sequenceID: sequence.id,
+                    trackID: reference.trackID,
+                    clipID: reference.clipID
+                )
+                : .liftClip(
+                    sequenceID: sequence.id,
+                    trackID: reference.trackID,
+                    clipID: reference.clipID
+                )
         }
         let changed = applyEditGroup(commands)
         if changed {
@@ -3089,8 +3220,38 @@ final class EditorAjarAppModel: ObservableObject {
 
     @discardableResult
     func cutTimelineClips() -> Bool {
-        guard copyTimelineClips() else { return false }
-        return liftSelection()
+        guard timelineHasFocus, !isTextEditingActive, let sequence = activeSequence else {
+            return false
+        }
+        var references = timelineState.selectedClips
+        guard !references.isEmpty else { return false }
+        for reference in timelineState.selectedClips {
+            references.formUnion(linkedPartnerReferences(of: reference))
+        }
+        let copied = references.compactMap { reference -> TimelineClipboardItem? in
+            guard let track = (sequence.videoTracks + sequence.audioTracks).first(where: {
+                $0.id == reference.trackID
+            }),
+                let clip = track.items.compactMap({ item -> Clip? in
+                    guard case .clip(let clip) = item else { return nil }
+                    return clip.id == reference.clipID ? clip : nil
+                }).first
+            else {
+                return nil
+            }
+            return TimelineClipboardItem(sourceTrackID: track.id, clip: clip)
+        }
+        guard copied.count == references.count else { return false }
+
+        // Cut and its clipboard must describe the same expanded linked set. Restore the prior
+        // clipboard when a locked partner or core refusal prevents the destructive half.
+        let previousClipboard = timelineClipboard
+        timelineClipboard = copied
+        guard applyDestructiveSelectionEdit(ripple: false) else {
+            timelineClipboard = previousClipboard
+            return false
+        }
+        return true
     }
 
     @discardableResult
@@ -3115,6 +3276,8 @@ final class EditorAjarAppModel: ObservableObject {
             remappedLinkGroups[group] = UUID()
         }
         // One undo step per gesture (#240): pasting every clipboard item is one atomic transaction.
+        // Refuse the entire paste if any item lacks a compatible unlocked destination. Skipping a
+        // linked member would otherwise create a dangling fresh link group in the pasted result.
         var commands: [EditCommand] = []
         for item in timelineClipboard {
             let tracks = item.clip.kind == .video ? sequence.videoTracks : sequence.audioTracks
@@ -3123,7 +3286,7 @@ final class EditorAjarAppModel: ObservableObject {
                   let offset = try? item.clip.timelineRange.start.subtracting(earliest),
                   let start = try? target.adding(offset),
                   let range = try? TimeRange(start: start, duration: item.clip.timelineRange.duration)
-            else { continue }
+            else { return false }
             let clip = item.clip.copyingForTimeline(
                 id: UUID(),
                 timelineRange: range,
@@ -3150,13 +3313,18 @@ final class EditorAjarAppModel: ObservableObject {
     @discardableResult
     func addTrack(kind: TrackKind) -> Bool {
         guard let sequence = activeSequence else { return false }
-        return applyEdit(.addTrack(sequenceID: sequence.id, track: Track(id: UUID(), kind: kind, items: [])))
+        return applyEdit(.addTrack(
+            sequenceID: sequence.id,
+            track: Track(id: UUID(), kind: kind, items: [])
+        ))
     }
 
     @discardableResult
     func removeSelectedEmptyTrack() -> Bool {
         guard let sequence = activeSequence, let trackID = selectedTimelineTrackID,
-              let track = (sequence.videoTracks + sequence.audioTracks).first(where: { $0.id == trackID }),
+              let track = (sequence.videoTracks + sequence.audioTracks).first(where: {
+                  $0.id == trackID
+              }),
               track.items.isEmpty
         else { return false }
         let removed = applyEdit(.removeTrack(sequenceID: sequence.id, trackID: trackID))
@@ -3168,15 +3336,31 @@ final class EditorAjarAppModel: ObservableObject {
     func editSelectedMedia(_ mode: TimelineMediaEditMode) -> Bool {
         guard !isTextEditingActive, let mediaID = selectedMediaIDs.first else { return false }
         switch mode {
-        case .insert: return insertMediaOnTimeline(mediaID: mediaID)
-        case .overwrite: return placeMediaOnTimeline(mediaID: mediaID, overwrite: true, append: false)
-        case .append: return placeMediaOnTimeline(mediaID: mediaID, overwrite: false, append: true)
+        case .insert:
+            return insertMediaOnTimeline(mediaID: mediaID)
+        case .overwrite:
+            return placeMediaOnTimeline(mediaID: mediaID, overwrite: true, append: false)
+        case .append:
+            return placeMediaOnTimeline(mediaID: mediaID, overwrite: false, append: true)
         case .replace:
             guard let sequence = activeSequence, let reference = selectedClipReference,
+                  let selectedClip,
+                  let track = (sequence.videoTracks + sequence.audioTracks).first(where: {
+                      $0.id == reference.trackID
+                  }),
+                  !track.locked,
                   let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+                  !media.isOffline,
+                  Self.media(media, contains: selectedClip.kind),
                   let sourceRange = try? TimeRange(start: .zero, duration: media.metadata.duration)
             else { return false }
-            return applyEdit(.replaceClipSource(sequenceID: sequence.id, trackID: reference.trackID, clipID: reference.clipID, source: .media(id: mediaID), sourceRange: sourceRange))
+            return applyEdit(.replaceClipSource(
+                sequenceID: sequence.id,
+                trackID: reference.trackID,
+                clipID: reference.clipID,
+                source: .media(id: mediaID),
+                sourceRange: sourceRange
+            ))
         }
     }
 
@@ -3187,12 +3371,19 @@ final class EditorAjarAppModel: ObservableObject {
               let inFrame = timelineState.selectionInFrame,
               let outFrame = timelineState.selectionOutFrame,
               outFrame > inFrame,
+              let sequence = activeSequence,
               let mediaID = selectedMediaIDs.first,
-              let media = project?.mediaPool.first(where: { $0.id == mediaID })
+              let media = project?.mediaPool.first(where: { $0.id == mediaID }),
+              !media.isOffline
         else {
             return false
         }
-        return !media.isOffline
+        if Self.isMuxedMedia(media) {
+            return Self.muxedPlacementTargets(in: sequence) != nil
+        }
+        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
+        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
+        return tracks.contains(where: { !$0.locked })
     }
 
     /// Fits the browser selection into the marked timeline range as a three-point edit (FR-TL-003).
@@ -3215,10 +3406,7 @@ final class EditorAjarAppModel: ObservableObject {
         else {
             return false
         }
-        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
-        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
-        guard let track = tracks.first(where: { !$0.locked }),
-              let timelineStart = try? RationalTime.atFrame(inFrame, frameRate: sequence.timebase),
+        guard let timelineStart = try? RationalTime.atFrame(inFrame, frameRate: sequence.timebase),
               let duration = try? sequence.timebase.duration(ofFrames: outFrame - inFrame),
               duration <= media.metadata.duration,
               let sourceRange = try? TimeRange(start: .zero, duration: duration)
@@ -3227,6 +3415,39 @@ final class EditorAjarAppModel: ObservableObject {
         }
         let name = media.sourceURL?.deletingPathExtension().lastPathComponent
             ?? AppString.localized("timeline.media.untitled", "Media")
+
+        if Self.isMuxedMedia(media) {
+            return performMuxedThreePointEdit(
+                sequence: sequence,
+                placement: MuxedThreePointPlacement(
+                    mediaID: mediaID,
+                    sourceRange: sourceRange,
+                    timelineStart: timelineStart,
+                    name: name,
+                    mode: mode
+                )
+            )
+        }
+
+        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
+        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
+        let placementEffect: TimelinePlacementEffect
+        switch mode {
+        case .insert:
+            placementEffect = .insert(at: timelineStart)
+        case .overwrite:
+            guard let timelineRange = try? TimeRange(start: timelineStart, duration: duration) else {
+                return false
+            }
+            placementEffect = .overwrite(range: timelineRange)
+        }
+        guard let track = firstSafeUnlockedTrack(
+            in: sequence,
+            candidates: tracks,
+            effect: placementEffect
+        ) else {
+            return false
+        }
         return applyEdit(.threePointEdit(
             sequenceID: sequence.id,
             trackID: track.id,
@@ -3470,7 +3691,6 @@ final class EditorAjarAppModel: ObservableObject {
         }
         // Re-publish when playing so the new gain is in the prepared plan (off-RT).
         publishAudioPlanForCurrentFrame()
-        ensureAudioPlanForPlayback()
         // Master is monitoring-only (no project edit → no updateProject), so refresh meters here.
         if isMixerPanelVisible {
             refreshMixerMeters()
@@ -3715,30 +3935,24 @@ final class EditorAjarAppModel: ObservableObject {
         else {
             return
         }
-        do {
-            let provider = try EditorAjarProjectAudioSourceProvider(
-                project: project,
-                sequence: sequence,
-                range: try TimeRange(
-                    start: RationalTime.atFrame(max(0, playheadFrame), frameRate: sequence.timebase),
-                    duration: sequence.timebase.duration(ofFrames: 4)
+        mixerMeterPublisher.requestMeter(
+            project: project,
+            sequence: sequence,
+            playheadFrame: playheadFrame,
+            sourceProviderFactory: { project, sequence, range in
+                try await EditorAjarProjectAudioSourceProvider.prepare(
+                    project: project,
+                    sequence: sequence,
+                    range: range
                 )
-            )
-            mixerMeterPublisher.requestMeter(
-                project: project,
-                sequence: sequence,
-                playheadFrame: playheadFrame,
-                sourceProvider: provider,
-                masterGainLinear: masterGainLinear
-            )
-        } catch {
-            // Silent: meters are best-effort chrome; typed mix edits still work.
-        }
+            },
+            masterGainLinear: masterGainLinear
+        )
     }
 
     /// Ensures waveform summaries for media referenced by audio clips are loading (non-blocking).
     func ensureTimelineAudioWaveforms() {
-        guard let project, let sequence = activeSequence else {
+        guard project != nil, let sequence = activeSequence else {
             return
         }
         var mediaIDs = Set<UUID>()
@@ -3753,7 +3967,7 @@ final class EditorAjarAppModel: ObservableObject {
             }
         }
         for mediaID in mediaIDs where mediaWaveformSummary[mediaID] == nil {
-            requestMediaPreview(forID: mediaID)
+            requestMediaPreview(forID: mediaID, kind: .waveform)
         }
     }
 
@@ -4082,12 +4296,18 @@ final class EditorAjarAppModel: ObservableObject {
         displayLinkDriver?.stop()
         audioCoordinator?.stop()
         mediaResolutionTask?.cancel()
+        renderTask?.cancel()
+        renderTask = nil
         cancelAllMediaPreviews()
         mediaThumbnailData = [:]
         mediaWaveformSummary = [:]
         mediaPreviewCache = nil
         mixerMeterSnapshot = nil
         mixerMeterPublisher.cancel()
+        audioPlaybackError = nil
+        loadMessageBeforeAudioPlaybackError = nil
+        audioPlaybackStatusMessage = nil
+        mixerMeterError = nil
         masterGainLinear = AudioMixUISupport.defaultMasterGainLinear
         audioMixGestureKey = nil
         renderGeneration += 1
@@ -4307,7 +4527,8 @@ final class EditorAjarAppModel: ObservableObject {
                 durationFrames: durationFrames
             )
         } catch {
-            loadMessage = "Audio playback unavailable: \(error)"
+            pauseForAudioPlaybackFailure()
+            surfaceAudioPlaybackError(.renderFailed(String(describing: error)))
         }
     }
 
@@ -4324,6 +4545,12 @@ final class EditorAjarAppModel: ObservableObject {
             return
         }
 
+        if audioCoordinator is EditorAjarLiveAudioCoordinator {
+            // A forced seek/edit plan restarts audio from this exact frame. Hold video until that
+            // immutable plan is published so asynchronous decode cannot leave a persistent offset.
+            displayLinkDriver?.stop()
+        }
+
         do {
             try audioCoordinator.publishSeek(
                 project: project,
@@ -4332,7 +4559,8 @@ final class EditorAjarAppModel: ObservableObject {
                 durationFrames: durationFrames
             )
         } catch {
-            loadMessage = "Audio seek unavailable: \(error)"
+            pauseForAudioPlaybackFailure()
+            surfaceAudioPlaybackError(.renderFailed(String(describing: error)))
         }
     }
 
@@ -4353,8 +4581,47 @@ final class EditorAjarAppModel: ObservableObject {
                 durationFrames: durationFrames
             )
         } catch {
-            loadMessage = "Audio playback unavailable: \(error)"
+            pauseForAudioPlaybackFailure()
+            surfaceAudioPlaybackError(.renderFailed(String(describing: error)))
         }
+    }
+
+    private func pauseForAudioPlaybackFailure() {
+        guard isPlaying else {
+            return
+        }
+        playbackController?.shuttlePause()
+        isPlaying = false
+        stopAudioPlayback()
+        displayLinkDriver?.stop()
+    }
+
+    private func surfaceAudioPlaybackError(_ error: EditorAjarAudioPipelineError) {
+        let message = AppString.localized(
+            "status.audioPlaybackUnavailable",
+            "Audio playback unavailable: \(String(describing: error))"
+        )
+        if audioPlaybackStatusMessage == nil || loadMessage != audioPlaybackStatusMessage {
+            loadMessageBeforeAudioPlaybackError = loadMessage
+        }
+        audioPlaybackError = error
+        audioPlaybackStatusMessage = message
+        loadMessage = message
+    }
+
+    private func clearAudioPlaybackErrorAfterPlanPublished() {
+        guard audioPlaybackError != nil else {
+            return
+        }
+        if let audioPlaybackStatusMessage, loadMessage == audioPlaybackStatusMessage {
+            loadMessage = loadMessageBeforeAudioPlaybackError ?? AppString.localized(
+                "status.audioPlaybackReady",
+                "Audio playback ready"
+            )
+        }
+        audioPlaybackError = nil
+        loadMessageBeforeAudioPlaybackError = nil
+        audioPlaybackStatusMessage = nil
     }
 
     private func requestRenderForCurrentFrame() {
@@ -4365,13 +4632,17 @@ final class EditorAjarAppModel: ObservableObject {
             return
         }
 
+        // Scrubbing and playback can supersede a decode before AVFoundation produces its frame.
+        // Cancel the stale request so it cannot consume a blocking decoder slot after its result
+        // is no longer presentable (NFR-STAB-001).
+        renderTask?.cancel()
         renderGeneration += 1
         let generation = renderGeneration
         let frame = playheadFrame
         let allowDiskWriteBehind = playbackRate == 0
         loadMessage = AppString.localized("status.renderingFrame", "Rendering frame \(frame)")
 
-        Task { [
+        renderTask = Task { [
             weak self,
             project,
             sequence,
@@ -4996,7 +5267,7 @@ final class EditorAjarAppModel: ObservableObject {
             presentedTexture = nil
         }
         requestRenderForCurrentFrame()
-        ensureAudioPlanForPlayback()
+        publishAudioPlanForCurrentFrame()
         ensureTimelineAudioWaveforms()
         if isMixerPanelVisible {
             refreshMixerMeters()
@@ -5344,24 +5615,38 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Incremental thumbnail/waveform request. Offline items deliberately skip extraction.
     func requestMediaPreview(for media: MediaRef) async {
+        let kind: MediaPreviewKind
+        if media.metadata.pixelDimensions != nil {
+            kind = .thumbnail
+        } else if media.metadata.audioChannelLayout != nil
+            || media.metadata.pixelDimensions == nil
+        {
+            kind = .waveform
+        } else {
+            return
+        }
+        await requestMediaPreview(for: media, kind: kind)
+    }
+
+    private func requestMediaPreview(for media: MediaRef, kind: MediaPreviewKind) async {
         guard !media.isOffline, media.contentHash != nil else { return }
-        if mediaPreviewTasks[media.id] != nil { return }
+        let key = MediaPreviewTaskKey(mediaID: media.id, kind: kind)
+        if mediaPreviewTasks[key] != nil { return }
         guard let cache = ensureMediaPreviewCache() else { return }
         let mediaID = media.id
         let task = Task { [weak self] in
             defer {
                 Task { @MainActor in
-                    self?.mediaPreviewTasks[mediaID] = nil
+                    self?.mediaPreviewTasks[key] = nil
                 }
             }
-            if media.metadata.pixelDimensions != nil {
+            switch kind {
+            case .thumbnail:
                 guard let data = try? await cache.data(for: media, kind: .thumbnail),
                       !Task.isCancelled
                 else { return }
                 await MainActor.run { self?.mediaThumbnailData[mediaID] = data }
-            } else if media.metadata.audioChannelLayout != nil
-                || media.metadata.pixelDimensions == nil
-            {
+            case .waveform:
                 guard let data = try? await cache.data(for: media, kind: .waveform),
                       !Task.isCancelled,
                       let summary = try? JSONDecoder().decode(AudioWaveformSummary.self, from: data)
@@ -5369,7 +5654,7 @@ final class EditorAjarAppModel: ObservableObject {
                 await MainActor.run { self?.mediaWaveformSummary[mediaID] = summary }
             }
         }
-        mediaPreviewTasks[mediaID] = task
+        mediaPreviewTasks[key] = task
         // Propagate SwiftUI `.task` cancellation into the per-id extraction task (M1).
         await withTaskCancellationHandler {
             await task.value
@@ -5383,10 +5668,18 @@ final class EditorAjarAppModel: ObservableObject {
         Task { await requestMediaPreview(for: media) }
     }
 
+    private func requestMediaPreview(forID mediaID: UUID, kind: MediaPreviewKind) {
+        guard let media = project?.mediaPool.first(where: { $0.id == mediaID }) else { return }
+        Task { await requestMediaPreview(for: media, kind: kind) }
+    }
+
     /// Cancels per-id preview extraction (tile disappear) and notifies the cache (M1).
     func cancelMediaPreview(for mediaID: UUID) {
-        mediaPreviewTasks[mediaID]?.cancel()
-        mediaPreviewTasks[mediaID] = nil
+        for kind in [MediaPreviewKind.thumbnail, .waveform] {
+            let key = MediaPreviewTaskKey(mediaID: mediaID, kind: kind)
+            mediaPreviewTasks[key]?.cancel()
+            mediaPreviewTasks[key] = nil
+        }
         if let media = project?.mediaPool.first(where: { $0.id == mediaID }),
            let cache = mediaPreviewCache
         {
@@ -5463,7 +5756,479 @@ final class EditorAjarAppModel: ObservableObject {
         return cache
     }
 
-    /// Simple #235 drop behavior: insert/ripple at the playhead on the first compatible track.
+    private struct MuxedPlacementTargets {
+        let video: Track
+        let audio: Track
+    }
+
+    private struct MuxedPlacementClips {
+        let video: Clip
+        let audio: Clip
+    }
+
+    private struct MuxedPlacementTiming {
+        let start: RationalTime
+        let videoEnd: RationalTime?
+        let audioEnd: RationalTime?
+    }
+
+    private struct MuxedThreePointPlacement {
+        let mediaID: UUID
+        let sourceRange: TimeRange
+        let timelineStart: RationalTime
+        let name: String
+        let mode: ThreePointEditMode
+    }
+
+    private enum MuxedPlacementMode: Equatable {
+        case overwrite
+        case append
+    }
+
+    private enum TimelinePlacementEffect {
+        case insert(at: RationalTime)
+        case overwrite(range: TimeRange)
+    }
+
+    private struct LinkedTimelineMember {
+        let trackID: UUID
+        let trackIsLocked: Bool
+        let clip: Clip
+    }
+
+    private static func isMuxedMedia(_ media: MediaRef) -> Bool {
+        media.metadata.pixelDimensions != nil && media.metadata.audioChannelLayout != nil
+    }
+
+    private static func media(_ media: MediaRef, contains kind: TrackKind) -> Bool {
+        switch kind {
+        case .video:
+            return media.metadata.pixelDimensions != nil
+        case .audio:
+            return media.metadata.audioChannelLayout != nil
+        }
+    }
+
+    private static func mediaPlacementName(_ media: MediaRef) -> String {
+        media.sourceURL?.deletingPathExtension().lastPathComponent
+            ?? AppString.localized("timeline.media.untitled", "Media")
+    }
+
+    /// Proves that the exact track-local commands about to run affect every member of each
+    /// touched link group in the same way. A target-track insert moves every item at/after the
+    /// cut (and splits a straddler); overwrite removes every intersecting item. If any linked
+    /// partner falls outside those exact commands, the entire user gesture is refused before
+    /// edit history sees its first command.
+    private static func validateLinkedPlacementSafety(
+        in sequence: Sequence,
+        targetTrackIDs: Set<UUID>,
+        effect: TimelinePlacementEffect
+    ) throws {
+        var membersByGroup: [UUID: [LinkedTimelineMember]] = [:]
+        for track in sequence.videoTracks + sequence.audioTracks {
+            for item in track.items {
+                guard case .clip(let clip) = item,
+                      let linkGroupID = clip.linkGroupID
+                else {
+                    continue
+                }
+                membersByGroup[linkGroupID, default: []].append(
+                    LinkedTimelineMember(
+                        trackID: track.id,
+                        trackIsLocked: track.locked,
+                        clip: clip
+                    )
+                )
+            }
+        }
+
+        for (linkGroupID, members) in membersByGroup {
+            let targetedMembers: [LinkedTimelineMember]
+            do {
+                targetedMembers = try members.filter { member in
+                    guard targetTrackIDs.contains(member.trackID) else {
+                        return false
+                    }
+                    return try placement(effect, affects: member.clip)
+                }
+            } catch {
+                throw EditorAjarTimelinePlacementSafetyError
+                    .linkGroupRangeCouldNotBeVerified(linkGroupID: linkGroupID)
+            }
+            guard !targetedMembers.isEmpty else {
+                continue
+            }
+
+            if let lockedMember = members.first(where: { $0.trackIsLocked }) {
+                throw EditorAjarTimelinePlacementSafetyError.linkedPartnerTrackLocked(
+                    linkGroupID: linkGroupID,
+                    trackID: lockedMember.trackID
+                )
+            }
+
+            let everyMemberIsAffected: Bool
+            do {
+                everyMemberIsAffected = try members.allSatisfy { member in
+                    guard targetTrackIDs.contains(member.trackID) else {
+                        return false
+                    }
+                    return try placement(effect, affects: member.clip)
+                }
+            } catch {
+                throw EditorAjarTimelinePlacementSafetyError
+                    .linkGroupRangeCouldNotBeVerified(linkGroupID: linkGroupID)
+            }
+            guard everyMemberIsAffected else {
+                throw EditorAjarTimelinePlacementSafetyError.linkGroupNotFullyTargeted(
+                    linkGroupID: linkGroupID
+                )
+            }
+        }
+    }
+
+    private static func placement(
+        _ effect: TimelinePlacementEffect,
+        affects clip: Clip
+    ) throws -> Bool {
+        switch effect {
+        case .insert(let time):
+            // `insertClip` leaves items ending at the cut alone, but shifts items starting at or
+            // after it and splits items that straddle it.
+            return try clip.timelineRange.end() > time
+        case .overwrite(let range):
+            return try clip.timelineRange.intersects(range)
+        }
+    }
+
+    private func preflightLinkedPlacement(
+        sequence: Sequence,
+        targetTrackIDs: Set<UUID>,
+        effect: TimelinePlacementEffect
+    ) -> Bool {
+        do {
+            try Self.validateLinkedPlacementSafety(
+                in: sequence,
+                targetTrackIDs: targetTrackIDs,
+                effect: effect
+            )
+            return true
+        } catch let error as EditorAjarTimelinePlacementSafetyError {
+            surfaceLinkedPlacementSafetyRefusal(error)
+            return false
+        } catch {
+            surfaceLinkedPlacementSafetyRefusal(
+                .placementCouldNotBeVerified
+            )
+            return false
+        }
+    }
+
+    /// Chooses the first unlocked destination whose exact edit will preserve every existing link.
+    /// A video-only or audio-only source may safely use a higher empty track instead of refusing
+    /// merely because the first track contains one half of a linked A/V pair.
+    private func firstSafeUnlockedTrack(
+        in sequence: Sequence,
+        candidates: [Track],
+        effect: TimelinePlacementEffect
+    ) -> Track? {
+        var firstRefusal: EditorAjarTimelinePlacementSafetyError?
+        var encounteredUnknownRefusal = false
+
+        for track in candidates where !track.locked {
+            do {
+                try Self.validateLinkedPlacementSafety(
+                    in: sequence,
+                    targetTrackIDs: [track.id],
+                    effect: effect
+                )
+                return track
+            } catch let error as EditorAjarTimelinePlacementSafetyError {
+                if firstRefusal == nil {
+                    firstRefusal = error
+                }
+            } catch {
+                encounteredUnknownRefusal = true
+            }
+        }
+
+        if let firstRefusal {
+            surfaceLinkedPlacementSafetyRefusal(firstRefusal)
+        } else if encounteredUnknownRefusal {
+            surfaceLinkedPlacementSafetyRefusal(.placementCouldNotBeVerified)
+        }
+        return nil
+    }
+
+    private func surfaceLinkedPlacementSafetyRefusal(
+        _ error: EditorAjarTimelinePlacementSafetyError
+    ) {
+        switch error {
+        case .linkedPartnerTrackLocked:
+            surfaceLocalizedEditRefusal(
+                "timeline.placement.refusal.linkedLocked",
+                "Unlock every track in the affected linked audio/video group, then try again."
+            )
+        case .linkGroupNotFullyTargeted,
+             .linkGroupRangeCouldNotBeVerified,
+             .linkedMembersDoNotShareInsertCut,
+             .placementCouldNotBeVerified:
+            surfaceLocalizedEditRefusal(
+                "timeline.placement.refusal.linkedPartial",
+                "This edit would move or replace only part of a linked audio/video group. Target both linked tracks, move to a cut, or detach the clips first. The project was not changed."
+            )
+        }
+    }
+
+    private static func muxedPlacementTargets(in sequence: Sequence) -> MuxedPlacementTargets? {
+        guard let video = sequence.videoTracks.first(where: { !$0.locked }),
+              let audio = sequence.audioTracks.first(where: { !$0.locked })
+        else {
+            return nil
+        }
+        return MuxedPlacementTargets(video: video, audio: audio)
+    }
+
+    private static func muxedPlacementClips(
+        mediaID: UUID,
+        sourceRange: TimeRange,
+        timelineRange: TimeRange,
+        name: String
+    ) -> MuxedPlacementClips {
+        MuxedPlacementClips(
+            video: Clip(
+                id: UUID(),
+                source: .media(id: mediaID),
+                sourceRange: sourceRange,
+                timelineRange: timelineRange,
+                kind: .video,
+                name: name
+            ),
+            audio: Clip(
+                id: UUID(),
+                source: .media(id: mediaID),
+                sourceRange: sourceRange,
+                timelineRange: timelineRange,
+                kind: .audio,
+                name: name
+            )
+        )
+    }
+
+    private func performMuxedThreePointEdit(
+        sequence: Sequence,
+        placement: MuxedThreePointPlacement
+    ) -> Bool {
+        guard let targets = Self.muxedPlacementTargets(in: sequence) else {
+            return false
+        }
+        let targetTrackIDs: Set<UUID> = [targets.video.id, targets.audio.id]
+        let placementEffect: TimelinePlacementEffect
+        switch placement.mode {
+        case .insert:
+            placementEffect = .insert(at: placement.timelineStart)
+        case .overwrite:
+            guard let timelineRange = try? TimeRange(
+                start: placement.timelineStart,
+                duration: placement.sourceRange.duration
+            ) else {
+                return false
+            }
+            placementEffect = .overwrite(range: timelineRange)
+        }
+        guard preflightLinkedPlacement(
+            sequence: sequence,
+            targetTrackIDs: targetTrackIDs,
+            effect: placementEffect
+        ) else {
+            return false
+        }
+        var commands: [EditCommand] = []
+        if placement.mode == .insert {
+            let preparation: [EditCommand]
+            do {
+                preparation = try linkedInsertPreparationCommands(
+                    sequence: sequence,
+                    targets: targets,
+                    at: placement.timelineStart
+                )
+            } catch let error as EditorAjarTimelinePlacementSafetyError {
+                surfaceLinkedPlacementSafetyRefusal(error)
+                return false
+            } catch {
+                surfaceLinkedPlacementSafetyRefusal(
+                    .linkedMembersDoNotShareInsertCut(linkGroupID: nil)
+                )
+                return false
+            }
+            commands.append(contentsOf: preparation)
+        }
+        commands.append(contentsOf: Self.muxedThreePointCommands(
+            sequenceID: sequence.id,
+            targets: targets,
+            placement: placement
+        ))
+        return applyEditGroup(commands)
+    }
+
+    private static func muxedThreePointCommands(
+        sequenceID: UUID,
+        targets: MuxedPlacementTargets,
+        placement: MuxedThreePointPlacement
+    ) -> [EditCommand] {
+        let videoClipID = UUID()
+        let audioClipID = UUID()
+        return [
+            .threePointEdit(
+                sequenceID: sequenceID,
+                trackID: targets.video.id,
+                clipID: videoClipID,
+                source: .media(id: placement.mediaID),
+                sourceRange: placement.sourceRange,
+                timelineStart: placement.timelineStart,
+                kind: .video,
+                name: placement.name,
+                mode: placement.mode
+            ),
+            .threePointEdit(
+                sequenceID: sequenceID,
+                trackID: targets.audio.id,
+                clipID: audioClipID,
+                source: .media(id: placement.mediaID),
+                sourceRange: placement.sourceRange,
+                timelineStart: placement.timelineStart,
+                kind: .audio,
+                name: placement.name,
+                mode: placement.mode
+            ),
+            .linkClips(
+                sequenceID: sequenceID,
+                linkGroupID: UUID(),
+                clips: [
+                    ClipReference(trackID: targets.video.id, clipID: videoClipID),
+                    ClipReference(trackID: targets.audio.id, clipID: audioClipID)
+                ]
+            )
+        ]
+    }
+
+    private static func exactTrackEnd(_ track: Track) -> RationalTime? {
+        var result = RationalTime.zero
+        for item in track.items {
+            guard let end = try? item.timelineRange.end() else {
+                return nil
+            }
+            result = max(result, end)
+        }
+        return result
+    }
+
+    private static func clipStraddling(_ time: RationalTime, in track: Track) -> Clip? {
+        track.items.first { item in
+            guard case .clip(let clip) = item,
+                  let end = try? clip.timelineRange.end()
+            else {
+                return false
+            }
+            return clip.timelineRange.start < time && time < end
+        }.flatMap { item in
+            guard case .clip(let clip) = item else { return nil }
+            return clip
+        }
+    }
+
+    /// Explicitly blades a linked pair before insert so the reducer never performs an unsafe
+    /// track-local implicit split. The old left pair keeps its group; the right pair receives a
+    /// fresh group before both halves ripple. Throws a typed safety refusal when the linked
+    /// topology cannot be preserved.
+    private func linkedInsertPreparationCommands(
+        sequence: Sequence,
+        targets: MuxedPlacementTargets,
+        at time: RationalTime
+    ) throws -> [EditCommand] {
+        let videoClip = Self.clipStraddling(time, in: targets.video)
+        let audioClip = Self.clipStraddling(time, in: targets.audio)
+        let linkedStraddlers = [videoClip, audioClip].compactMap { clip -> Clip? in
+            clip?.linkGroupID == nil ? nil : clip
+        }
+        guard !linkedStraddlers.isEmpty else {
+            return []
+        }
+        guard let videoClip,
+              let audioClip,
+              let linkGroupID = videoClip.linkGroupID,
+              audioClip.linkGroupID == linkGroupID
+        else {
+            throw EditorAjarTimelinePlacementSafetyError.linkedMembersDoNotShareInsertCut(
+                linkGroupID: linkedStraddlers.first?.linkGroupID
+            )
+        }
+
+        let groupReferences = (sequence.videoTracks + sequence.audioTracks).flatMap { track in
+            track.items.compactMap { item -> TimelineClipReference? in
+                guard case .clip(let clip) = item,
+                      clip.linkGroupID == linkGroupID
+                else {
+                    return nil
+                }
+                return TimelineClipReference(trackID: track.id, clipID: clip.id)
+            }
+        }
+        let expectedReferences: Set<TimelineClipReference> = [
+            TimelineClipReference(trackID: targets.video.id, clipID: videoClip.id),
+            TimelineClipReference(trackID: targets.audio.id, clipID: audioClip.id)
+        ]
+        guard Set(groupReferences) == expectedReferences else {
+            // Inserting on two target tracks cannot safely ripple a larger or differently routed
+            // link group. Refuse atomically instead of desynchronizing untouched partners.
+            throw EditorAjarTimelinePlacementSafetyError.linkGroupNotFullyTargeted(
+                linkGroupID: linkGroupID
+            )
+        }
+
+        let rightVideoClipID = UUID()
+        let rightAudioClipID = UUID()
+        return [
+            .bladeClip(
+                sequenceID: sequence.id,
+                trackID: targets.video.id,
+                clipID: videoClip.id,
+                atTime: time,
+                rightClipID: rightVideoClipID
+            ),
+            .bladeClip(
+                sequenceID: sequence.id,
+                trackID: targets.audio.id,
+                clipID: audioClip.id,
+                atTime: time,
+                rightClipID: rightAudioClipID
+            ),
+            .linkClips(
+                sequenceID: sequence.id,
+                linkGroupID: UUID(),
+                clips: [
+                    ClipReference(trackID: targets.video.id, clipID: rightVideoClipID),
+                    ClipReference(trackID: targets.audio.id, clipID: rightAudioClipID)
+                ]
+            )
+        ]
+    }
+
+    private static func linkCommand(
+        sequenceID: UUID,
+        targets: MuxedPlacementTargets,
+        clips: MuxedPlacementClips
+    ) -> EditCommand {
+        .linkClips(
+            sequenceID: sequenceID,
+            linkGroupID: UUID(),
+            clips: [
+                ClipReference(trackID: targets.video.id, clipID: clips.video.id),
+                ClipReference(trackID: targets.audio.id, clipID: clips.audio.id)
+            ]
+        )
+    }
+
+    /// #235 drop behavior: insert/ripple at the playhead on the first compatible track(s).
     ///
     /// Still images use the 5 s initial placement duration (not the unbounded source extent on
     /// `MediaMetadata.duration`) so insert does not place a 24 h clip; trims can still extend
@@ -5471,53 +6236,307 @@ final class EditorAjarAppModel: ObservableObject {
     @discardableResult
     func insertMediaOnTimeline(mediaID: UUID) -> Bool {
         guard let media = project?.mediaPool.first(where: { $0.id == mediaID }),
-              !media.isOffline, let sequence = activeSequence else { return false }
-        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
-        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
-        guard let track = tracks.first(where: { !$0.locked }) else { return false }
-        let start = (try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)) ?? .zero
-        guard let duration = try? StillMediaDefaults.timelinePlacementDuration(for: media),
-              let range = try? TimeRange(start: start, duration: duration),
+              !media.isOffline,
+              let sequence = activeSequence,
+              let duration = try? StillMediaDefaults.timelinePlacementDuration(for: media)
+        else {
+            return false
+        }
+        let start = (try? RationalTime.atFrame(
+            playheadFrame,
+            frameRate: sequence.timebase
+        )) ?? .zero
+        if Self.isMuxedMedia(media) {
+            return insertMuxedMediaOnTimeline(
+                media: media,
+                sequence: sequence,
+                start: start,
+                duration: duration
+            )
+        }
+
+        guard let range = try? TimeRange(start: start, duration: duration),
               let sourceRange = try? TimeRange(start: .zero, duration: duration)
         else {
             return false
         }
-        let clipName = media.sourceURL?
-            .deletingPathExtension()
-            .lastPathComponent ?? "Media"
+        let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
+        let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
+        guard let track = firstSafeUnlockedTrack(
+            in: sequence,
+            candidates: tracks,
+            effect: .insert(at: start)
+        ) else {
+            return false
+        }
         let clip = Clip(
             id: UUID(),
             source: .media(id: mediaID),
             sourceRange: sourceRange,
             timelineRange: range,
             kind: kind,
-            name: clipName
+            name: Self.mediaPlacementName(media)
         )
-        return applyEdit(.insertClip(sequenceID: sequence.id, trackID: track.id, clip: clip))
+        return applyEdit(.insertClip(
+            sequenceID: sequence.id,
+            trackID: track.id,
+            clip: clip
+        ))
+    }
+
+    private func insertMuxedMediaOnTimeline(
+        media: MediaRef,
+        sequence: Sequence,
+        start: RationalTime,
+        duration: RationalTime
+    ) -> Bool {
+        guard let targets = Self.muxedPlacementTargets(in: sequence),
+              let range = try? TimeRange(start: start, duration: duration),
+              let sourceRange = try? TimeRange(start: .zero, duration: duration)
+        else {
+            return false
+        }
+        let targetTrackIDs: Set<UUID> = [targets.video.id, targets.audio.id]
+        guard preflightLinkedPlacement(
+            sequence: sequence,
+            targetTrackIDs: targetTrackIDs,
+            effect: .insert(at: start)
+        ) else {
+            return false
+        }
+        let preparation: [EditCommand]
+        do {
+            preparation = try linkedInsertPreparationCommands(
+                sequence: sequence,
+                targets: targets,
+                at: start
+            )
+        } catch let error as EditorAjarTimelinePlacementSafetyError {
+            surfaceLinkedPlacementSafetyRefusal(error)
+            return false
+        } catch {
+            surfaceLinkedPlacementSafetyRefusal(
+                .linkedMembersDoNotShareInsertCut(linkGroupID: nil)
+            )
+            return false
+        }
+        let clips = Self.muxedPlacementClips(
+            mediaID: media.id,
+            sourceRange: sourceRange,
+            timelineRange: range,
+            name: Self.mediaPlacementName(media)
+        )
+        var commands = preparation
+        commands.append(.insertClip(
+            sequenceID: sequence.id,
+            trackID: targets.video.id,
+            clip: clips.video
+        ))
+        commands.append(.insertClip(
+            sequenceID: sequence.id,
+            trackID: targets.audio.id,
+            clip: clips.audio
+        ))
+        commands.append(Self.linkCommand(
+            sequenceID: sequence.id,
+            targets: targets,
+            clips: clips
+        ))
+        return applyEditGroup(commands)
+    }
+
+    private func placeMuxedMediaOnTimeline(
+        media: MediaRef,
+        sequence: Sequence,
+        overwrite: Bool,
+        append: Bool
+    ) -> Bool {
+        let mode: MuxedPlacementMode
+        if overwrite {
+            mode = .overwrite
+        } else if append {
+            mode = .append
+        } else {
+            return false
+        }
+        guard let targets = Self.muxedPlacementTargets(in: sequence),
+              let timing = Self.muxedPlacementTiming(
+                  targets: targets,
+                  playheadFrame: playheadFrame,
+                  frameRate: sequence.timebase,
+                  append: append
+              ),
+              let duration = try? StillMediaDefaults.timelinePlacementDuration(for: media),
+              let timelineRange = try? TimeRange(start: timing.start, duration: duration),
+              let sourceRange = try? TimeRange(start: .zero, duration: duration)
+        else {
+            return false
+        }
+        let clips = Self.muxedPlacementClips(
+            mediaID: media.id,
+            sourceRange: sourceRange,
+            timelineRange: timelineRange,
+            name: Self.mediaPlacementName(media)
+        )
+        if mode == .overwrite,
+           !preflightLinkedPlacement(
+               sequence: sequence,
+               targetTrackIDs: [targets.video.id, targets.audio.id],
+               effect: .overwrite(range: timelineRange)
+           ) {
+            return false
+        }
+        guard var commands = Self.muxedPlacementCommands(
+            sequenceID: sequence.id,
+            targets: targets,
+            clips: clips,
+            timing: timing,
+            mode: mode
+        ) else {
+            return false
+        }
+        commands.append(Self.linkCommand(
+            sequenceID: sequence.id,
+            targets: targets,
+            clips: clips
+        ))
+        return applyEditGroup(commands)
+    }
+
+    private static func muxedPlacementTiming(
+        targets: MuxedPlacementTargets,
+        playheadFrame: Int64,
+        frameRate: FrameRate,
+        append: Bool
+    ) -> MuxedPlacementTiming? {
+        if append {
+            guard let videoEnd = exactTrackEnd(targets.video),
+                  let audioEnd = exactTrackEnd(targets.audio)
+            else {
+                return nil
+            }
+            return MuxedPlacementTiming(
+                start: max(videoEnd, audioEnd),
+                videoEnd: videoEnd,
+                audioEnd: audioEnd
+            )
+        }
+        let start = (try? RationalTime.atFrame(
+            playheadFrame,
+            frameRate: frameRate
+        )) ?? .zero
+        return MuxedPlacementTiming(start: start, videoEnd: nil, audioEnd: nil)
+    }
+
+    private static func muxedPlacementCommands(
+        sequenceID: UUID,
+        targets: MuxedPlacementTargets,
+        clips: MuxedPlacementClips,
+        timing: MuxedPlacementTiming,
+        mode: MuxedPlacementMode
+    ) -> [EditCommand]? {
+        switch mode {
+        case .overwrite:
+            return [
+                .overwriteClip(
+                    sequenceID: sequenceID,
+                    trackID: targets.video.id,
+                    clip: clips.video
+                ),
+                .overwriteClip(
+                    sequenceID: sequenceID,
+                    trackID: targets.audio.id,
+                    clip: clips.audio
+                )
+            ]
+        case .append:
+            guard let videoEnd = timing.videoEnd, let audioEnd = timing.audioEnd else {
+                return nil
+            }
+            return [
+                appendPlacementCommand(
+                    sequenceID: sequenceID,
+                    trackID: targets.video.id,
+                    clip: clips.video,
+                    trackEnd: videoEnd,
+                    sharedStart: timing.start
+                ),
+                appendPlacementCommand(
+                    sequenceID: sequenceID,
+                    trackID: targets.audio.id,
+                    clip: clips.audio,
+                    trackEnd: audioEnd,
+                    sharedStart: timing.start
+                )
+            ]
+        }
+    }
+
+    private static func appendPlacementCommand(
+        sequenceID: UUID,
+        trackID: UUID,
+        clip: Clip,
+        trackEnd: RationalTime,
+        sharedStart: RationalTime
+    ) -> EditCommand {
+        if trackEnd == sharedStart {
+            return .appendClip(sequenceID: sequenceID, trackID: trackID, clip: clip)
+        }
+        return .addClip(sequenceID: sequenceID, trackID: trackID, clip: clip)
     }
 
     private func placeMediaOnTimeline(mediaID: UUID, overwrite: Bool, append: Bool) -> Bool {
         guard let media = project?.mediaPool.first(where: { $0.id == mediaID }),
               !media.isOffline, let sequence = activeSequence else { return false }
+
+        if Self.isMuxedMedia(media) {
+            return placeMuxedMediaOnTimeline(
+                media: media,
+                sequence: sequence,
+                overwrite: overwrite,
+                append: append
+            )
+        }
+
         let kind: TrackKind = media.metadata.pixelDimensions == nil ? .audio : .video
         let tracks = kind == .video ? sequence.videoTracks : sequence.audioTracks
-        guard let track = tracks.first(where: { !$0.locked }) else { return false }
+        guard let firstUnlockedTrack = tracks.first(where: { !$0.locked }) else { return false }
         let start: RationalTime
         if append {
-            start = track.items.compactMap { try? $0.timelineRange.end() }.max() ?? .zero
+            start = firstUnlockedTrack.items.compactMap {
+                try? $0.timelineRange.end()
+            }.max() ?? .zero
         } else {
-            start = (try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase)) ?? .zero
+            start = (try? RationalTime.atFrame(
+                playheadFrame,
+                frameRate: sequence.timebase
+            )) ?? .zero
         }
         // Same still placement rule as insert: 5 s initial span, not the 24 h source extent.
         guard let duration = try? StillMediaDefaults.timelinePlacementDuration(for: media),
               let timelineRange = try? TimeRange(start: start, duration: duration),
               let sourceRange = try? TimeRange(start: .zero, duration: duration)
         else { return false }
+        let track: Track
+        if overwrite {
+            guard let safeTrack = firstSafeUnlockedTrack(
+                in: sequence,
+                candidates: tracks,
+                effect: .overwrite(range: timelineRange)
+            ) else {
+                return false
+            }
+            track = safeTrack
+        } else {
+            track = firstUnlockedTrack
+        }
         let clip = Clip(
-            id: UUID(), source: .media(id: mediaID), sourceRange: sourceRange,
-            timelineRange: timelineRange, kind: kind,
-            name: media.sourceURL?.deletingPathExtension().lastPathComponent
-                ?? AppString.localized("timeline.media.untitled", "Media")
+            id: UUID(),
+            source: .media(id: mediaID),
+            sourceRange: sourceRange,
+            timelineRange: timelineRange,
+            kind: kind,
+            name: Self.mediaPlacementName(media)
         )
         let command: EditCommand = overwrite
             ? .overwriteClip(sequenceID: sequence.id, trackID: track.id, clip: clip)

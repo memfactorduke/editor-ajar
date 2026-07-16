@@ -112,7 +112,8 @@ extension OfflineAudioMixer {
             clip: clip,
             source: source,
             window: window,
-            declaredEndFrame: declaredEndFrame
+            declaredEndFrame: declaredEndFrame,
+            cancellationCheck: environment.cancellationCheck
         )
         environment.pitchCorrectedSourceCache[key] = stretch
         return stretch
@@ -154,14 +155,29 @@ extension OfflineAudioMixer {
         clip: Clip,
         source: AudioSourceBuffer,
         window: TimeRange,
-        declaredEndFrame: Double?
+        declaredEndFrame: Double?,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
     ) throws -> PitchCorrectedStretch {
         let bounds = try extractionFrameBounds(window: window, source: source)
-        let extracted = extractedWindowSamples(
+        // Refuse before allocating the extracted window. The production decoder has its own
+        // source-buffer cap, but WSOLA simultaneously retains several larger analysis/output
+        // arrays; this actual-format check is the authoritative bound for that temporary peak.
+        do {
+            try WSOLATimeStretcher.validateWorkingSet(
+                inputFrameCount: bounds.frameCount,
+                channelCount: source.format.channelCount,
+                sampleRate: source.format.sampleRate,
+                speed: clip.speed
+            )
+        } catch let error as WSOLATimeStretchError {
+            throw AudioRenderError.pitchCorrectedStretchFailed(clipID: clip.id, error: error)
+        }
+        let extracted = try extractedWindowSamples(
             clip: clip,
             source: source,
             bounds: bounds,
-            declaredEndFrame: declaredEndFrame
+            declaredEndFrame: declaredEndFrame,
+            cancellationCheck: cancellationCheck
         )
         let stretched: [Float]
         do {
@@ -169,7 +185,8 @@ extension OfflineAudioMixer {
                 samples: extracted,
                 channelCount: source.format.channelCount,
                 sampleRate: source.format.sampleRate,
-                speed: clip.speed
+                speed: clip.speed,
+                cancellationCheck: cancellationCheck
             )
         } catch let error as WSOLATimeStretchError {
             throw AudioRenderError.pitchCorrectedStretchFailed(clipID: clip.id, error: error)
@@ -199,7 +216,13 @@ extension OfflineAudioMixer {
         window: TimeRange,
         source: AudioSourceBuffer
     ) throws -> PitchCorrectedFrameBounds {
-        let sampleRate = source.format.sampleRate
+        try extractionFrameBounds(window: window, sampleRate: source.format.sampleRate)
+    }
+
+    static func extractionFrameBounds(
+        window: TimeRange,
+        sampleRate: Int
+    ) throws -> PitchCorrectedFrameBounds {
         return PitchCorrectedFrameBounds(
             startFrame: try sampleIndex(
                 for: window.start,
@@ -264,12 +287,16 @@ extension OfflineAudioMixer {
         clip: Clip,
         source: AudioSourceBuffer,
         bounds: PitchCorrectedFrameBounds,
-        declaredEndFrame: Double?
-    ) -> [Float] {
+        declaredEndFrame: Double?,
+        cancellationCheck: AudioRenderCancellationCheck
+    ) throws -> [Float] {
         let frameCount = bounds.frameCount
         let channelCount = source.format.channelCount
         var extracted = [Float](repeating: 0, count: frameCount * channelCount)
         for frame in 0..<frameCount {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let sourceFrame = bounds.startFrame + frame
             if let declaredEndFrame, Double(sourceFrame) >= declaredEndFrame {
                 continue

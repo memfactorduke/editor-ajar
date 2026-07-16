@@ -320,6 +320,7 @@ final class OfflineAudioPitchCorrectedMixerTests: XCTestCase {
         XCTAssertEqual(Array(mono[0..<1_000]), source)
         XCTAssertEqual(Array(mono[1_000..<1_500]), Array(oracle[0..<500]))
     }
+
 }
 
 private extension OfflineAudioPitchCorrectedMixerTests {

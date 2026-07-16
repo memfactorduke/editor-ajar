@@ -178,17 +178,89 @@ public extension EditCommand {
             if let only = names.first, names.count == 1 {
                 return only
             }
+            // Creating a muxed A/V placement is one gesture even though it places two clips and
+            // then validates their link. Mid-clip insert additionally blades/relinks the old pair
+            // first. Keep the undo label on the user's requested operation, not implementation
+            // scaffolding such as "Link Clips" or "Add Clip".
+            if let placementName = Self.linkedPlacementTransactionActionName(commands) {
+                return placementName
+            }
             // Occupied-track / locked-track title insert is one user gesture: create a free video
             // track, then insert the title on it (`insertTitleAtPlayhead` via `applyEditGroup`).
             // Track creation is scaffolding — the undo menu should still say "Insert Title", not
             // "Multiple Edits" (#240 MIXED default vs FR-TXT-001 overlay insert). Pure shape
             // match only; no persisted label field on the enum.
-            if commands.count == 2,
-               case .addTrack = commands[0],
-               case .insertTitleClip = commands[1] {
-                return commands[1].actionName
+            if commands.count == 2 {
+                switch (commands[0], commands[1]) {
+                case (.addTrack, .insertTitleClip):
+                    return commands[1].actionName
+                default:
+                    break
+                }
             }
             return "Multiple Edits"
         }
+    }
+
+    // Counting the allowed command shapes is clearer here than scattering nested pattern matches.
+    // swiftlint:disable:next cyclomatic_complexity
+    private static func linkedPlacementTransactionActionName(
+        _ commands: [EditCommand]
+    ) -> String? {
+        var addCount = 0
+        var insertCount = 0
+        var overwriteCount = 0
+        var appendCount = 0
+        var threePointCount = 0
+        var bladeCount = 0
+        var linkCount = 0
+        var containsOtherCommand = false
+
+        for command in commands {
+            switch command {
+            case .addClip:
+                addCount += 1
+            case .insertClip:
+                insertCount += 1
+            case .overwriteClip:
+                overwriteCount += 1
+            case .appendClip:
+                appendCount += 1
+            case .threePointEdit:
+                threePointCount += 1
+            case .bladeClip:
+                bladeCount += 1
+            case .linkClips:
+                linkCount += 1
+            default:
+                containsOtherCommand = true
+            }
+        }
+
+        guard linkCount > 0, !containsOtherCommand else {
+            return nil
+        }
+
+        let placementCount =
+            addCount + insertCount + overwriteCount + appendCount + threePointCount
+        if threePointCount >= 2 && placementCount == threePointCount {
+            return "Three-Point Edit"
+        }
+        if insertCount >= 2 && placementCount == insertCount {
+            return "Insert Clip"
+        }
+        if overwriteCount >= 2 && placementCount == overwriteCount && bladeCount == 0 {
+            return "Overwrite Clip"
+        }
+        let appendPlacementCount = addCount + appendCount
+        let isAppendPair = appendPlacementCount == 2 && appendCount > 0
+        let containsOnlyAppendCommands = placementCount == appendPlacementCount && bladeCount == 0
+        if isAppendPair && containsOnlyAppendCommands {
+            return "Append Clip"
+        }
+        if bladeCount >= 2 && placementCount == 0 {
+            return "Blade Clip"
+        }
+        return nil
     }
 }

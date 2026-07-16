@@ -222,6 +222,10 @@ final class MediaImportPipelineTests: XCTestCase {
         XCTAssertEqual(reference.contentHash, originalHash)
         XCTAssertEqual(reference.transcodeProvenance?.originalSourceURL, sourceURL)
         XCTAssertEqual(reference.transcodeProvenance?.originalContentHash, originalHash)
+        XCTAssertEqual(
+            reference.transcodeProvenance?.playableContentHash,
+            try SHA256MediaFileHasher().contentHash(of: outputURL)
+        )
         XCTAssertEqual(batch.summary.transcoded.first?.detectedCodec, "vp9")
         XCTAssertEqual(batch.summary.failed, [])
 

@@ -25,6 +25,55 @@ public enum OfflineAudioMixer {
         )
     }
 
+    /// Renders a project sequence into an explicit output format.
+    ///
+    /// Live output uses a stable device-facing rate while imported sources retain their native
+    /// rates. Keeping the project here (unlike the sequence-only overload) preserves compound
+    /// traversal and declared-media boundary validation during that resampling pass.
+    public static func render(
+        project: Project,
+        sequence: Sequence,
+        range: TimeRange,
+        format: AudioRenderFormat,
+        sourceProvider: any AudioSourceProvider
+    ) throws -> RenderedAudioBuffer {
+        try render(
+            sequence: sequence,
+            range: range,
+            format: format,
+            sourceProvider: sourceProvider,
+            project: project
+        )
+    }
+
+    // swiftlint:disable function_parameter_count
+    /// Renders one bounded piece of a continuous project range.
+    ///
+    /// `continuation` carries only envelope state; it never retains PCM. Adjacent calls with the
+    /// same continuation therefore preserve ducking attack/hold/release behavior exactly while
+    /// allowing the caller to discard each rendered buffer after writing it. The cancellation
+    /// hook is polled throughout frame-heavy work and may throw any caller-owned typed error.
+    public static func render(
+        project: Project,
+        sequence: Sequence,
+        range: TimeRange,
+        format: AudioRenderFormat,
+        sourceProvider: any AudioSourceProvider,
+        continuation: inout OfflineAudioRenderContinuation,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> RenderedAudioBuffer {
+        try render(
+            sequence: sequence,
+            range: range,
+            format: format,
+            sourceProvider: sourceProvider,
+            project: project,
+            continuation: &continuation,
+            cancellationCheck: cancellationCheck
+        )
+    }
+    // swiftlint:enable function_parameter_count
+
     /// Renders the first-stage master mix for a sequence.
     ///
     /// The master bus is a 32-bit floating-point mix bus. FR-AUD-003 renders preserve
@@ -52,26 +101,55 @@ public enum OfflineAudioMixer {
         sourceProvider: any AudioSourceProvider,
         project: Project?
     ) throws -> RenderedAudioBuffer {
+        var continuation = OfflineAudioRenderContinuation()
+        return try render(
+            sequence: sequence,
+            range: range,
+            format: format,
+            sourceProvider: sourceProvider,
+            project: project,
+            continuation: &continuation,
+            cancellationCheck: {}
+        )
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    static func render(
+        sequence: Sequence,
+        range: TimeRange,
+        format: AudioRenderFormat,
+        sourceProvider: any AudioSourceProvider,
+        project: Project?,
+        continuation: inout OfflineAudioRenderContinuation,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> RenderedAudioBuffer {
         var environment = OfflineAudioRenderEnvironment(
             project: project,
-            sourceProvider: sourceProvider
+            sourceProvider: sourceProvider,
+            continuation: continuation,
+            cancellationCheck: cancellationCheck
         )
+        defer { continuation = environment.continuation }
         return try render(
             sequence: sequence,
             range: range,
             format: format,
             environment: &environment,
-            nestingDepth: 0
+            nestingDepth: 0,
+            renderPath: [.sequence(sequence.id)]
         )
     }
 
+    // swiftlint:disable:next function_parameter_count
     static func render(
         sequence: Sequence,
         range: TimeRange,
         format: AudioRenderFormat,
         environment: inout OfflineAudioRenderEnvironment,
-        nestingDepth: Int
+        nestingDepth: Int,
+        renderPath: OfflineAudioRenderPath
     ) throws -> RenderedAudioBuffer {
+        try environment.cancellationCheck()
         try AudioBufferValidator.validate(format: format, frameCount: 0, samples: [])
         try validateCrossfades(in: sequence)
 
@@ -84,7 +162,12 @@ public enum OfflineAudioMixer {
             frameCount: frameCount,
             channelCount: format.channelCount
         )
-        let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
+        let context = OfflineMixContext(
+            frameCount: frameCount,
+            range: range,
+            format: format,
+            cancellationCheck: environment.cancellationCheck
+        )
         var output = Array(repeating: Float(0), count: outputSampleCount)
         let contributorTracks = audioContributorTracks(
             in: sequence,
@@ -92,6 +175,7 @@ public enum OfflineAudioMixer {
             nestingDepth: nestingDepth
         )
         let duckingMultipliers = try duckingMultipliersByTrackID(
+            renderPath: renderPath,
             rules: sequence.audioDucking,
             tracks: contributorTracks.filter { $0.kind == .audio },
             context: context,
@@ -100,6 +184,7 @@ public enum OfflineAudioMixer {
         )
 
         for track in contributorTracks {
+            try environment.cancellationCheck()
             try mixTrack(
                 track,
                 into: &output,
@@ -108,10 +193,12 @@ public enum OfflineAudioMixer {
                     duckingMultipliers: duckingMultipliers[track.id]
                 ),
                 environment: &environment,
-                nestingDepth: nestingDepth
+                nestingDepth: nestingDepth,
+                renderPath: renderPath
             )
         }
 
+        try environment.cancellationCheck()
         return try RenderedAudioBuffer(format: format, frameCount: frameCount, samples: output)
     }
 }
@@ -120,6 +207,25 @@ struct OfflineMixContext {
     let frameCount: Int
     let range: TimeRange
     let format: AudioRenderFormat
+    let cancellationCheck: AudioRenderCancellationCheck
+
+    init(
+        frameCount: Int,
+        range: TimeRange,
+        format: AudioRenderFormat,
+        cancellationCheck: @escaping AudioRenderCancellationCheck = {}
+    ) {
+        self.frameCount = frameCount
+        self.range = range
+        self.format = format
+        self.cancellationCheck = cancellationCheck
+    }
+
+    func checkCancellation(atFrame frame: Int) throws {
+        if frame & 1_023 == 0 {
+            try cancellationCheck()
+        }
+    }
 }
 
 struct OfflineTrackMixContext {

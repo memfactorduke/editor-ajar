@@ -190,7 +190,9 @@ public enum AjarProjectCodec {
     /// - `14`: atomic `EditCommand.transaction` edit-journal records for single-undo timeline
     ///   gestures — linked A/V blade, multi-clip delete/lift/paste, multi-selection move
     ///   (FR-TL-004 / FR-TL-005 / FR-TL-009 / #240).
-    public static let currentSchemaMinor = 14
+    /// - `15`: fallback-transcode playable-content identity
+    ///   (`MediaTranscodeProvenance.playableContentHash`, FR-MED-003 / #277).
+    public static let currentSchemaMinor = 15
 
     /// Encodes a runtime project into canonical `project.json` and `media.json` bytes.
     ///

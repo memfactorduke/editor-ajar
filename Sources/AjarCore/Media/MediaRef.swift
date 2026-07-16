@@ -102,10 +102,46 @@ public struct MediaTranscodeProvenance: Codable, Hashable, Sendable {
     /// SHA-256 of the original bytes; this remains the deduplication identity.
     public let originalContentHash: ContentHash
 
+    /// SHA-256 of the playable working transcode stored at `MediaRef.sourceURL`.
+    ///
+    /// Older projects do not contain this field. Readers deliberately treat that legacy state
+    /// as an unknown working identity instead of comparing the transcode with the original hash.
+    public let playableContentHash: ContentHash?
+
+    private enum CodingKeys: String, CodingKey {
+        case originalSourceURL
+        case originalContentHash
+        case playableContentHash
+    }
+
     /// Creates durable import provenance.
-    public init(originalSourceURL: URL, originalContentHash: ContentHash) {
+    public init(
+        originalSourceURL: URL,
+        originalContentHash: ContentHash,
+        playableContentHash: ContentHash? = nil
+    ) {
         self.originalSourceURL = originalSourceURL
         self.originalContentHash = originalContentHash
+        self.playableContentHash = playableContentHash
+    }
+
+    /// Decodes pre-working-hash projects without mistaking the original bytes for playable bytes.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        originalSourceURL = try container.decode(URL.self, forKey: .originalSourceURL)
+        originalContentHash = try container.decode(ContentHash.self, forKey: .originalContentHash)
+        playableContentHash = try container.decodeIfPresent(
+            ContentHash.self,
+            forKey: .playableContentHash
+        )
+    }
+
+    /// Encodes both the original identity and the optional playable working identity.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(originalSourceURL, forKey: .originalSourceURL)
+        try container.encode(originalContentHash, forKey: .originalContentHash)
+        try container.encodeIfPresent(playableContentHash, forKey: .playableContentHash)
     }
 }
 

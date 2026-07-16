@@ -89,75 +89,7 @@ public struct AudioProgramLoudnessReport: Codable, Equatable, Sendable {
     }
 }
 
-public extension AudioMixerMeterAnalyzer {
-    /// Computes BS.1770/R128 integrated loudness and 4x true peak for a rendered buffer.
-    ///
-    /// This is deterministic offline analysis for FR-AUD-003, not the FR-AUD-007 real-time audio
-    /// callback path. K-weighting follows the BS.1770 two-stage high-shelf plus RLB high-pass
-    /// filter model; stereo uses L/R channel weights of 1.0 and surround layout weighting is out of
-    /// scope until layout metadata is available.
-    static func measureProgramLoudness(
-        buffer: RenderedAudioBuffer
-    ) throws -> AudioProgramLoudnessReport {
-        try BS1770.validate(sampleRate: buffer.format.sampleRate)
-        try BS1770.validate(channelCount: buffer.format.channelCount)
-        let powers = BS1770.kWeightedPowers(buffer: buffer)
-        let blockEnergies = BS1770.blockEnergies(
-            powers: powers,
-            sampleRate: buffer.format.sampleRate
-        )
-        let gated = BS1770.gatedLoudness(blockEnergies: blockEnergies)
-        let truePeak = BS1770.truePeak(buffer: buffer)
-
-        return AudioProgramLoudnessReport(
-            sampleRate: buffer.format.sampleRate,
-            channelCount: buffer.format.channelCount,
-            frameCount: buffer.frameCount,
-            integratedLUFS: gated.integratedLUFS,
-            truePeak: truePeak,
-            blockCount: blockEnergies.count,
-            gatedBlockCount: gated.gatedBlockCount,
-            truePeakOversamplingFactor: BS1770.truePeakOversamplingFactor
-        )
-    }
-
-    /// Renders a project sequence window, then computes integrated loudness and true peak.
-    static func measureProgramLoudness(
-        project: Project,
-        sequence: Sequence,
-        range: TimeRange,
-        sourceProvider: any AudioSourceProvider,
-        channelCount: Int = 2
-    ) throws -> AudioProgramLoudnessReport {
-        let buffer = try OfflineAudioMixer.render(
-            project: project,
-            sequence: sequence,
-            range: range,
-            sourceProvider: sourceProvider,
-            channelCount: channelCount
-        )
-        return try measureProgramLoudness(buffer: buffer)
-    }
-
-    /// Renders a sequence window, then computes integrated loudness and true peak.
-    static func measureProgramLoudness(
-        sequence: Sequence,
-        range: TimeRange,
-        format: AudioRenderFormat,
-        sourceProvider: any AudioSourceProvider
-    ) throws -> AudioProgramLoudnessReport {
-        let buffer = try OfflineAudioMixer.render(
-            sequence: sequence,
-            range: range,
-            format: format,
-            sourceProvider: sourceProvider
-        )
-        return try measureProgramLoudness(buffer: buffer)
-    }
-
-}
-
-private enum BS1770 {
+enum BS1770 {
     static let loudnessOffset = -0.691
     static let absoluteGateLUFS = -70.0
     static let relativeGateLU = -10.0
@@ -165,7 +97,7 @@ private enum BS1770 {
     static let blockHopMilliseconds = 100
     static let truePeakOversamplingFactor = 4
     static let truePeakSincRadius = 32
-    static let truePeakKernels = TruePeakKernel.kernels(
+    fileprivate static let truePeakKernels = TruePeakKernel.kernels(
         oversamplingFactor: truePeakOversamplingFactor,
         radius: truePeakSincRadius
     )
@@ -197,7 +129,10 @@ private enum BS1770 {
         }
     }
 
-    static func kWeightedPowers(buffer: RenderedAudioBuffer) -> [Double] {
+    static func kWeightedPowers(
+        buffer: RenderedAudioBuffer,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> [Double] {
         let channelCount = buffer.format.channelCount
         var preFilters = filters(
             coefficients: .kWeightingHighShelf(sampleRate: buffer.format.sampleRate),
@@ -210,6 +145,9 @@ private enum BS1770 {
         var powers = Array(repeating: Double(0), count: buffer.frameCount)
 
         for frame in 0..<buffer.frameCount {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             var framePower = Double(0)
             for channel in 0..<channelCount {
                 let sampleIndex = (frame * channelCount) + channel
@@ -220,10 +158,15 @@ private enum BS1770 {
             powers[frame] = framePower
         }
 
+        try cancellationCheck()
         return powers
     }
 
-    static func blockEnergies(powers: [Double], sampleRate: Int) -> [Double] {
+    static func blockEnergies(
+        powers: [Double],
+        sampleRate: Int,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> [Double] {
         let blockSize = (sampleRate * blockDurationMilliseconds) / 1_000
         let hopSize = (sampleRate * blockHopMilliseconds) / 1_000
         guard blockSize > 0, hopSize > 0, powers.count >= blockSize else {
@@ -233,8 +176,12 @@ private enum BS1770 {
         var energies: [Double] = []
         var start = 0
         while start + blockSize <= powers.count {
+            try cancellationCheck()
             var sum = Double(0)
             for frame in start..<(start + blockSize) {
+                if frame & 1_023 == 0 {
+                    try cancellationCheck()
+                }
                 sum += powers[frame]
             }
             energies.append(sum / Double(blockSize))
@@ -243,9 +190,19 @@ private enum BS1770 {
         return energies
     }
 
-    static func gatedLoudness(blockEnergies: [Double]) -> GatedLoudness {
-        let absoluteGated = blockEnergies.filter { energy in
-            (loudness(energy: energy) ?? -.infinity) >= absoluteGateLUFS
+    static func gatedLoudness(
+        blockEnergies: [Double],
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> GatedLoudness {
+        var absoluteGated: [Double] = []
+        absoluteGated.reserveCapacity(blockEnergies.count)
+        for (index, energy) in blockEnergies.enumerated() {
+            if index & 1_023 == 0 {
+                try cancellationCheck()
+            }
+            if (loudness(energy: energy) ?? -.infinity) >= absoluteGateLUFS {
+                absoluteGated.append(energy)
+            }
         }
         guard !absoluteGated.isEmpty else {
             return GatedLoudness(integratedLUFS: nil, gatedBlockCount: 0)
@@ -253,8 +210,15 @@ private enum BS1770 {
 
         let preliminaryLoudness = loudness(energy: average(absoluteGated)) ?? -.infinity
         let threshold = max(absoluteGateLUFS, preliminaryLoudness + relativeGateLU)
-        let relativeGated = absoluteGated.filter { energy in
-            (loudness(energy: energy) ?? -.infinity) >= threshold
+        var relativeGated: [Double] = []
+        relativeGated.reserveCapacity(absoluteGated.count)
+        for (index, energy) in absoluteGated.enumerated() {
+            if index & 1_023 == 0 {
+                try cancellationCheck()
+            }
+            if (loudness(energy: energy) ?? -.infinity) >= threshold {
+                relativeGated.append(energy)
+            }
         }
         guard !relativeGated.isEmpty else {
             return GatedLoudness(integratedLUFS: nil, gatedBlockCount: 0)
@@ -266,21 +230,43 @@ private enum BS1770 {
         )
     }
 
-    static func truePeak(buffer: RenderedAudioBuffer) -> Double {
+    static func truePeak(
+        buffer: RenderedAudioBuffer,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> Double {
         var peak = Double(0)
         for channel in 0..<buffer.format.channelCount {
-            peak = max(peak, truePeak(buffer: buffer, channel: channel))
+            try cancellationCheck()
+            peak = max(
+                peak,
+                try truePeak(
+                    buffer: buffer,
+                    channel: channel,
+                    cancellationCheck: cancellationCheck
+                )
+            )
         }
         return peak
     }
 
-    static func truePeak(buffer: RenderedAudioBuffer, channel: Int) -> Double {
-        var peak = samplePeak(buffer: buffer, channel: channel)
+    static func truePeak(
+        buffer: RenderedAudioBuffer,
+        channel: Int,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> Double {
+        var peak = try samplePeak(
+            buffer: buffer,
+            channel: channel,
+            cancellationCheck: cancellationCheck
+        )
         guard buffer.frameCount > 1 else {
             return peak
         }
 
         for frame in 0..<(buffer.frameCount - 1) {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             for kernel in truePeakKernels {
                 let value = sincInterpolatedSample(
                     buffer: buffer,
@@ -294,9 +280,16 @@ private enum BS1770 {
         return peak
     }
 
-    static func samplePeak(buffer: RenderedAudioBuffer, channel: Int) -> Double {
+    static func samplePeak(
+        buffer: RenderedAudioBuffer,
+        channel: Int,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> Double {
         var peak = Double(0)
         for frame in 0..<buffer.frameCount {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let sampleIndex = (frame * buffer.format.channelCount) + channel
             peak = max(peak, abs(Double(buffer.samples[sampleIndex])))
         }

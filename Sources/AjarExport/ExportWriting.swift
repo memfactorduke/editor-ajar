@@ -11,7 +11,8 @@ protocol ExportWriting: AnyObject {
     func appendVideoIfReady(_ pixelBuffer: CVPixelBuffer, at time: CMTime) throws -> Bool
     func appendAudioIfReady(
         _ buffer: RenderedAudioBuffer,
-        frames: Range<Int>
+        frames: Range<Int>,
+        presentationFrameOffset: Int
     ) throws -> Bool
     func checkForFailure() throws
     func finish(at endTime: CMTime) async throws

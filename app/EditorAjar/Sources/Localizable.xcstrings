@@ -3598,6 +3598,28 @@
         }
       }
     },
+    "status.audioPlaybackReady": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio playback ready"
+          }
+        }
+      }
+    },
+    "status.audioPlaybackUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio playback unavailable: %@"
+          }
+        }
+      }
+    },
     "status.autosaveFailed": {
       "extractionState": "manual",
       "localizations": {
@@ -5992,6 +6014,8 @@
     "compound.decompose.refusal.overlap": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The compound contents would overlap clips already on the parent timeline. Move those clips and try again." } } } },
     "compound.decompose.refusal.ducking": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Decomposing would break an audio ducking relationship. Change the ducking setup first." } } } },
     "compound.decompose.refusal.failed": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The compound clip could not be decomposed. The project was not changed." } } } },
+    "timeline.placement.refusal.linkedLocked": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Unlock every track in the affected linked audio/video group, then try again." } } } },
+    "timeline.placement.refusal.linkedPartial": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "This edit would move or replace only part of a linked audio/video group. Target both linked tracks, move to a cut, or detach the clips first. The project was not changed." } } } },
     "sequence.close.refusal.referenced": { "extractionState": "manual", "localizations": { "en": { "stringUnit": { "state": "translated", "value": "This sequence is used by a compound clip. Decompose every instance before removing it." } } } }
   },
   "version": "1.0"

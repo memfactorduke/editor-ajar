@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-
 // swiftlint:disable sorted_imports
 import AVFoundation
 import AjarCore
@@ -7,6 +6,7 @@ import CoreVideo
 import Foundation
 import Metal
 import VideoToolbox
+
 // swiftlint:enable sorted_imports
 
 /// Errors produced by native video frame decoding.
@@ -180,7 +180,7 @@ public final class VideoFrameDecoder {
             pixelFormat: pixelFormat,
             metalPixelFormat: metalPixelFormat,
             textureCache: cache,
-            blockingQueue: Self.blockingDecodeQueue
+            blockingQueue: Self.stillDecodeQueue
         )
     }
 
@@ -195,7 +195,8 @@ public final class VideoFrameDecoder {
 
         // Prefer the still path when metadata already identifies ImageIO codecs so proxy movies
         // and genuine video files with image-like names keep the AVFoundation path.
-        let useStillPath = StillMediaDefaults.isStillCodec(media.metadata.codecID)
+        let useStillPath =
+            StillMediaDefaults.isStillCodec(media.metadata.codecID)
             || StillMediaDefaults.isStillImageFile(sourceURL)
         if useStillPath {
             return try await stillDecoder.decode(from: sourceURL, at: time)
@@ -245,45 +246,50 @@ public final class VideoFrameDecoder {
             throw MediaDecodeError.unsupportedSource(sourceURL)
         }
 
-        // `copyNextSampleBuffer` blocks its thread while MediaToolbox decodes. Running that on
-        // the Swift cooperative pool can wedge the entire process: enough concurrent decodes
-        // occupy every pool thread, and the completions/releases they are transitively waiting
-        // on also need pool threads, so nothing ever drains (NFR-STAB-001, observed as an
-        // app-test deadlock). A dedicated concurrent GCD queue keeps decoder blocking out of
-        // the cooperative pool entirely. Cancellation intentionally does not interrupt
-        // AVAssetReader: a cancelled Task still waits for this uninterruptible read to finish,
-        // matching the decoder's behavior before the queue hop.
-        return try await withCheckedThrowingContinuation { continuation in
-            Self.blockingDecodeQueue.async {
-                do {
-                    let frame = try self.readFirstFrame(
-                        asset: asset,
-                        track: track,
-                        sourceURL: sourceURL,
-                        at: time
-                    )
-                    continuation.resume(returning: frame)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
+        // `copyNextSampleBuffer` blocks its thread while MediaToolbox decodes. Keep it off the
+        // Swift cooperative pool, but also bound the number of readers: an unbounded concurrent
+        // GCD queue can create dozens of blocked workers during rapid scrubbing. The cancellation
+        // token prevents queued superseded work from opening a reader. Once a blocking
+        // `copyNextSampleBuffer` call has begun, its owning worker completes that call and tears
+        // the reader down on the same thread; invoking AVAssetReader cancellation concurrently
+        // with that call is not a safe lifecycle boundary (NFR-STAB-001).
+        return try await Self.videoDecodeExecutor.run { cancellation in
+            try self.readFirstFrame(
+                asset: asset,
+                track: track,
+                sourceURL: sourceURL,
+                at: time,
+                cancellation: cancellation
+            )
         }
     }
 
-    /// Queue for the blocking `AVAssetReader` phase; never the Swift cooperative pool.
-    private static let blockingDecodeQueue = DispatchQueue(
+    /// Maximum simultaneous blocking readers. Four covers dissolves/multicam without allowing
+    /// rapid render replacement to exhaust the process-wide dispatch worker soft limit.
+    static let maximumConcurrentVideoDecodes = 4
+
+    private static let videoDecodeExecutor = BoundedVideoDecodeExecutor(
         label: "org.editorajar.video-frame-decode",
-        qos: .userInitiated,
-        attributes: .concurrent
+        maximumConcurrentOperationCount: maximumConcurrentVideoDecodes
     )
 
-    /// Blocking first-frame read at `time`; runs on `blockingDecodeQueue`.
+    /// Still images do not create AVAssetReaders, so they use their own blocking queue and cannot
+    /// queue behind a slow video reader.
+    private static let stillDecodeQueue = DispatchQueue(
+        label: "org.editorajar.still-frame-decode",
+        qos: .userInitiated
+    )
+
+    /// Blocking first-frame read at `time`; runs on `videoDecodeExecutor`.
     private func readFirstFrame(
         asset: AVAsset,
         track: AVAssetTrack,
         sourceURL: URL,
-        at time: RationalTime
+        at time: RationalTime,
+        cancellation: VideoDecodeCancellation
     ) throws -> DecodedFrame {
+        try cancellation.checkCancellation()
+
         let reader: AVAssetReader
         do {
             reader = try makeReader(asset: asset)
@@ -299,18 +305,22 @@ public final class VideoFrameDecoder {
 
         reader.add(output)
         reader.timeRange = CMTimeRange(start: try cmTime(from: time), duration: .positiveInfinity)
-
-        guard reader.startReading() else {
-            try requireAvailableSource(sourceURL)
-            throw MediaDecodeError.readerSetupFailed(reader.errorDescription)
-        }
         defer {
             if reader.status == .reading {
                 reader.cancelReading()
             }
         }
 
-        guard let sampleBuffer = output.copyNextSampleBuffer() else {
+        try cancellation.checkCancellation()
+        guard reader.startReading() else {
+            try requireAvailableSource(sourceURL)
+            throw MediaDecodeError.readerSetupFailed(reader.errorDescription)
+        }
+
+        try cancellation.checkCancellation()
+        let sampleBuffer = output.copyNextSampleBuffer()
+        try cancellation.checkCancellation()
+        guard let sampleBuffer else {
             try requireAvailableSource(sourceURL)
             if reader.status == .failed {
                 throw MediaDecodeError.readerFailed(reader.errorDescription)
@@ -329,6 +339,7 @@ public final class VideoFrameDecoder {
             presentationTime: try rationalTime(from: presentationTime)
         )
 
+        try cancellation.checkCancellation()
         return frame
     }
 

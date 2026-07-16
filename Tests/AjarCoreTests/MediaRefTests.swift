@@ -171,8 +171,11 @@ final class MediaRefTests: XCTestCase {
     }
 
     func testFRMED003TranscodeProvenanceRoundTripsAndLegacyDefaultsNil() throws {
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 15)
+
         let originalURL = URL(fileURLWithPath: "/original/legacy.mkv")
         let originalHash = ContentHash.sha256(data: Data("legacy bytes".utf8))
+        let playableHash = ContentHash.sha256(data: Data("working bytes".utf8))
         let media = MediaRef(
             id: UUID(),
             sourceURL: URL(fileURLWithPath: "/Project.ajar/transcodes/working.mov"),
@@ -180,7 +183,8 @@ final class MediaRefTests: XCTestCase {
             metadata: try makeMetadata(),
             transcodeProvenance: MediaTranscodeProvenance(
                 originalSourceURL: originalURL,
-                originalContentHash: originalHash
+                originalContentHash: originalHash,
+                playableContentHash: playableHash
             )
         )
         let encoded = try JSONEncoder().encode(media)
@@ -191,6 +195,25 @@ final class MediaRefTests: XCTestCase {
             media.transcodeProvenance
         )
         XCTAssertEqual(media.withProxyState(.none).transcodeProvenance, media.transcodeProvenance)
+
+        var legacyProvenanceObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        var legacyProvenance = try XCTUnwrap(
+            legacyProvenanceObject["transcodeProvenance"] as? [String: Any]
+        )
+        legacyProvenance.removeValue(forKey: "playableContentHash")
+        legacyProvenanceObject["transcodeProvenance"] = legacyProvenance
+        let legacyProvenanceData = try JSONSerialization.data(
+            withJSONObject: legacyProvenanceObject,
+            options: [.sortedKeys]
+        )
+        let legacyProvenanceMedia = try JSONDecoder().decode(
+            MediaRef.self,
+            from: legacyProvenanceData
+        )
+        XCTAssertEqual(legacyProvenanceMedia.transcodeProvenance?.originalContentHash, originalHash)
+        XCTAssertNil(legacyProvenanceMedia.transcodeProvenance?.playableContentHash)
 
         var object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: encoded) as? [String: Any]

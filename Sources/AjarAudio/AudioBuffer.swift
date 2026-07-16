@@ -88,6 +88,25 @@ public struct RenderedAudioBuffer: Equatable, Sendable {
 public protocol AudioSourceProvider: Sendable {
     /// Returns decoded interleaved PCM for a media reference.
     func audioSource(for mediaID: UUID) throws -> AudioSourceBuffer
+
+    /// Returns a decoded buffer covering the exact source-time window needed by one clip.
+    ///
+    /// Sparse providers use this requirement to retain several bounded buffers for one media ID.
+    /// Providers that already retain the complete source inherit the compatibility default.
+    func audioSource(
+        for mediaID: UUID,
+        covering sourceRange: TimeRange
+    ) throws -> AudioSourceBuffer
+}
+
+public extension AudioSourceProvider {
+    /// Full-source providers satisfy sparse requests with their existing complete buffer.
+    func audioSource(
+        for mediaID: UUID,
+        covering _: TimeRange
+    ) throws -> AudioSourceBuffer {
+        try audioSource(for: mediaID)
+    }
 }
 
 /// In-memory source provider used by deterministic tests and harnesses.

@@ -20,6 +20,16 @@ public enum WSOLATimeStretchError: Error, Equatable, Sendable, CustomStringConve
     /// Exact frame arithmetic overflowed.
     case frameCountOverflow(frameCount: Int, speed: RationalValue)
 
+    /// Estimating the temporary working set overflowed integer byte-count arithmetic.
+    case workingSetByteCountOverflow(
+        inputFrameCount: Int,
+        channelCount: Int,
+        speed: RationalValue
+    )
+
+    /// The deterministic stretch would exceed its bounded temporary-memory budget.
+    case workingSetLimitExceeded(estimatedByteCount: Int, maximumByteCount: Int)
+
     /// A human-readable description of the failure.
     public var description: String {
         switch self {
@@ -34,6 +44,12 @@ public enum WSOLATimeStretchError: Error, Equatable, Sendable, CustomStringConve
         case .frameCountOverflow(let frameCount, let speed):
             "WSOLA output length overflowed for \(frameCount) frames at speed "
                 + "\(speed.numerator)/\(speed.denominator)"
+        case .workingSetByteCountOverflow(let inputFrameCount, let channelCount, let speed):
+            "WSOLA working-set estimate overflowed for \(inputFrameCount) frames, "
+                + "\(channelCount) channels, speed \(speed.numerator)/\(speed.denominator)"
+        case .workingSetLimitExceeded(let estimatedByteCount, let maximumByteCount):
+            "WSOLA requires \(estimatedByteCount) temporary bytes, exceeding the bounded "
+                + "limit of \(maximumByteCount) bytes"
         }
     }
 }
@@ -111,14 +127,18 @@ public enum WSOLATimeStretcher {
     ///     inter-channel image phase-coherent.
     ///   - sampleRate: Source sample rate in hertz; scales the fixed 20 ms analysis window.
     ///   - speed: The clip's constant speed. `2/1` halves the duration, `1/2` doubles it.
+    ///   - cancellationCheck: Cooperative interruption hook polled throughout frame-heavy work.
     /// - Returns: Interleaved stretched samples of exactly
     ///   `stretchedFrameCount(frameCount:speed:)` frames.
+    /// - Throws: A typed validation, memory-budget, arithmetic, or caller cancellation error.
     public static func stretch(
         samples: [Float],
         channelCount: Int,
         sampleRate: Int,
-        speed: RationalValue
+        speed: RationalValue,
+        cancellationCheck: @escaping AudioRenderCancellationCheck = {}
     ) throws -> [Float] {
+        try cancellationCheck()
         guard channelCount > 0 else {
             throw WSOLATimeStretchError.invalidChannelCount(channelCount)
         }
@@ -132,18 +152,24 @@ public enum WSOLATimeStretcher {
             )
         }
         try validate(speed: speed)
+        let inputFrameCount = samples.count / channelCount
+        try validateWorkingSet(
+            inputFrameCount: inputFrameCount,
+            channelCount: channelCount,
+            sampleRate: sampleRate,
+            speed: speed
+        )
         // Unit speed is the exact identity: return the input verbatim, bit-identical.
         if speed == .one {
             return samples
         }
 
-        let inputFrameCount = samples.count / channelCount
         let outputFrameCount = try stretchedFrameCount(frameCount: inputFrameCount, speed: speed)
         guard outputFrameCount > 0, inputFrameCount > 0 else {
             return Array(repeating: 0, count: outputFrameCount * channelCount)
         }
 
-        return synthesize(
+        return try synthesize(
             input: StretchInput(
                 samples: samples,
                 channelCount: channelCount,
@@ -151,7 +177,8 @@ public enum WSOLATimeStretcher {
                 speed: speed
             ),
             windowFrameCount: analysisWindowFrameCount(sampleRate: sampleRate),
-            outputFrameCount: outputFrameCount
+            outputFrameCount: outputFrameCount,
+            cancellationCheck: cancellationCheck
         )
     }
 }
@@ -164,9 +191,14 @@ struct StretchInput {
     let speed: RationalValue
 
     /// Channel-averaged mono downmix used for the similarity search.
-    func monoDownmix() -> [Double] {
+    func monoDownmix(
+        cancellationCheck: AudioRenderCancellationCheck
+    ) throws -> [Double] {
         var mono = [Double](repeating: 0, count: frameCount)
         for frame in 0..<frameCount {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             var sum = 0.0
             for channel in 0..<channelCount {
                 sum += Double(samples[(frame * channelCount) + channel])
@@ -202,11 +234,12 @@ private extension WSOLATimeStretcher {
     static func synthesize(
         input: StretchInput,
         windowFrameCount: Int,
-        outputFrameCount: Int
-    ) -> [Float] {
+        outputFrameCount: Int,
+        cancellationCheck: AudioRenderCancellationCheck
+    ) throws -> [Float] {
         let hop = windowFrameCount / 2
         let searchRadius = hop / 2
-        let mono = input.monoDownmix()
+        let mono = try input.monoDownmix(cancellationCheck: cancellationCheck)
         var accumulator = OverlapAddAccumulator(
             window: hannWindow(frameCount: windowFrameCount),
             outputFrameCount: outputFrameCount,
@@ -216,30 +249,34 @@ private extension WSOLATimeStretcher {
         var previousAnalysisStart = 0
         var segmentIndex = 0
         while segmentIndex * hop < outputFrameCount {
+            try cancellationCheck()
             let synthesisStart = segmentIndex * hop
             let target = analysisTarget(synthesisFrame: synthesisStart, speed: input.speed)
             let analysisStart: Int
             if segmentIndex == 0 {
                 analysisStart = target
             } else {
-                analysisStart = target + bestLag(
+                let lag = try bestLag(
                     mono: mono,
                     target: target,
                     reference: previousAnalysisStart + hop,
                     windowFrameCount: windowFrameCount,
-                    searchRadius: searchRadius
+                    searchRadius: searchRadius,
+                    cancellationCheck: cancellationCheck
                 )
+                analysisStart = target + lag
             }
-            accumulator.add(
+            try accumulator.add(
                 input: input,
                 analysisStart: analysisStart,
-                synthesisStart: synthesisStart
+                synthesisStart: synthesisStart,
+                cancellationCheck: cancellationCheck
             )
             previousAnalysisStart = analysisStart
             segmentIndex += 1
         }
 
-        return accumulator.normalizedOutput()
+        return try accumulator.normalizedOutput(cancellationCheck: cancellationCheck)
     }
 
     /// Periodic Hann window: `w[n] = 0.5 · (1 − cos(2πn/N))`, exact unity sum at 50% overlap.
@@ -249,6 +286,7 @@ private extension WSOLATimeStretcher {
         }
     }
 
+    // swiftlint:disable function_parameter_count
     /// The lag in `[-searchRadius, +searchRadius]` whose candidate segment best matches the
     /// natural continuation of the previous segment, by normalized cross-correlation on the
     /// mono downmix. Lags scan in ascending order and only a strictly greater score replaces
@@ -258,17 +296,20 @@ private extension WSOLATimeStretcher {
         target: Int,
         reference: Int,
         windowFrameCount: Int,
-        searchRadius: Int
-    ) -> Int {
+        searchRadius: Int,
+        cancellationCheck: AudioRenderCancellationCheck
+    ) throws -> Int {
         var best = -searchRadius
         var bestScore = -Double.infinity
         var lag = -searchRadius
         while lag <= searchRadius {
-            let score = normalizedCrossCorrelation(
+            try cancellationCheck()
+            let score = try normalizedCrossCorrelation(
                 mono: mono,
                 candidate: target + lag,
                 reference: reference,
-                frameCount: windowFrameCount
+                frameCount: windowFrameCount,
+                cancellationCheck: cancellationCheck
             )
             if score > bestScore {
                 bestScore = score
@@ -279,18 +320,24 @@ private extension WSOLATimeStretcher {
         return best
     }
 
+    // swiftlint:enable function_parameter_count
+
     /// Normalized cross-correlation of two zero-padded segments; either segment having zero
     /// energy scores exactly 0.
     static func normalizedCrossCorrelation(
         mono: [Double],
         candidate: Int,
         reference: Int,
-        frameCount: Int
-    ) -> Double {
+        frameCount: Int,
+        cancellationCheck: AudioRenderCancellationCheck
+    ) throws -> Double {
         var dot = 0.0
         var candidateEnergy = 0.0
         var referenceEnergy = 0.0
         for index in 0..<frameCount {
+            if index & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let candidateValue = paddedMono(mono, frame: candidate + index)
             let referenceValue = paddedMono(mono, frame: reference + index)
             dot += candidateValue * referenceValue
@@ -330,8 +377,16 @@ struct OverlapAddAccumulator {
     }
 
     /// Overlap-adds one Hann-windowed analysis segment at a synthesis position.
-    mutating func add(input: StretchInput, analysisStart: Int, synthesisStart: Int) {
+    mutating func add(
+        input: StretchInput,
+        analysisStart: Int,
+        synthesisStart: Int,
+        cancellationCheck: AudioRenderCancellationCheck
+    ) throws {
         for offset in 0..<window.count {
+            if offset & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let weight = window[offset]
             let outputFrame = synthesisStart + offset
             windowSum[outputFrame] += weight
@@ -345,9 +400,14 @@ struct OverlapAddAccumulator {
     /// Divides the overlap-add accumulation by the accumulated window sum, correcting the
     /// head/tail taper; frames with a window sum below
     /// `WSOLATimeStretcher.minimumWindowSum` are exact silence.
-    func normalizedOutput() -> [Float] {
+    func normalizedOutput(
+        cancellationCheck: AudioRenderCancellationCheck
+    ) throws -> [Float] {
         var output = [Float](repeating: 0, count: outputFrameCount * channelCount)
         for frame in 0..<outputFrameCount {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let sum = windowSum[frame]
             guard sum > WSOLATimeStretcher.minimumWindowSum else {
                 continue

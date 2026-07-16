@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AjarAudio
 import AjarCore
+import AjarMedia
 import XCTest
+
 @testable import EditorAjar
 
 @MainActor
@@ -196,11 +199,19 @@ final class MediaBrowserTests: XCTestCase {
     func testMediaDropInsertsUndoableClipAtPlayheadFRMED005() throws {
         let model = EditorAjarAppModel(opensSampleProjectWhenNoRecovery: true)
         let mediaID = try XCTUnwrap(model.project?.mediaPool.first?.id)
-        let before = try XCTUnwrap(model.activeSequence?.videoTracks.first?.items.count)
+        let before = try XCTUnwrap(model.activeSequence).videoTracks.reduce(0) {
+            $0 + $1.items.count
+        }
         XCTAssertTrue(model.insertMediaOnTimeline(mediaID: mediaID))
-        XCTAssertEqual(model.activeSequence?.videoTracks.first?.items.count, before + 1)
+        XCTAssertEqual(
+            model.activeSequence?.videoTracks.reduce(0) { $0 + $1.items.count },
+            before + 1
+        )
         model.undo()
-        XCTAssertEqual(model.activeSequence?.videoTracks.first?.items.count, before)
+        XCTAssertEqual(
+            model.activeSequence?.videoTracks.reduce(0) { $0 + $1.items.count },
+            before
+        )
     }
 
     func testProxyBrowserActionRoutesThroughAppModelQueueFRMED005() throws {
@@ -250,17 +261,122 @@ final class MediaBrowserTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url
     }
-
 }
 
-/// Pure data generation for preview-cache tests — file-scope so extractors
-/// (non-main-actor) can call it without hopping to `@MainActor` `MediaBrowserTests`.
+extension MediaBrowserTests {
+    func testNFRSTAB001LongWaveformStreamsBeyondDecoderWindowCap() async throws {
+        let decoderCapBytes = 64 * 1_024 * 1_024
+        let sampleRate = 48_000
+        let channelCount = 2
+        let frameCount = (decoderCapBytes / (channelCount * MemoryLayout<Float>.size))
+            + sampleRate
+        let root = temporaryDirectory()
+        let sourceURL = root.appendingPathComponent("long-waveform.wav")
+        let identityBytes = Data("long-waveform-identity".utf8)
+        try identityBytes.write(to: sourceURL)
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: sourceURL,
+            contentHash: .sha256(data: identityBytes),
+            metadata: MediaMetadata(
+                codecID: "pcm_f32le",
+                pixelDimensions: nil,
+                frameRate: nil,
+                duration: try RationalTime(
+                    value: Int64(frameCount),
+                    timescale: Int64(sampleRate)
+                ),
+                colorSpace: .unspecified,
+                audioChannelLayout: AudioChannelLayout(channelCount: channelCount),
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        let maximumSuccessfulWindowBytes = 1 * 1_024 * 1_024
+        let probe = LongWaveformDecodeProbe(
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            maximumSuccessfulWindowBytes: maximumSuccessfulWindowBytes
+        )
+
+        let summary = try await MediaPreviewCache.waveformSummary(for: media) { media, range in
+            try await probe.decode(media: media, range: range)
+        }
+        let snapshot = await probe.snapshot()
+
+        XCTAssertGreaterThan(
+            frameCount * channelCount * MemoryLayout<Float>.size,
+            decoderCapBytes,
+            "a monolithic native Float32 decode must exceed the decoder's hard 64 MiB cap"
+        )
+        XCTAssertEqual(summary.sourceFrameCount, frameCount)
+        XCTAssertEqual(summary.sampleRate, sampleRate)
+        XCTAssertEqual(summary.channelCount, channelCount)
+        XCTAssertEqual(
+            summary.binCount,
+            (frameCount + summary.framesPerBin - 1) / summary.framesPerBin
+        )
+        XCTAssertLessThanOrEqual(
+            snapshot.maximumSuccessfulWindowBytes,
+            maximumSuccessfulWindowBytes,
+            "waveform generation must discard each bounded PCM chunk after binning it"
+        )
+        XCTAssertEqual(
+            snapshot.totalSuccessfulSampleBytes,
+            frameCount * channelCount * MemoryLayout<Float>.size
+        )
+        XCTAssertEqual(snapshot.oversizedRetryCount, 1)
+        XCTAssertGreaterThan(snapshot.successfulWindowCount, 1)
+    }
+
+    func testNFRSTAB006WaveformRefusesSourceReplacementDuringChunkedRead() async throws {
+        let sampleRate = 48_000
+        let root = temporaryDirectory()
+        let sourceURL = root.appendingPathComponent("replaced-waveform.wav")
+        let originalBytes = Data("original-playable-bytes".utf8)
+        try originalBytes.write(to: sourceURL)
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: sourceURL,
+            contentHash: .sha256(data: originalBytes),
+            metadata: MediaMetadata(
+                codecID: "pcm_f32le",
+                pixelDimensions: nil,
+                frameRate: nil,
+                duration: try RationalTime(value: 8, timescale: 1),
+                colorSpace: .unspecified,
+                audioChannelLayout: AudioChannelLayout(channelCount: 1),
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        let replacement = WaveformReplacementProbe(
+            sourceURL: sourceURL,
+            sampleRate: sampleRate
+        )
+
+        do {
+            _ = try await MediaPreviewCache.waveformSummary(for: media) { media, range in
+                try await replacement.decode(media: media, range: range)
+            }
+            XCTFail("Expected replacement during waveform generation to be refused")
+        } catch {
+            XCTAssertEqual(
+                error as? MediaSourceIdentityVerificationError,
+                .sourceChangedDuringRead(sourceURL.standardizedFileURL)
+            )
+        }
+    }
+}
+
+/// Pure data generation that non-main-actor preview extractors can call directly.
 private enum MediaBrowserTestFixtures {
     /// Tiny valid PNG so L2 image validation accepts regenerated cache bytes.
     static func minimalPNGData(marker: Int) -> Data {
         _ = marker
         let base64 =
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W3qUAAAAASUVORK5CYII="
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/"
+            + "x8AAwMCAO5W3qUAAAAASUVORK5CYII="
         return Data(base64Encoded: base64) ?? Data()
     }
 }
@@ -288,4 +404,105 @@ private actor ExtractionProbe {
     func snapshot() -> (calls: Int, maximumActive: Int) {
         (calls, maximumActive)
     }
+}
+
+private actor LongWaveformDecodeProbe {
+    private let sampleRate: Int
+    private let channelCount: Int
+    private let maximumSuccessfulWindowBytes: Int
+    private var successfulWindowCount = 0
+    private var oversizedRetryCount = 0
+    private var largestSuccessfulWindowBytes = 0
+    private var totalSuccessfulSampleBytes = 0
+
+    init(
+        sampleRate: Int,
+        channelCount: Int,
+        maximumSuccessfulWindowBytes: Int
+    ) {
+        self.sampleRate = sampleRate
+        self.channelCount = channelCount
+        self.maximumSuccessfulWindowBytes = maximumSuccessfulWindowBytes
+    }
+
+    func decode(media: MediaRef, range: TimeRange) throws -> AudioSourceBuffer {
+        let frameRange = try nativeFrameRange(for: range, sampleRate: sampleRate)
+        let sampleCount = frameRange.count * channelCount
+        let sampleBytes = sampleCount * MemoryLayout<Float>.size
+        if sampleBytes > maximumSuccessfulWindowBytes {
+            oversizedRetryCount += 1
+            throw AudioPCMDecodeError.windowTooLarge(
+                try XCTUnwrap(media.sourceURL),
+                frameCount: frameRange.count,
+                channelCount: channelCount,
+                maximumSampleBytes: maximumSuccessfulWindowBytes
+            )
+        }
+        successfulWindowCount += 1
+        largestSuccessfulWindowBytes = max(largestSuccessfulWindowBytes, sampleBytes)
+        totalSuccessfulSampleBytes += sampleBytes
+        return try AudioSourceBuffer(
+            format: AudioRenderFormat(
+                sampleRate: sampleRate,
+                channelCount: channelCount
+            ),
+            frameCount: frameRange.count,
+            samples: Array(repeating: 0, count: sampleCount),
+            frameOffset: frameRange.lowerBound
+        )
+    }
+
+    func snapshot() -> LongWaveformDecodeSnapshot {
+        LongWaveformDecodeSnapshot(
+            successfulWindowCount: successfulWindowCount,
+            oversizedRetryCount: oversizedRetryCount,
+            maximumSuccessfulWindowBytes: largestSuccessfulWindowBytes,
+            totalSuccessfulSampleBytes: totalSuccessfulSampleBytes
+        )
+    }
+}
+
+private struct LongWaveformDecodeSnapshot {
+    let successfulWindowCount: Int
+    let oversizedRetryCount: Int
+    let maximumSuccessfulWindowBytes: Int
+    let totalSuccessfulSampleBytes: Int
+}
+
+private actor WaveformReplacementProbe {
+    private let sourceURL: URL
+    private let sampleRate: Int
+    private var didReplaceSource = false
+
+    init(sourceURL: URL, sampleRate: Int) {
+        self.sourceURL = sourceURL
+        self.sampleRate = sampleRate
+    }
+
+    func decode(media: MediaRef, range: TimeRange) throws -> AudioSourceBuffer {
+        _ = media
+        let frameRange = try nativeFrameRange(for: range, sampleRate: sampleRate)
+        if !didReplaceSource {
+            didReplaceSource = true
+            try Data("replacement-playable-bytes-with-a-different-size".utf8).write(
+                to: sourceURL,
+                options: .atomic
+            )
+        }
+        return try AudioSourceBuffer(
+            format: AudioRenderFormat(sampleRate: sampleRate, channelCount: 1),
+            frameCount: frameRange.count,
+            samples: Array(repeating: 0, count: frameRange.count),
+            frameOffset: frameRange.lowerBound
+        )
+    }
+}
+
+private func nativeFrameRange(for range: TimeRange, sampleRate: Int) throws -> Range<Int> {
+    let rate = try FrameRate(frames: Int64(sampleRate))
+    let start = try range.start.frameIndex(at: rate, rounding: .down)
+    let end = try range.end().frameIndex(at: rate, rounding: .up)
+    let nativeStart = try XCTUnwrap(Int(exactly: start))
+    let nativeEnd = try XCTUnwrap(Int(exactly: end))
+    return nativeStart..<nativeEnd
 }

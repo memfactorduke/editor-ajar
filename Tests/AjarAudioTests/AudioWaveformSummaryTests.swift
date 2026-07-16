@@ -126,6 +126,79 @@ final class AudioWaveformSummaryTests: XCTestCase {
         XCTAssertEqual(decoded, first)
     }
 
+    func testFRAUD002ChunkedWaveformMatchesMonolithicAcrossPartialBins() throws {
+        let format = AudioRenderFormat(sampleRate: 44_100, channelCount: 2)
+        let frameOffset = 10_000
+        let frameCount = 13
+        let samples = (0..<(frameCount * format.channelCount)).map { index in
+            Float((index % 11) - 5) / 5
+        }
+        let source = try AudioSourceBuffer(
+            format: format,
+            frameCount: frameCount,
+            samples: samples,
+            frameOffset: frameOffset
+        )
+        let monolithic = try AudioWaveformAnalyzer.summarize(
+            source: source,
+            framesPerBin: 4
+        )
+        var chunked = try AudioWaveformAccumulator(format: format, framesPerBin: 4)
+
+        try chunked.append(sourceChunk(source, localFrames: 0..<3))
+        try chunked.append(sourceChunk(source, localFrames: 3..<8))
+        try chunked.append(sourceChunk(source, localFrames: 8..<13))
+
+        XCTAssertEqual(chunked.makeSummary(), monolithic)
+    }
+
+    func testNFRSTAB001ChunkedWaveformRejectsFormatChangesAndFrameGaps() throws {
+        let format = AudioRenderFormat(sampleRate: 48_000, channelCount: 1)
+        let first = try AudioSourceBuffer(
+            format: format,
+            frameCount: 2,
+            samples: [0, 1],
+            frameOffset: 20
+        )
+        var formatAccumulator = try AudioWaveformAccumulator(
+            format: format,
+            framesPerBin: 2
+        )
+        try formatAccumulator.append(first)
+        let changedFormat = try AudioSourceBuffer(
+            format: AudioRenderFormat(sampleRate: 44_100, channelCount: 1),
+            frameCount: 1,
+            samples: [0],
+            frameOffset: 22
+        )
+        XCTAssertThrowsError(try formatAccumulator.append(changedFormat)) { error in
+            XCTAssertEqual(
+                error as? AudioWaveformError,
+                .inconsistentSourceFormat(
+                    expectedSampleRate: 48_000,
+                    expectedChannelCount: 1,
+                    actualSampleRate: 44_100,
+                    actualChannelCount: 1
+                )
+            )
+        }
+
+        var gapAccumulator = try AudioWaveformAccumulator(format: format, framesPerBin: 2)
+        try gapAccumulator.append(first)
+        let gapped = try AudioSourceBuffer(
+            format: format,
+            frameCount: 1,
+            samples: [0],
+            frameOffset: 23
+        )
+        XCTAssertThrowsError(try gapAccumulator.append(gapped)) { error in
+            XCTAssertEqual(
+                error as? AudioWaveformError,
+                .nonContiguousSourceFrames(expectedFrameOffset: 22, actualFrameOffset: 23)
+            )
+        }
+    }
+
     func testFRAUD002WaveformRejectsInvalidResolutionWithTypedErrors() throws {
         let source = try AudioSourceBuffer(
             format: AudioRenderFormat(sampleRate: 4, channelCount: 1),
@@ -145,6 +218,21 @@ final class AudioWaveformSummaryTests: XCTestCase {
             XCTAssertEqual(error as? AudioWaveformError, .invalidBinsPerSecond(0))
         }
     }
+}
+
+private func sourceChunk(
+    _ source: AudioSourceBuffer,
+    localFrames: Range<Int>
+) throws -> AudioSourceBuffer {
+    let channelCount = source.format.channelCount
+    let sampleStart = localFrames.lowerBound * channelCount
+    let sampleEnd = localFrames.upperBound * channelCount
+    return try AudioSourceBuffer(
+        format: source.format,
+        frameCount: localFrames.count,
+        samples: Array(source.samples[sampleStart..<sampleEnd]),
+        frameOffset: source.frameOffset + localFrames.lowerBound
+    )
 }
 
 private func assertBin(

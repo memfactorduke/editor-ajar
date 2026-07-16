@@ -13,7 +13,7 @@ final class TitleTextStylingModelTests: XCTestCase {
         XCTAssertNil(TitleTextStyle.default.gradientFill)
         // Title styling claimed minor 4; later additive kinds advance past it.
         XCTAssertGreaterThanOrEqual(AjarProjectCodec.currentSchemaMinor, 4)
-        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 14)
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 15)
     }
 
     func testFRTXT002SparseNestedStylePayloadsDecodeStableDefaults() throws {

@@ -65,6 +65,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Imported audio now survives the complete editing path instead of disappearing after import.
+  Native windowed PCM decoding preserves source rate, channels, timestamps, and absolute frame
+  offsets; exact source planning covers retimes, reverses, freezes, remaps, crossfades, and nested
+  compounds. Movies with audio place as one atomic linked A/V edit across insert, overwrite,
+  append, drag/drop, and three-point operations, with link-safe blade, mid-insert, paste, lift, and
+  ripple-delete behavior plus one-step undo/redo. Live playback, meters, waveforms, and default
+  ProRes export now prepare real media
+  asynchronously, reject unreadable sources with typed visible errors, and never substitute stale
+  cache data or synthetic silence. Long-file waveforms stream bounded native PCM windows instead
+  of decoding the whole source, and playback/waveform reads refuse replaced bytes or a source that
+  changes mid-read. Working transcodes now record their own playable-byte identity separately from
+  the original import identity. `AjarCore` also rejects partial linked-group insert, overwrite, and
+  blade, lift, and ripple-delete commands, so non-app callers cannot silently separate linked
+  picture and sound. Distant excerpts from the same long recording remain separate bounded decode
+  windows instead of expanding to the hours of unused media between them. Export mixes bounded PCM
+  windows with cooperative cancellation. Rapid scrubbing cancels superseded frame renders, bridges
+  queued superseded reads, and caps blocking video decodes so stale work cannot exhaust the
+  process's dispatch threads; active readers finish and tear down on their owning worker. Audio
+  reads use the same bounded, immediate queued-cancellation discipline, while valid movies with
+  leading or trailing audio gaps zero-fill only those gaps without hiding reader failures. Clean
+  reader under-delivery now fails instead of padding missing content, and repeated compound
+  instances keep independent ducking history across bounded export chunks.
+  Release acceptance generates and probes real muxed ProRes/PCM media, then proves linked editing,
+  playback, meters, save/reopen, and decoded non-silent, time-aligned export audio alongside pixels
+  (#277, FR-MED-001, FR-TL-009, FR-AUD-001/003/007/009, FR-EXP-002/007).
 - Production proxy generation now decodes the first and later source frames and publishes a
   playable ProRes 422 Proxy instead of failing every job before frame zero. The decoder now gives
   `AVAssetReaderTrackOutput` a track owned by the reader's exact `AVURLAsset`; rebuilding the same

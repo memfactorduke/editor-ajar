@@ -22,6 +22,18 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         XCTAssertFalse(model.isExportQueuePanelVisible)
     }
 
+    func testFREXP002ProductionDefaultsIncludeStereoLinearPCM() throws {
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+
+        let settings = try EditorAjarExportQueueController.defaultSettings(for: project)
+
+        let audio = try XCTUnwrap(settings.audio)
+        XCTAssertEqual(audio.codec, .linearPCM)
+        XCTAssertEqual(audio.sampleRate, project.settings.audioSampleRate)
+        XCTAssertEqual(audio.channelCount, 2)
+        XCTAssertNil(audio.bitRate)
+    }
+
     func testFREXP005EnqueueActiveSequenceExportOpensPanelAndCapturesSequenceName() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "ajar-app-export-queue-\(UUID().uuidString)",
@@ -129,6 +141,9 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
                 id: jobID,
                 request: request,
                 frameProvider: AppStubFrameProvider(holdFirstFrame: holdFirstFrame),
+                audioSourceProvider: AppStubAudioSourceProvider(
+                    sampleRate: request.project.settings.audioSampleRate
+                ),
                 writerFactory: { temporaryURL, _ in
                     AppStubWriter(outputURL: temporaryURL)
                 },
@@ -164,6 +179,19 @@ private final class AppStubFrameProvider: ExportVideoFrameProvider, @unchecked S
             }
         }
         try Task.checkCancellation()
+    }
+}
+
+private struct AppStubAudioSourceProvider: AudioSourceProvider {
+    let sampleRate: Int
+
+    func audioSource(for _: UUID) throws -> AudioSourceBuffer {
+        let frameCount = sampleRate * 60
+        return try AudioSourceBuffer(
+            format: AudioRenderFormat(sampleRate: sampleRate, channelCount: 1),
+            frameCount: frameCount,
+            samples: [Float](repeating: 0, count: frameCount)
+        )
     }
 }
 
@@ -213,10 +241,12 @@ private final class AppStubWriter: ExportWriting {
 
     func appendAudioIfReady(
         _ buffer: RenderedAudioBuffer,
-        frames: Range<Int>
+        frames: Range<Int>,
+        presentationFrameOffset: Int
     ) throws -> Bool {
         _ = buffer
         _ = frames
+        _ = presentationFrameOffset
         return true
     }
 

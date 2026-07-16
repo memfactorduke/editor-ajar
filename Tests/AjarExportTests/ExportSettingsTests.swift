@@ -286,12 +286,16 @@ final class ExportSettingsTests: XCTestCase {
         )
         let factory = try AudioSampleBufferFactory(sampleRate: 48_000, channelCount: 2)
 
-        let sampleBuffer = try factory.makeSampleBuffer(from: rendered, frames: 2..<4)
+        let sampleBuffer = try factory.makeSampleBuffer(
+            from: rendered,
+            frames: 2..<4,
+            presentationFrameOffset: 48_000
+        )
 
         XCTAssertEqual(CMSampleBufferGetNumSamples(sampleBuffer), 2)
         XCTAssertEqual(
             CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
-            CMTime(value: 2, timescale: 48_000)
+            CMTime(value: 48_002, timescale: 48_000)
         )
     }
 }

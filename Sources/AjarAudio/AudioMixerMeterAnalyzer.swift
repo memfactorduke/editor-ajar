@@ -104,6 +104,19 @@ public enum AudioMixerMeterAnalyzer {
         )
     }
 
+    /// Computes per-channel peak and RMS levels while cooperatively polling for cancellation.
+    public static func measure(
+        buffer: RenderedAudioBuffer,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> [AudioMeterChannelLevel] {
+        try levels(
+            samples: buffer.samples,
+            frameCount: buffer.frameCount,
+            channelCount: buffer.format.channelCount,
+            cancellationCheck: cancellationCheck
+        )
+    }
+
     /// Renders and meters selected audio tracks plus the summed master mix for a project sequence.
     public static func measure(
         project: Project,
@@ -112,9 +125,30 @@ public enum AudioMixerMeterAnalyzer {
         sourceProvider: any AudioSourceProvider,
         channelCount: Int = 2
     ) throws -> AudioMixerMeterReport {
+        try measure(
+            project: project,
+            sequence: sequence,
+            range: range,
+            sourceProvider: sourceProvider,
+            channelCount: channelCount,
+            cancellationCheck: {}
+        )
+    }
+
+    /// Renders and meters a project window while cooperatively polling for cancellation.
+    public static func measure(
+        project: Project,
+        sequence: Sequence,
+        range: TimeRange,
+        sourceProvider: any AudioSourceProvider,
+        channelCount: Int = 2,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> AudioMixerMeterReport {
         var environment = OfflineAudioRenderEnvironment(
             project: project,
-            sourceProvider: sourceProvider
+            sourceProvider: sourceProvider,
+            continuation: OfflineAudioRenderContinuation(),
+            cancellationCheck: cancellationCheck
         )
         return try measure(
             sequence: sequence,
@@ -158,6 +192,7 @@ public enum AudioMixerMeterAnalyzer {
         environment: inout OfflineAudioRenderEnvironment,
         nestingDepth: Int
     ) throws -> AudioMixerMeterReport {
+        try environment.cancellationCheck()
         try AudioBufferValidator.validate(format: format, frameCount: 0, samples: [])
         try OfflineAudioMixer.validateCrossfades(in: sequence)
 
@@ -170,7 +205,12 @@ public enum AudioMixerMeterAnalyzer {
             frameCount: frameCount,
             channelCount: format.channelCount
         )
-        let context = OfflineMixContext(frameCount: frameCount, range: range, format: format)
+        let context = OfflineMixContext(
+            frameCount: frameCount,
+            range: range,
+            format: format,
+            cancellationCheck: environment.cancellationCheck
+        )
         // FR-CMP-001: meter the same contributor tracks the offline mixer renders — including
         // video tracks carrying audible compound clips — so meters agree with the render.
         let contributorTracks = OfflineAudioMixer.audioContributorTracks(
@@ -196,16 +236,18 @@ public enum AudioMixerMeterAnalyzer {
             nestingDepth: nestingDepth
         )
 
+        try environment.cancellationCheck()
         return AudioMixerMeterReport(
             range: range,
             sampleRate: format.sampleRate,
             channelCount: format.channelCount,
             frameCount: frameCount,
             trackLevels: measured.trackLevels,
-            mixLevels: levels(
+            mixLevels: try levels(
                 samples: measured.mixSamples,
                 frameCount: frameCount,
-                channelCount: format.channelCount
+                channelCount: format.channelCount,
+                cancellationCheck: environment.cancellationCheck
             )
         )
     }
@@ -234,6 +276,7 @@ private extension AudioMixerMeterAnalyzer {
         var mixSamples = Array(repeating: Float(0), count: request.sampleCount)
 
         for track in request.tracks {
+            try environment.cancellationCheck()
             var trackSamples = Array(repeating: Float(0), count: request.sampleCount)
             try OfflineAudioMixer.mixTrack(
                 track,
@@ -246,20 +289,25 @@ private extension AudioMixerMeterAnalyzer {
                 nestingDepth: nestingDepth
             )
             for index in trackSamples.indices {
+                if index & 1_023 == 0 {
+                    try environment.cancellationCheck()
+                }
                 mixSamples[index] += trackSamples[index]
             }
             trackLevels.append(
                 AudioTrackMeterReading(
                     trackID: track.id,
-                    levels: levels(
+                    levels: try levels(
                         samples: trackSamples,
                         frameCount: request.context.frameCount,
-                        channelCount: request.context.format.channelCount
+                        channelCount: request.context.format.channelCount,
+                        cancellationCheck: environment.cancellationCheck
                     )
                 )
             )
         }
 
+        try environment.cancellationCheck()
         return MeasuredTracks(trackLevels: trackLevels, mixSamples: mixSamples)
     }
 
@@ -285,6 +333,32 @@ private extension AudioMixerMeterAnalyzer {
         return levels
     }
 
+    static func levels(
+        samples: [Float],
+        frameCount: Int,
+        channelCount: Int,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> [AudioMeterChannelLevel] {
+        try cancellationCheck()
+        var levels: [AudioMeterChannelLevel] = []
+        levels.reserveCapacity(channelCount)
+
+        for channelIndex in 0..<channelCount {
+            try cancellationCheck()
+            levels.append(
+                try level(
+                    samples: samples,
+                    frameCount: frameCount,
+                    channelCount: channelCount,
+                    channelIndex: channelIndex,
+                    cancellationCheck: cancellationCheck
+                )
+            )
+        }
+
+        return levels
+    }
+
     static func level(
         samples: [Float],
         frameCount: Int,
@@ -302,6 +376,37 @@ private extension AudioMixerMeterAnalyzer {
             peak = max(peak, value)
             sumOfSquares += value * value
         }
+
+        return AudioMeterChannelLevel(
+            channelIndex: channelIndex,
+            peak: peak,
+            rms: (sumOfSquares / Double(frameCount)).squareRoot()
+        )
+    }
+
+    static func level(
+        samples: [Float],
+        frameCount: Int,
+        channelCount: Int,
+        channelIndex: Int,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> AudioMeterChannelLevel {
+        guard frameCount > 0 else {
+            try cancellationCheck()
+            return AudioMeterChannelLevel(channelIndex: channelIndex, peak: 0, rms: 0)
+        }
+
+        var peak = Double(0)
+        var sumOfSquares = Double(0)
+        for frame in 0..<frameCount {
+            if frame & 1_023 == 0 {
+                try cancellationCheck()
+            }
+            let value = Double(abs(samples[(frame * channelCount) + channelIndex]))
+            peak = max(peak, value)
+            sumOfSquares += value * value
+        }
+        try cancellationCheck()
 
         return AudioMeterChannelLevel(
             channelIndex: channelIndex,
