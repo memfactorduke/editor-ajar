@@ -173,6 +173,30 @@ is deterministic, CI-runnable, and diagnostic on failure. Implementation:
    decode with `ExportMovieDecoder`, and assert frame count + non-trivial pixel content.
 10. **Undo-count sanity** on the pre-save edit history (non-empty multi-step journey).
 
+Document lifecycle coverage additionally seeds an older package-local recovery snapshot before an
+explicit Save, then proves reopen selects the newly saved canonical project. An injected failure
+after staged contents publish verifies that canonical files and the prior recovery checkpoint roll
+back together. A symlink fixture proves Save never follows a package recovery entry to write
+outside the document. A split-generation canonical pair proves Open falls back to the matching
+complete recovery envelope only when a unique Save marker binds the exact canonical transition and
+every authoritative recovery file. The suite verifies that those files, `recovery/`, and the package
+directory cross macOS `F_FULLFSYNC` ordering barriers before canonical publication. An injected
+barrier failure must restore recovery while preserving the canonical files' bytes and file numbers,
+proving those saved files were not needlessly republished; the same fixture uses a legacy-minimal
+recovery directory with no optional manifest or journal. Preserved opaque recovery sidecars,
+including nested directory trees, are synchronized from files to parent directories without
+following symbolic links. Canonical publication coverage requires each temporary and renamed
+project/media file, the staged and published version tree, and the package directory entries to
+cross their durability barriers before the successful-Save boundary. Symlinked canonical manifests
+must fail before publication without changing their external target, package peer, or package
+entries. Corrupting the marker's manifest or restoring a stale marker while only the unchanged media
+file matches must fail closed.
+Addition and removal fixtures cover both old/new canonical file orderings that later replacements
+can leave after power loss. A valid recovery stays dirty until it is saved again (FR-PROJ-002,
+NFR-STAB-002). The repair Save must retain only decodable version snapshots and must not archive the
+split pair. An injected failure after partial canonical restoration must retain the complete rollback
+staging package, surface its exact path, and prove that both prior canonical files remain available.
+
 ### Hardware-only extension
 
 `testReleaseAcceptanceH264ExportHardwareOnly` repeats a compact edit path and enqueues an H.264

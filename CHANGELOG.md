@@ -52,6 +52,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notarization path, deterministic bundle verifier, tag-aware GitHub release workflow, and an
   operator guide covering credentials, verification, publishing, and rollback.
 
+### Fixed
+
+- Explicit in-place Save now rebases package-local crash recovery to the same project and command
+  count as the newly published canonical files, with an empty journal. This prevents an older
+  `recovery/snapshot.json` from overriding newer saved work on reopen. Canonical files, version
+  history, and recovery publish as one rollback-covered transaction; cache data and unknown
+  recovery sidecars remain intact if present. Recovery publishes first for crash safety, and Save
+  refuses a symlinked recovery directory instead of following it outside the package. If a crash
+  splits the canonical JSON pair across Save generations, Open requires a unique transaction marker
+  whose hashes bind every recovery file and the exact old-to-new canonical transition before using
+  the complete checkpoint. Save uses macOS `F_FULLFSYNC` ordering barriers for that recovery
+  generation, preserved opaque sidecars (including nested trees), and its package directory entry
+  before publishing either canonical file. Each canonical temp file is also fully synchronized
+  before rename; the renamed project/media files, version tree, and package directory entries cross
+  barriers before Save reports success. Symlinked or special-file canonical manifests are rejected
+  before publication so rollback always owns regular backup files. A recovery-barrier failure
+  restores only recovery, leaving untouched canonical files and their metadata alone. If restoring
+  a failed publication also fails, the complete rollback staging package is retained instead of
+  deleting the user's last intact backup. Both
+  old/new file orderings are recognized because power loss can make later replacements durable out
+  of process order, while a merely unchanged `media.json` can no longer make stale recovery look
+  current. Recovered documents require a fresh Save, and the broken pair is never promoted into
+  version history (#271, FR-PROJ-002, NFR-STAB-002).
+
 ## [1.0.0] - 2026-07-11
 
 ### Added
