@@ -35,9 +35,9 @@ extension OfflineAudioMixer {
         context: OfflineTrackMixContext,
         environment: inout OfflineAudioRenderEnvironment,
         nestingDepth: Int,
-        renderPath: [UUID] = []
+        renderPath: OfflineAudioRenderPath = []
     ) throws {
-        for item in track.items {
+        for (itemIndex, item) in track.items.enumerated() {
             try context.mix.cancellationCheck()
             guard case .clip(let clip) = item, clipCarriesAudio(clip, on: track) else {
                 continue
@@ -55,7 +55,12 @@ extension OfflineAudioMixer {
                 context: context.mix,
                 environment: &environment,
                 nestingDepth: nestingDepth,
-                renderPath: renderPath
+                renderPath: clipOccurrenceRenderPath(
+                    renderPath,
+                    trackID: track.id,
+                    itemIndex: itemIndex,
+                    clipID: clip.id
+                )
             )
             try validateTailSourceDelivery(
                 clip: clip,
@@ -74,6 +79,15 @@ extension OfflineAudioMixer {
                 context: context
             )
         }
+    }
+
+    static func clipOccurrenceRenderPath(
+        _ renderPath: OfflineAudioRenderPath,
+        trackID: UUID,
+        itemIndex: Int,
+        clipID: UUID
+    ) -> OfflineAudioRenderPath {
+        renderPath + [.track(trackID), .item(itemIndex), .clip(clipID)]
     }
 
     static func mixClip(

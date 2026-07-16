@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import AjarCore
 import Foundation
@@ -122,31 +123,44 @@ final class OfflineAudioChunkedRenderTests: XCTestCase {
 
     func testDuplicateCompoundInstancesKeepIndependentDuckingContinuationAcrossChunks() throws {
         let fixture = try makeDuplicateCompoundDuckingFixture()
-        let completeRange = try TimeRange(start: .zero, duration: time(2, 1))
-        let monolithic = try OfflineAudioMixer.render(
-            project: fixture.project,
-            sequence: fixture.sequence,
-            range: completeRange,
-            format: fixture.format,
-            sourceProvider: fixture.provider
-        )
-
-        var continuation = OfflineAudioRenderContinuation()
-        var chunkedSamples: [Float] = []
-        for start in [RationalTime.zero, try time(1, 1)] {
-            let chunk = try OfflineAudioMixer.render(
-                project: fixture.project,
-                sequence: fixture.sequence,
-                range: TimeRange(start: start, duration: time(1, 1)),
-                format: fixture.format,
-                sourceProvider: fixture.provider,
-                continuation: &continuation,
-                cancellationCheck: {}
-            )
-            chunkedSamples.append(contentsOf: chunk.samples)
-        }
+        let monolithic = try renderMonolithicDuckingFixture(fixture)
+        let chunkedSamples = try renderChunkedDuckingFixture(fixture)
 
         assertSamples(chunkedSamples, equal: monolithic.samples)
+    }
+
+    func testDuplicateCompoundClipIDsUseStructuralOccurrencePaths() throws {
+        let uniqueFixture = try makeDuplicateCompoundDuckingFixture()
+        let duplicateIDFixture = try makeDuplicateCompoundDuckingFixture(
+            reuseCompoundClipID: true
+        )
+
+        assertSamples(
+            try renderMonolithicDuckingFixture(duplicateIDFixture).samples,
+            equal: try renderMonolithicDuckingFixture(uniqueFixture).samples
+        )
+        assertSamples(
+            try renderChunkedDuckingFixture(duplicateIDFixture),
+            equal: try renderChunkedDuckingFixture(uniqueFixture)
+        )
+
+        let sequenceID = try chunkedUUID(277_820)
+        let trackID = try chunkedUUID(277_821)
+        let duplicateClipID = try chunkedUUID(277_822)
+        let basePath: OfflineAudioRenderPath = [.sequence(sequenceID)]
+        let firstPath = OfflineAudioMixer.clipOccurrenceRenderPath(
+            basePath,
+            trackID: trackID,
+            itemIndex: 0,
+            clipID: duplicateClipID
+        )
+        let secondPath = OfflineAudioMixer.clipOccurrenceRenderPath(
+            basePath,
+            trackID: trackID,
+            itemIndex: 1,
+            clipID: duplicateClipID
+        )
+        XCTAssertNotEqual(firstPath, secondPath)
     }
 
     func testCancellationHookInterruptsFastCPUMixAtBoundedFrameInterval() throws {
@@ -198,8 +212,40 @@ private struct ChunkedDuckingFixture {
     let format: AudioRenderFormat
 }
 
+private func renderMonolithicDuckingFixture(
+    _ fixture: ChunkedDuckingFixture
+) throws -> RenderedAudioBuffer {
+    try OfflineAudioMixer.render(
+        project: fixture.project,
+        sequence: fixture.sequence,
+        range: TimeRange(start: .zero, duration: time(2, 1)),
+        format: fixture.format,
+        sourceProvider: fixture.provider
+    )
+}
+
+private func renderChunkedDuckingFixture(_ fixture: ChunkedDuckingFixture) throws -> [Float] {
+    var continuation = OfflineAudioRenderContinuation()
+    var samples: [Float] = []
+    for start in [RationalTime.zero, try time(1, 1)] {
+        let chunk = try OfflineAudioMixer.render(
+            project: fixture.project,
+            sequence: fixture.sequence,
+            range: TimeRange(start: start, duration: time(1, 1)),
+            format: fixture.format,
+            sourceProvider: fixture.provider,
+            continuation: &continuation,
+            cancellationCheck: {}
+        )
+        samples.append(contentsOf: chunk.samples)
+    }
+    return samples
+}
+
 // swiftlint:disable:next function_body_length
-private func makeDuplicateCompoundDuckingFixture() throws -> ChunkedDuckingFixture {
+private func makeDuplicateCompoundDuckingFixture(
+    reuseCompoundClipID: Bool = false
+) throws -> ChunkedDuckingFixture {
     let sampleRate = 8
     let duration = try time(2, 1)
     let secondHalf = try time(1, 1)
@@ -255,16 +301,19 @@ private func makeDuplicateCompoundDuckingFixture() throws -> ChunkedDuckingFixtu
         timebase: try FrameRate(frames: Int64(sampleRate))
     )
 
+    let firstInstanceID = try chunkedUUID(277_809)
     let firstInstance = Clip(
-        id: try chunkedUUID(277_809),
+        id: firstInstanceID,
         source: .sequence(id: nestedSequenceID),
         sourceRange: try TimeRange(start: .zero, duration: duration),
         timelineRange: try TimeRange(start: .zero, duration: duration),
         kind: .audio,
         name: "Continuous instance"
     )
+    let secondInstanceID =
+        reuseCompoundClipID ? firstInstanceID : try chunkedUUID(277_810)
     let secondInstance = Clip(
-        id: try chunkedUUID(277_810),
+        id: secondInstanceID,
         source: .sequence(id: nestedSequenceID),
         sourceRange: try TimeRange(start: secondHalf, duration: secondHalf),
         timelineRange: try TimeRange(start: secondHalf, duration: secondHalf),

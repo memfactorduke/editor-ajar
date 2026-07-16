@@ -10,7 +10,7 @@ struct OfflinePeakFrameContext {
 
 extension OfflineAudioMixer {
     static func duckingMultipliersByTrackID(
-        renderPath: [UUID] = [],
+        renderPath: OfflineAudioRenderPath = [],
         rules: [AudioDuckingRule],
         tracks: [Track],
         context: OfflineMixContext,
@@ -79,7 +79,7 @@ extension OfflineAudioMixer {
     // swiftlint:disable:next function_parameter_count
     static func cachedPeakLevels(
         for triggerTrack: Track,
-        renderPath: [UUID],
+        renderPath: OfflineAudioRenderPath,
         context: OfflineMixContext,
         environment: inout OfflineAudioRenderEnvironment,
         peaksByTriggerID: inout [UUID: [Double]],
@@ -102,13 +102,13 @@ extension OfflineAudioMixer {
 
     static func trackPeakLevels(
         _ track: Track,
-        renderPath: [UUID],
+        renderPath: OfflineAudioRenderPath,
         context: OfflineMixContext,
         environment: inout OfflineAudioRenderEnvironment,
         nestingDepth: Int
     ) throws -> [Double] {
         var levels = Array(repeating: Double(0), count: context.frameCount)
-        for item in track.items {
+        for (itemIndex, item) in track.items.enumerated() {
             try context.cancellationCheck()
             guard case .clip(let clip) = item, clip.kind == .audio else {
                 continue
@@ -128,7 +128,12 @@ extension OfflineAudioMixer {
                 context: context,
                 environment: &environment,
                 nestingDepth: nestingDepth,
-                renderPath: renderPath
+                renderPath: clipOccurrenceRenderPath(
+                    renderPath,
+                    trackID: track.id,
+                    itemIndex: itemIndex,
+                    clipID: clip.id
+                )
             )
             try peakClipLevels(
                 state: retimedClipMixState(

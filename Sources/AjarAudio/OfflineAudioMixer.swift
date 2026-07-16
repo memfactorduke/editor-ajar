@@ -136,7 +136,7 @@ public enum OfflineAudioMixer {
             format: format,
             environment: &environment,
             nestingDepth: 0,
-            renderPath: [sequence.id]
+            renderPath: [.sequence(sequence.id)]
         )
     }
 
@@ -147,7 +147,7 @@ public enum OfflineAudioMixer {
         format: AudioRenderFormat,
         environment: inout OfflineAudioRenderEnvironment,
         nestingDepth: Int,
-        renderPath: [UUID]
+        renderPath: OfflineAudioRenderPath
     ) throws -> RenderedAudioBuffer {
         try environment.cancellationCheck()
         try AudioBufferValidator.validate(format: format, frameCount: 0, samples: [])

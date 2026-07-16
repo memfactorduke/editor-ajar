@@ -9,6 +9,20 @@ import Foundation
 /// throw their own typed cancellation error; the mixer deliberately preserves that error.
 public typealias AudioRenderCancellationCheck = @Sendable () throws -> Void
 
+/// Stable structural identity for one nested-render occurrence.
+///
+/// Clip IDs alone are insufficient because compound decomposition can legally duplicate them.
+/// Track identity plus item position keeps those occurrences separate while remaining stable for
+/// every bounded chunk rendered from the same captured project snapshot.
+enum OfflineAudioRenderPathComponent: Hashable, Sendable {
+    case sequence(UUID)
+    case track(UUID)
+    case item(Int)
+    case clip(UUID)
+}
+
+typealias OfflineAudioRenderPath = [OfflineAudioRenderPathComponent]
+
 /// State carried between bounded renders of one continuous timeline range.
 ///
 /// Most mix parameters are functions of absolute timeline time and therefore need no state.
@@ -24,7 +38,7 @@ public struct OfflineAudioRenderContinuation: Sendable {
 }
 
 struct OfflineDuckingContinuationKey: Hashable, Sendable {
-    let renderPath: [UUID]
+    let renderPath: OfflineAudioRenderPath
     let ruleIndex: Int
 }
 
