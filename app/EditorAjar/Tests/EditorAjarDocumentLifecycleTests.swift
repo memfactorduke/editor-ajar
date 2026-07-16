@@ -613,8 +613,11 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         let attemptedProject = try XCTUnwrap(model.project)
         var projectObservedAtBoundary: Project?
         var canonicalBytesObservedAtBoundary: Data?
+        let synchronizationEvents = InPlaceSaveSynchronizationEvents()
+        let recoveryURL = packageURL.appendingPathComponent("recovery", isDirectory: true)
         let store = EditorAjarDocumentStore(
             saveDidPublishRecovery: {
+                synchronizationEvents.values.append(.recoveryPublished)
                 projectObservedAtBoundary = try AjarAutosaveStore.recoverProject(
                     from: packageURL
                 ).project
@@ -625,7 +628,10 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
                     path: packageURL.path,
                     reason: "injected recovery-first boundary failure"
                 )
-            }
+            },
+            saveAsSynchronizer: RecordingInPlaceSaveSynchronizer(
+                events: synchronizationEvents
+            )
         )
 
         XCTAssertThrowsError(
@@ -640,12 +646,99 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertEqual(projectObservedAtBoundary, attemptedProject)
         XCTAssertEqual(canonicalBytesObservedAtBoundary, previousProjectBytes)
         XCTAssertEqual(
+            synchronizationEvents.values,
+            [
+                .file(recoveryURL.appendingPathComponent("snapshot.json").path),
+                .file(recoveryURL.appendingPathComponent("manifest.json").path),
+                .file(recoveryURL.appendingPathComponent("edit-journal.jsonl").path),
+                .file(recoveryURL.appendingPathComponent("save-transaction.json").path),
+                .directory(recoveryURL.path),
+                .directory(packageURL.path),
+                .recoveryPublished,
+            ]
+        )
+        XCTAssertEqual(
             try AjarAutosaveStore.recoverProject(from: packageURL).project,
             previousProject
         )
         XCTAssertEqual(
             try Data(contentsOf: packageURL.appendingPathComponent("project.json")),
             previousProjectBytes
+        )
+        XCTAssertTrue(try fixture.stagingPackages().isEmpty)
+    }
+
+    func testNFRSTAB002RecoveryDurabilityFailurePreventsCanonicalPublication() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "RecoveryDurabilityFailure.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        XCTAssertTrue(model.addSequence())
+        let previousProject = try XCTUnwrap(model.project)
+        try AjarAutosaveStore.writeSnapshot(
+            previousProject,
+            appliedCommandCount: 1,
+            openMode: .editable,
+            to: packageURL
+        )
+        try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
+        let previousProjectBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("project.json")
+        )
+        let previousMediaBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("media.json")
+        )
+        let previousRecoveryBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")
+        )
+
+        XCTAssertTrue(model.addSequence())
+        let attemptedProject = try XCTUnwrap(model.project)
+        let synchronizationEvents = InPlaceSaveSynchronizationEvents(
+            failingDirectoryURL: packageURL
+        )
+        var reachedCanonicalPublicationBoundary = false
+        let store = EditorAjarDocumentStore(
+            saveDidPublishRecovery: {
+                reachedCanonicalPublicationBoundary = true
+            },
+            saveAsSynchronizer: RecordingInPlaceSaveSynchronizer(
+                events: synchronizationEvents
+            )
+        )
+
+        XCTAssertThrowsError(
+            try store.save(
+                project: attemptedProject,
+                openMode: .editable,
+                appliedCommandCount: 2,
+                to: packageURL
+            )
+        ) { error in
+            guard case EditorAjarDocumentStoreError.saveAsSynchronization = error else {
+                return XCTFail("Expected a typed durability failure, got \(error)")
+            }
+        }
+
+        XCTAssertFalse(reachedCanonicalPublicationBoundary)
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("project.json")),
+            previousProjectBytes
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("media.json")),
+            previousMediaBytes
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")),
+            previousRecoveryBytes
+        )
+        XCTAssertEqual(
+            try AjarAutosaveStore.recoverProject(from: packageURL).project,
+            previousProject
         )
         XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
@@ -1252,5 +1345,39 @@ private struct DocumentLifecycleFixture {
     func cleanup() {
         try? FileManager.default.removeItem(at: rootURL)
         userDefaults.removePersistentDomain(forName: userDefaultsSuiteName)
+    }
+}
+
+private final class InPlaceSaveSynchronizationEvents {
+    enum Event: Equatable {
+        case file(String)
+        case directory(String)
+        case recoveryPublished
+    }
+
+    var values: [Event] = []
+    let failingDirectoryURL: URL?
+
+    init(failingDirectoryURL: URL? = nil) {
+        self.failingDirectoryURL = failingDirectoryURL
+    }
+}
+
+private struct RecordingInPlaceSaveSynchronizer: EditorAjarSaveAsSynchronizing {
+    let events: InPlaceSaveSynchronizationEvents
+
+    func synchronizeFile(at url: URL) throws {
+        events.values.append(.file(url.path))
+    }
+
+    func synchronizeDirectory(at url: URL, descriptor _: Int32?) throws {
+        events.values.append(.directory(url.path))
+        if url.standardizedFileURL == events.failingDirectoryURL?.standardizedFileURL {
+            throw EditorAjarDocumentStoreError.saveAsSynchronization(
+                path: url.path,
+                operation: "injected in-place Save directory synchronization failure",
+                code: EIO
+            )
+        }
     }
 }

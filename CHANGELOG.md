@@ -62,10 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses a symlinked recovery directory instead of following it outside the package. If a crash
   splits the canonical JSON pair across Save generations, Open requires a unique transaction marker
   whose hashes bind every recovery file and the exact old-to-new canonical transition before using
-  the complete checkpoint. Both old/new file orderings are recognized because power loss can make
-  unsynchronized replacements durable out of process order, while a merely unchanged `media.json`
-  can no longer make stale recovery look current. Recovered documents require a fresh Save, and the
-  broken pair is never promoted into version history (#271, FR-PROJ-002, NFR-STAB-002).
+  the complete checkpoint. Save synchronizes that recovery generation and its package directory
+  entry before publishing either canonical file. Both old/new file orderings are recognized because
+  power loss can make later replacements durable out of process order, while a merely unchanged
+  `media.json` can no longer make stale recovery look current. Recovered documents require a fresh
+  Save, and the broken pair is never promoted into version history (#271, FR-PROJ-002,
+  NFR-STAB-002).
 
 ## [1.0.0] - 2026-07-11
 
