@@ -124,8 +124,12 @@ public final class MediaTranscodeFrameProvider: @unchecked Sendable {
             }
         }
         try requireReadableSource()
-        let track = try await loadVideoTrack()
-        let reader = try makeReader()
+        // AVAssetReaderTrackOutput requires its track to belong to the exact asset instance used
+        // by the reader. Reconstructing the same URL as a second AVURLAsset is not equivalent and
+        // makes reader.canAdd(output) fail before the first proxy frame can decode.
+        let asset = AVURLAsset(url: sourceURL)
+        let track = try await loadVideoTrack(from: asset)
+        let reader = try makeReader(for: asset)
         let output = AVAssetReaderTrackOutput(
             track: track,
             outputSettings: [
@@ -161,8 +165,7 @@ public final class MediaTranscodeFrameProvider: @unchecked Sendable {
         }
     }
 
-    private func loadVideoTrack() async throws -> AVAssetTrack {
-        let asset = AVURLAsset(url: sourceURL)
+    private func loadVideoTrack(from asset: AVURLAsset) async throws -> AVAssetTrack {
         let tracks: [AVAssetTrack]
         do {
             tracks = try await asset.loadTracks(withMediaType: .video)
@@ -175,8 +178,7 @@ public final class MediaTranscodeFrameProvider: @unchecked Sendable {
         return track
     }
 
-    private func makeReader() throws -> AVAssetReader {
-        let asset = AVURLAsset(url: sourceURL)
+    private func makeReader(for asset: AVURLAsset) throws -> AVAssetReader {
         do {
             return try AVAssetReader(asset: asset)
         } catch {

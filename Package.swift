@@ -96,7 +96,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AjarMediaTests",
-            dependencies: ["AjarMedia", "AjarCore"],
+            dependencies: ["AjarMedia", "AjarCore", "AjarExport"],
             path: "Tests/AjarMediaTests"
         ),
         .testTarget(

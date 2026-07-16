@@ -54,6 +54,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Production proxy generation now decodes the first and later source frames and publishes a
+  playable ProRes 422 Proxy instead of failing every job before frame zero. The decoder now gives
+  `AVAssetReaderTrackOutput` a track owned by the reader's exact `AVURLAsset`; rebuilding the same
+  URL as a second asset made `reader.canAdd(output)` fail deterministically. Direct 64-bit ARGB
+  decode coverage, the real queue/session/provider path, codec/playability checks, typed malformed
+  and missing-source errors, and no-output/no-partial cleanup guard the fix. The 1.0.0 note below
+  now describes that release's proxy path as intended rather than working end to end (#273,
+  FR-MED-004, NFR-STAB-006).
 - Explicit in-place Save now rebases package-local crash recovery to the same project and command
   count as the newly published canonical files, with an empty journal. This prevents an older
   `recovery/snapshot.json` from overriding newer saved work on reopen. Canonical files, version
@@ -215,7 +223,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (autosave/recovery/render failures) are intentionally left un-localized. Format acronyms
   (PNG/JPEG/WAV/M4A) and persisted default document names (`Sequence N`, `Look N`) are document
   data, not UI chrome, and are likewise left as-is.
-- FR-MED-004 proxy / optimized media pipeline (#217): **working** end-to-end app path — background
+- FR-MED-004 proxy / optimized media pipeline (#217): intended end-to-end app path (production
+  frame-decoder fix followed in #273) — background
   ProRes 422 Proxy generation on a dedicated `ProxyGenerationQueue` (does not block user
   `ExportQueue` encodes) driven from playback when proxies are missing/stale, package-relative
   storage under `caches/proxies/` (ADR-0007), durable `MediaRef.proxyState` + project
