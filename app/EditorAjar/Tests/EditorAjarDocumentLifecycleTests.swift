@@ -469,6 +469,9 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
                 saveDidPublishRecovery: {
                     synchronizationEvents.values.append(.recoveryPublished)
                 },
+                saveDidPublishContents: {
+                    synchronizationEvents.values.append(.contentsPublished)
+                },
                 saveAsSynchronizer: RecordingInPlaceSaveSynchronizer(
                     events: synchronizationEvents
                 )
@@ -534,6 +537,67 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertLessThan(nestedDirectoryIndex, recoveryDirectoryIndex)
         XCTAssertLessThan(recoveryDirectoryIndex, packageDirectoryIndex)
         XCTAssertLessThan(packageDirectoryIndex, publicationBoundaryIndex)
+
+        let projectURL = packageURL.appendingPathComponent("project.json")
+        let mediaURL = packageURL.appendingPathComponent("media.json")
+        let versionsURL = packageURL.appendingPathComponent("versions", isDirectory: true)
+        let projectTemporaryIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex { event in
+                guard case .file(let path) = event else {
+                    return false
+                }
+                return path.contains("/.project.json.") && path.hasSuffix(".tmp")
+            }
+        )
+        let projectFileIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex(of: .file(projectURL.path))
+        )
+        let projectPackageIndex = try directoryEventIndex(
+            in: synchronizationEvents.values,
+            path: packageURL.path,
+            after: projectFileIndex
+        )
+        let mediaTemporaryIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex { event in
+                guard case .file(let path) = event else {
+                    return false
+                }
+                return path.contains("/.media.json.") && path.hasSuffix(".tmp")
+            }
+        )
+        let mediaFileIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex(of: .file(mediaURL.path))
+        )
+        let mediaPackageIndex = try directoryEventIndex(
+            in: synchronizationEvents.values,
+            path: packageURL.path,
+            after: mediaFileIndex
+        )
+        let stagedVersionsIndex = try stagingDirectoryIndex(
+            in: synchronizationEvents.values,
+            named: "versions",
+            destinationURL: versionsURL
+        )
+        let publishedVersionsIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex(of: .directory(versionsURL.path))
+        )
+        let versionsPackageIndex = try directoryEventIndex(
+            in: synchronizationEvents.values,
+            path: packageURL.path,
+            after: publishedVersionsIndex
+        )
+        let contentsBoundaryIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex(of: .contentsPublished)
+        )
+        XCTAssertLessThan(projectTemporaryIndex, projectFileIndex)
+        XCTAssertLessThan(projectFileIndex, projectPackageIndex)
+        XCTAssertLessThan(projectPackageIndex, mediaTemporaryIndex)
+        XCTAssertLessThan(mediaTemporaryIndex, mediaFileIndex)
+        XCTAssertLessThan(mediaFileIndex, mediaPackageIndex)
+        XCTAssertLessThan(mediaPackageIndex, stagedVersionsIndex)
+        XCTAssertLessThan(stagedVersionsIndex, publishedVersionsIndex)
+        XCTAssertLessThan(publishedVersionsIndex, versionsPackageIndex)
+        XCTAssertLessThan(versionsPackageIndex, contentsBoundaryIndex)
         let recovery = try AjarAutosaveStore.recoverProject(from: packageURL)
         XCTAssertEqual(recovery.project, model.project)
         XCTAssertEqual(recovery.appliedJournalEntryCount, 0)
@@ -1410,6 +1474,31 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         })
     }
 
+    private func directoryEventIndex(
+        in events: [InPlaceSaveSynchronizationEvents.Event],
+        path: String,
+        after precedingIndex: Int
+    ) throws -> Int {
+        try XCTUnwrap(events.indices.first { index in
+            index > precedingIndex && events[index] == .directory(path)
+        })
+    }
+
+    private func stagingDirectoryIndex(
+        in events: [InPlaceSaveSynchronizationEvents.Event],
+        named name: String,
+        destinationURL: URL
+    ) throws -> Int {
+        try XCTUnwrap(events.firstIndex { event in
+            guard case .directory(let path) = event else {
+                return false
+            }
+            return path.hasSuffix("/\(name)")
+                && URL(fileURLWithPath: path).standardizedFileURL
+                    != destinationURL.standardizedFileURL
+        })
+    }
+
     private func writeHigherMinorPackage(
         project: Project,
         schemaMinor: Int,
@@ -1496,6 +1585,7 @@ private final class InPlaceSaveSynchronizationEvents {
         case file(String)
         case directory(String)
         case recoveryPublished
+        case contentsPublished
     }
 
     var values: [Event] = []

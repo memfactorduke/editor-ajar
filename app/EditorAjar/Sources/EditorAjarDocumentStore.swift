@@ -1690,15 +1690,39 @@ private extension EditorAjarDocumentStore {
     }
 
     func publishStagedFile(named name: String, from stagingURL: URL, to destinationURL: URL) throws {
-        try AjarAtomicFileWriter.write(
+        let destinationFileURL = destinationURL.appendingPathComponent(name)
+        let transaction = try AjarAtomicFileWriter.prepareWrite(
             Data(contentsOf: stagingURL.appendingPathComponent(name)),
-            to: destinationURL.appendingPathComponent(name),
+            to: destinationFileURL,
             fileManager: fileManager
         )
+        do {
+            // Make the new inode durable before its atomic rename, then make both the renamed file
+            // and its directory entry durable before a later canonical replacement can begin.
+            try saveAsSynchronizer.synchronizeFile(at: transaction.temporaryURL)
+            try transaction.commit(fileManager: fileManager)
+            try saveAsSynchronizer.synchronizeFile(at: destinationFileURL)
+            try saveAsSynchronizer.synchronizeDirectory(at: destinationURL, descriptor: nil)
+        } catch {
+            try? transaction.cancel(fileManager: fileManager)
+            throw error
+        }
     }
 
     func publishStagedVersions(from stagingURL: URL, to destinationURL: URL) throws {
+        let stagedVersionsURL = stagingURL.appendingPathComponent("versions", isDirectory: true)
+        guard fileManager.fileExists(atPath: stagedVersionsURL.path) else {
+            return
+        }
+        // Version snapshots are part of the explicit Save transaction. Synchronize their entire
+        // staged tree before replacement, then persist the replacement entry in the package root.
+        try synchronizePackageTree(at: stagedVersionsURL)
         try publishStagedDirectory(named: "versions", from: stagingURL, to: destinationURL)
+        try saveAsSynchronizer.synchronizeDirectory(
+            at: destinationURL.appendingPathComponent("versions", isDirectory: true),
+            descriptor: nil
+        )
+        try saveAsSynchronizer.synchronizeDirectory(at: destinationURL, descriptor: nil)
     }
 
     func synchronizeRecoveryDirectory(
@@ -1731,19 +1755,19 @@ private extension EditorAjarDocumentStore {
         ).filter { !authoritativeNameSet.contains($0.lastPathComponent) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         for sidecarURL in sidecarURLs {
-            try synchronizeRecoverySidecar(at: sidecarURL)
+            try synchronizePackageTree(at: sidecarURL)
         }
         try saveAsSynchronizer.synchronizeDirectory(at: recoveryURL, descriptor: nil)
     }
 
-    /// Synchronizes opaque recovery content without following links outside the package.
-    func synchronizeRecoverySidecar(at url: URL) throws {
+    /// Synchronizes an app-owned tree bottom-up without following links outside the package.
+    func synchronizePackageTree(at url: URL) throws {
         var information = stat()
         let result = url.path.withCString { lstat($0, &information) }
         guard result == 0 else {
             throw EditorAjarDocumentStoreError.fileOperation(
                 path: url.path,
-                reason: "The recovery sidecar could not be inspected."
+                reason: "The package durability entry could not be inspected."
             )
         }
         switch information.st_mode & S_IFMT {
@@ -1755,13 +1779,13 @@ private extension EditorAjarDocumentStore {
                 includingPropertiesForKeys: nil
             ).sorted { $0.lastPathComponent < $1.lastPathComponent }
             for child in children {
-                try synchronizeRecoverySidecar(at: child)
+                try synchronizePackageTree(at: child)
             }
             try saveAsSynchronizer.synchronizeDirectory(at: url, descriptor: nil)
         default:
             throw EditorAjarDocumentStoreError.fileOperation(
                 path: url.path,
-                reason: "Recovery sidecars must be regular files or directories."
+                reason: "Package durability entries must be regular files or directories."
             )
         }
     }

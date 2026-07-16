@@ -185,11 +185,14 @@ barrier failure must restore recovery while preserving the canonical files' byte
 proving those saved files were not needlessly republished; the same fixture uses a legacy-minimal
 recovery directory with no optional manifest or journal. Preserved opaque recovery sidecars,
 including nested directory trees, are synchronized from files to parent directories without
-following symbolic links. Corrupting the marker's manifest or
-restoring a stale marker while only the unchanged media file matches must fail closed. Addition and
-removal fixtures cover both old/new canonical file orderings that later replacements can leave after
-power loss. A valid recovery stays dirty until it is saved again (FR-PROJ-002, NFR-STAB-002). The
-repair Save must retain only decodable version snapshots and must not archive the split pair.
+following symbolic links. Canonical publication coverage requires each temporary and renamed
+project/media file, the staged and published version tree, and the package directory entries to
+cross their durability barriers before the successful-Save boundary. Corrupting the marker's
+manifest or restoring a stale marker while only the unchanged media file matches must fail closed.
+Addition and removal fixtures cover both old/new canonical file orderings that later replacements
+can leave after power loss. A valid recovery stays dirty until it is saved again (FR-PROJ-002,
+NFR-STAB-002). The repair Save must retain only decodable version snapshots and must not archive the
+split pair.
 
 ### Hardware-only extension
 
