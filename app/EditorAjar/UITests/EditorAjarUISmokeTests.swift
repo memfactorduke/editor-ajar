@@ -100,7 +100,14 @@ final class EditorAjarUISmokeTests: XCTestCase {
 
         let sourceClip = app.buttons["Clip Sample Playback Clip"]
         XCTAssertTrue(sourceClip.waitForExistence(timeout: 10))
-        sourceClip.click()
+        // Direct XCUI clicks on the SwiftUI timeline block can be swallowed by its simultaneous
+        // drag gesture on macOS 14 even though the synthesized event lands on the clip. Use the
+        // existing accessible track action, then prove the selection precondition before opening
+        // the menu. The linked audio partner is still expanded by the production compound action.
+        let selectSourceTrack = app.buttons["Select all Video track 1"]
+        XCTAssertTrue(selectSourceTrack.waitForExistence(timeout: 5))
+        selectSourceTrack.click()
+        waitForElementValue(sourceClip, containing: "Selected", timeout: 5)
 
         let clipMenu = app.menuBars.menuBarItems["Clip"]
         XCTAssertTrue(clipMenu.waitForExistence(timeout: 5))
