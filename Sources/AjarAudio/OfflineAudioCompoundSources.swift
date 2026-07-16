@@ -10,6 +10,9 @@ struct CompoundAudioSourceKey: Hashable {
     let sequenceID: UUID
     let sourceRange: TimeRange
     let format: AudioRenderFormat
+    /// Instance path also keys ducking continuation. Two references to the same nested sequence
+    /// can enter the same source window with different envelope histories across export chunks.
+    let renderPath: [UUID]
 }
 
 /// One imported-media window requested by a particular clip mapping.
@@ -230,10 +233,12 @@ extension OfflineAudioMixer {
             for: requiredSourceWindow,
             sampleRate: context.format.sampleRate
         )
+        let nestedRenderPath = renderPath + [clip.id, sequence.id]
         let key = CompoundAudioSourceKey(
             sequenceID: sequenceID,
             sourceRange: sourceWindow.range,
-            format: context.format
+            format: context.format,
+            renderPath: nestedRenderPath
         )
         if let cached = environment.compoundSourceCache[key] {
             return cached
@@ -245,7 +250,7 @@ extension OfflineAudioMixer {
             format: context.format,
             environment: &environment,
             nestingDepth: nestingDepth + 1,
-            renderPath: renderPath + [clip.id, sequence.id]
+            renderPath: nestedRenderPath
         )
         let source = try AudioSourceBuffer(
             format: nestedBuffer.format,

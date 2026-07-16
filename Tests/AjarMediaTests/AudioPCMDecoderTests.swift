@@ -230,6 +230,89 @@ final class AudioPCMDecoderTests: XCTestCase {
         }
     }
 
+    // swiftlint:disable:next function_body_length
+    func testNFRSTAB006AccumulatorRejectsMissingAndPartialDecodedCoverage() async throws {
+        let sampleRate = 8_000
+        let sourceURL = try temporaryURL(extension: "wav")
+        try PCMTestWaveWriter.writeInt16Wave(
+            to: sourceURL,
+            sampleRate: sampleRate,
+            channelCount: 1,
+            samples: PCMTestWaveWriter.interleavedRamp(frameCount: 8, channelCount: 1)
+        )
+        let asset = AVURLAsset(url: sourceURL)
+        let track = try await AudioPCMDecoder.loadAudioTrack(
+            asset: asset,
+            sourceURL: sourceURL
+        )
+        let sourceRange = try TimeRange(
+            start: .zero,
+            duration: RationalTime(value: 4, timescale: Int64(sampleRate))
+        )
+        let context = AudioPCMDecodeContext(
+            asset: asset,
+            track: track,
+            sourceURL: sourceURL,
+            sourceRange: sourceRange,
+            frameRange: 0..<4,
+            decodeFrameRange: 0..<4,
+            format: AudioPCMNativeFormat(sampleRate: sampleRate, channelCount: 1),
+            cancellation: AudioPCMDecodeCancellation()
+        )
+
+        var missing = AudioPCMWindowAccumulator(context: context)
+        XCTAssertThrowsError(try missing.makeWindow()) { error in
+            XCTAssertEqual(
+                error as? AudioPCMDecodeError,
+                .windowUnderDelivered(
+                    sourceURL,
+                    expectedFrameRange: 0..<4,
+                    actualFrameRange: 0..<0
+                )
+            )
+        }
+
+        var partial = AudioPCMWindowAccumulator(context: context)
+        try partial.append(
+            AudioPCMFrameSlice(
+                presentationTime: .zero,
+                startFrame: 0,
+                endFrame: 2,
+                samples: [0.25, 0.25]
+            )
+        )
+        XCTAssertThrowsError(try partial.makeWindow()) { error in
+            XCTAssertEqual(
+                error as? AudioPCMDecodeError,
+                .windowUnderDelivered(
+                    sourceURL,
+                    expectedFrameRange: 0..<4,
+                    actualFrameRange: 0..<2
+                )
+            )
+        }
+
+        var missingPrefix = AudioPCMWindowAccumulator(context: context)
+        try missingPrefix.append(
+            AudioPCMFrameSlice(
+                presentationTime: RationalTime(value: 2, timescale: Int64(sampleRate)),
+                startFrame: 2,
+                endFrame: 4,
+                samples: [0.25, 0.25]
+            )
+        )
+        XCTAssertThrowsError(try missingPrefix.makeWindow()) { error in
+            XCTAssertEqual(
+                error as? AudioPCMDecodeError,
+                .windowUnderDelivered(
+                    sourceURL,
+                    expectedFrameRange: 0..<4,
+                    actualFrameRange: 2..<4
+                )
+            )
+        }
+    }
+
 }
 
 extension AudioPCMDecoderTests {

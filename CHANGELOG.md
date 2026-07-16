@@ -84,7 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queued superseded reads, and caps blocking video decodes so stale work cannot exhaust the
   process's dispatch threads; active readers finish and tear down on their owning worker. Audio
   reads use the same bounded, immediate queued-cancellation discipline, while valid movies with
-  leading or trailing audio gaps zero-fill only those gaps without hiding reader failures.
+  leading or trailing audio gaps zero-fill only those gaps without hiding reader failures. Clean
+  reader under-delivery now fails instead of padding missing content, and repeated compound
+  instances keep independent ducking history across bounded export chunks.
   Release acceptance generates and probes real muxed ProRes/PCM media, then proves linked editing,
   playback, meters, save/reopen, and decoded non-silent, time-aligned export audio alongside pixels
   (#277, FR-MED-001, FR-TL-009, FR-AUD-001/003/007/009, FR-EXP-002/007).

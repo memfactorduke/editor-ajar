@@ -166,13 +166,23 @@ struct AudioPCMWindowAccumulator {
     }
 
     mutating func makeWindow() throws -> DecodedAudioWindow {
-        guard let frameOffset = firstFrameOffset,
-            let endFrameOffset = nextFrameOffset
-        else {
-            return try makePaddedWindow(decodedFrameRange: nil)
+        let actualFrameRange: Range<Int>
+        if let frameOffset = firstFrameOffset, let endFrameOffset = nextFrameOffset {
+            actualFrameRange = frameOffset..<endFrameOffset
+        } else {
+            actualFrameRange =
+                context.decodeFrameRange.lowerBound..<context.decodeFrameRange.lowerBound
         }
-        let actualFrameRange = frameOffset..<endFrameOffset
-        return try makePaddedWindow(decodedFrameRange: actualFrameRange)
+        guard actualFrameRange == context.decodeFrameRange else {
+            throw AudioPCMDecodeError.windowUnderDelivered(
+                context.sourceURL,
+                expectedFrameRange: context.decodeFrameRange,
+                actualFrameRange: actualFrameRange
+            )
+        }
+        return try makePaddedWindow(
+            decodedFrameRange: actualFrameRange.isEmpty ? nil : actualFrameRange
+        )
     }
 
     private mutating func makePaddedWindow(

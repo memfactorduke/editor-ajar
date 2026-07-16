@@ -120,6 +120,35 @@ final class OfflineAudioChunkedRenderTests: XCTestCase {
         XCTAssertEqual(chunkedSamples, monolithic.samples)
     }
 
+    func testDuplicateCompoundInstancesKeepIndependentDuckingContinuationAcrossChunks() throws {
+        let fixture = try makeDuplicateCompoundDuckingFixture()
+        let completeRange = try TimeRange(start: .zero, duration: time(2, 1))
+        let monolithic = try OfflineAudioMixer.render(
+            project: fixture.project,
+            sequence: fixture.sequence,
+            range: completeRange,
+            format: fixture.format,
+            sourceProvider: fixture.provider
+        )
+
+        var continuation = OfflineAudioRenderContinuation()
+        var chunkedSamples: [Float] = []
+        for start in [RationalTime.zero, try time(1, 1)] {
+            let chunk = try OfflineAudioMixer.render(
+                project: fixture.project,
+                sequence: fixture.sequence,
+                range: TimeRange(start: start, duration: time(1, 1)),
+                format: fixture.format,
+                sourceProvider: fixture.provider,
+                continuation: &continuation,
+                cancellationCheck: {}
+            )
+            chunkedSamples.append(contentsOf: chunk.samples)
+        }
+
+        assertSamples(chunkedSamples, equal: monolithic.samples)
+    }
+
     func testCancellationHookInterruptsFastCPUMixAtBoundedFrameInterval() throws {
         let sampleRate = 192_000
         let mediaID = try uuid("00000000-0000-0000-0000-000000277311")
@@ -162,7 +191,7 @@ final class OfflineAudioChunkedRenderTests: XCTestCase {
     }
 }
 
-private struct MaximumDepthDuckingFixture {
+private struct ChunkedDuckingFixture {
     let project: Project
     let sequence: Sequence
     let provider: InMemoryAudioSourceProvider
@@ -170,7 +199,131 @@ private struct MaximumDepthDuckingFixture {
 }
 
 // swiftlint:disable:next function_body_length
-private func makeMaximumDepthDuckingFixture() throws -> MaximumDepthDuckingFixture {
+private func makeDuplicateCompoundDuckingFixture() throws -> ChunkedDuckingFixture {
+    let sampleRate = 8
+    let duration = try time(2, 1)
+    let secondHalf = try time(1, 1)
+    let format = AudioRenderFormat(sampleRate: sampleRate, channelCount: 2)
+    let triggerMediaID = try chunkedUUID(277_801)
+    let bedMediaID = try chunkedUUID(277_802)
+    let triggerTrackID = try chunkedUUID(277_803)
+    let bedTrackID = try chunkedUUID(277_804)
+    let nestedSequenceID = try chunkedUUID(277_805)
+    let rootSequenceID = try chunkedUUID(277_806)
+
+    let nested = Sequence(
+        id: nestedSequenceID,
+        name: "Ducked nested source",
+        videoTracks: [],
+        audioTracks: [
+            try makeTrack(
+                id: triggerTrackID,
+                items: [
+                    .clip(
+                        try makeClip(
+                            id: chunkedUUID(277_807),
+                            mediaID: triggerMediaID,
+                            duration: duration
+                        )
+                    )
+                ]
+            ),
+            try makeTrack(
+                id: bedTrackID,
+                items: [
+                    .clip(
+                        try makeClip(
+                            id: chunkedUUID(277_808),
+                            mediaID: bedMediaID,
+                            duration: duration
+                        )
+                    )
+                ]
+            )
+        ],
+        markers: [],
+        audioDucking: [
+            AudioDuckingRule(
+                triggerTrackID: triggerTrackID,
+                targetTrackIDs: [bedTrackID],
+                threshold: RationalValue.approximating(0.5),
+                reductionGain: RationalValue.approximating(0.25),
+                attack: .zero,
+                release: duration
+            )
+        ],
+        timebase: try FrameRate(frames: Int64(sampleRate))
+    )
+
+    let firstInstance = Clip(
+        id: try chunkedUUID(277_809),
+        source: .sequence(id: nestedSequenceID),
+        sourceRange: try TimeRange(start: .zero, duration: duration),
+        timelineRange: try TimeRange(start: .zero, duration: duration),
+        kind: .audio,
+        name: "Continuous instance"
+    )
+    let secondInstance = Clip(
+        id: try chunkedUUID(277_810),
+        source: .sequence(id: nestedSequenceID),
+        sourceRange: try TimeRange(start: secondHalf, duration: secondHalf),
+        timelineRange: try TimeRange(start: secondHalf, duration: secondHalf),
+        kind: .audio,
+        name: "Fresh instance"
+    )
+    let root = Sequence(
+        id: rootSequenceID,
+        name: "Repeated compound root",
+        videoTracks: [],
+        audioTracks: [
+            try makeTrack(
+                id: chunkedUUID(277_811),
+                items: [.clip(firstInstance)]
+            ),
+            try makeTrack(
+                id: chunkedUUID(277_812),
+                items: [.clip(secondInstance)]
+            )
+        ],
+        markers: [],
+        timebase: try FrameRate(frames: Int64(sampleRate))
+    )
+    let project = Project(
+        schemaVersion: AjarProjectCodec.currentSchemaVersion,
+        settings: ProjectSettings(
+            frameRate: try FrameRate(frames: Int64(sampleRate)),
+            resolution: PixelDimensions(width: 16, height: 16),
+            colorSpace: .rec709,
+            audioSampleRate: sampleRate
+        ),
+        mediaPool: [
+            makeCrossfadeMediaRef(id: triggerMediaID, declaredDuration: duration),
+            makeCrossfadeMediaRef(id: bedMediaID, declaredDuration: duration)
+        ],
+        sequences: [root, nested]
+    )
+    return ChunkedDuckingFixture(
+        project: project,
+        sequence: root,
+        provider: InMemoryAudioSourceProvider(sources: [
+            triggerMediaID: try AudioSourceBuffer(
+                format: AudioRenderFormat(sampleRate: sampleRate, channelCount: 1),
+                frameCount: sampleRate * 2,
+                samples: [Float](repeating: 1, count: sampleRate / 4)
+                    + [Float](repeating: 0, count: (sampleRate * 2) - (sampleRate / 4))
+            ),
+            bedMediaID: try AudioSourceBuffer(
+                format: AudioRenderFormat(sampleRate: sampleRate, channelCount: 1),
+                frameCount: sampleRate * 2,
+                samples: [Float](repeating: 1, count: sampleRate * 2)
+            )
+        ]),
+        format: format
+    )
+}
+
+// swiftlint:disable:next function_body_length
+private func makeMaximumDepthDuckingFixture() throws -> ChunkedDuckingFixture {
     let sampleRate = 64
     let duration = try time(2, 1)
     let format = AudioRenderFormat(sampleRate: sampleRate, channelCount: 2)
@@ -268,7 +421,7 @@ private func makeMaximumDepthDuckingFixture() throws -> MaximumDepthDuckingFixtu
         ],
         sequences: sequences
     )
-    return MaximumDepthDuckingFixture(
+    return ChunkedDuckingFixture(
         project: project,
         sequence: root,
         provider: InMemoryAudioSourceProvider(sources: [
