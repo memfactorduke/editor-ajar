@@ -194,7 +194,8 @@ file matches must fail closed.
 Addition and removal fixtures cover both old/new canonical file orderings that later replacements
 can leave after power loss. A valid recovery stays dirty until it is saved again (FR-PROJ-002,
 NFR-STAB-002). The repair Save must retain only decodable version snapshots and must not archive the
-split pair.
+split pair. An injected failure after partial canonical restoration must retain the complete rollback
+staging package, surface its exact path, and prove that both prior canonical files remain available.
 
 ### Hardware-only extension
 

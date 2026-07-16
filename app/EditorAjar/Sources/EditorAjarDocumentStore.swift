@@ -1705,16 +1705,26 @@ private extension EditorAjarDocumentStore {
             try saveDidPublishContents()
             try? fileManager.removeItem(at: stagingURL)
             try? fileManager.removeItem(at: rollbackURL)
-        } catch {
-            defer {
-                try? fileManager.removeItem(at: rollbackURL)
+        } catch let publicationError {
+            do {
+                if didBeginCanonicalPublication {
+                    try restoreCanonicalContents(from: rollbackURL, to: destinationURL)
+                } else if didBeginRecoveryPublication {
+                    try restoreRecoveryContents(from: rollbackURL, to: destinationURL)
+                }
+            } catch let restorationError {
+                // The backup is now the only complete copy of the pre-Save generation. Retain it
+                // when restoration fails instead of destroying the user's last recovery option.
+                let reason = "Save publication failed (\(publicationError)); restoring the "
+                    + "previous package also failed (\(restorationError)). The rollback backup "
+                    + "was retained at \(rollbackURL.path)."
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: destinationURL.path,
+                    reason: reason
+                )
             }
-            if didBeginCanonicalPublication {
-                try restoreCanonicalContents(from: rollbackURL, to: destinationURL)
-            } else if didBeginRecoveryPublication {
-                try restoreRecoveryContents(from: rollbackURL, to: destinationURL)
-            }
-            throw error
+            try? fileManager.removeItem(at: rollbackURL)
+            throw publicationError
         }
     }
 

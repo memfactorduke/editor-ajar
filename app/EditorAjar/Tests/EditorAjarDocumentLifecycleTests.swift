@@ -702,6 +702,141 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
 
+    func testNFRSTAB002FailedRestorationRetainsCompleteRollbackBackup() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "RetainedRollback.ajar")
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        let duration = try RationalTime(value: 1, timescale: 1)
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: fixture.rootURL.appendingPathComponent("retained-rollback.mov"),
+            contentHash: ContentHash.sha256(data: Data("retained rollback media".utf8)),
+            metadata: MediaMetadata(
+                codecID: "prores422",
+                pixelDimensions: PixelDimensions(width: 1_920, height: 1_080),
+                frameRate: try FrameRate(frames: 30),
+                duration: duration,
+                colorSpace: .rec709,
+                audioChannelLayout: nil,
+                isVariableFrameRate: false,
+                conformedFrameRate: nil
+            )
+        )
+        XCTAssertTrue(model.applyEditForTesting(.addMediaReferences([media])))
+        let sequence = try XCTUnwrap(model.project?.sequences.first)
+        let track = try XCTUnwrap(sequence.videoTracks.first)
+        let range = try TimeRange(start: .zero, duration: duration)
+        let clip = Clip(
+            id: UUID(),
+            source: .media(id: media.id),
+            sourceRange: range,
+            timelineRange: range,
+            kind: .video,
+            name: "Retained Rollback Clip"
+        )
+        XCTAssertTrue(
+            model.applyEditForTesting(
+                .addClip(sequenceID: sequence.id, trackID: track.id, clip: clip)
+            )
+        )
+        try model.saveProject()
+        let previousProject = try XCTUnwrap(model.project)
+        let previousProjectBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("project.json")
+        )
+        let previousMediaBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("media.json")
+        )
+
+        let projectWithoutClip = try apply(
+            .removeClip(sequenceID: sequence.id, trackID: track.id, clipID: clip.id),
+            to: previousProject
+        )
+        let attemptedProject = Project(
+            schemaVersion: projectWithoutClip.schemaVersion,
+            schemaMinor: projectWithoutClip.schemaMinor,
+            settings: projectWithoutClip.settings,
+            mediaPool: [],
+            sequences: projectWithoutClip.sequences,
+            looks: projectWithoutClip.looks
+        )
+        let attemptedPackage = try AjarProjectCodec.encode(
+            attemptedProject,
+            openMode: .editable
+        )
+        var restorationStarted = false
+        var reportedReason: String?
+        let synchronizationEvents = InPlaceSaveSynchronizationEvents(
+            failingFileURL: packageURL.appendingPathComponent("project.json"),
+            shouldFailFile: { restorationStarted }
+        )
+        let store = EditorAjarDocumentStore(
+            saveDidPublishContents: {
+                restorationStarted = true
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: packageURL.path,
+                    reason: "injected post-publication failure"
+                )
+            },
+            saveAsSynchronizer: RecordingInPlaceSaveSynchronizer(
+                events: synchronizationEvents
+            )
+        )
+
+        XCTAssertThrowsError(
+            try store.save(
+                project: attemptedProject,
+                openMode: .editable,
+                appliedCommandCount: 3,
+                to: packageURL
+            )
+        ) { error in
+            guard let documentError = error as? EditorAjarDocumentStoreError,
+                case .fileOperation(let path, let reason) = documentError
+            else {
+                return XCTFail("Expected a typed restoration failure, got \(error)")
+            }
+            XCTAssertEqual(path, packageURL.path)
+            XCTAssertTrue(reason.contains("rollback backup was retained"))
+            reportedReason = reason
+        }
+
+        XCTAssertEqual(synchronizationEvents.remainingFileFailures, 0)
+        let retainedBackups = try fixture.stagingPackages()
+        let retainedBackupURL = try XCTUnwrap(retainedBackups.first)
+        XCTAssertEqual(retainedBackups.count, 1)
+        XCTAssertTrue(reportedReason?.contains(retainedBackupURL.lastPathComponent) == true)
+        XCTAssertEqual(
+            try Data(contentsOf: retainedBackupURL.appendingPathComponent("project.json")),
+            previousProjectBytes
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: retainedBackupURL.appendingPathComponent("media.json")),
+            previousMediaBytes
+        )
+
+        // Restoration replaced project.json before its injected barrier failed, but media.json is
+        // still the newly published generation. The retained backup is therefore essential.
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("project.json")),
+            previousProjectBytes
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("media.json")),
+            attemptedPackage.mediaJSON
+        )
+        XCTAssertThrowsError(
+            try AjarProjectCodec.decode(
+                projectJSON: previousProjectBytes,
+                mediaJSON: attemptedPackage.mediaJSON
+            )
+        )
+    }
+
     func testNFRSTAB002RecoveryPublishesBeforeCanonicalAndBoundaryFailureRollsBack() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
@@ -1650,11 +1785,21 @@ private final class InPlaceSaveSynchronizationEvents {
 
     var values: [Event] = []
     let failingDirectoryURL: URL?
+    let failingFileURL: URL?
+    let shouldFailFile: () -> Bool
     var remainingDirectoryFailures: Int
+    var remainingFileFailures: Int
 
-    init(failingDirectoryURL: URL? = nil) {
+    init(
+        failingDirectoryURL: URL? = nil,
+        failingFileURL: URL? = nil,
+        shouldFailFile: @escaping () -> Bool = { true }
+    ) {
         self.failingDirectoryURL = failingDirectoryURL
+        self.failingFileURL = failingFileURL
+        self.shouldFailFile = shouldFailFile
         remainingDirectoryFailures = failingDirectoryURL == nil ? 0 : 1
+        remainingFileFailures = failingFileURL == nil ? 0 : 1
     }
 }
 
@@ -1663,6 +1808,17 @@ private struct RecordingInPlaceSaveSynchronizer: EditorAjarSaveAsSynchronizing {
 
     func synchronizeFile(at url: URL) throws {
         events.values.append(.file(url.path))
+        if url.standardizedFileURL == events.failingFileURL?.standardizedFileURL,
+            events.remainingFileFailures > 0,
+            events.shouldFailFile()
+        {
+            events.remainingFileFailures -= 1
+            throw EditorAjarDocumentStoreError.saveAsSynchronization(
+                path: url.path,
+                operation: "injected in-place Save file synchronization failure",
+                code: EIO
+            )
+        }
     }
 
     func synchronizeDirectory(at url: URL, descriptor _: Int32?) throws {
