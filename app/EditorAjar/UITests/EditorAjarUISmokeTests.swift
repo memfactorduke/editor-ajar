@@ -94,6 +94,58 @@ final class EditorAjarUISmokeTests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
     }
 
+    func testFRCMP001002004ClipMenuMakesOpensAndDecomposesCompoundSafely() throws {
+        let app = try XCTUnwrap(launchedApp)
+        openSampleProjectFromHelp(in: app)
+
+        let sourceClip = app.buttons["Clip Sample Playback Clip"]
+        XCTAssertTrue(sourceClip.waitForExistence(timeout: 10))
+        sourceClip.click()
+
+        let clipMenu = app.menuBars.menuBarItems["Clip"]
+        XCTAssertTrue(clipMenu.waitForExistence(timeout: 5))
+        clipMenu.click()
+        let make = app.menuItems["Make Compound Clip"]
+        XCTAssertTrue(make.waitForExistence(timeout: 5))
+        XCTAssertTrue(make.isEnabled)
+        make.click()
+
+        XCTAssertTrue(
+            app.buttons["Sequence tab Compound Clip 1"].waitForExistence(timeout: 10)
+        )
+        let nestedClose = app.buttons["Close Compound Clip 1"]
+        XCTAssertTrue(nestedClose.waitForExistence(timeout: 5))
+        XCTAssertFalse(nestedClose.isEnabled, "referenced nested sequence must be protected")
+        XCTAssertTrue(app.buttons["Clip Compound Clip 1"].waitForExistence(timeout: 5))
+
+        clipMenu.click()
+        let open = app.menuItems["Open Compound Clip"]
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        XCTAssertTrue(open.isEnabled)
+        open.click()
+        XCTAssertEqual(
+            app.buttons["Sequence tab Compound Clip 1"].value as? String,
+            "Selected"
+        )
+
+        app.buttons["Sequence tab Sample Playback Sequence"].click()
+        clipMenu.click()
+        let decompose = app.menuItems["Decompose Compound Clip"]
+        XCTAssertTrue(decompose.waitForExistence(timeout: 5))
+        XCTAssertTrue(decompose.isEnabled)
+        decompose.click()
+
+        XCTAssertFalse(app.buttons["Clip Compound Clip 1"].exists)
+        XCTAssertTrue(
+            nestedClose.waitForExistence(timeout: 5) && nestedClose.isEnabled,
+            "orphaned nested sequence may be removed normally"
+        )
+
+        app.typeKey("z", modifierFlags: [.command])
+        XCTAssertTrue(app.buttons["Clip Compound Clip 1"].waitForExistence(timeout: 5))
+        XCTAssertFalse(nestedClose.isEnabled, "undo must restore sequence protection")
+    }
+
     // #210 / NFR-A11Y-001 canvas edit smoke — **local-only**.
     //
     // Why not un-gated for CI (honest verdict): this path depends on NSTextView first-responder

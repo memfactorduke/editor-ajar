@@ -1413,19 +1413,61 @@ final class EditorAjarAppModel: ObservableObject {
             return []
         }
         let activeID = activeSequence?.id
-        let canClose = isProjectEditable && project.sequences.count > 1
         return project.sequences.map { sequence in
             SequenceTab(
                 id: sequence.id,
                 title: sequence.name,
                 isActive: sequence.id == activeID,
-                canClose: canClose
+                canClose: isProjectEditable
+                    && project.sequences.count > 1
+                    && !Self.isSequenceReferenced(sequence.id, in: project)
             )
         }
     }
 
     var canCloseActiveSequence: Bool {
-        isProjectEditable && (project?.sequences.count ?? 0) > 1
+        guard isProjectEditable,
+              let project,
+              project.sequences.count > 1,
+              let sequenceID = activeSequence?.id
+        else {
+            return false
+        }
+        return !Self.isSequenceReferenced(sequenceID, in: project)
+    }
+
+    /// Whether the Clip menu can safely collapse the current selection (FR-CMP-001/005).
+    ///
+    /// Engine-only overlap/ducking checks run when invoked so an otherwise eligible selection can
+    /// receive actionable consumer copy instead of leaving a mysteriously disabled menu item.
+    var canMakeCompoundClip: Bool {
+        guard isProjectEditable,
+              !isTextEditingActive,
+              let sequence = activeSequence,
+              let selection = expandedCompoundSelection(in: sequence),
+              selection.contains(where: { $0.clip.kind == .video }),
+              !selection.contains(where: { $0.track.locked })
+        else {
+            return false
+        }
+        return true
+    }
+
+    /// Open is navigation, so it remains available for read-only inspection (FR-CMP-002).
+    var canOpenCompoundClip: Bool {
+        !isTextEditingActive && selectedCompoundClipTarget != nil
+    }
+
+    /// Decompose is enabled only for one safe, editable compound target (FR-CMP-004).
+    var canDecomposeCompoundClip: Bool {
+        guard isProjectEditable,
+              !isTextEditingActive,
+              let target = selectedCompoundClipTarget,
+              !target.track.locked
+        else {
+            return false
+        }
+        return true
     }
 
     var projectSummary: String {
@@ -1881,6 +1923,13 @@ final class EditorAjarAppModel: ObservableObject {
         guard let project else {
             return false
         }
+        guard !Self.isSequenceReferenced(sequenceID, in: project) else {
+            surfaceLocalizedEditRefusal(
+                "sequence.close.refusal.referenced",
+                "This sequence is used by a compound clip. Decompose every instance before removing it."
+            )
+            return false
+        }
         let replacementID = Self.replacementSequenceID(
             afterRemoving: sequenceID,
             from: project
@@ -1894,6 +1943,177 @@ final class EditorAjarAppModel: ObservableObject {
         if isRemovingActiveSequence, let replacementID {
             selectSequence(replacementID)
         }
+        return true
+    }
+
+    // MARK: - Compound clips (FR-CMP-001...005)
+
+    /// Collapses the selected clips and every member of their linked A/V groups atomically.
+    @discardableResult
+    func makeCompoundClip() -> Bool {
+        guard isProjectEditable else {
+            if let reason = projectReadOnlyReason {
+                surfaceReadOnlyEditRefusalOnce(reason: reason)
+            }
+            return false
+        }
+        guard !isTextEditingActive else {
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.textEditing",
+                "Finish editing text before making a compound clip."
+            )
+            return false
+        }
+        guard let project, let sequence = activeSequence else {
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.selection",
+                "Select one or more timeline clips to make a compound clip."
+            )
+            return false
+        }
+        guard let selection = expandedCompoundSelection(in: sequence) else {
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.selection",
+                "Select one or more timeline clips to make a compound clip."
+            )
+            return false
+        }
+        guard selection.contains(where: { $0.clip.kind == .video }) else {
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.video",
+                "Include at least one video clip in the compound selection."
+            )
+            return false
+        }
+        guard !selection.contains(where: { $0.track.locked }) else {
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.locked",
+                "Unlock every selected or linked track before making a compound clip."
+            )
+            return false
+        }
+
+        let compoundSequenceID = UUID()
+        let compoundClipID = UUID()
+        let command = makeCompoundClipCommand(
+            project: project,
+            sequence: sequence,
+            selection: selection,
+            compoundSequenceID: compoundSequenceID,
+            compoundClipID: compoundClipID
+        )
+        do {
+            _ = try EditReducer.apply(command, to: project)
+        } catch {
+            surfaceMakeCompoundRefusal(error)
+            return false
+        }
+
+        guard applyEdit(command) else {
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.failed",
+                "The compound clip could not be created. The project was not changed."
+            )
+            return false
+        }
+        guard let parent = self.project?.sequences.first(where: { $0.id == sequence.id }),
+              let replacement = Self.clipReference(compoundClipID, in: parent)
+        else {
+            // The preflight and journaled reducer are deterministic, so this is defensive only.
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.failed",
+                "The compound clip could not be selected."
+            )
+            return true
+        }
+        selectClip(trackID: replacement.trackID, clipID: replacement.clipID, mode: .replace)
+        return true
+    }
+
+    /// Activates the nested sequence referenced by the single selected compound (FR-CMP-002).
+    @discardableResult
+    func openCompoundClip() -> Bool {
+        guard !isTextEditingActive else {
+            surfaceLocalizedEditRefusal(
+                "compound.open.refusal.textEditing",
+                "Finish editing text before opening a compound clip."
+            )
+            return false
+        }
+        guard let target = selectedCompoundClipTarget else {
+            surfaceLocalizedEditRefusal(
+                "compound.open.refusal.selection",
+                "Select one compound clip to open its sequence."
+            )
+            return false
+        }
+        guard selectSequence(target.targetSequenceID) else {
+            surfaceLocalizedEditRefusal(
+                "compound.open.refusal.missing",
+                "The compound clip's sequence is unavailable. The project was not changed."
+            )
+            return false
+        }
+        return true
+    }
+
+    /// Expands one compound in place as one undoable edit and selects only restored clips.
+    @discardableResult
+    func decomposeCompoundClip() -> Bool {
+        guard isProjectEditable else {
+            if let reason = projectReadOnlyReason {
+                surfaceReadOnlyEditRefusalOnce(reason: reason)
+            }
+            return false
+        }
+        guard !isTextEditingActive else {
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.textEditing",
+                "Finish editing text before decomposing a compound clip."
+            )
+            return false
+        }
+        guard let project,
+              let target = selectedCompoundClipTarget,
+              let nestedSequence = project.sequences.first(where: {
+                  $0.id == target.targetSequenceID
+              })
+        else {
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.selection",
+                "Select one compound clip to decompose."
+            )
+            return false
+        }
+        guard !target.track.locked else {
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.locked",
+                "Unlock the compound clip's track before decomposing it."
+            )
+            return false
+        }
+
+        do {
+            _ = try EditReducer.apply(target.decomposeCommand, to: project)
+        } catch {
+            surfaceDecomposeCompoundRefusal(error)
+            return false
+        }
+
+        let expectedReferences = TimelineInteraction.clipReferences(in: nestedSequence)
+        guard applyEdit(target.decomposeCommand) else {
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.failed",
+                "The compound clip could not be decomposed. The project was not changed."
+            )
+            return false
+        }
+
+        let restored = expectedReferences.filter { reference in
+            guard let parent = activeSequence else { return false }
+            return Self.clip(reference, in: parent) != nil
+        }
+        replaceTimelineClipSelection(with: restored)
         return true
     }
 
@@ -4280,6 +4500,236 @@ final class EditorAjarAppModel: ObservableObject {
         project.sequences.first?.id
     }
 
+    private var selectedCompoundClipTarget: AppCompoundClipTarget? {
+        guard let sequence = activeSequence,
+              let reference = selectedClipReference,
+              let track = Self.track(reference.trackID, in: sequence),
+              let clip = Self.clip(reference, in: sequence),
+              case .sequence(let targetSequenceID) = clip.source,
+              project?.sequences.contains(where: { $0.id == targetSequenceID }) == true
+        else {
+            return nil
+        }
+        return AppCompoundClipTarget(
+            parentSequenceID: sequence.id,
+            reference: reference,
+            track: track,
+            targetSequenceID: targetSequenceID
+        )
+    }
+
+    /// Expands every selected link group before the core command sees the selection.
+    /// Timeline order makes the command and tests deterministic even though selection is a Set.
+    private func expandedCompoundSelection(
+        in sequence: Sequence
+    ) -> [AppCompoundSelectionItem]? {
+        let selected = timelineState.selectedClips
+        guard !selected.isEmpty else {
+            return nil
+        }
+
+        var selectedLinkGroups = Set<UUID>()
+        for reference in selected {
+            guard let clip = Self.clip(reference, in: sequence) else {
+                return nil
+            }
+            if let linkGroupID = clip.linkGroupID {
+                selectedLinkGroups.insert(linkGroupID)
+            }
+        }
+
+        var result: [AppCompoundSelectionItem] = []
+        for reference in TimelineInteraction.clipReferences(in: sequence) {
+            guard let track = Self.track(reference.trackID, in: sequence),
+                  let clip = Self.clip(reference, in: sequence)
+            else {
+                return nil
+            }
+            let isRequiredLinkedPartner = clip.linkGroupID.map {
+                selectedLinkGroups.contains($0)
+            } ?? false
+            if selected.contains(reference) || isRequiredLinkedPartner {
+                result.append(
+                    AppCompoundSelectionItem(reference: reference, track: track, clip: clip)
+                )
+            }
+        }
+        guard Set(result.map(\.reference).filter { selected.contains($0) }) == selected else {
+            return nil
+        }
+        return result
+    }
+
+    private func makeCompoundClipCommand(
+        project: Project,
+        sequence: Sequence,
+        selection: [AppCompoundSelectionItem],
+        compoundSequenceID: UUID,
+        compoundClipID: UUID
+    ) -> EditCommand {
+        .makeCompoundClip(
+            sequenceID: sequence.id,
+            compoundSequenceID: compoundSequenceID,
+            compoundClipID: compoundClipID,
+            selectedClips: selection.map {
+                ClipReference(trackID: $0.reference.trackID, clipID: $0.reference.clipID)
+            },
+            name: Self.nextCompoundClipName(in: project)
+        )
+    }
+
+    private func replaceTimelineClipSelection(with references: [TimelineClipReference]) {
+        timelineState.selectedClips = Set(references)
+        timelineState.selectionAnchor = references.first
+        timelineState.selectedMarkerID = nil
+        colorCorrectionCoalesceActive = false
+        lutStrengthCoalesceActive = false
+        effectParameterCoalesceActive = false
+        effectParameterCoalesceKey = nil
+        videoTransitionError = nil
+        refreshVideoTransitionDraftFromSelection()
+        titleStyleCoalesceActive = false
+        persistActiveSequenceContext()
+    }
+
+    private func surfaceMakeCompoundRefusal(_ error: Error) {
+        guard let reducerError = error as? EditReducerError,
+              case .invalidEdit(let validation) = reducerError
+        else {
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.failed",
+                "The compound clip could not be created. The project was not changed."
+            )
+            return
+        }
+        switch validation {
+        case .compoundSelectionEmpty:
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.selection",
+                "Select one or more timeline clips to make a compound clip."
+            )
+        case .compoundSelectionRequiresVideo:
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.video",
+                "Include at least one video clip in the compound selection."
+            )
+        case .compoundSelectionNeedsDestinationTrack:
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.destination",
+                "The selection cannot be replaced without overlapping clips left outside it. Adjust the selection and try again."
+            )
+        case .compoundSelectionSeversAudioDucking:
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.ducking",
+                "The selection crosses an audio ducking boundary. Include every affected ducking track or change the ducking setup first."
+            )
+        default:
+            surfaceLocalizedEditRefusal(
+                "compound.make.refusal.failed",
+                "The compound clip could not be created. The project was not changed."
+            )
+        }
+    }
+
+    private func surfaceDecomposeCompoundRefusal(_ error: Error) {
+        guard let reducerError = error as? EditReducerError,
+              case .invalidEdit(let validation) = reducerError
+        else {
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.failed",
+                "The compound clip could not be decomposed. The project was not changed."
+            )
+            return
+        }
+        switch validation {
+        case .decomposeRequiresCompoundClip:
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.selection",
+                "Select one compound clip to decompose."
+            )
+        case .compoundDecomposeUnsupportedAttribute:
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.attributes",
+                "Remove compound-level transforms, effects, keyframes, time remapping, reverse or freeze settings, audio adjustments, and nested track keyframes before decomposing."
+            )
+        case .compoundDecomposeWouldOverlap:
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.overlap",
+                "The compound contents would overlap clips already on the parent timeline. Move those clips and try again."
+            )
+        case .compoundDecomposeSeversAudioDucking:
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.ducking",
+                "Decomposing would break an audio ducking relationship. Change the ducking setup first."
+            )
+        default:
+            surfaceLocalizedEditRefusal(
+                "compound.decompose.refusal.failed",
+                "The compound clip could not be decomposed. The project was not changed."
+            )
+        }
+    }
+
+    private static func nextCompoundClipName(in project: Project) -> String {
+        var names = Set(project.sequences.map { $0.name.lowercased() })
+        for sequence in project.sequences {
+            for track in sequence.videoTracks + sequence.audioTracks {
+                for item in track.items {
+                    if case .clip(let clip) = item {
+                        names.insert(clip.name.lowercased())
+                    }
+                }
+            }
+        }
+        var suffix = 1
+        var candidate = AppString.localized(
+            "compound.defaultName",
+            "Compound Clip \(suffix)"
+        )
+        while names.contains(candidate.lowercased()) {
+            suffix += 1
+            candidate = AppString.localized(
+                "compound.defaultName",
+                "Compound Clip \(suffix)"
+            )
+        }
+        return candidate
+    }
+
+    private static func isSequenceReferenced(_ sequenceID: UUID, in project: Project) -> Bool {
+        project.sequences.contains { sequence in
+            (sequence.videoTracks + sequence.audioTracks).contains { track in
+                track.items.contains { item in
+                    guard case .clip(let clip) = item,
+                          case .sequence(let targetID) = clip.source
+                    else {
+                        return false
+                    }
+                    return targetID == sequenceID
+                }
+            }
+        }
+    }
+
+    private static func track(_ trackID: UUID, in sequence: Sequence) -> Track? {
+        (sequence.videoTracks + sequence.audioTracks).first { $0.id == trackID }
+    }
+
+    private static func clipReference(
+        _ clipID: UUID,
+        in sequence: Sequence
+    ) -> TimelineClipReference? {
+        for track in sequence.videoTracks + sequence.audioTracks {
+            if track.items.contains(where: { item in
+                guard case .clip(let clip) = item else { return false }
+                return clip.id == clipID
+            }) {
+                return TimelineClipReference(trackID: track.id, clipID: clipID)
+            }
+        }
+        return nil
+    }
+
     private static func clip(_ reference: TimelineClipReference, in sequence: Sequence) -> Clip? {
         for track in sequence.videoTracks + sequence.audioTracks {
             guard track.id == reference.trackID else {
@@ -4319,10 +4769,15 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private static func mediaDimensions(for clip: Clip, in project: Project) -> PixelDimensions? {
-        guard case .media(let mediaID) = clip.source else {
+        switch clip.source {
+        case .media(let mediaID):
+            return project.mediaPool.first { $0.id == mediaID }?.metadata.pixelDimensions
+        case .sequence:
+            // Nested sequences render in the project canvas coordinate space.
+            return project.settings.resolution
+        case .title:
             return nil
         }
-        return project.mediaPool.first { $0.id == mediaID }?.metadata.pixelDimensions
     }
 
     private func playheadTime(in sequence: Sequence) -> RationalTime? {
@@ -5364,6 +5819,27 @@ struct SequenceTab: Identifiable, Equatable, Sendable {
     let title: String
     let isActive: Bool
     let canClose: Bool
+}
+
+private struct AppCompoundSelectionItem {
+    let reference: TimelineClipReference
+    let track: Track
+    let clip: Clip
+}
+
+private struct AppCompoundClipTarget {
+    let parentSequenceID: UUID
+    let reference: TimelineClipReference
+    let track: Track
+    let targetSequenceID: UUID
+
+    var decomposeCommand: EditCommand {
+        .decomposeCompoundClip(
+            sequenceID: parentSequenceID,
+            trackID: reference.trackID,
+            clipID: reference.clipID
+        )
+    }
 }
 
 private struct SequenceEditingContext: Equatable, Sendable {

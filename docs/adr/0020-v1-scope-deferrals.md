@@ -90,6 +90,14 @@ An unmeasured assertion that playback “feels fast” does not satisfy this con
   performance-evidence obligation after cache wiring.
 - FR-PROJ-002 remains shipped and must not appear in v1.x scope lists.
 
+## Post-v1 delivery
+
+Issue #269 completed the deferred FR-CMP-001…005 macOS app workflow on 2026-07-15. It reuses the
+accepted sequence-backed core model and commands, protects referenced nested sequences from the
+existing destructive close controls, and does not add the separately out-of-scope breadcrumb,
+rename, or automatic orphan-collection surfaces. The table above remains the historical v1 scope
+decision as of 2026-07-11.
+
 ## Alternatives considered
 
 ### Hold v1 until every audited v1 app surface ships

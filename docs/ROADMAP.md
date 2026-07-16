@@ -192,6 +192,14 @@ clean supported Apple Silicon Mac. Pipeline code alone does not satisfy this ext
 
 ## Post-1.0 (v1.x / future)
 
+**FR-CMP-001…005 app workflow is complete (#269, 2026-07-15).** Clip-menu Make/Open/Decompose
+actions use the existing atomic core commands; Make expands complete linked A/V groups, names and
+selects the parent replacement, and opens nested sequences through the existing tabs. Referenced
+nested sequences cannot be removed until orphaned. Decompose validates one unlocked compound,
+remains one undo step, and selects only restored clips. Localized safety refusals, persistence,
+nested propagation, whole-compound controls, UI/VoiceOver smoke, and the release journey are
+covered without adding rename/breadcrumb UI or orphan collection.
+
 **FR-MED-008 consumer consolidation is complete (#267, 2026-07-15).** File > Consolidate Media…
 uses the existing Save As/document package flow and `AjarMedia.MediaConsolidateCommand`; copies to
 the saved `.ajar/media` directory off-main with determinate progress, cancellation through copy and

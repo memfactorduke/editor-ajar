@@ -186,10 +186,11 @@ final class EditorAjarExportSourceProvider: ExportRenderSourceProvider, @uncheck
     func prepare(graph: RenderGraph) async throws {
         var nextTextures: [SourceKey: MTLTexture] = [:]
         var nextRetained: [DecodedFrame] = []
-        for node in graph.nodes {
-            guard case .source(let source) = node.kind else {
-                continue
-            }
+        // A compound node owns another complete render graph. Preparing only the outer graph
+        // leaves its nested media undecoded, so the executor later fails when it descends into the
+        // compound. Walk every nested graph up front and keep those decoded frames alive alongside
+        // ordinary top-level sources for the duration of this export frame.
+        for source in Self.sourceNodes(in: graph) {
             guard let media = project.mediaPool.first(where: { $0.id == source.mediaID }) else {
                 throw ExportError.frameRenderFailed(
                     frameIndex: 0,
@@ -210,6 +211,19 @@ final class EditorAjarExportSourceProvider: ExportRenderSourceProvider, @uncheck
         textures = nextTextures
         retainedFrames = nextRetained
         lock.unlock()
+    }
+
+    private static func sourceNodes(in graph: RenderGraph) -> [RenderSourceNode] {
+        graph.nodes.flatMap { node in
+            switch node.kind {
+            case .source(let source):
+                return [source]
+            case .compound(let compound):
+                return sourceNodes(in: compound.graph)
+            case .title, .transition, .composite:
+                return []
+            }
+        }
     }
 
     func texture(for source: RenderSourceNode) throws -> MTLTexture {

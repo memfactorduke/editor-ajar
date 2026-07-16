@@ -13,7 +13,8 @@ import XCTest
 @testable import EditorAjar
 
 /// End-to-end usable-app acceptance gate (#236): walks the real user journey through
-/// `EditorAjarAppModel` APIs so CI can prove create → import → edit → save/reopen → export.
+/// `EditorAjarAppModel` APIs so CI can prove create → import → edit → compound open/edit/return →
+/// save/reopen → export → decompose/undo.
 ///
 /// Runs in the `EditorAjarTests` target (ui-smoke app-test step). ProRes export is CI-hard;
 /// H.264 is capability-skipped when hardware encode is unavailable.
@@ -24,9 +25,14 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
     private let syntheticFrameCount = 15
     private let syntheticFrameRate: Int32 = 30
 
-    /// Full journey: project → import (video + still + audio) → timeline edits → save/reopen →
-    /// ProRes export decode-verified.
+    /// Full journey: project → import (video + still + audio) → timeline edits → compound
+    /// make/open/edit/return → save/reopen → ProRes export → decompose/undo.
+    ///
+    /// Nested rendering makes this intentionally broader journey exceed Xcode's 60-second default
+    /// on some supported Macs. CI already caps app tests at 120 seconds, so opt this case into that
+    /// existing ceiling instead of letting XCTest terminate a healthy export halfway through.
     func testReleaseAcceptanceEndToEndUserJourney() async throws {
+        executionTimeAllowance = 120
         guard MTLCreateSystemDefaultDevice() != nil else {
             throw XCTSkip("Metal device unavailable on this runner")
         }
@@ -44,6 +50,7 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
 
         try await runCreateImportAndPlace(model: model, media: media)
         try runEditEffectsTitleAndAudio(model: model)
+        let compoundJourney = try runCompoundMakeOpenEditAndReturn(model: model)
 
         let undoBeforeSave = model.editHistory?.undoCount ?? 0
         XCTAssertGreaterThan(
@@ -124,6 +131,11 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         XCTAssertEqual(reopened.project?.mediaPool.count, 3)
         XCTAssertFalse(reopened.canUndo)
 
+        try verifyReopenedCompoundPropagation(
+            model: reopened,
+            journey: compoundJourney
+        )
+
         let exportURL = workspace.rootURL.appendingPathComponent("acceptance-prores.mov")
         try await runProResExportAndVerify(
             model: reopened,
@@ -131,6 +143,21 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
             expectedFrames: expectedExportFrames,
             expectedResolution: savedProject.settings.resolution
         )
+        XCTAssertTrue(reopened.selectSequence(compoundJourney.parentSequenceID))
+        reopened.selectClip(
+            trackID: compoundJourney.compoundTrackID,
+            clipID: compoundJourney.compoundClipID,
+            mode: .replace
+        )
+        let beforeDecompose = reopened.project
+        XCTAssertTrue(reopened.decomposeCompoundClip(), "release compound should decompose")
+        let existingReferences = Set(
+            TimelineInteraction.clipReferences(in: try XCTUnwrap(reopened.activeSequence))
+        )
+        XCTAssertFalse(reopened.timelineState.selectedClips.isEmpty)
+        XCTAssertTrue(reopened.timelineState.selectedClips.isSubset(of: existingReferences))
+        reopened.undo()
+        XCTAssertEqual(reopened.project, beforeDecompose)
         XCTAssertGreaterThan(undoBeforeSave, 0)
     }
 
@@ -418,6 +445,73 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
             "default audio fade-in refused"
         )
         XCTAssertNotNil(model.selectedClip?.audioMix.fadeIn)
+    }
+
+    private struct CompoundAcceptanceJourney {
+        let parentSequenceID: UUID
+        let nestedSequenceID: UUID
+        let compoundTrackID: UUID
+        let compoundClipID: UUID
+        let innerClipID: UUID
+    }
+
+    private func runCompoundMakeOpenEditAndReturn(
+        model: EditorAjarAppModel
+    ) throws -> CompoundAcceptanceJourney {
+        let parentSequenceID = try XCTUnwrap(model.activeSequenceID)
+        let editedVideo = try firstClip(in: model) {
+            $0.kind == .video && !$0.effectStack.nodes.isEmpty
+        }
+        model.selectClip(
+            trackID: editedVideo.trackID,
+            clipID: editedVideo.clip.id,
+            mode: .replace
+        )
+        XCTAssertTrue(model.makeCompoundClip(), "release make compound refused")
+        let compoundTrackID = try XCTUnwrap(model.selectedClipReference?.trackID)
+        let compoundClipID = try XCTUnwrap(model.selectedClip?.id)
+        guard case .sequence(let nestedSequenceID) = model.selectedClip?.source else {
+            XCTFail("release make must select the compound replacement")
+            throw AcceptanceFixtureError.clipNotFound
+        }
+
+        XCTAssertTrue(model.openCompoundClip(), "release open compound refused")
+        XCTAssertEqual(model.activeSequenceID, nestedSequenceID)
+        let inner = try firstClip(in: model, matching: { $0.kind == .video })
+        XCTAssertEqual(inner.clip.id, editedVideo.clip.id)
+        model.selectClip(trackID: inner.trackID, clipID: inner.clip.id, mode: .replace)
+        XCTAssertTrue(
+            model.updateSelectedTransformField(.positionX, rawValue: "4"),
+            "nested edit refused"
+        )
+        XCTAssertTrue(model.selectSequence(parentSequenceID), "return to parent refused")
+        XCTAssertEqual(model.selectedClip?.id, compoundClipID)
+
+        return CompoundAcceptanceJourney(
+            parentSequenceID: parentSequenceID,
+            nestedSequenceID: nestedSequenceID,
+            compoundTrackID: compoundTrackID,
+            compoundClipID: compoundClipID,
+            innerClipID: inner.clip.id
+        )
+    }
+
+    private func verifyReopenedCompoundPropagation(
+        model: EditorAjarAppModel,
+        journey: CompoundAcceptanceJourney
+    ) throws {
+        XCTAssertTrue(model.selectSequence(journey.parentSequenceID))
+        model.selectClip(
+            trackID: journey.compoundTrackID,
+            clipID: journey.compoundClipID,
+            mode: .replace
+        )
+        XCTAssertTrue(model.openCompoundClip())
+        XCTAssertEqual(model.activeSequenceID, journey.nestedSequenceID)
+        let inner = try firstClip(in: model) { $0.id == journey.innerClipID }
+        XCTAssertEqual(inner.clip.transform.position.x, RationalValue(4))
+        XCTAssertTrue(model.selectSequence(journey.parentSequenceID))
+        XCTAssertEqual(model.selectedClip?.id, journey.compoundClipID)
     }
 
     private func runProResExportAndVerify(

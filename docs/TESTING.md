@@ -20,7 +20,7 @@ watching every diff. If it's not tested, it's not done.
 | **Soak** | seeded edit+render loop for leaks/stability, §8 (NFR-STAB-005) | short: every PR · full 1-hour: pre-release | ~3 min / 1 h |
 | **Sanitizers** | Thread Sanitizer on the concurrency-relevant suite (NFR-STAB-004); Address Sanitizer forthcoming on the reference runner | every PR (TSan) | min |
 | **UI smoke** | app launches, opens a project, plays; **AX tree walk** asserts every interactive role has a VoiceOver label (NFR-A11Y-001); canvas edit/nudge smokes are local-only (#210) | every PR | min |
-| **Release acceptance** | app-model end-to-end usable-app journey (create → import → edit → save/reopen → ProRes export decode); H.264 capability-skipped on encoder-less runners (#236) | every PR (EditorAjarTests / ui-smoke) | seconds–min |
+| **Release acceptance** | app-model end-to-end usable-app journey (create → import → edit → compound make/open/edit/return → save/reopen → ProRes export decode → decompose/undo); H.264 capability-skipped on encoder-less runners (#236/#269) | every PR (EditorAjarTests / ui-smoke) | seconds–min |
 
 ## 2. Golden-frame testing (the core visual gate)
 

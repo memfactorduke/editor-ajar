@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Complete compound-clip app workflow (#269, FR-CMP-001…005): localized, VoiceOver-labelled Clip
+  menu actions Make (`⌥G`), Open, and Decompose (`⇧⌘G`) reuse the atomic `AjarCore` commands.
+  Make expands every selected linked A/V group, rejects locked/read-only/text-editing/no-video and
+  core overlap/ducking/destination hazards without mutation, generates a unique default name,
+  stays on the parent, and selects the replacement. Open activates the existing nested sequence
+  tab; every referenced nested sequence is protected from both tab and Sequences-menu removal
+  until orphaned. Decompose requires one unlocked compound, remains one undo step, and leaves only
+  existing restored clips selected. Whole-compound transform/effect/speed/keyframe controls,
+  nested editing propagation, save/reopen, undo/redo, localized refusal atomicity, UI smoke, and
+  release make/open/edit/return/save/reopen/export/decompose/undo coverage are included; no naming
+  sheet, breadcrumb architecture, orphan GC, or weakened safety validation was added.
+
 - Consumer media consolidation (#267): File > Consolidate Media… copies referenced originals into
   the saved project's `.ajar/media` directory after an exact destination/count confirmation;
   untitled projects use the existing Save As flow first. Copy/hash work stays off-main with

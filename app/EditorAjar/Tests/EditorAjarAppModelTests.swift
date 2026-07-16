@@ -705,6 +705,336 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(model.timelineSnappingEnabled)
     }
 
+    func testFRCMP001002004LinkedMakeOpenEditDecomposeAndUndoRedo() throws {
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let original = try sampleLinkedSelection(in: model)
+        let parentSequenceID = try XCTUnwrap(model.activeSequenceID)
+        model.selectClip(
+            trackID: original.videoTrackID,
+            clipID: original.videoClip.id,
+            mode: .replace
+        )
+        let undoBeforeMake = model.editHistory?.undoCount
+
+        XCTAssertTrue(model.canMakeCompoundClip)
+        XCTAssertTrue(model.makeCompoundClip())
+        XCTAssertEqual(model.editHistory?.undoCount, (undoBeforeMake ?? 0) + 1)
+        XCTAssertEqual(model.activeSequenceID, parentSequenceID, "Make stays on the parent")
+        let compound = try XCTUnwrap(model.selectedClip)
+        let compoundReference = try XCTUnwrap(model.selectedClipReference)
+        guard case .sequence(let nestedSequenceID) = compound.source else {
+            return XCTFail("Make must select a sequence-backed compound replacement")
+        }
+        XCTAssertEqual(compound.name, "Compound Clip 1")
+        let nested = try XCTUnwrap(model.project?.sequences.first { $0.id == nestedSequenceID })
+        XCTAssertEqual(
+            Set(TimelineInteraction.clipReferences(in: nested).map(\.clipID)),
+            [original.videoClip.id, original.audioClip.id],
+            "selecting linked video must pull its audio partner into the compound"
+        )
+        XCTAssertFalse(try XCTUnwrap(model.sequenceTabs.first { $0.id == nestedSequenceID }).canClose)
+
+        let projectBeforeProtectedClose = model.project
+        XCTAssertFalse(model.closeSequence(nestedSequenceID))
+        XCTAssertEqual(model.project, projectBeforeProtectedClose)
+        XCTAssertEqual(
+            model.loadMessage,
+            "This sequence is used by a compound clip. Decompose every instance before removing it."
+        )
+
+        XCTAssertTrue(model.canOpenCompoundClip)
+        XCTAssertTrue(model.openCompoundClip())
+        XCTAssertEqual(model.activeSequenceID, nestedSequenceID)
+        let innerVideoTrack = try XCTUnwrap(model.activeSequence?.videoTracks.first)
+        let innerVideo = try firstClip(in: innerVideoTrack)
+        model.selectClip(trackID: innerVideoTrack.id, clipID: innerVideo.id, mode: .replace)
+        XCTAssertTrue(model.addEffectToSelectedClip(kind: .gaussianBlur))
+
+        XCTAssertTrue(model.selectSequence(parentSequenceID))
+        XCTAssertEqual(model.selectedClipReference, compoundReference)
+        guard case .sequence(let stillNestedID) = model.selectedClip?.source else {
+            return XCTFail("parent compound selection should survive open/edit/return")
+        }
+        XCTAssertEqual(stillNestedID, nestedSequenceID)
+        let editedNested = try XCTUnwrap(
+            model.project?.sequences.first { $0.id == nestedSequenceID }
+        )
+        XCTAssertEqual(try firstClip(in: editedNested.videoTracks[0]).effectStack.nodes.count, 1)
+
+        let undoBeforeDecompose = model.editHistory?.undoCount
+        XCTAssertTrue(model.canDecomposeCompoundClip)
+        XCTAssertTrue(model.decomposeCompoundClip())
+        XCTAssertEqual(model.editHistory?.undoCount, (undoBeforeDecompose ?? 0) + 1)
+        XCTAssertEqual(
+            Set(model.timelineState.selectedClips.map(\.clipID)),
+            [original.videoClip.id, original.audioClip.id]
+        )
+        for reference in model.timelineState.selectedClips {
+            XCTAssertTrue(
+                TimelineInteraction.clipReferences(in: try XCTUnwrap(model.activeSequence))
+                    .contains(reference),
+                "post-decompose selection may contain only clips that still exist"
+            )
+        }
+        XCTAssertTrue(try XCTUnwrap(model.sequenceTabs.first { $0.id == nestedSequenceID }).canClose)
+
+        model.undo()
+        XCTAssertNotNil(
+            model.activeSequence?.videoTracks.flatMap(\.items).compactMap { item -> Clip? in
+                guard case .clip(let clip) = item,
+                      case .sequence(let id) = clip.source,
+                      id == nestedSequenceID
+                else { return nil }
+                return clip
+            }.first
+        )
+        XCTAssertFalse(try XCTUnwrap(model.sequenceTabs.first { $0.id == nestedSequenceID }).canClose)
+
+        model.redo()
+        let existing = Set(TimelineInteraction.clipReferences(in: try XCTUnwrap(model.activeSequence)))
+        XCTAssertTrue(model.timelineState.selectedClips.isSubset(of: existing))
+    }
+
+    func testFRCMP003WholeCompoundUsesTransformEffectSpeedAndKeyframeControls() throws {
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let linked = try sampleLinkedSelection(in: model)
+        model.selectClip(trackID: linked.videoTrackID, clipID: linked.videoClip.id, mode: .replace)
+        XCTAssertTrue(model.makeCompoundClip())
+        let compoundReference = try XCTUnwrap(model.selectedClipReference)
+        let nestedBefore = try XCTUnwrap(model.project?.sequences.last)
+
+        XCTAssertEqual(model.selectedCanvasTransformLayout?.clipSize, model.project?.settings.resolution)
+        XCTAssertTrue(model.updateSelectedTransformField(.positionX, rawValue: "12"))
+        XCTAssertTrue(model.toggleSelectedTransformKeyframe(.position))
+        XCTAssertTrue(model.addEffectToSelectedClip(kind: .gaussianBlur))
+        XCTAssertTrue(model.updateSelectedClipSpeed(percentText: "200"))
+
+        let outer = try XCTUnwrap(model.selectedClip)
+        XCTAssertEqual(compoundReference, model.selectedClipReference)
+        XCTAssertEqual(outer.transform.position.x, RationalValue(12))
+        XCTAssertEqual(outer.transformAnimation.position.keyframes.count, 1)
+        XCTAssertEqual(outer.effectStack.nodes.first?.kind, .gaussianBlur)
+        XCTAssertEqual(outer.speed, RationalValue(2))
+        XCTAssertEqual(
+            model.project?.sequences.first { $0.id == nestedBefore.id },
+            nestedBefore,
+            "whole-compound controls must not rewrite nested contents"
+        )
+
+        let beforeRefusedDecompose = model.project
+        XCTAssertFalse(model.decomposeCompoundClip())
+        XCTAssertEqual(model.project, beforeRefusedDecompose)
+        XCTAssertEqual(
+            model.loadMessage,
+            "Remove compound-level transforms, effects, keyframes, time remapping, reverse or freeze settings, audio adjustments, and nested track keyframes before decomposing."
+        )
+    }
+
+    func testFRCMP001005NestedMakeUsesUniqueNamesAndProtectsEveryReferencedSequence() throws {
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let linked = try sampleLinkedSelection(in: model)
+        model.selectClip(trackID: linked.videoTrackID, clipID: linked.videoClip.id, mode: .replace)
+        XCTAssertTrue(model.makeCompoundClip())
+        let firstNestedID = try XCTUnwrap(model.project?.sequences.last?.id)
+        XCTAssertTrue(model.openCompoundClip())
+
+        let innerVideoTrack = try XCTUnwrap(model.activeSequence?.videoTracks.first)
+        let innerVideo = try firstClip(in: innerVideoTrack)
+        model.selectClip(trackID: innerVideoTrack.id, clipID: innerVideo.id, mode: .replace)
+        XCTAssertTrue(model.makeCompoundClip())
+        let secondCompound = try XCTUnwrap(model.selectedClip)
+        guard case .sequence(let secondNestedID) = secondCompound.source else {
+            return XCTFail("nested make should produce another sequence reference")
+        }
+        XCTAssertEqual(secondCompound.name, "Compound Clip 2")
+        XCTAssertEqual(model.activeSequenceID, firstNestedID)
+        XCTAssertEqual(
+            Set(model.project?.sequences.map(\.name) ?? []),
+            ["Sample Playback Sequence", "Compound Clip 1", "Compound Clip 2"]
+        )
+        XCTAssertFalse(try XCTUnwrap(model.sequenceTabs.first { $0.id == firstNestedID }).canClose)
+        XCTAssertFalse(try XCTUnwrap(model.sequenceTabs.first { $0.id == secondNestedID }).canClose)
+        XCTAssertEqual(model.project?.validate(), .valid)
+    }
+
+    func testFRCMP001LockedLinkedTrackAndTextEditingRefuseWithoutMutation() throws {
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let linked = try sampleLinkedSelection(in: model)
+        model.setTrackState(
+            sequenceID: try XCTUnwrap(model.activeSequenceID),
+            trackID: linked.audioTrackID,
+            locked: true
+        )
+        model.selectClip(trackID: linked.videoTrackID, clipID: linked.videoClip.id, mode: .replace)
+        let lockedProject = model.project
+        let lockedUndoCount = model.editHistory?.undoCount
+        XCTAssertFalse(model.canMakeCompoundClip)
+        XCTAssertFalse(model.makeCompoundClip())
+        XCTAssertEqual(model.project, lockedProject)
+        XCTAssertEqual(model.editHistory?.undoCount, lockedUndoCount)
+        XCTAssertEqual(
+            model.loadMessage,
+            "Unlock every selected or linked track before making a compound clip."
+        )
+
+        model.setTrackState(
+            sequenceID: try XCTUnwrap(model.activeSequenceID),
+            trackID: linked.audioTrackID,
+            locked: false
+        )
+        let editorID = UUID()
+        XCTAssertTrue(model.textEditorFocusChanged(id: editorID, isFocused: true))
+        let textEditingProject = model.project
+        XCTAssertFalse(model.makeCompoundClip())
+        XCTAssertEqual(model.project, textEditingProject)
+        XCTAssertEqual(model.loadMessage, "Finish editing text before making a compound clip.")
+        XCTAssertTrue(model.textEditorFocusChanged(id: editorID, isFocused: false))
+
+        XCTAssertTrue(model.detachAudioForSelectedClip())
+        model.selectClip(trackID: linked.audioTrackID, clipID: linked.audioClip.id, mode: .replace)
+        let audioOnlyProject = model.project
+        XCTAssertFalse(model.canMakeCompoundClip)
+        XCTAssertFalse(model.makeCompoundClip())
+        XCTAssertEqual(model.project, audioOnlyProject)
+        XCTAssertEqual(
+            model.loadMessage,
+            "Include at least one video clip in the compound selection."
+        )
+    }
+
+    func testFRCMP001DestinationAndDuckingRefusalsAreAtomicAndLocalized() throws {
+        let destinationFixture = try makeCompoundDestinationRefusalProject()
+        let destinationModel = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        destinationModel.replaceProjectSessionForTesting(destinationFixture.project, documentURL: nil)
+        destinationModel.selectClip(
+            trackID: destinationFixture.first.trackID,
+            clipID: destinationFixture.first.clipID,
+            mode: .replace
+        )
+        destinationModel.selectClip(
+            trackID: destinationFixture.second.trackID,
+            clipID: destinationFixture.second.clipID,
+            mode: .toggle
+        )
+        let destinationBefore = destinationModel.project
+        let destinationUndo = destinationModel.editHistory?.undoCount
+        XCTAssertTrue(destinationModel.canMakeCompoundClip)
+        XCTAssertFalse(destinationModel.makeCompoundClip())
+        XCTAssertEqual(destinationModel.project, destinationBefore)
+        XCTAssertEqual(destinationModel.editHistory?.undoCount, destinationUndo)
+        XCTAssertEqual(
+            destinationModel.loadMessage,
+            "The selection cannot be replaced without overlapping clips left outside it. Adjust the selection and try again."
+        )
+
+        let duckingFixture = try makeCompoundDuckingRefusalProject()
+        let duckingModel = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        duckingModel.replaceProjectSessionForTesting(duckingFixture.project, documentURL: nil)
+        duckingModel.selectClip(
+            trackID: duckingFixture.video.trackID,
+            clipID: duckingFixture.video.clipID,
+            mode: .replace
+        )
+        duckingModel.selectClip(
+            trackID: duckingFixture.trigger.trackID,
+            clipID: duckingFixture.trigger.clipID,
+            mode: .toggle
+        )
+        let duckingBefore = duckingModel.project
+        let duckingUndo = duckingModel.editHistory?.undoCount
+        XCTAssertTrue(duckingModel.canMakeCompoundClip)
+        XCTAssertFalse(duckingModel.makeCompoundClip())
+        XCTAssertEqual(duckingModel.project, duckingBefore)
+        XCTAssertEqual(duckingModel.editHistory?.undoCount, duckingUndo)
+        XCTAssertEqual(
+            duckingModel.loadMessage,
+            "The selection crosses an audio ducking boundary. Include every affected ducking track or change the ducking setup first."
+        )
+    }
+
+    func testFRCMP004LockedOverlapAndDuckingRefusalsAreAtomicAndLocalized() throws {
+        let lockedModel = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let linked = try sampleLinkedSelection(in: lockedModel)
+        lockedModel.selectClip(
+            trackID: linked.videoTrackID,
+            clipID: linked.videoClip.id,
+            mode: .replace
+        )
+        XCTAssertTrue(lockedModel.makeCompoundClip())
+        let compoundReference = try XCTUnwrap(lockedModel.selectedClipReference)
+        lockedModel.setTrackState(
+            sequenceID: try XCTUnwrap(lockedModel.activeSequenceID),
+            trackID: compoundReference.trackID,
+            locked: true
+        )
+        let lockedBefore = lockedModel.project
+        let lockedUndo = lockedModel.editHistory?.undoCount
+        XCTAssertFalse(lockedModel.canDecomposeCompoundClip)
+        XCTAssertFalse(lockedModel.decomposeCompoundClip())
+        XCTAssertEqual(lockedModel.project, lockedBefore)
+        XCTAssertEqual(lockedModel.editHistory?.undoCount, lockedUndo)
+        XCTAssertEqual(
+            lockedModel.loadMessage,
+            "Unlock the compound clip's track before decomposing it."
+        )
+
+        let overlapFixture = try makeDecomposeOverlapRefusalProject()
+        let overlapModel = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        overlapModel.replaceProjectSessionForTesting(overlapFixture.project, documentURL: nil)
+        overlapModel.selectClip(
+            trackID: overlapFixture.compound.trackID,
+            clipID: overlapFixture.compound.clipID,
+            mode: .replace
+        )
+        let overlapBefore = overlapModel.project
+        let overlapUndo = overlapModel.editHistory?.undoCount
+        XCTAssertTrue(overlapModel.canDecomposeCompoundClip)
+        XCTAssertFalse(overlapModel.decomposeCompoundClip())
+        XCTAssertEqual(overlapModel.project, overlapBefore)
+        XCTAssertEqual(overlapModel.editHistory?.undoCount, overlapUndo)
+        XCTAssertEqual(
+            overlapModel.loadMessage,
+            "The compound contents would overlap clips already on the parent timeline. Move those clips and try again."
+        )
+
+        let decomposeDuckingFixture = try makeDecomposeDuckingRefusalProject()
+        let decomposeDuckingModel = EditorAjarAppModel(autosaveIntervalSeconds: 0)
+        decomposeDuckingModel.replaceProjectSessionForTesting(
+            decomposeDuckingFixture.project,
+            documentURL: nil
+        )
+        decomposeDuckingModel.selectClip(
+            trackID: decomposeDuckingFixture.compound.trackID,
+            clipID: decomposeDuckingFixture.compound.clipID,
+            mode: .replace
+        )
+        let decomposeDuckingBefore = decomposeDuckingModel.project
+        let decomposeDuckingUndo = decomposeDuckingModel.editHistory?.undoCount
+        XCTAssertTrue(decomposeDuckingModel.canDecomposeCompoundClip)
+        XCTAssertFalse(decomposeDuckingModel.decomposeCompoundClip())
+        XCTAssertEqual(decomposeDuckingModel.project, decomposeDuckingBefore)
+        XCTAssertEqual(decomposeDuckingModel.editHistory?.undoCount, decomposeDuckingUndo)
+        XCTAssertEqual(
+            decomposeDuckingModel.loadMessage,
+            "Decomposing would break an audio ducking relationship. Change the ducking setup first."
+        )
+    }
+
     func testFRTL010TimelineTimeMappingAndZoomClamps() {
         XCTAssertEqual(
             TimelineInteraction.xPosition(frame: 12, pixelsPerFrame: 4),
@@ -1641,6 +1971,13 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(model.loadMessage, messageAfterFirstRefusal)
         XCTAssertEqual(model.project, projectBefore)
 
+        let videoClip = try firstClip(in: track)
+        model.selectClip(trackID: track.id, clipID: videoClip.id, mode: .replace)
+        XCTAssertFalse(model.canMakeCompoundClip)
+        XCTAssertFalse(model.makeCompoundClip())
+        XCTAssertEqual(model.project, projectBefore)
+        XCTAssertEqual(model.loadMessage, reason.message)
+
         // Autosave must not rewrite a higher-minor package.
         await model.autosaveCheckpointForTesting()
         let reloaded = try AjarAutosaveStore.recoverProject(from: packageURL)
@@ -2534,6 +2871,373 @@ final class EditorAjarAppModelTests: XCTestCase {
 
     private func appTestUUID(_ rawValue: String) throws -> UUID {
         try XCTUnwrap(UUID(uuidString: rawValue))
+    }
+
+    private struct CompoundDestinationRefusalFixture {
+        let project: Project
+        let first: TimelineClipReference
+        let second: TimelineClipReference
+    }
+
+    private func makeCompoundDestinationRefusalProject() throws
+        -> CompoundDestinationRefusalFixture
+    {
+        let sample = try EditorAjarAppModel.makeSampleProject().get()
+        let settings = sample.settings
+        let frameRate = settings.frameRate
+        let mediaID = try XCTUnwrap(sample.mediaPool.first { $0.metadata.pixelDimensions != nil }?.id)
+        let firstTrackID = UUID()
+        let secondTrackID = UUID()
+        let firstSelectedID = UUID()
+        let secondSelectedID = UUID()
+        let sequence = Sequence(
+            id: UUID(),
+            name: "Compound destination refusal",
+            videoTracks: [
+                Track(
+                    id: firstTrackID,
+                    kind: .video,
+                    items: [
+                        .clip(try compoundTestClip(
+                            id: firstSelectedID,
+                            mediaID: mediaID,
+                            kind: .video,
+                            startFrame: 0,
+                            durationFrames: 10,
+                            frameRate: frameRate,
+                            name: "First selected"
+                        )),
+                        .clip(try compoundTestClip(
+                            id: UUID(),
+                            mediaID: mediaID,
+                            kind: .video,
+                            startFrame: 10,
+                            durationFrames: 10,
+                            frameRate: frameRate,
+                            name: "First leftover"
+                        )),
+                    ]
+                ),
+                Track(
+                    id: secondTrackID,
+                    kind: .video,
+                    items: [
+                        .clip(try compoundTestClip(
+                            id: UUID(),
+                            mediaID: mediaID,
+                            kind: .video,
+                            startFrame: 0,
+                            durationFrames: 20,
+                            frameRate: frameRate,
+                            name: "Second leftover"
+                        )),
+                        .clip(try compoundTestClip(
+                            id: secondSelectedID,
+                            mediaID: mediaID,
+                            kind: .video,
+                            startFrame: 20,
+                            durationFrames: 10,
+                            frameRate: frameRate,
+                            name: "Second selected"
+                        )),
+                    ]
+                ),
+            ],
+            audioTracks: [],
+            markers: [],
+            timebase: frameRate
+        )
+        return CompoundDestinationRefusalFixture(
+            project: Project(
+                schemaVersion: AjarProjectCodec.currentSchemaVersion,
+                settings: settings,
+                mediaPool: sample.mediaPool,
+                sequences: [sequence]
+            ),
+            first: TimelineClipReference(trackID: firstTrackID, clipID: firstSelectedID),
+            second: TimelineClipReference(trackID: secondTrackID, clipID: secondSelectedID)
+        )
+    }
+
+    private struct CompoundDuckingRefusalFixture {
+        let project: Project
+        let video: TimelineClipReference
+        let trigger: TimelineClipReference
+    }
+
+    private func makeCompoundDuckingRefusalProject() throws -> CompoundDuckingRefusalFixture {
+        let sample = try EditorAjarAppModel.makeSampleProject().get()
+        let settings = sample.settings
+        let frameRate = settings.frameRate
+        let videoMediaID = try XCTUnwrap(
+            sample.mediaPool.first { $0.metadata.pixelDimensions != nil }?.id
+        )
+        let audioMediaID = try XCTUnwrap(
+            sample.mediaPool.first { $0.metadata.audioChannelLayout != nil }?.id
+        )
+        let videoTrackID = UUID()
+        let triggerTrackID = UUID()
+        let targetTrackID = UUID()
+        let videoClipID = UUID()
+        let triggerClipID = UUID()
+        let targetClipID = UUID()
+        let sequence = Sequence(
+            id: UUID(),
+            name: "Compound ducking refusal",
+            videoTracks: [
+                Track(
+                    id: videoTrackID,
+                    kind: .video,
+                    items: [.clip(try compoundTestClip(
+                        id: videoClipID,
+                        mediaID: videoMediaID,
+                        kind: .video,
+                        startFrame: 0,
+                        durationFrames: 10,
+                        frameRate: frameRate,
+                        name: "Selected video"
+                    ))]
+                )
+            ],
+            audioTracks: [
+                Track(
+                    id: triggerTrackID,
+                    kind: .audio,
+                    items: [.clip(try compoundTestClip(
+                        id: triggerClipID,
+                        mediaID: audioMediaID,
+                        kind: .audio,
+                        startFrame: 0,
+                        durationFrames: 10,
+                        frameRate: frameRate,
+                        name: "Selected trigger"
+                    ))]
+                ),
+                Track(
+                    id: targetTrackID,
+                    kind: .audio,
+                    items: [.clip(try compoundTestClip(
+                        id: targetClipID,
+                        mediaID: audioMediaID,
+                        kind: .audio,
+                        startFrame: 0,
+                        durationFrames: 10,
+                        frameRate: frameRate,
+                        name: "Outside target"
+                    ))]
+                ),
+            ],
+            markers: [],
+            audioDucking: [
+                AudioDuckingRule(
+                    triggerTrackID: triggerTrackID,
+                    targetTrackIDs: [targetTrackID],
+                    threshold: try RationalValue(numerator: 1, denominator: 2),
+                    reductionGain: try RationalValue(numerator: 1, denominator: 4),
+                    attack: .zero,
+                    release: .zero
+                )
+            ],
+            timebase: frameRate
+        )
+        return CompoundDuckingRefusalFixture(
+            project: Project(
+                schemaVersion: AjarProjectCodec.currentSchemaVersion,
+                settings: settings,
+                mediaPool: sample.mediaPool,
+                sequences: [sequence]
+            ),
+            video: TimelineClipReference(trackID: videoTrackID, clipID: videoClipID),
+            trigger: TimelineClipReference(trackID: triggerTrackID, clipID: triggerClipID)
+        )
+    }
+
+    private struct DecomposeRefusalFixture {
+        let project: Project
+        let compound: TimelineClipReference
+    }
+
+    private func makeDecomposeOverlapRefusalProject() throws -> DecomposeRefusalFixture {
+        let sample = try EditorAjarAppModel.makeSampleProject().get()
+        let settings = sample.settings
+        let frameRate = settings.frameRate
+        let mediaID = try XCTUnwrap(sample.mediaPool.first { $0.metadata.pixelDimensions != nil }?.id)
+        let parentSequenceID = UUID()
+        let nestedSequenceID = UUID()
+        let compoundTrackID = UUID()
+        let targetTrackID = UUID()
+        let compoundClipID = UUID()
+        let duration = try frameRate.duration(ofFrames: 10)
+        let compound = Clip(
+            id: compoundClipID,
+            source: .sequence(id: nestedSequenceID),
+            sourceRange: try TimeRange(start: .zero, duration: duration),
+            timelineRange: try TimeRange(start: .zero, duration: duration),
+            kind: .video,
+            name: "Overlap compound"
+        )
+        let inner = try compoundTestClip(
+            id: UUID(),
+            mediaID: mediaID,
+            kind: .video,
+            startFrame: 0,
+            durationFrames: 10,
+            frameRate: frameRate,
+            name: "Inner video"
+        )
+        let blocker = try compoundTestClip(
+            id: UUID(),
+            mediaID: mediaID,
+            kind: .video,
+            startFrame: 0,
+            durationFrames: 10,
+            frameRate: frameRate,
+            name: "Parent blocker"
+        )
+        let parent = Sequence(
+            id: parentSequenceID,
+            name: "Decompose overlap parent",
+            videoTracks: [
+                Track(id: compoundTrackID, kind: .video, items: [.clip(compound)]),
+                Track(id: targetTrackID, kind: .video, items: [.clip(blocker)]),
+            ],
+            audioTracks: [],
+            markers: [],
+            timebase: frameRate
+        )
+        let nested = Sequence(
+            id: nestedSequenceID,
+            name: "Decompose overlap nested",
+            videoTracks: [Track(id: targetTrackID, kind: .video, items: [.clip(inner)])],
+            audioTracks: [],
+            markers: [],
+            timebase: frameRate
+        )
+        let project = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            settings: settings,
+            mediaPool: sample.mediaPool,
+            sequences: [parent, nested]
+        )
+        XCTAssertEqual(project.validate(), .valid)
+        return DecomposeRefusalFixture(
+            project: project,
+            compound: TimelineClipReference(trackID: compoundTrackID, clipID: compoundClipID)
+        )
+    }
+
+    private func makeDecomposeDuckingRefusalProject() throws -> DecomposeRefusalFixture {
+        let sample = try EditorAjarAppModel.makeSampleProject().get()
+        let settings = sample.settings
+        let frameRate = settings.frameRate
+        let audioMediaID = try XCTUnwrap(
+            sample.mediaPool.first { $0.metadata.audioChannelLayout != nil }?.id
+        )
+        let parentSequenceID = UUID()
+        let nestedSequenceID = UUID()
+        let compoundTrackID = UUID()
+        let insideTriggerTrackID = UUID()
+        let outsideTargetTrackID = UUID()
+        let compoundClipID = UUID()
+        let windowDuration = try frameRate.duration(ofFrames: 4)
+        let compound = Clip(
+            id: compoundClipID,
+            source: .sequence(id: nestedSequenceID),
+            sourceRange: try TimeRange(start: .zero, duration: windowDuration),
+            timelineRange: try TimeRange(start: .zero, duration: windowDuration),
+            kind: .video,
+            name: "Ducking compound"
+        )
+        let rule = AudioDuckingRule(
+            triggerTrackID: insideTriggerTrackID,
+            targetTrackIDs: [outsideTargetTrackID],
+            threshold: try RationalValue(numerator: 1, denominator: 2),
+            reductionGain: try RationalValue(numerator: 1, denominator: 4),
+            attack: .zero,
+            release: .zero
+        )
+        let parent = Sequence(
+            id: parentSequenceID,
+            name: "Decompose ducking parent",
+            videoTracks: [Track(
+                id: compoundTrackID,
+                kind: .video,
+                items: [.clip(compound)]
+            )],
+            audioTracks: [],
+            markers: [],
+            timebase: frameRate
+        )
+        let nested = Sequence(
+            id: nestedSequenceID,
+            name: "Decompose ducking nested",
+            videoTracks: [],
+            audioTracks: [
+                Track(
+                    id: insideTriggerTrackID,
+                    kind: .audio,
+                    items: [.clip(try compoundTestClip(
+                        id: UUID(),
+                        mediaID: audioMediaID,
+                        kind: .audio,
+                        startFrame: 0,
+                        durationFrames: 4,
+                        frameRate: frameRate,
+                        name: "Inside trigger"
+                    ))]
+                ),
+                Track(
+                    id: outsideTargetTrackID,
+                    kind: .audio,
+                    items: [.clip(try compoundTestClip(
+                        id: UUID(),
+                        mediaID: audioMediaID,
+                        kind: .audio,
+                        startFrame: 4,
+                        durationFrames: 4,
+                        frameRate: frameRate,
+                        name: "Outside target"
+                    ))]
+                ),
+            ],
+            markers: [],
+            audioDucking: [rule],
+            timebase: frameRate
+        )
+        let project = Project(
+            schemaVersion: AjarProjectCodec.currentSchemaVersion,
+            settings: settings,
+            mediaPool: sample.mediaPool,
+            sequences: [parent, nested]
+        )
+        XCTAssertEqual(project.validate(), .valid)
+        return DecomposeRefusalFixture(
+            project: project,
+            compound: TimelineClipReference(trackID: compoundTrackID, clipID: compoundClipID)
+        )
+    }
+
+    private func compoundTestClip(
+        id: UUID,
+        mediaID: UUID,
+        kind: TrackKind,
+        startFrame: Int64,
+        durationFrames: Int64,
+        frameRate: FrameRate,
+        name: String
+    ) throws -> Clip {
+        let duration = try frameRate.duration(ofFrames: durationFrames)
+        return Clip(
+            id: id,
+            source: .media(id: mediaID),
+            sourceRange: try TimeRange(start: .zero, duration: duration),
+            timelineRange: try TimeRange(
+                start: try RationalTime.atFrame(startFrame, frameRate: frameRate),
+                duration: duration
+            ),
+            kind: kind,
+            name: name
+        )
     }
 
     private func sampleLinkedSelection(
