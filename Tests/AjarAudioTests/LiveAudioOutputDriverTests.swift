@@ -66,6 +66,24 @@ final class LiveAudioOutputDriverTests: XCTestCase {
         }
     }
 
+    func testFRAUD007LiveDriverRejectsPlanWithMismatchedSampleRate() throws {
+        let driver = try LiveAudioOutputDriver(format: Self.testFormat)
+        let wrongRatePlan = RealtimeAudioRenderPlan(
+            buffer: try RenderedAudioBuffer(
+                format: AudioRenderFormat(sampleRate: 44_100, channelCount: 2),
+                frameCount: 1,
+                samples: [1, -1]
+            )
+        )
+
+        XCTAssertThrowsError(try driver.publish(wrongRatePlan)) { error in
+            XCTAssertEqual(
+                error as? LiveAudioOutputDriverError,
+                .sampleRateMismatch(expected: 48_000, actual: 44_100)
+            )
+        }
+    }
+
     func testFRAUD007LiveDriverKeepsRenderBodyRealtimeSafe() throws {
         let driver = try LiveAudioOutputDriver(format: Self.testFormat)
         try driver.publish(try plan(samples: [1, 2, 3, 4]))

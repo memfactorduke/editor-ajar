@@ -102,7 +102,10 @@ final class OfflineAudioCrossfadeGuardTests: XCTestCase {
         )
         assertSamples(after.samples, equal: stereoFrames([0, 0, 0, 0, 0, 0, 0, 0]))
 
-        let expectedMissing = try TimeRange(start: time(5, 8), duration: time(3, 8))
+        // Windowed providers owe only the source-time image of frames this render will mix.
+        // The provider ends at 5/8, but this chunk begins at 3/4, so the typed fault reports
+        // the actually requested tail interval rather than unrelated earlier source frames.
+        let expectedMissing = try TimeRange(start: time(3, 4), duration: time(1, 4))
         XCTAssertThrowsError(
             try OfflineAudioMixer.render(
                 project: fixture.project,

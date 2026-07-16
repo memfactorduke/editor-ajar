@@ -11,6 +11,9 @@ public enum LiveAudioOutputDriverError: Error, Equatable, Sendable, CustomString
     /// A published render plan does not match the configured device channel count.
     case channelCountMismatch(expected: Int, actual: Int)
 
+    /// A published render plan does not match the configured device-facing sample rate.
+    case sampleRateMismatch(expected: Int, actual: Int)
+
     /// A human-readable description.
     public var description: String {
         switch self {
@@ -19,6 +22,8 @@ public enum LiveAudioOutputDriverError: Error, Equatable, Sendable, CustomString
                 + "channelCount=\(channelCount)"
         case .channelCountMismatch(let expected, let actual):
             "live audio plan channelCount=\(actual) does not match output channelCount=\(expected)"
+        case .sampleRateMismatch(let expected, let actual):
+            "live audio plan sampleRate=\(actual) does not match output sampleRate=\(expected)"
         }
     }
 }
@@ -33,6 +38,7 @@ public final class LiveAudioOutputDriver: @unchecked Sendable {
     private let engine: AVAudioEngine
     private let sourceNode: AVAudioSourceNode
     private let outputFormat: AVAudioFormat
+    private let sampleRate: Int
     private let channelCount: Int
 
     /// Creates the audio graph. This does not start hardware output.
@@ -56,6 +62,7 @@ public final class LiveAudioOutputDriver: @unchecked Sendable {
         self.handoff = handoff
         engine = AVAudioEngine()
         self.outputFormat = outputFormat
+        sampleRate = format.sampleRate
         channelCount = format.channelCount
         sourceNode = AVAudioSourceNode { _, _, frameCount, audioBufferList in
             Self.renderCallback(
@@ -82,6 +89,12 @@ public final class LiveAudioOutputDriver: @unchecked Sendable {
 
     /// Publishes a fully prepared render plan from the control side.
     public func publish(_ plan: RealtimeAudioRenderPlan) throws {
+        guard plan.format.sampleRate == sampleRate else {
+            throw LiveAudioOutputDriverError.sampleRateMismatch(
+                expected: sampleRate,
+                actual: plan.format.sampleRate
+            )
+        }
         guard plan.format.channelCount == channelCount else {
             throw LiveAudioOutputDriverError.channelCountMismatch(
                 expected: channelCount,

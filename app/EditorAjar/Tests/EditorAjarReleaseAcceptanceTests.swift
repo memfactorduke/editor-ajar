@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AjarAudio
 import AjarCore
-import AjarExport
 import AjarMedia
+import AudioToolbox
 import AVFoundation
 import CoreVideo
 import Foundation
@@ -10,6 +11,7 @@ import ImageIO
 import Metal
 import XCTest
 
+@testable import AjarExport
 @testable import EditorAjar
 
 /// End-to-end usable-app acceptance gate (#236): walks the real user journey through
@@ -46,11 +48,21 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
             frameCount: syntheticFrameCount,
             frameRate: syntheticFrameRate
         )
-        let model = try makeModel(workspace: workspace)
+        let audioDriver = AcceptanceAudioOutputDriver()
+        let audioCoordinator = EditorAjarLiveAudioCoordinator(driver: audioDriver)
+        let model = try makeModel(
+            workspace: workspace,
+            audioCoordinator: audioCoordinator
+        )
 
-        try await runCreateImportAndPlace(model: model, media: media)
+        let muxedMediaID = try await runCreateImportAndPlace(model: model, media: media)
         try runEditEffectsTitleAndAudio(model: model)
         let compoundJourney = try runCompoundMakeOpenEditAndReturn(model: model)
+        try await verifyLivePlaybackAndMeters(
+            model: model,
+            coordinator: audioCoordinator,
+            driver: audioDriver
+        )
 
         let undoBeforeSave = model.editHistory?.undoCount ?? 0
         XCTAssertGreaterThan(
@@ -62,6 +74,19 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         let packageURL = workspace.packageURL(named: "ReleaseAcceptance.ajar")
         try model.saveProjectAs(to: packageURL)
         XCTAssertFalse(model.isDocumentDirty)
+
+        // Muxed media needs two independent preview lanes: the browser thumbnail must not
+        // suppress the timeline waveform request for the same media id.
+        model.requestMediaPreview(forID: muxedMediaID)
+        model.ensureTimelineAudioWaveforms()
+        let previewsCompleted = await waitUntil(timeout: 30) {
+            model.mediaThumbnailData[muxedMediaID] != nil
+                && model.mediaWaveformSummary[muxedMediaID] != nil
+        }
+        XCTAssertTrue(
+            previewsCompleted,
+            "muxed media did not produce both its thumbnail and audio waveform"
+        )
 
         XCTAssertTrue(model.startMediaConsolidation())
         let consolidationCompleted = await waitUntil(timeout: 30) {
@@ -130,6 +155,10 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         XCTAssertFalse(reopened.isDocumentDirty)
         XCTAssertEqual(reopened.project?.mediaPool.count, 3)
         XCTAssertFalse(reopened.canUndo)
+        try assertOnlyMuxedMediaSuppliesTimelineAudio(
+            project: try XCTUnwrap(reopened.project),
+            muxedMediaID: muxedMediaID
+        )
 
         try verifyReopenedCompoundPropagation(
             model: reopened,
@@ -141,7 +170,9 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
             model: reopened,
             exportURL: exportURL,
             expectedFrames: expectedExportFrames,
-            expectedResolution: savedProject.settings.resolution
+            expectedResolution: savedProject.settings.resolution,
+            expectedAudioSampleRate: savedProject.settings.audioSampleRate,
+            expectedAudioMarkerTime: media.muxedAudioMarkerTime
         )
         XCTAssertTrue(reopened.selectSequence(compoundJourney.parentSequenceID))
         reopened.selectClip(
@@ -246,12 +277,13 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
 
     // MARK: - Journey steps
 
-    private func makeModel(workspace: AcceptanceWorkspace) throws -> EditorAjarAppModel {
+    private func makeModel(
+        workspace: AcceptanceWorkspace,
+        audioCoordinator: (any EditorAjarAudioCoordinating)? = nil
+    ) throws -> EditorAjarAppModel {
         let bookmarkStore = AcceptanceBookmarkStore()
         let pipeline = MediaImportPipeline(
-            probe: AcceptanceImportProbe(
-                audioResult: try audioOnlyProbeResult(frameCount: syntheticFrameCount)
-            ),
+            probe: AVFoundationMediaProbe(),
             hasher: SHA256MediaFileHasher(),
             bookmarkStore: bookmarkStore
         )
@@ -266,6 +298,7 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         }
         return EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
+            audioCoordinator: audioCoordinator,
             mediaImportPipeline: pipeline,
             mediaConsolidationRunner: consolidationRunner,
             documentStore: EditorAjarDocumentStore(bookmarkStore: bookmarkStore),
@@ -277,7 +310,7 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
     private func runCreateImportAndPlace(
         model: EditorAjarAppModel,
         media: AcceptanceWorkspace.MediaFixtures
-    ) async throws {
+    ) async throws -> UUID {
         try model.createNewProject(settings: .sensibleDefaults)
         let defaults = try EditorAjarNewProjectSettings.sensibleDefaults.makeProjectSettings()
         XCTAssertEqual(model.project?.settings.resolution, defaults.resolution)
@@ -289,7 +322,8 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
 
         await model.importMediaAndWait(from: [media.videoURL, media.stillURL, media.audioURL])
         if let error = model.mediaImportError {
-            return XCTFail("import refused: \(error)")
+            XCTFail("import refused: \(error)")
+            throw error
         }
         let summary = try XCTUnwrap(model.mediaImportSummary, "import summary missing")
         XCTAssertEqual(
@@ -317,13 +351,64 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         let videoMedia = try XCTUnwrap(videoMedia(in: pool), "missing video media in pool")
         let stillMedia = try XCTUnwrap(stillMedia(in: pool), "missing still media in pool")
         let audioMedia = try XCTUnwrap(audioMedia(in: pool), "missing audio media in pool")
+        XCTAssertNotEqual(videoMedia.id, audioMedia.id)
+
+        // Place the unlinked still while the timeline is empty. Once the muxed fixture is on the
+        // timeline, the playhead is intentionally clamped to its final in-range frame; trying to
+        // insert a video-only still there would bisect just the video half of a linked A/V pair.
+        model.scrub(to: 0)
+        XCTAssertTrue(model.insertMediaOnTimeline(mediaID: stillMedia.id), "insert still refused")
+        let stillClip = try firstClip(in: model) { clip in
+            guard case .media(let id) = clip.source else { return false }
+            return id == stillMedia.id
+        }
+        model.selectClip(trackID: stillClip.trackID, clipID: stillClip.clip.id, mode: .replace)
+        XCTAssertTrue(
+            model.trimSelectedClip(
+                sourceStartFrame: 0,
+                timelineStartFrame: 0,
+                durationFrames: 10
+            ),
+            "trim still refused"
+        )
 
         model.scrub(to: 0)
+        let beforeMuxedPlacement = model.project
         XCTAssertTrue(
             model.insertMediaOnTimeline(mediaID: videoMedia.id),
             "insert video refused (typed refusal is a failure for this journey)"
         )
-        let videoClip = try firstClip(in: model, matching: { $0.kind == .video })
+        let afterMuxedPlacement = model.project
+        let placedVideo = try firstClip(in: model) {
+            $0.kind == .video && $0.source == .media(id: videoMedia.id)
+        }
+        let placedAudio = try firstClip(in: model) {
+            $0.kind == .audio && $0.source == .media(id: videoMedia.id)
+        }
+        let placementGroupID = try XCTUnwrap(
+            placedVideo.clip.linkGroupID,
+            "muxed placement must assign a link group"
+        )
+        XCTAssertEqual(placedAudio.clip.linkGroupID, placementGroupID)
+        XCTAssertEqual(placedAudio.clip.timelineRange, placedVideo.clip.timelineRange)
+        XCTAssertEqual(placedAudio.clip.sourceRange, placedVideo.clip.sourceRange)
+
+        model.undo()
+        XCTAssertEqual(
+            model.project,
+            beforeMuxedPlacement,
+            "one undo must remove both halves of the atomic muxed placement"
+        )
+        model.redo()
+        XCTAssertEqual(
+            model.project,
+            afterMuxedPlacement,
+            "one redo must restore the linked A/V pair"
+        )
+
+        let videoClip = try firstClip(in: model) {
+            $0.kind == .video && $0.source == .media(id: videoMedia.id)
+        }
         model.selectClip(trackID: videoClip.trackID, clipID: videoClip.clip.id, mode: .replace)
         XCTAssertTrue(
             model.moveSelectedClip(toStartFrame: 0),
@@ -340,48 +425,43 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
             model.bladeSelectedClipAtPlayhead(),
             "blade refused at frame \(bladeFrame)"
         )
-        let videoTrackAfterBlade = try XCTUnwrap(
-            model.activeSequence?.videoTracks.first(where: { $0.id == videoClip.trackID })
+        let videoClipsAfterBlade = try mediaClips(
+            in: model,
+            mediaID: videoMedia.id,
+            kind: .video
         )
-        let videoClipsAfterBlade = videoTrackAfterBlade.items.compactMap { item -> Clip? in
-            guard case .clip(let clip) = item, clip.kind == .video else { return nil }
-            return clip
+        let audioClipsAfterBlade = try mediaClips(
+            in: model,
+            mediaID: videoMedia.id,
+            kind: .audio
+        )
+        XCTAssertEqual(videoClipsAfterBlade.count, 2, "blade should produce two video pieces")
+        XCTAssertEqual(
+            audioClipsAfterBlade.count, 2, "linked blade should produce two audio pieces")
+        for index in videoClipsAfterBlade.indices {
+            let videoPiece = videoClipsAfterBlade[index].clip
+            let audioPiece = audioClipsAfterBlade[index].clip
+            XCTAssertEqual(audioPiece.timelineRange, videoPiece.timelineRange)
+            XCTAssertEqual(audioPiece.sourceRange, videoPiece.sourceRange)
+            XCTAssertEqual(
+                audioPiece.linkGroupID,
+                videoPiece.linkGroupID,
+                "each bladed A/V half must retain one shared link group"
+            )
+            XCTAssertNotNil(videoPiece.linkGroupID)
         }
-        XCTAssertGreaterThanOrEqual(
-            videoClipsAfterBlade.count,
+        XCTAssertEqual(
+            Set(videoClipsAfterBlade.compactMap(\.clip.linkGroupID)).count,
             2,
-            "blade should produce two video pieces"
+            "left and right A/V halves need independent link groups"
         )
         // Stash for the edit step (left piece after blade).
         model.selectClip(
-            trackID: videoClip.trackID,
-            clipID: try XCTUnwrap(
-                videoClipsAfterBlade.min {
-                    $0.timelineRange.start < $1.timelineRange.start
-                }
-            ).id,
+            trackID: videoClipsAfterBlade[0].trackID,
+            clipID: videoClipsAfterBlade[0].clip.id,
             mode: .replace
         )
-
-        let stillStart = try sequenceEndFrame(model)
-        model.scrub(to: stillStart)
-        XCTAssertTrue(model.insertMediaOnTimeline(mediaID: stillMedia.id), "insert still refused")
-        let stillClip = try firstClip(in: model) { clip in
-            guard case .media(let id) = clip.source else { return false }
-            return id == stillMedia.id
-        }
-        model.selectClip(trackID: stillClip.trackID, clipID: stillClip.clip.id, mode: .replace)
-        XCTAssertTrue(
-            model.trimSelectedClip(
-                sourceStartFrame: 0,
-                timelineStartFrame: stillStart,
-                durationFrames: 10
-            ),
-            "trim still refused"
-        )
-
-        model.scrub(to: 0)
-        XCTAssertTrue(model.insertMediaOnTimeline(mediaID: audioMedia.id), "insert audio refused")
+        return videoMedia.id
     }
 
     private func runEditEffectsTitleAndAudio(model: EditorAjarAppModel) throws {
@@ -514,11 +594,85 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         XCTAssertEqual(model.selectedClip?.id, journey.compoundClipID)
     }
 
+    private func verifyLivePlaybackAndMeters(
+        model: EditorAjarAppModel,
+        coordinator: EditorAjarLiveAudioCoordinator,
+        driver: AcceptanceAudioOutputDriver
+    ) async throws {
+        model.scrub(to: 0)
+        if !model.isMixerPanelVisible {
+            model.toggleMixerPanel()
+        } else {
+            model.refreshMixerMeters()
+        }
+        let meterFinished = await waitUntil(timeout: 10) {
+            !(model.mixerMeterSnapshot?.mixLevels.isEmpty ?? true)
+                || model.mixerMeterError != nil
+        }
+        XCTAssertTrue(meterFinished, "real-media meter preparation did not finish")
+        XCTAssertNil(model.mixerMeterError)
+        let meter = try XCTUnwrap(model.mixerMeterSnapshot)
+        XCTAssertFalse(meter.mixLevels.isEmpty)
+        XCTAssertTrue(
+            meter.mixLevels.allSatisfy { $0.peak.isFinite && $0.rms.isFinite },
+            "meter values must be finite"
+        )
+        XCTAssertGreaterThan(
+            meter.mixLevels.map(\.peak).max() ?? 0,
+            0.01,
+            "muxed fixture audio must reach the offline meters"
+        )
+
+        model.shuttleForward()
+        await coordinator.drainPendingRendersForTesting()
+        let playbackPublished = await waitUntil(timeout: 10) {
+            driver.publishCount > 0 || model.audioPlaybackError != nil
+        }
+        XCTAssertTrue(playbackPublished, "real-media live playback did not publish a plan")
+        XCTAssertNil(model.audioPlaybackError)
+        XCTAssertGreaterThan(driver.startCount, 0)
+        let samples = driver.lastPublishedSamples
+        XCTAssertFalse(samples.isEmpty)
+        XCTAssertTrue(samples.allSatisfy(\.isFinite), "live PCM must contain only finite samples")
+        XCTAssertTrue(
+            samples.contains { abs($0) > 0.01 },
+            "muxed fixture audio must reach the live playback plan"
+        )
+        model.shuttlePause()
+    }
+
+    private func assertOnlyMuxedMediaSuppliesTimelineAudio(
+        project: Project,
+        muxedMediaID: UUID
+    ) throws {
+        let mediaAudioIDs = project.sequences.flatMap { sequence in
+            sequence.audioTracks.flatMap { track in
+                track.items.compactMap { item -> UUID? in
+                    guard case .clip(let clip) = item,
+                        clip.kind == .audio,
+                        case .media(let mediaID) = clip.source
+                    else {
+                        return nil
+                    }
+                    return mediaID
+                }
+            }
+        }
+        XCTAssertFalse(mediaAudioIDs.isEmpty, "journey must retain imported timeline audio")
+        XCTAssertEqual(
+            Set(mediaAudioIDs),
+            Set([muxedMediaID]),
+            "standalone audio must not be able to mask a broken muxed-audio path"
+        )
+    }
+
     private func runProResExportAndVerify(
         model: EditorAjarAppModel,
         exportURL: URL,
         expectedFrames: Int64,
-        expectedResolution: PixelDimensions
+        expectedResolution: PixelDimensions,
+        expectedAudioSampleRate: Int,
+        expectedAudioMarkerTime: RationalTime
     ) async throws {
         model.enqueueActiveSequenceExport(destinationURL: exportURL)
         try await waitForTerminalExport(model: model, timeout: 90)
@@ -545,6 +699,72 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         XCTAssertEqual(first.width, expectedResolution.width)
         XCTAssertEqual(first.height, expectedResolution.height)
         assertNonTrivialContent(frames)
+        try await assertExportHasAlignedPCM(
+            exportURL,
+            expectedSampleRate: expectedAudioSampleRate,
+            expectedMarkerTime: expectedAudioMarkerTime
+        )
+    }
+
+    private func assertExportHasAlignedPCM(
+        _ exportURL: URL,
+        expectedSampleRate: Int,
+        expectedMarkerTime: RationalTime
+    ) async throws {
+        let duration = try await AVURLAsset(url: exportURL).load(.duration)
+        XCTAssertTrue(duration.isValid)
+        XCTAssertTrue(duration.isNumeric)
+        let sourceRange = try TimeRange(
+            start: .zero,
+            duration: RationalTime(
+                value: duration.value,
+                timescale: Int64(duration.timescale)
+            )
+        )
+        let decoded = try await AudioPCMDecoder().decodeWindow(
+            from: exportURL,
+            sourceRange: sourceRange
+        )
+        XCTAssertEqual(decoded.sampleRate, expectedSampleRate)
+        XCTAssertEqual(decoded.channelCount, 2)
+        XCTAssertGreaterThan(decoded.frameCount, 0)
+        XCTAssertEqual(decoded.frameOffset, 0)
+        XCTAssertEqual(decoded.presentationTime, .zero)
+        XCTAssertEqual(decoded.samples.count, decoded.frameCount * decoded.channelCount)
+        XCTAssertTrue(
+            decoded.samples.allSatisfy(\.isFinite),
+            "exported PCM must not contain NaN or infinity"
+        )
+
+        let activeThreshold = Float(0.02)
+        let firstActiveFrame = (0..<decoded.frameCount).first { frame in
+            let firstSample = frame * decoded.channelCount
+            let frameSamples = decoded.samples[
+                firstSample..<(firstSample + decoded.channelCount)
+            ]
+            return frameSamples.contains { abs($0) > activeThreshold }
+        }
+        let observedMarkerFrame = try XCTUnwrap(
+            firstActiveFrame,
+            "exported PCM track is silent; muxed audio did not survive the user journey"
+        )
+        let outputRate = try FrameRate(frames: Int64(decoded.sampleRate))
+        let expectedMarkerFrame = try expectedMarkerTime.frameIndex(
+            at: outputRate,
+            rounding: .nearestOrAwayFromZero
+        )
+        XCTAssertLessThanOrEqual(
+            abs(Int64(observedMarkerFrame) - expectedMarkerFrame),
+            4,
+            "exported PCM marker is shifted from its linked timeline position"
+        )
+
+        let silencePrefixEnd = max(0, Int(expectedMarkerFrame) - 8)
+        let silencePrefixSampleCount = silencePrefixEnd * decoded.channelCount
+        XCTAssertTrue(
+            decoded.samples.prefix(silencePrefixSampleCount).allSatisfy { abs($0) < 0.001 },
+            "exported PCM became active before the fixture's deterministic marker"
+        )
     }
 
     // MARK: - Assertions / helpers
@@ -611,28 +831,6 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         )
     }
 
-    private func audioOnlyProbeResult(frameCount: Int) throws -> MediaProbeResult {
-        let frameRate = try FrameRate(frames: Int64(syntheticFrameRate))
-        let duration = try frameRate.duration(ofFrames: Int64(frameCount))
-        return MediaProbeResult(
-            metadata: MediaMetadata(
-                codecID: "pcm_s16le",
-                pixelDimensions: nil,
-                frameRate: nil,
-                duration: duration,
-                colorSpace: .unspecified,
-                audioChannelLayout: AjarCore.AudioChannelLayout(
-                    channelCount: 2,
-                    layoutTag: "stereo"
-                ),
-                isVariableFrameRate: false,
-                conformedFrameRate: nil
-            ),
-            videoFrameCount: nil,
-            audioSampleRate: 48_000
-        )
-    }
-
     private struct TrackedClip {
         let trackID: UUID
         let clip: Clip
@@ -671,9 +869,25 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         throw AcceptanceFixtureError.clipNotFound
     }
 
-    private func sequenceEndFrame(_ model: EditorAjarAppModel) throws -> Int64 {
+    private func mediaClips(
+        in model: EditorAjarAppModel,
+        mediaID: UUID,
+        kind: TrackKind
+    ) throws -> [TrackedClip] {
         let sequence = try XCTUnwrap(model.activeSequence)
-        return try frameCount(of: try sequence.timelineDuration(), timebase: sequence.timebase)
+        var matches: [TrackedClip] = []
+        for track in sequence.videoTracks + sequence.audioTracks {
+            for item in track.items {
+                guard case .clip(let clip) = item,
+                    clip.kind == kind,
+                    clip.source == .media(id: mediaID)
+                else {
+                    continue
+                }
+                matches.append(TrackedClip(trackID: track.id, clip: clip))
+            }
+        }
+        return matches.sorted { $0.clip.timelineRange.start < $1.clip.timelineRange.start }
     }
 
     private func exportFrameCount(for sequence: Sequence) throws -> Int64 {
@@ -750,6 +964,7 @@ private struct AcceptanceWorkspace {
         let videoURL: URL
         let stillURL: URL
         let audioURL: URL
+        let muxedAudioMarkerTime: RationalTime
     }
 
     func makeMediaFixtures(
@@ -775,23 +990,21 @@ private struct AcceptanceWorkspace {
             green: 80,
             blue: 40
         )
-        // Audio is probe-injected; bytes only need to exist and hash stably.
-        try Data("editor-ajar-release-acceptance-audio".utf8).write(to: audioURL)
-        return MediaFixtures(videoURL: videoURL, stillURL: stillURL, audioURL: audioURL)
-    }
-}
-
-/// Routes still/video to the real native probe; audio-only temp files use an injected result.
-private struct AcceptanceImportProbe: MediaProbing {
-    let audioResult: MediaProbeResult
-    let native = AVFoundationMediaProbe()
-
-    func probe(_ sourceURL: URL) async throws -> MediaProbeResult {
-        let ext = sourceURL.pathExtension.lowercased()
-        if ext == "wav" || ext == "aif" || ext == "aiff" {
-            return audioResult
-        }
-        return try await native.probe(sourceURL)
+        try AcceptancePCMWriter.writeTone(
+            to: audioURL,
+            sampleRate: 44_100,
+            channelCount: 2,
+            frameCount: Int(frameCount) * 44_100 / Int(frameRate)
+        )
+        return MediaFixtures(
+            videoURL: videoURL,
+            stillURL: stillURL,
+            audioURL: audioURL,
+            muxedAudioMarkerTime: try RationalTime(
+                value: Int64(AcceptanceSyntheticProResWriter.audioMarkerStartFrame),
+                timescale: Int64(AcceptanceSyntheticProResWriter.audioSampleRate)
+            )
+        )
     }
 }
 
@@ -820,8 +1033,58 @@ private final class AcceptanceConsolidationProgress: ConsolidateProgress, @unche
     }
 }
 
-/// Minimal ProRes 4444 writer (same CI-safe path as the sample project / golden harness).
+private final class AcceptanceAudioOutputDriver: EditorAjarAudioOutputDriving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var publishedSamples: [[Float]] = []
+    private var startCountValue = 0
+    private var latestSafetyReport: RealtimeAudioSafetyReport?
+
+    var publishCount: Int {
+        lock.withLock { publishedSamples.count }
+    }
+
+    var startCount: Int {
+        lock.withLock { startCountValue }
+    }
+
+    var lastPublishedSamples: [Float] {
+        lock.withLock { publishedSamples.last ?? [] }
+    }
+
+    func publish(_ plan: RealtimeAudioRenderPlan) throws {
+        let report = plan.safetyReport()
+        var inspectablePlan = plan
+        var samples = [Float](
+            repeating: 0,
+            count: report.preparedFrameCount * plan.format.channelCount
+        )
+        samples.withUnsafeMutableBufferPointer { output in
+            _ = inspectablePlan.render(into: output)
+        }
+        lock.withLock {
+            publishedSamples.append(samples)
+            latestSafetyReport = report
+        }
+    }
+
+    func start() throws {
+        lock.withLock { startCountValue += 1 }
+    }
+
+    func stop() {}
+
+    func safetyReport() -> RealtimeAudioSafetyReport? {
+        lock.withLock { latestSafetyReport }
+    }
+}
+
+/// Minimal muxed ProRes 4444 + native-rate Float32 PCM writer for the release journey.
 private enum AcceptanceSyntheticProResWriter {
+    static let audioSampleRate = 44_100
+    static let audioMarkerStartFrame = 4_410
+    private static let audioChannelCount = 2
+    private static let audioAppendFrameCount = 4_096
+
     static func writeMovie(
         to url: URL,
         width: Int,
@@ -854,55 +1117,138 @@ private enum AcceptanceSyntheticProResWriter {
             throw AcceptanceFixtureError.cannotAddVideoInput
         }
         writer.add(input)
+
+        let audioOutputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: audioSampleRate,
+            AVNumberOfChannelsKey: audioChannelCount,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        guard writer.canApply(outputSettings: audioOutputSettings, forMediaType: .audio) else {
+            throw AcceptanceFixtureError.cannotAddAudioInput
+        }
+        let audioInput = AVAssetWriterInput(
+            mediaType: .audio,
+            outputSettings: audioOutputSettings
+        )
+        audioInput.expectsMediaDataInRealTime = false
+        guard writer.canAdd(audioInput) else {
+            throw AcceptanceFixtureError.cannotAddAudioInput
+        }
+        writer.add(audioInput)
+
+        let audioFrameProduct = frameCount.multipliedReportingOverflow(by: audioSampleRate)
+        guard frameRate > 0,
+            !audioFrameProduct.overflow,
+            audioFrameProduct.partialValue.isMultiple(of: Int(frameRate))
+        else {
+            throw AcceptanceFixtureError.writerFailed("fixture duration is not audio-frame exact")
+        }
+        let audioFrameCount = audioFrameProduct.partialValue / Int(frameRate)
+        let audioBuffer = try makeAudioBuffer(frameCount: audioFrameCount)
+        let audioSampleBufferFactory = try AudioSampleBufferFactory(
+            sampleRate: audioSampleRate,
+            channelCount: audioChannelCount
+        )
+
         guard writer.startWriting() else {
             throw AcceptanceFixtureError.writerFailed(String(describing: writer.error))
         }
         writer.startSession(atSourceTime: .zero)
 
-        let queue = DispatchQueue(label: "org.editorajar.release-acceptance.prores")
-        let finished = DispatchSemaphore(value: 0)
-        var writeError: Error?
-        var frameIndex = 0
-        input.requestMediaDataWhenReady(on: queue) {
-            while input.isReadyForMoreMediaData, frameIndex < frameCount {
-                do {
+        var videoFrameIndex = 0
+        var audioFrameIndex = 0
+        let writeDeadline = Date().addingTimeInterval(15)
+        do {
+            while videoFrameIndex < frameCount || audioFrameIndex < audioFrameCount {
+                if writer.status == .failed || writer.status == .cancelled {
+                    throw AcceptanceFixtureError.writerFailed(String(describing: writer.error))
+                }
+                var madeProgress = false
+                if videoFrameIndex < frameCount, input.isReadyForMoreMediaData {
                     let buffer = try makePixelBuffer(
                         width: width,
                         height: height,
-                        frameIndex: frameIndex
+                        frameIndex: videoFrameIndex
                     )
-                    let time = CMTime(value: Int64(frameIndex), timescale: frameRate)
+                    let time = CMTime(value: Int64(videoFrameIndex), timescale: frameRate)
                     guard adaptor.append(buffer, withPresentationTime: time) else {
-                        writeError = AcceptanceFixtureError.writerFailed(
+                        throw AcceptanceFixtureError.writerFailed(
                             String(describing: writer.error)
                         )
-                        input.markAsFinished()
-                        finished.signal()
-                        return
                     }
-                    frameIndex += 1
-                } catch {
-                    writeError = error
-                    input.markAsFinished()
-                    finished.signal()
-                    return
+                    videoFrameIndex += 1
+                    madeProgress = true
+                }
+                if audioFrameIndex < audioFrameCount, audioInput.isReadyForMoreMediaData {
+                    let end = min(
+                        audioFrameIndex + audioAppendFrameCount,
+                        audioFrameCount
+                    )
+                    let sampleBuffer = try audioSampleBufferFactory.makeSampleBuffer(
+                        from: audioBuffer,
+                        frames: audioFrameIndex..<end
+                    )
+                    guard audioInput.append(sampleBuffer) else {
+                        throw AcceptanceFixtureError.writerFailed(
+                            String(describing: writer.error)
+                        )
+                    }
+                    audioFrameIndex = end
+                    madeProgress = true
+                }
+                if !madeProgress {
+                    guard Date() < writeDeadline else {
+                        throw AcceptanceFixtureError.writerFailed(
+                            "muxed fixture writer stalled before all samples were appended"
+                        )
+                    }
+                    Thread.sleep(forTimeInterval: 0.001)
                 }
             }
-            if frameIndex >= frameCount {
-                input.markAsFinished()
-                finished.signal()
-            }
+        } catch {
+            writer.cancelWriting()
+            throw error
         }
-        finished.wait()
-        if let writeError {
-            throw writeError
-        }
+        input.markAsFinished()
+        audioInput.markAsFinished()
         let done = DispatchSemaphore(value: 0)
         writer.finishWriting { done.signal() }
         done.wait()
         guard writer.status == .completed else {
             throw AcceptanceFixtureError.writerFailed(String(describing: writer.error))
         }
+    }
+
+    private static func makeAudioBuffer(frameCount: Int) throws -> RenderedAudioBuffer {
+        guard frameCount > audioMarkerStartFrame else {
+            throw AcceptanceFixtureError.writerFailed("audio marker falls outside fixture")
+        }
+        var samples: [Float] = []
+        samples.reserveCapacity(frameCount * audioChannelCount)
+        for frame in 0..<frameCount {
+            let sample: Float
+            if frame < audioMarkerStartFrame {
+                sample = 0
+            } else {
+                let localFrame = frame - audioMarkerStartFrame
+                let phase = 2 * Double.pi * 997 * Double(localFrame) / Double(audioSampleRate)
+                sample = Float(cos(phase) * 0.5)
+            }
+            samples.append(sample)
+            samples.append(-sample)
+        }
+        return try RenderedAudioBuffer(
+            format: AudioRenderFormat(
+                sampleRate: audioSampleRate,
+                channelCount: audioChannelCount
+            ),
+            frameCount: frameCount,
+            samples: samples
+        )
     }
 
     private static func makePixelBuffer(
@@ -968,7 +1314,7 @@ private enum AcceptanceStillWriter {
         }
         let nsData = Data(rgba) as CFData
         guard let provider = CGDataProvider(data: nsData),
-              let image = CGImage(
+            let image = CGImage(
                 width: width,
                 height: height,
                 bitsPerComponent: 8,
@@ -980,16 +1326,18 @@ private enum AcceptanceStillWriter {
                 decode: nil,
                 shouldInterpolate: false,
                 intent: .defaultIntent
-              )
+            )
         else {
             throw AcceptanceFixtureError.pngEncodeFailed
         }
-        guard let destination = CGImageDestinationCreateWithURL(
-            url as CFURL,
-            "public.png" as CFString,
-            1,
-            nil
-        ) else {
+        guard
+            let destination = CGImageDestinationCreateWithURL(
+                url as CFURL,
+                "public.png" as CFString,
+                1,
+                nil
+            )
+        else {
             throw AcceptanceFixtureError.pngEncodeFailed
         }
         CGImageDestinationAddImage(destination, image, nil)
@@ -999,8 +1347,70 @@ private enum AcceptanceStillWriter {
     }
 }
 
+private enum AcceptancePCMWriter {
+    static func writeTone(
+        to url: URL,
+        sampleRate: Int,
+        channelCount: Int,
+        frameCount: Int
+    ) throws {
+        guard sampleRate > 0,
+            channelCount > 0,
+            frameCount > 0,
+            frameCount <= Int.max / channelCount,
+            let dataByteCount = UInt32(
+                exactly: frameCount * channelCount * MemoryLayout<Int16>.size
+            ),
+            let riffByteCount = UInt32(exactly: UInt64(dataByteCount) + 36),
+            let byteRate = UInt32(
+                exactly: sampleRate * channelCount * MemoryLayout<Int16>.size
+            ),
+            let blockAlign = UInt16(
+                exactly: channelCount * MemoryLayout<Int16>.size
+            ),
+            let waveSampleRate = UInt32(exactly: sampleRate),
+            let waveChannelCount = UInt16(exactly: channelCount)
+        else {
+            throw AcceptanceFixtureError.writerFailed("invalid PCM fixture dimensions")
+        }
+
+        var data = Data()
+        data.append(contentsOf: "RIFF".utf8)
+        append(riffByteCount, to: &data)
+        data.append(contentsOf: "WAVE".utf8)
+        data.append(contentsOf: "fmt ".utf8)
+        append(UInt32(16), to: &data)
+        append(UInt16(1), to: &data)
+        append(waveChannelCount, to: &data)
+        append(waveSampleRate, to: &data)
+        append(byteRate, to: &data)
+        append(blockAlign, to: &data)
+        append(UInt16(16), to: &data)
+        data.append(contentsOf: "data".utf8)
+        append(dataByteCount, to: &data)
+
+        for frame in 0..<frameCount {
+            let phase = 2 * Double.pi * 440 * Double(frame) / Double(sampleRate)
+            let sample = Int16((sin(phase) * 8_192).rounded())
+            for channel in 0..<channelCount {
+                append(channel.isMultiple(of: 2) ? sample : -sample, to: &data)
+            }
+        }
+        try data.write(to: url, options: .atomic)
+    }
+
+    private static func append<Value: FixedWidthInteger>(
+        _ value: Value,
+        to data: inout Data
+    ) {
+        var littleEndian = value.littleEndian
+        withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+    }
+}
+
 private enum AcceptanceFixtureError: Error, CustomStringConvertible {
     case cannotAddVideoInput
+    case cannotAddAudioInput
     case writerFailed(String)
     case pixelBufferFailed(CVReturn)
     case missingBaseAddress
@@ -1011,6 +1421,8 @@ private enum AcceptanceFixtureError: Error, CustomStringConvertible {
         switch self {
         case .cannotAddVideoInput:
             "cannot add ProRes video input"
+        case .cannotAddAudioInput:
+            "cannot add linear PCM audio input"
         case .writerFailed(let message):
             "synthetic ProRes writer failed: \(message)"
         case .pixelBufferFailed(let code):

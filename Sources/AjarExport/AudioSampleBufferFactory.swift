@@ -46,13 +46,16 @@ final class AudioSampleBufferFactory {
 
     func makeSampleBuffer(
         from buffer: RenderedAudioBuffer,
-        frames: Range<Int>
+        frames: Range<Int>,
+        presentationFrameOffset: Int = 0
     ) throws -> CMSampleBuffer {
         guard
             buffer.format.sampleRate == sampleRate,
             buffer.format.channelCount == channelCount,
             frames.lowerBound >= 0,
             frames.upperBound <= buffer.frameCount,
+            presentationFrameOffset >= 0,
+            presentationFrameOffset <= Int.max - frames.lowerBound,
             !frames.isEmpty
         else {
             throw ExportError.audioMixFailed("audio append range or format is inconsistent")
@@ -62,7 +65,7 @@ final class AudioSampleBufferFactory {
         var timing = CMSampleTimingInfo(
             duration: CMTime(value: 1, timescale: Int32(sampleRate)),
             presentationTimeStamp: CMTime(
-                value: Int64(frames.lowerBound),
+                value: Int64(presentationFrameOffset + frames.lowerBound),
                 timescale: Int32(sampleRate)
             ),
             decodeTimeStamp: .invalid

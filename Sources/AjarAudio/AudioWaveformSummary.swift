@@ -13,6 +13,23 @@ public enum AudioWaveformError: Error, Equatable, Sendable, CustomStringConverti
     /// Waveform output metadata would overflow before allocation.
     case binCountOverflow(frameCount: Int, framesPerBin: Int, channelCount: Int)
 
+    /// A streaming source format must have a positive integer rate and channel count.
+    case invalidSourceFormat(sampleRate: Int, channelCount: Int)
+
+    /// Every chunk in one streaming summary must keep the source's native format.
+    case inconsistentSourceFormat(
+        expectedSampleRate: Int,
+        expectedChannelCount: Int,
+        actualSampleRate: Int,
+        actualChannelCount: Int
+    )
+
+    /// Streaming chunks must be contiguous in absolute native-frame coordinates.
+    case nonContiguousSourceFrames(expectedFrameOffset: Int, actualFrameOffset: Int)
+
+    /// Appending a source window would overflow the accumulated native-frame count.
+    case sourceFrameCountOverflow(currentFrameCount: Int, appendedFrameCount: Int)
+
     /// A human-readable description.
     public var description: String {
         switch self {
@@ -23,6 +40,23 @@ public enum AudioWaveformError: Error, Equatable, Sendable, CustomStringConverti
         case .binCountOverflow(let frameCount, let framesPerBin, let channelCount):
             "waveform bin count overflows frameCount=\(frameCount) "
                 + "framesPerBin=\(framesPerBin) channelCount=\(channelCount)"
+        case .invalidSourceFormat(let sampleRate, let channelCount):
+            "invalid waveform source format \(sampleRate) Hz, \(channelCount) channels"
+        case .inconsistentSourceFormat(
+            let expectedSampleRate,
+            let expectedChannelCount,
+            let actualSampleRate,
+            let actualChannelCount
+        ):
+            "waveform source format changed from \(expectedSampleRate) Hz/"
+                + "\(expectedChannelCount) channels to \(actualSampleRate) Hz/"
+                + "\(actualChannelCount) channels"
+        case .nonContiguousSourceFrames(let expectedFrameOffset, let actualFrameOffset):
+            "waveform source chunks are not contiguous: expected native frame "
+                + "\(expectedFrameOffset), received \(actualFrameOffset)"
+        case .sourceFrameCountOverflow(let currentFrameCount, let appendedFrameCount):
+            "waveform source frame count overflows while appending \(appendedFrameCount) "
+                + "frames to \(currentFrameCount)"
         }
     }
 }
@@ -103,6 +137,114 @@ public struct AudioWaveformSummary: Codable, Equatable, Sendable {
     }
 }
 
+/// Incremental waveform analysis that retains compact bins, never the source PCM history.
+///
+/// Chunks may end in the middle of a bin. The accumulator carries that bin's per-channel
+/// minimum, maximum, sum-of-squares, and frame count into the next chunk, so its result is
+/// bit-for-bit equivalent to analyzing the same native frames in one `AudioSourceBuffer`.
+public struct AudioWaveformAccumulator: Sendable {
+    /// Native source format shared by every appended window.
+    public let format: AudioRenderFormat
+
+    /// Number of source frames represented by each complete output bin.
+    public let framesPerBin: Int
+
+    private var sourceFrameCount = 0
+    private var expectedFrameOffset: Int?
+    private var binsByChannel: [[AudioWaveformBin]]
+    private var activeMinimum: [Float]
+    private var activeMaximum: [Float]
+    private var activeSumOfSquares: [Double]
+    private var activeFrameCount = 0
+
+    /// Creates an accumulator with exact native-frame bin boundaries.
+    public init(format: AudioRenderFormat, framesPerBin: Int) throws {
+        guard framesPerBin > 0 else {
+            throw AudioWaveformError.invalidFramesPerBin(framesPerBin)
+        }
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw AudioWaveformError.invalidSourceFormat(
+                sampleRate: format.sampleRate,
+                channelCount: format.channelCount
+            )
+        }
+        self.format = format
+        self.framesPerBin = framesPerBin
+        binsByChannel = Array(repeating: [], count: format.channelCount)
+        activeMinimum = Array(repeating: 0, count: format.channelCount)
+        activeMaximum = Array(repeating: 0, count: format.channelCount)
+        activeSumOfSquares = Array(repeating: 0, count: format.channelCount)
+    }
+
+    /// Creates an accumulator at a deterministic number of bins per source second.
+    public init(format: AudioRenderFormat, binsPerSecond: Int) throws {
+        guard binsPerSecond > 0 else {
+            throw AudioWaveformError.invalidBinsPerSecond(binsPerSecond)
+        }
+        try self.init(
+            format: format,
+            framesPerBin: max(1, format.sampleRate / binsPerSecond)
+        )
+    }
+
+    /// Adds one contiguous, native-rate PCM window.
+    ///
+    /// `cancellationCheck` is polled before allocation growth, every 1,024 frames, and after the
+    /// chunk. It lets import/cache tasks stop long analysis without turning cancellation into a
+    /// partial waveform.
+    public mutating func append(
+        _ source: AudioSourceBuffer,
+        cancellationCheck: @escaping AudioRenderCancellationCheck = {}
+    ) throws {
+        try cancellationCheck()
+        try validateFormat(source.format)
+        try validateFrameOffset(source)
+
+        let newFrameCount = sourceFrameCount.addingReportingOverflow(source.frameCount)
+        let endFrameOffset = source.frameOffset.addingReportingOverflow(source.frameCount)
+        guard !newFrameCount.overflow, !endFrameOffset.overflow else {
+            throw AudioWaveformError.sourceFrameCountOverflow(
+                currentFrameCount: sourceFrameCount,
+                appendedFrameCount: source.frameCount
+            )
+        }
+        let binCount = try AudioWaveformAnalyzer.checkedBinCount(
+            frameCount: newFrameCount.partialValue,
+            framesPerBin: framesPerBin,
+            channelCount: format.channelCount
+        )
+        for channelIndex in binsByChannel.indices {
+            binsByChannel[channelIndex].reserveCapacity(binCount)
+        }
+
+        for localFrame in 0..<source.frameCount {
+            if localFrame & 1_023 == 0 {
+                try cancellationCheck()
+            }
+            appendFrame(source, localFrame: localFrame)
+        }
+
+        sourceFrameCount = newFrameCount.partialValue
+        expectedFrameOffset = endFrameOffset.partialValue
+        try cancellationCheck()
+    }
+
+    /// Finishes the trailing partial bin and returns the deterministic compact summary.
+    public mutating func makeSummary() -> AudioWaveformSummary {
+        finishActiveBinIfNeeded()
+        let channels = binsByChannel.enumerated().map { channelIndex, bins in
+            AudioWaveformChannelSummary(channelIndex: channelIndex, bins: bins)
+        }
+        return AudioWaveformSummary(
+            sampleRate: format.sampleRate,
+            channelCount: format.channelCount,
+            sourceFrameCount: sourceFrameCount,
+            framesPerBin: framesPerBin,
+            channels: channels
+        )
+    }
+}
+
 /// Deterministic waveform analysis for import/cache-time work.
 public enum AudioWaveformAnalyzer {
     /// Summarizes an audio source using a fixed number of source frames per waveform bin.
@@ -115,28 +257,12 @@ public enum AudioWaveformAnalyzer {
         source: AudioSourceBuffer,
         framesPerBin: Int
     ) throws -> AudioWaveformSummary {
-        guard framesPerBin > 0 else {
-            throw AudioWaveformError.invalidFramesPerBin(framesPerBin)
-        }
-
-        let binCount = try checkedBinCount(
-            frameCount: source.frameCount,
-            framesPerBin: framesPerBin,
-            channelCount: source.format.channelCount
+        var accumulator = try AudioWaveformAccumulator(
+            format: source.format,
+            framesPerBin: framesPerBin
         )
-        let channels = channelSummaries(
-            source: source,
-            framesPerBin: framesPerBin,
-            binCount: binCount
-        )
-
-        return AudioWaveformSummary(
-            sampleRate: source.format.sampleRate,
-            channelCount: source.format.channelCount,
-            sourceFrameCount: source.frameCount,
-            framesPerBin: framesPerBin,
-            channels: channels
-        )
+        try accumulator.append(source)
+        return accumulator.makeSummary()
     }
 
     /// Summarizes an audio source using a target number of waveform bins per second.
@@ -156,7 +282,7 @@ public enum AudioWaveformAnalyzer {
     }
 }
 
-private extension AudioWaveformAnalyzer {
+extension AudioWaveformAnalyzer {
     static func checkedBinCount(
         frameCount: Int,
         framesPerBin: Int,
@@ -183,87 +309,69 @@ private extension AudioWaveformAnalyzer {
         return binCount
     }
 
-    static func channelSummaries(
-        source: AudioSourceBuffer,
-        framesPerBin: Int,
-        binCount: Int
-    ) -> [AudioWaveformChannelSummary] {
-        var channels: [AudioWaveformChannelSummary] = []
-        channels.reserveCapacity(source.format.channelCount)
+}
 
-        for channelIndex in 0..<source.format.channelCount {
-            let bins = waveformBins(
-                source: source,
-                channelIndex: channelIndex,
-                framesPerBin: framesPerBin,
-                binCount: binCount
-            )
-            channels.append(
-                AudioWaveformChannelSummary(channelIndex: channelIndex, bins: bins)
+private extension AudioWaveformAccumulator {
+    mutating func validateFormat(_ actual: AudioRenderFormat) throws {
+        guard actual == format else {
+            throw AudioWaveformError.inconsistentSourceFormat(
+                expectedSampleRate: format.sampleRate,
+                expectedChannelCount: format.channelCount,
+                actualSampleRate: actual.sampleRate,
+                actualChannelCount: actual.channelCount
             )
         }
-
-        return channels
     }
 
-    static func waveformBins(
-        source: AudioSourceBuffer,
-        channelIndex: Int,
-        framesPerBin: Int,
-        binCount: Int
-    ) -> [AudioWaveformBin] {
-        var bins: [AudioWaveformBin] = []
-        bins.reserveCapacity(binCount)
+    mutating func validateFrameOffset(_ source: AudioSourceBuffer) throws {
+        guard let expectedFrameOffset else {
+            return
+        }
+        guard source.frameOffset == expectedFrameOffset else {
+            throw AudioWaveformError.nonContiguousSourceFrames(
+                expectedFrameOffset: expectedFrameOffset,
+                actualFrameOffset: source.frameOffset
+            )
+        }
+    }
 
-        var binStartFrame = 0
-        while binStartFrame < source.frameCount {
-            let binEndFrame = min(binStartFrame + framesPerBin, source.frameCount)
-            bins.append(
-                waveformBin(
-                    source: source,
-                    channelIndex: channelIndex,
-                    frameRange: binStartFrame..<binEndFrame
+    mutating func appendFrame(_ source: AudioSourceBuffer, localFrame: Int) {
+        let frameSampleOffset = localFrame * format.channelCount
+        for channelIndex in 0..<format.channelCount {
+            let value = source.samples[frameSampleOffset + channelIndex]
+            if activeFrameCount == 0 {
+                activeMinimum[channelIndex] = value
+                activeMaximum[channelIndex] = value
+            } else {
+                activeMinimum[channelIndex] = min(activeMinimum[channelIndex], value)
+                activeMaximum[channelIndex] = max(activeMaximum[channelIndex], value)
+            }
+            let doubleValue = Double(value)
+            activeSumOfSquares[channelIndex] += doubleValue * doubleValue
+        }
+        activeFrameCount += 1
+        if activeFrameCount == framesPerBin {
+            finishActiveBinIfNeeded()
+        }
+    }
+
+    mutating func finishActiveBinIfNeeded() {
+        guard activeFrameCount > 0 else {
+            return
+        }
+        for channelIndex in 0..<format.channelCount {
+            binsByChannel[channelIndex].append(
+                AudioWaveformBin(
+                    minimum: activeMinimum[channelIndex],
+                    maximum: activeMaximum[channelIndex],
+                    rms: Float(
+                        (activeSumOfSquares[channelIndex] / Double(activeFrameCount)).squareRoot()
+                    ),
+                    frameCount: activeFrameCount
                 )
             )
-            binStartFrame = binEndFrame
+            activeSumOfSquares[channelIndex] = 0
         }
-
-        return bins
-    }
-
-    static func waveformBin(
-        source: AudioSourceBuffer,
-        channelIndex: Int,
-        frameRange: Range<Int>
-    ) -> AudioWaveformBin {
-        let firstSample = sample(
-            source: source,
-            frame: frameRange.lowerBound,
-            channel: channelIndex
-        )
-        var minimum = firstSample
-        var maximum = firstSample
-        var sumOfSquares = Double(0)
-
-        for frame in frameRange {
-            let value = sample(source: source, frame: frame, channel: channelIndex)
-            minimum = min(minimum, value)
-            maximum = max(maximum, value)
-            let doubleValue = Double(value)
-            sumOfSquares += doubleValue * doubleValue
-        }
-
-        let frameCount = frameRange.count
-        let rms = Float((sumOfSquares / Double(frameCount)).squareRoot())
-        return AudioWaveformBin(
-            minimum: minimum,
-            maximum: maximum,
-            rms: rms,
-            frameCount: frameCount
-        )
-    }
-
-    static func sample(source: AudioSourceBuffer, frame: Int, channel: Int) -> Float {
-        source.samples[(frame * source.format.channelCount) + channel]
+        activeFrameCount = 0
     }
 }

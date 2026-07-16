@@ -11,6 +11,43 @@ private struct PendingVideoFrame {
     let presentationTime: CMTime
 }
 
+/// Builds the immutable decoded-source lookup used by one export audio mix.
+///
+/// The requested range is always a bounded, monotonically increasing slice of the export.
+/// Platform adapters decode only that slice while `AjarExport` remains independent of
+/// AVFoundation decode modules (ADR-0019).
+public typealias ExportAudioSourceProviderFactory =
+    @Sendable (_ range: TimeRange) async throws -> any AudioSourceProvider
+
+struct ExportAudioChunk {
+    let buffer: RenderedAudioBuffer
+    let presentationFrameOffset: Int
+    var appendedFrameCount: Int
+}
+
+final class ExportAudioStream {
+    let settings: ExportAudioSettings
+    let totalFrameCount: Int
+    var nextChunkFrameOffset: Int
+    var currentChunk: ExportAudioChunk?
+    var continuation = OfflineAudioRenderContinuation()
+
+    init(
+        settings: ExportAudioSettings,
+        totalFrameCount: Int,
+        firstChunk: ExportAudioChunk?
+    ) {
+        self.settings = settings
+        self.totalFrameCount = totalFrameCount
+        currentChunk = firstChunk
+        nextChunkFrameOffset = firstChunk?.buffer.frameCount ?? 0
+    }
+
+    var hasPendingAudio: Bool {
+        currentChunk != nil || nextChunkFrameOffset < totalFrameCount
+    }
+}
+
 /// One-shot export lifecycle designed to be owned by the FR-EXP-005 background queue.
 public final class ExportSession: @unchecked Sendable {
     /// Stable queue identity.
@@ -26,9 +63,10 @@ public final class ExportSession: @unchecked Sendable {
 
     /// Frame provider (module-internal so ``ExportSessionSupport`` can audit graph tiers).
     let frameProvider: any ExportVideoFrameProvider
-    private let audioSourceProvider: (any AudioSourceProvider)?
-    private let writerFactory: ExportWriterFactory
-    private let beforePublish: (() -> Void)?
+    let audioSourceProvider: (any AudioSourceProvider)?
+    let audioSourceProviderFactory: ExportAudioSourceProviderFactory?
+    let writerFactory: ExportWriterFactory
+    let beforePublish: (() -> Void)?
     let onFrameProgress: (@Sendable (ExportProgress) -> Void)?
     let stateLock = NSLock()
     var stateValue = ExportSessionState.ready
@@ -36,8 +74,10 @@ public final class ExportSession: @unchecked Sendable {
     var framesWrittenValue = Int64(0)
     var totalFramesValue = Int64(0)
     var activeWriter: (any ExportWriting)?
+    var activeAudioProviderTask: Task<any AudioSourceProvider, Error>?
     var sourceSelectionRecordsValue: [ExportFrameSourceSelection] = []
-    private static let audioAppendFrameCount = 4_096
+    static let audioAppendFrameCount = 4_096
+    static let audioRenderChunkDurationSeconds = 1
 
     /// Current lifecycle state, safe to poll from a queue or UI adapter.
     public var state: ExportSessionState {
@@ -81,6 +121,34 @@ public final class ExportSession: @unchecked Sendable {
             request: request,
             frameProvider: frameProvider,
             audioSourceProvider: audioSourceProvider,
+            audioSourceProviderFactory: nil,
+            sourceSelectionPolicy: sourceSelectionPolicy,
+            writerFactory: { url, settings in
+                try AVAssetExportWriter(outputURL: url, settings: settings)
+            },
+            beforePublish: nil,
+            onFrameProgress: onFrameProgress
+        )
+    }
+
+    /// Creates a session whose platform audio sources are prepared asynchronously on demand.
+    ///
+    /// The factory is invoked only when the request carries audio settings. Its returned provider
+    /// is immutable and used synchronously by the deterministic offline mixer.
+    public convenience init(
+        id: UUID = UUID(),
+        request: ExportRequest,
+        frameProvider: any ExportVideoFrameProvider,
+        audioSourceProviderFactory: @escaping ExportAudioSourceProviderFactory,
+        sourceSelectionPolicy: ExportSourceSelectionPolicy = .alwaysOriginal,
+        onFrameProgress: (@Sendable (ExportProgress) -> Void)? = nil
+    ) {
+        self.init(
+            id: id,
+            request: request,
+            frameProvider: frameProvider,
+            audioSourceProvider: nil,
+            audioSourceProviderFactory: audioSourceProviderFactory,
             sourceSelectionPolicy: sourceSelectionPolicy,
             writerFactory: { url, settings in
                 try AVAssetExportWriter(outputURL: url, settings: settings)
@@ -95,6 +163,7 @@ public final class ExportSession: @unchecked Sendable {
         request: ExportRequest,
         frameProvider: any ExportVideoFrameProvider,
         audioSourceProvider: (any AudioSourceProvider)? = nil,
+        audioSourceProviderFactory: ExportAudioSourceProviderFactory? = nil,
         sourceSelectionPolicy: ExportSourceSelectionPolicy = .alwaysOriginal,
         writerFactory: @escaping ExportWriterFactory,
         beforePublish: (() -> Void)? = nil,
@@ -104,6 +173,7 @@ public final class ExportSession: @unchecked Sendable {
         self.request = request
         self.frameProvider = frameProvider
         self.audioSourceProvider = audioSourceProvider
+        self.audioSourceProviderFactory = audioSourceProviderFactory
         self.sourceSelectionPolicy = sourceSelectionPolicy
         self.writerFactory = writerFactory
         self.beforePublish = beforePublish
@@ -113,21 +183,25 @@ public final class ExportSession: @unchecked Sendable {
     /// Requests cooperative cancellation. Cleanup completes before `run()` returns.
     public func cancel() {
         var writerToCancel: (any ExportWriting)?
+        var audioTaskToCancel: Task<any AudioSourceProvider, Error>?
         stateLock.lock()
         switch stateValue {
         case .preparing, .writing, .finishing:
             cancellationRequested = true
             stateValue = .cancelling
             writerToCancel = activeWriter
+            audioTaskToCancel = activeAudioProviderTask
         case .ready:
             cancellationRequested = true
             stateValue = .cancelled
         case .cancelling:
             writerToCancel = activeWriter
+            audioTaskToCancel = activeAudioProviderTask
         case .completed, .cancelled, .failed:
             break
         }
         stateLock.unlock()
+        audioTaskToCancel?.cancel()
         writerToCancel?.cancel()
     }
 
@@ -141,143 +215,27 @@ public final class ExportSession: @unchecked Sendable {
         }
     }
 
-    private func executeRun() async throws -> ExportResult {
-        var transaction: ExportOutputTransaction?
-        var writer: (any ExportWriting)?
-        do {
-            return try await performExport(
-                transaction: &transaction,
-                writer: &writer
-            )
-        } catch {
-            writer?.cancel()
-            throw finalizeFailure(error, transaction: transaction)
-        }
-    }
-
-    private func performExport(
-        transaction: inout ExportOutputTransaction?,
-        writer: inout (any ExportWriting)?
-    ) async throws -> ExportResult {
-        try checkCancellation()
-        let preparedTransaction = try ExportOutputTransaction(
-            destinationURL: request.destinationURL
-        )
-        transaction = preparedTransaction
-        let preparedWriter = try writerFactory(
-            preparedTransaction.temporaryURL,
-            request.settings
-        )
-        writer = preparedWriter
-        try installActiveWriter(preparedWriter)
-        let audioBuffer = try renderAudioIfRequested()
-        try checkCancellation()
-        try preparedWriter.start()
-        try transition(to: .writing)
-
-        let videoFrameCount = try request.videoFrameCount()
-        setTotalFrames(videoFrameCount)
-        try await appendMedia(
-            writer: preparedWriter,
-            videoFrameCount: videoFrameCount,
-            audioBuffer: audioBuffer
-        )
-        try checkCancellation()
-        try transition(to: .finishing)
-        // Use the video frame-rate CMTime basis for frame-aligned ranges so endSession compares
-        // cleanly against presentationTime stamps (see ExportTimeMapping.endTime).
-        try await preparedWriter.finish(
-            at: try ExportTimeMapping.endTime(
-                for: request.range.duration,
-                frameRate: request.settings.video.frameRate
-            )
-        )
-        beforePublish?()
-        try publish(preparedTransaction)
-        return ExportResult(
-            destinationURL: request.destinationURL,
-            duration: request.range.duration,
-            videoFrameCount: videoFrameCount,
-            audioFrameCount: audioBuffer?.frameCount ?? 0
-        )
-    }
-
-    private func finalizeFailure(
-        _ error: Error,
-        transaction: ExportOutputTransaction?
-    ) -> ExportError {
-        let mapped = mapRunError(error)
-        do {
-            try transaction?.cleanUp()
-        } catch let cleanup as ExportCleanupFailure {
-            setTerminalState(.failed)
-            return .cleanupFailed(
-                rootCause: mapped,
-                temporaryURL: cleanup.temporaryURL,
-                reason: cleanup.reason
-            )
-        } catch {
-            setTerminalState(.failed)
-            return .cleanupFailed(
-                rootCause: mapped,
-                temporaryURL: transaction?.temporaryURL ?? request.destinationURL,
-                reason: String(describing: error)
-            )
-        }
-        setTerminalState(mapped == .cancelled ? .cancelled : .failed)
-        return mapped
-    }
-
-    private func beginRun() throws {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        // cancel() before run() leaves the session in `.cancelled` with the cancellation flag set;
-        // produce the clean cancelled outcome instead of invalidSessionState.
-        if stateValue == .cancelled || (stateValue == .ready && cancellationRequested) {
-            stateValue = .cancelled
-            throw ExportError.cancelled
-        }
-        guard stateValue == .ready else {
-            throw ExportError.invalidSessionState(stateValue)
-        }
-        stateValue = .preparing
-    }
-
-    private func renderAudioIfRequested() throws -> RenderedAudioBuffer? {
-        guard let audioSettings = request.settings.audio else {
-            return nil
-        }
-        guard let audioSourceProvider else {
-            throw ExportError.missingAudioSourceProvider
-        }
-        do {
-            return try OfflineAudioMixer.render(
-                project: request.project,
-                sequence: request.sequence,
-                range: request.range,
-                sourceProvider: audioSourceProvider,
-                channelCount: audioSettings.channelCount
-            )
-        } catch {
-            throw ExportError.audioMixFailed(String(describing: error))
-        }
-    }
-
-    private func appendMedia(
+    func appendMedia(
         writer: any ExportWriting,
         videoFrameCount: Int64,
-        audioBuffer: RenderedAudioBuffer?
+        audioStream: ExportAudioStream?
     ) async throws {
         var videoFrameIndex = Int64(0)
-        var audioFrameIndex = 0
         var pendingVideoFrame: PendingVideoFrame?
 
         while videoFrameIndex < videoFrameCount
             || pendingVideoFrame != nil
-            || audioFrameIndex < (audioBuffer?.frameCount ?? 0) {
+            || audioStream?.hasPendingAudio == true {
             try checkCancellation()
             try writer.checkForFailure()
             var madeProgress = false
+
+            if let audioStream,
+                audioStream.currentChunk == nil,
+                audioStream.nextChunkFrameOffset < audioStream.totalFrameCount {
+                try await renderNextAudioChunk(in: audioStream)
+                madeProgress = true
+            }
 
             if videoFrameIndex < videoFrameCount, pendingVideoFrame == nil {
                 pendingVideoFrame = try await renderVideoFrame(
@@ -295,17 +253,19 @@ public final class ExportSession: @unchecked Sendable {
                 recordFrameWritten()
                 madeProgress = true
             }
-            if let audioBuffer,
-                audioFrameIndex < audioBuffer.frameCount {
+            if let audioStream, var chunk = audioStream.currentChunk {
                 let end = min(
-                    audioFrameIndex + Self.audioAppendFrameCount,
-                    audioBuffer.frameCount
+                    chunk.appendedFrameCount + Self.audioAppendFrameCount,
+                    chunk.buffer.frameCount
                 )
                 if try writer.appendAudioIfReady(
-                    audioBuffer,
-                    frames: audioFrameIndex..<end
+                    chunk.buffer,
+                    frames: chunk.appendedFrameCount..<end,
+                    presentationFrameOffset: chunk.presentationFrameOffset
                 ) {
-                    audioFrameIndex = end
+                    chunk.appendedFrameCount = end
+                    audioStream.currentChunk =
+                        end == chunk.buffer.frameCount ? nil : chunk
                     madeProgress = true
                 }
             }

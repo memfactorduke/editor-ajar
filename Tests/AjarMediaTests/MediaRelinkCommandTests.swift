@@ -41,6 +41,10 @@ final class MediaRelinkCommandTests: XCTestCase {
         XCTAssertEqual(replacement.sourceURL, outputURL)
         XCTAssertEqual(replacement.transcodeProvenance?.originalSourceURL, originalURL)
         XCTAssertEqual(replacement.transcodeProvenance?.originalContentHash, hash)
+        XCTAssertEqual(
+            replacement.transcodeProvenance?.playableContentHash,
+            try SHA256MediaFileHasher().contentHash(of: outputURL)
+        )
     }
 
     func testFRMED007TranscodedOriginalRelinkFFmpegMissingLeavesReferenceUnchanged() async throws {

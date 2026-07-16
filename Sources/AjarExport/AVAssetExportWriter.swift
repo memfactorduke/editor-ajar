@@ -192,7 +192,8 @@ final class AVAssetExportWriter: ExportWriting, @unchecked Sendable {
 
     func appendAudioIfReady(
         _ buffer: RenderedAudioBuffer,
-        frames: Range<Int>
+        frames: Range<Int>,
+        presentationFrameOffset: Int
     ) throws -> Bool {
         try operationQueue.sync {
             guard let audioInput, let audioSampleBufferFactory else {
@@ -203,7 +204,8 @@ final class AVAssetExportWriter: ExportWriting, @unchecked Sendable {
             }
             let sampleBuffer = try audioSampleBufferFactory.makeSampleBuffer(
                 from: buffer,
-                frames: frames
+                frames: frames,
+                presentationFrameOffset: presentationFrameOffset
             )
             guard audioInput.append(sampleBuffer) else {
                 throw mappedAppendFailure(kind: .audio)

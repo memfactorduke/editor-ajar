@@ -162,20 +162,25 @@ is deterministic, CI-runnable, and diagnostic on failure. Implementation:
 ### Journey (every step asserts; typed refusals fail the test)
 
 1. **Create project** from New Project sheet defaults (`EditorAjarNewProjectSettings.sensibleDefaults`).
-2. **Import** three temp fixtures via the production import pipeline: a short **ProRes** synthetic
-   movie (CI-safe real encode), a solid **PNG** still, and an **audio** placeholder whose probe
-   result is injected (same temp-file + injectable-probe pattern as the import app-model tests;
-   real codecs are used where CI-safe).
+2. **Import** three temp fixtures via the production import pipeline: a short real **ProRes movie
+   with deterministic 44.1 kHz Float32 PCM**, a solid **PNG** still, and a separate real **WAV**.
+   The production AVFoundation probe supplies all metadata; no audio bytes or probe results are
+   faked.
 3. **Verify media pool** membership (video + still + audio).
-4. **Place clips** with `insertMediaOnTimeline` and a drag-equivalent `moveSelectedClip`.
-5. **Blade** one video clip at the playhead mid-point.
+4. **Place clips** and prove the movie becomes one linked A/V pair while the unrelated WAV remains
+   unplaced; one undo/redo removes/restores both halves atomically.
+5. **Blade** the linked movie at the playhead mid-point and prove both independent A/V halves keep
+   matching ranges and link groups.
 6. **Apply** one effect (gaussian blur), one color correction (exposure), and a **styled title**
    (`insertTitleAtPlayhead` + font weight/size).
 7. **Audio fade** via `applyDefaultFadeInToSelectedAudioClip`.
 8. **Save** to a temp `.ajar` package, **reopen**, and assert **full `Project` equality**.
-9. **Export ProRes** through `enqueueActiveSequenceExport` (production queue + Metal render path),
-   decode with `ExportMovieDecoder`, and assert frame count + non-trivial pixel content.
-10. **Undo-count sanity** on the pre-save edit history (non-empty multi-step journey).
+9. **Play and meter** through the live production preparation path, asserting finite, non-zero PCM
+   from the muxed source rather than a bundled sample tone or silent fallback.
+10. **Export ProRes** through `enqueueActiveSequenceExport` (production queue + Metal render path),
+    decode with `ExportMovieDecoder`, and assert frame count + non-trivial pixel content together
+    with finite, non-zero PCM at the expected sample rate and marker time.
+11. **Undo-count sanity** on the pre-save edit history (non-empty multi-step journey).
 
 Document lifecycle coverage additionally seeds an older package-local recovery snapshot before an
 explicit Save, then proves reopen selects the newly saved canonical project. An injected failure

@@ -37,6 +37,7 @@ final class LifecycleWriter: ExportWriting {
     private(set) var appendedVideoCount = 0
     private(set) var appendedVideoPresentationTimes: [CMTime] = []
     private(set) var appendedAudioRanges: [Range<Int>] = []
+    private(set) var maximumAudioBufferFrameCount = 0
     private(set) var finishedAt: CMTime?
     /// True if any video append arrived after `finish(at:)` began.
     private(set) var appendedVideoAfterFinish = false
@@ -102,13 +103,17 @@ final class LifecycleWriter: ExportWriting {
 
     func appendAudioIfReady(
         _ buffer: RenderedAudioBuffer,
-        frames: Range<Int>
+        frames: Range<Int>,
+        presentationFrameOffset: Int
     ) throws -> Bool {
         _ = buffer
         guard audioReady else {
             return false
         }
-        appendedAudioRanges.append(frames)
+        maximumAudioBufferFrameCount = max(maximumAudioBufferFrameCount, buffer.frameCount)
+        let absoluteStart = presentationFrameOffset + frames.lowerBound
+        let absoluteEnd = presentationFrameOffset + frames.upperBound
+        appendedAudioRanges.append(absoluteStart..<absoluteEnd)
         return true
     }
 
@@ -158,7 +163,9 @@ final class LifecycleFixture {
         frameCount: Int64,
         includeAudio: Bool = false,
         frameRate: FrameRate? = nil,
-        duration: RationalTime? = nil
+        duration: RationalTime? = nil,
+        audioSampleRate: Int = 48_000,
+        audioTrackCount: Int = 0
     ) throws {
         directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(
             "ajar-export-lifecycle-\(UUID().uuidString)",
@@ -175,7 +182,9 @@ final class LifecycleFixture {
             destinationURL: destinationURL,
             frameRate: resolvedFrameRate,
             duration: resolvedDuration,
-            includeAudio: includeAudio
+            includeAudio: includeAudio,
+            audioSampleRate: audioSampleRate,
+            audioTrackCount: audioTrackCount
         )
     }
 
@@ -186,6 +195,7 @@ final class LifecycleFixture {
     func session(
         frameProvider: any ExportVideoFrameProvider,
         audioSourceProvider: (any AudioSourceProvider)? = nil,
+        audioSourceProviderFactory: ExportAudioSourceProviderFactory? = nil,
         beforePublish: (() -> Void)? = nil,
         onFrameProgress: (@Sendable (ExportProgress) -> Void)? = nil,
         writerFactory: @escaping ExportWriterFactory
@@ -194,6 +204,7 @@ final class LifecycleFixture {
             request: request,
             frameProvider: frameProvider,
             audioSourceProvider: audioSourceProvider,
+            audioSourceProviderFactory: audioSourceProviderFactory,
             writerFactory: { temporaryURL, settings in
                 let writer = try writerFactory(temporaryURL, settings)
                 if let lifecycleWriter = writer as? LifecycleWriter {
@@ -218,19 +229,41 @@ final class LifecycleFixture {
         )
     }
 
+    // swiftlint:disable:next function_body_length function_parameter_count
     private static func makeRequest(
         destinationURL: URL,
         frameRate: FrameRate,
         duration: RationalTime,
-        includeAudio: Bool
+        includeAudio: Bool,
+        audioSampleRate: Int,
+        audioTrackCount: Int
     ) throws -> ExportRequest {
         let range = try TimeRange(start: .zero, duration: duration)
         let sequenceID = UUID()
+        let mediaID = UUID()
+        let audioTracks = (0..<audioTrackCount).map { index in
+            Track(
+                id: UUID(),
+                kind: .audio,
+                items: [
+                    .clip(
+                        Clip(
+                            id: UUID(),
+                            source: .media(id: mediaID),
+                            sourceRange: range,
+                            timelineRange: range,
+                            kind: .audio,
+                            name: "Cancellation probe \(index)"
+                        )
+                    )
+                ]
+            )
+        }
         let sequence = Sequence(
             id: sequenceID,
             name: "Lifecycle",
             videoTracks: [Track(id: UUID(), kind: .video, items: [.gap(range)])],
-            audioTracks: [],
+            audioTracks: audioTracks,
             markers: [],
             timebase: frameRate
         )
@@ -240,16 +273,34 @@ final class LifecycleFixture {
                 frameRate: frameRate,
                 resolution: PixelDimensions(width: 64, height: 64),
                 colorSpace: .rec709,
-                audioSampleRate: 48_000
+                audioSampleRate: audioSampleRate
             ),
-            mediaPool: [],
+            mediaPool: audioTrackCount > 0
+                ? [
+                    MediaRef(
+                        id: mediaID,
+                        sourceURL: nil,
+                        contentHash: nil,
+                        metadata: MediaMetadata(
+                            codecID: "pcm_f32le",
+                            pixelDimensions: nil,
+                            frameRate: nil,
+                            duration: duration,
+                            colorSpace: .unspecified,
+                            audioChannelLayout: AudioChannelLayout(channelCount: 1),
+                            isVariableFrameRate: false,
+                            conformedFrameRate: nil
+                        )
+                    )
+                ]
+                : [],
             sequences: [sequence]
         )
         let audioSettings =
             includeAudio
             ? try ExportAudioSettings(
                 codec: .aac,
-                sampleRate: 48_000,
+                sampleRate: audioSampleRate,
                 channelCount: 2,
                 bitRate: 64_000
             )
@@ -277,4 +328,27 @@ final class LifecycleFixture {
 
 final class WeakSessionBox {
     weak var value: ExportSession?
+}
+
+final class MixStartSignallingProvider: AudioSourceProvider, @unchecked Sendable {
+    private let source: AudioSourceBuffer
+    private let started: XCTestExpectation
+    private let lock = NSLock()
+    private var didSignal = false
+
+    init(source: AudioSourceBuffer, started: XCTestExpectation) {
+        self.source = source
+        self.started = started
+    }
+
+    func audioSource(for _: UUID) throws -> AudioSourceBuffer {
+        lock.lock()
+        let shouldSignal = !didSignal
+        didSignal = true
+        lock.unlock()
+        if shouldSignal {
+            started.fulfill()
+        }
+        return source
+    }
 }

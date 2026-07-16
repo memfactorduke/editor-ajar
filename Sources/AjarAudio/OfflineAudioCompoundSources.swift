@@ -12,11 +12,19 @@ struct CompoundAudioSourceKey: Hashable {
     let format: AudioRenderFormat
 }
 
+/// One imported-media window requested by a particular clip mapping.
+struct MediaAudioSourceKey: Hashable {
+    let mediaID: UUID
+    let sourceRange: TimeRange
+}
+
 struct OfflineAudioRenderEnvironment {
     let project: Project?
     let sourceProvider: any AudioSourceProvider
-    var sourceCache: [UUID: AudioSourceBuffer]
+    let cancellationCheck: AudioRenderCancellationCheck
+    var sourceCache: [MediaAudioSourceKey: AudioSourceBuffer]
     var compoundSourceCache: [CompoundAudioSourceKey: AudioSourceBuffer]
+    var continuation: OfflineAudioRenderContinuation
 
     /// FR-SPD-001 stretched timeline-domain buffers keyed by the full stretch-input identity
     /// (`PitchCorrectedSourceKey`), never by clip ID alone — duplicate clip IDs are legal
@@ -25,12 +33,28 @@ struct OfflineAudioRenderEnvironment {
     /// ducking-detection passes still share one deterministic stretch per identity per render.
     var pitchCorrectedSourceCache: [PitchCorrectedSourceKey: PitchCorrectedStretch]
 
-    init(project: Project?, sourceProvider: any AudioSourceProvider) {
+    init(
+        project: Project?,
+        sourceProvider: any AudioSourceProvider,
+        continuation: OfflineAudioRenderContinuation,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) {
         self.project = project
         self.sourceProvider = sourceProvider
+        self.cancellationCheck = cancellationCheck
+        self.continuation = continuation
         sourceCache = [:]
         compoundSourceCache = [:]
         pitchCorrectedSourceCache = [:]
+    }
+
+    init(project: Project?, sourceProvider: any AudioSourceProvider) {
+        self.init(
+            project: project,
+            sourceProvider: sourceProvider,
+            continuation: OfflineAudioRenderContinuation(),
+            cancellationCheck: {}
+        )
     }
 }
 
@@ -139,40 +163,56 @@ extension OfflineAudioMixer {
         }
     }
 
+    // swiftlint:disable:next function_parameter_count
     static func sourceBuffer(
         for clip: Clip,
+        requiredSourceWindow: TimeRange,
         context: OfflineMixContext,
         environment: inout OfflineAudioRenderEnvironment,
-        nestingDepth: Int
+        nestingDepth: Int,
+        renderPath: [UUID]
     ) throws -> AudioSourceBuffer {
         switch clip.source {
         case .media(let mediaID):
-            if let cached = environment.sourceCache[mediaID] {
+            let key = MediaAudioSourceKey(
+                mediaID: mediaID,
+                sourceRange: requiredSourceWindow
+            )
+            if let cached = environment.sourceCache[key] {
                 return cached
             }
-            let source = try environment.sourceProvider.audioSource(for: mediaID)
-            environment.sourceCache[mediaID] = source
+            let source = try environment.sourceProvider.audioSource(
+                for: mediaID,
+                covering: requiredSourceWindow
+            )
+            environment.sourceCache[key] = source
             return source
-        case .sequence(let sequenceID):
+        case .sequence:
             return try compoundSourceBuffer(
-                sequenceID: sequenceID,
                 clip: clip,
+                requiredSourceWindow: requiredSourceWindow,
                 context: context,
                 environment: &environment,
-                nestingDepth: nestingDepth
+                nestingDepth: nestingDepth,
+                renderPath: renderPath
             )
         case .title:
             throw AudioRenderError.unsupportedClipSource(clipID: clip.id)
         }
     }
 
+    // swiftlint:disable:next function_parameter_count
     static func compoundSourceBuffer(
-        sequenceID: UUID,
         clip: Clip,
+        requiredSourceWindow: TimeRange,
         context: OfflineMixContext,
         environment: inout OfflineAudioRenderEnvironment,
-        nestingDepth: Int
+        nestingDepth: Int,
+        renderPath: [UUID]
     ) throws -> AudioSourceBuffer {
+        guard case .sequence(let sequenceID) = clip.source else {
+            throw AudioRenderError.unsupportedClipSource(clipID: clip.id)
+        }
         guard nestingDepth < RenderGraphBuilder.maximumCompoundNestingDepth else {
             throw AudioRenderError.maximumCompoundNestingDepthExceeded(
                 clipID: clip.id,
@@ -186,8 +226,8 @@ extension OfflineAudioMixer {
             throw AudioRenderError.missingSequenceReference(clipID: clip.id, sequenceID: sequenceID)
         }
 
-        let sourceWindow = try alignedSourceWindow(
-            for: effectiveSourceWindow(for: clip),
+        let sourceWindow = try paddedAlignedSourceWindow(
+            for: requiredSourceWindow,
             sampleRate: context.format.sampleRate
         )
         let key = CompoundAudioSourceKey(
@@ -204,7 +244,8 @@ extension OfflineAudioMixer {
             range: sourceWindow.range,
             format: context.format,
             environment: &environment,
-            nestingDepth: nestingDepth + 1
+            nestingDepth: nestingDepth + 1,
+            renderPath: renderPath + [clip.id, sequence.id]
         )
         let source = try AudioSourceBuffer(
             format: nestedBuffer.format,
@@ -226,5 +267,53 @@ extension OfflineAudioMixer {
         let alignedStart = try RationalTime(value: Int64(startFrame), timescale: Int64(sampleRate))
         let duration = try RationalTime(value: Int64(frameCount), timescale: Int64(sampleRate))
         return (try TimeRange(start: alignedStart, duration: duration), startFrame)
+    }
+
+    /// Sample-aligned source window with the same interpolation padding requested from media
+    /// decoders. Compound sources are rendered PCM buffers, so their nested render must materialize
+    /// those guard frames before the parent clip interpolates across the window boundary.
+    static func paddedAlignedSourceWindow(
+        for range: TimeRange,
+        sampleRate: Int
+    ) throws -> (range: TimeRange, frameOffset: Int) {
+        let frames = try paddedDecodingFrameRange(for: range, sampleRate: sampleRate)
+        let start = try RationalTime(
+            value: Int64(frames.lowerBound),
+            timescale: Int64(sampleRate)
+        )
+        let duration = try RationalTime(
+            value: Int64(frames.count),
+            timescale: Int64(sampleRate)
+        )
+        return (try TimeRange(start: start, duration: duration), frames.lowerBound)
+    }
+
+    /// Frame conversion shared by public media requests and internal compound materialization.
+    static func paddedDecodingFrameRange(
+        for range: TimeRange,
+        sampleRate: Int
+    ) throws -> Range<Int> {
+        guard sampleRate > 0 else {
+            throw AudioRenderError.invalidFormat(
+                sampleRate: sampleRate,
+                channelCount: 1,
+                frameCount: 0
+            )
+        }
+        let startFrame = try sampleIndex(
+            for: range.start,
+            sampleRate: sampleRate,
+            rounding: .down
+        )
+        let endFrame = try sampleIndex(
+            for: end(of: range),
+            sampleRate: sampleRate,
+            rounding: .up
+        )
+        guard endFrame < Int.max else {
+            throw AudioRenderError.timeArithmetic("padded decoder frame range overflows Int")
+        }
+        let lowerPadding = min(startFrame, 2)
+        return (startFrame - lowerPadding)..<(endFrame + 1)
     }
 }

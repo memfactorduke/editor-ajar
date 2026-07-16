@@ -103,6 +103,19 @@ extension EditReducer {
         context: MidInsertSplitContext,
         into items: inout [TimelineItem]
     ) throws {
+        if let linkGroupID = existing.linkGroupID {
+            // Splitting one track in isolation would leave the old linked partner spanning the
+            // cut while this clip gains an unlinked right half. The app prepares linked inserts
+            // as one explicit blade/relink/insert transaction; lower-level callers get a typed
+            // refusal instead of silently corrupting A/V linkage.
+            throw EditReducerError.invalidEdit(
+                .insertWouldSplitLinkedClip(
+                    clipID: existing.id,
+                    linkGroupID: linkGroupID,
+                    atTime: context.cut
+                )
+            )
+        }
         try rejectBladeInsideCrossfadeRegion(clip: existing, atTime: context.cut)
         try rejectBladeInsideVideoTransitionRegion(clip: existing, atTime: context.cut)
         let rightClipID = derivedInsertSplitClipID(

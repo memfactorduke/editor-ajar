@@ -38,6 +38,30 @@ public enum EditCommandValidationError: Equatable, Sendable {
     /// Blade time must be strictly inside the clip range.
     case bladeTimeOutsideClip(clipID: UUID, atTime: RationalTime)
 
+    /// A track-local insert cannot implicitly split one member of a linked A/V group.
+    /// Callers must blade every linked member atomically and assign the right halves a fresh
+    /// link group before inserting at the resulting cut.
+    case insertWouldSplitLinkedClip(
+        clipID: UUID,
+        linkGroupID: UUID,
+        atTime: RationalTime
+    )
+
+    /// An insert, overwrite, or blade changed only part of a linked A/V group.
+    /// Multi-track gestures must be expressed as one transaction that applies the same topology
+    /// change to every group member.
+    case linkedEditWouldDesynchronizeGroup(
+        sequenceID: UUID,
+        linkGroupID: UUID
+    )
+
+    /// A topology-changing linked edit cannot include a member on a locked track.
+    case linkedEditTargetsLockedTrack(
+        sequenceID: UUID,
+        linkGroupID: UUID,
+        trackID: UUID
+    )
+
     /// A trim-style command must keep source and timeline durations equal.
     case durationMismatch(
         clipID: UUID,

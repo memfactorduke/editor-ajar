@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// swiftlint:disable sorted_imports
 import AjarAudio
 import AjarCore
 import AjarMedia
-import AVFoundation
 import CoreImage
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
-// swiftlint:enable sorted_imports
 
-enum MediaPreviewKind: String, Sendable {
+enum MediaPreviewKind: String, Hashable, Sendable {
     case thumbnail = "thumbnail.png"
     case waveform = "waveform.json"
 }
@@ -31,6 +28,13 @@ enum MediaPreviewCacheError: Error {
 /// under `thumbnails/` until a future maintenance pass (L1 / future work).
 actor MediaPreviewCache {
     typealias Extractor = @Sendable (MediaRef, MediaPreviewKind) async throws -> Data
+    typealias AudioChunkDecoder = @Sendable (MediaRef, TimeRange) async throws
+        -> AudioSourceBuffer
+
+    /// Four seconds keeps ordinary 48 kHz stereo PCM windows near 1.5 MiB. Sources with unusually
+    /// large native formats are retried with successively smaller exact time ranges when the
+    /// decoder reports its hard allocation ceiling.
+    static let waveformDecodeChunkSeconds: Int64 = 4
 
     private let packageURL: URL
     private let workerLimit: Int
@@ -206,10 +210,89 @@ actor MediaPreviewCache {
         case .thumbnail:
             return try await extractThumbnailPNG(media: media, at: .zero)
         case .waveform:
-            let source = try await audioBuffer(for: media)
-            try Task.checkCancellation()
-            let summary = try AudioWaveformAnalyzer.summarize(source: source, binsPerSecond: 24)
+            let summary = try await waveformSummary(for: media) { media, range in
+                try await audioBuffer(for: media, range: range)
+            }
             return try JSONEncoder().encode(summary)
+        }
+    }
+
+    /// Generates one deterministic waveform while retaining only a bounded PCM window at a time.
+    ///
+    /// The accumulator preserves a partially filled bin between native-rate windows, so 44.1 kHz
+    /// and other rates whose 24 Hz bin boundary does not align with four seconds produce exactly
+    /// the same bins as a monolithic analysis.
+    static func waveformSummary(
+        for media: MediaRef,
+        decodeChunk: AudioChunkDecoder
+    ) async throws -> AudioWaveformSummary {
+        let sourceDuration = media.metadata.duration
+        let preferredChunkDuration = try RationalTime(
+            value: waveformDecodeChunkSeconds,
+            timescale: 1
+        )
+        let verifiedSource = try await MediaSourceIdentityVerifier.shared.verifyBeforeReading(media)
+        var nextStart = RationalTime.zero
+        var maximumChunkDuration = preferredChunkDuration
+        var accumulator: AudioWaveformAccumulator?
+        var decodedEmptySource = false
+
+        while nextStart < sourceDuration || !decodedEmptySource && sourceDuration == .zero {
+            try Task.checkCancellation()
+            let remainingDuration = try sourceDuration.subtracting(nextStart)
+            let initialChunkDuration = min(maximumChunkDuration, remainingDuration)
+            let (source, decodedDuration) = try await boundedAudioChunk(
+                media: media,
+                start: nextStart,
+                duration: initialChunkDuration,
+                decodeChunk: decodeChunk
+            )
+            try Task.checkCancellation()
+
+            if accumulator == nil {
+                accumulator = try AudioWaveformAccumulator(
+                    format: source.format,
+                    binsPerSecond: 24
+                )
+            }
+            try accumulator?.append(source) {
+                try Task.checkCancellation()
+            }
+
+            decodedEmptySource = true
+            nextStart = try nextStart.adding(decodedDuration)
+            maximumChunkDuration = min(maximumChunkDuration, decodedDuration)
+        }
+
+        guard var accumulator else {
+            throw MediaPreviewCacheError.unsupportedAudio
+        }
+        try Task.checkCancellation()
+        let summary = accumulator.makeSummary()
+        try await MediaSourceIdentityVerifier.shared.verifyAfterReading(verifiedSource)
+        return summary
+    }
+
+    private static func boundedAudioChunk(
+        media: MediaRef,
+        start: RationalTime,
+        duration initialDuration: RationalTime,
+        decodeChunk: AudioChunkDecoder
+    ) async throws -> (source: AudioSourceBuffer, duration: RationalTime) {
+        var duration = initialDuration
+        while true {
+            try Task.checkCancellation()
+            let range = try TimeRange(start: start, duration: duration)
+            do {
+                return (try await decodeChunk(media, range), duration)
+            } catch let error as AudioPCMDecodeError {
+                guard case .windowTooLarge(_, let frameCount, _, _) = error,
+                    frameCount > 1
+                else {
+                    throw error
+                }
+                duration = try duration.divided(by: 2)
+            }
         }
     }
 
@@ -239,57 +322,23 @@ actor MediaPreviewCache {
         return data as Data
     }
 
-    private static func audioBuffer(for media: MediaRef) async throws -> AudioSourceBuffer {
-        guard let url = media.sourceURL else { throw MediaPreviewCacheError.unsupportedAudio }
-        let asset = AVURLAsset(url: url)
-        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
-            throw MediaPreviewCacheError.unsupportedAudio
-        }
+    private static func audioBuffer(
+        for media: MediaRef,
+        range: TimeRange
+    ) async throws -> AudioSourceBuffer {
+        let decoded = try await AudioPCMDecoder().decodeWindow(
+            from: media,
+            sourceRange: range
+        )
         try Task.checkCancellation()
-        let reader = try AVAssetReader(asset: asset)
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVLinearPCMIsFloatKey: true,
-            AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsNonInterleaved: false
-        ]
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
-        guard reader.canAdd(output) else { throw MediaPreviewCacheError.unsupportedAudio }
-        reader.add(output)
-        guard reader.startReading() else { throw MediaPreviewCacheError.unsupportedAudio }
-        var samples: [Float] = []
-        var sampleRate = 48_000
-        var channelCount = max(1, media.metadata.audioChannelLayout?.channelCount ?? 1)
-        while let sample = output.copyNextSampleBuffer() {
-            try Task.checkCancellation()
-            if let description = CMSampleBufferGetFormatDescription(sample),
-               let basic = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee
-            {
-                sampleRate = Int(basic.mSampleRate.rounded())
-                channelCount = Int(basic.mChannelsPerFrame)
-            }
-            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
-            let length = CMBlockBufferGetDataLength(block)
-            var bytes = Data(count: length)
-            let copied = bytes.withUnsafeMutableBytes { pointer -> OSStatus in
-                guard let baseAddress = pointer.baseAddress else {
-                    return kCMBlockBufferBadCustomBlockSourceErr
-                }
-                return CMBlockBufferCopyDataBytes(
-                    block, atOffset: 0, dataLength: length, destination: baseAddress
-                )
-            }
-            if copied == kCMBlockBufferNoErr {
-                samples.append(
-                    contentsOf: bytes.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
-                )
-            }
-        }
-        let frames = samples.count / max(1, channelCount)
         return try AudioSourceBuffer(
-            format: AudioRenderFormat(sampleRate: sampleRate, channelCount: channelCount),
-            frameCount: frames,
-            samples: samples
+            format: AudioRenderFormat(
+                sampleRate: decoded.sampleRate,
+                channelCount: decoded.channelCount
+            ),
+            frameCount: decoded.frameCount,
+            samples: decoded.samples,
+            frameOffset: decoded.frameOffset
         )
     }
 }

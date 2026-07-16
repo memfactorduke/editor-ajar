@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+@preconcurrency import AVFoundation
 import AjarAudio
 import AjarCore
 import AjarExport
+import AjarMedia
 import Foundation
 import XCTest
 
@@ -281,6 +283,48 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(audioCoordinator.stopCount, 1)
     }
 
+    func testFRAUD007SynchronousAudioStartFailurePausesTransport() {
+        let audioCoordinator = FakeAudioCoordinator()
+        audioCoordinator.startError = TestAudioPreparationError.unreadable
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            audioCoordinator: audioCoordinator,
+            opensSampleProjectWhenNoRecovery: true
+        )
+
+        model.shuttleForward()
+
+        XCTAssertFalse(model.isPlaying)
+        XCTAssertEqual(model.playbackRate, 0)
+        XCTAssertEqual(audioCoordinator.stopCount, 1)
+        XCTAssertEqual(
+            model.audioPlaybackError,
+            .renderFailed("unreadable")
+        )
+        XCTAssertTrue(model.loadMessage.contains("Audio playback unavailable"))
+    }
+
+    func testFRAUD007SynchronousAudioSeekFailurePausesTransport() {
+        let audioCoordinator = FakeAudioCoordinator()
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            audioCoordinator: audioCoordinator,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        model.shuttleForward()
+        audioCoordinator.seekError = TestAudioPreparationError.unreadable
+
+        _ = model.setMasterGainDB(-3, gesturePhase: .ended)
+
+        XCTAssertFalse(model.isPlaying)
+        XCTAssertEqual(model.playbackRate, 0)
+        XCTAssertEqual(audioCoordinator.stopCount, 1)
+        XCTAssertEqual(
+            model.audioPlaybackError,
+            .renderFailed("unreadable")
+        )
+    }
+
     func testFRAUD007FastForwardShuttleMutesWithoutRestartingAudio() {
         let audioCoordinator = FakeAudioCoordinator()
         let model = EditorAjarAppModel(
@@ -320,7 +364,7 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(audioCoordinator.stopCount, 3)
     }
 
-    func testFRAUD007CoordinatorRefillsLiveAudioAtPlaybackWindowMargin() throws {
+    func testFRAUD007CoordinatorRefillsLiveAudioAtPlaybackWindowMargin() async throws {
         let driver = FakeAudioOutputDriver()
         let coordinator = EditorAjarLiveAudioCoordinator(driver: driver)
         let project = try EditorAjarSampleProjectFactory.makeSampleProject()
@@ -333,7 +377,7 @@ final class EditorAjarAppModelTests: XCTestCase {
             playheadFrame: 0,
             durationFrames: durationFrames
         )
-        coordinator.drainPendingRendersForTesting()
+        await coordinator.drainPendingRendersForTesting()
 
         XCTAssertEqual(driver.startCount, 1)
         XCTAssertEqual(driver.publishCount, 1)
@@ -346,7 +390,7 @@ final class EditorAjarAppModelTests: XCTestCase {
             playheadFrame: 29,
             durationFrames: durationFrames
         )
-        coordinator.drainPendingRendersForTesting()
+        await coordinator.drainPendingRendersForTesting()
 
         XCTAssertEqual(driver.publishCount, 1)
 
@@ -356,11 +400,510 @@ final class EditorAjarAppModelTests: XCTestCase {
             playheadFrame: 30,
             durationFrames: durationFrames
         )
-        coordinator.drainPendingRendersForTesting()
+        await coordinator.drainPendingRendersForTesting()
 
         XCTAssertEqual(driver.publishCount, 2)
         XCTAssertEqual(driver.publishedFrameCounts, [96_000, 96_000])
         XCTAssertEqual(driver.publishWasOnMainThread, [false, false])
+    }
+
+    func testFRAUD007DelayedRefillStartsAtLatestPlaybackFrame() async throws {
+        let driver = FakeAudioOutputDriver()
+        let gate = AudioRefillPreparationGate()
+        let coordinator = EditorAjarLiveAudioCoordinator(
+            driver: driver,
+            sourceProviderFactory: { project, sequence, range in
+                try await gate.prepare(project: project, sequence: sequence, range: range)
+            }
+        )
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+        let durationFrames = try Self.durationFrames(for: sequence)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: durationFrames
+        )
+        await coordinator.drainPendingRendersForTesting()
+
+        try coordinator.ensurePlaybackPlan(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 30,
+            durationFrames: durationFrames
+        )
+        await gate.waitUntilRefillEntered()
+
+        // Video advances while the second source window is still being decoded. Publishing that
+        // window from sample zero would replay frame 30 and permanently lag video by one frame.
+        try coordinator.ensurePlaybackPlan(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 31,
+            durationFrames: durationFrames
+        )
+        coordinator.drainControlQueueForTesting()
+        await gate.releaseRefill()
+        await coordinator.drainPendingRendersForTesting()
+
+        XCTAssertEqual(driver.publishCount, 2)
+        let firstSamples = driver.publishedFirstSamples
+        XCTAssertEqual(firstSamples.count, 2)
+        XCTAssertEqual(firstSamples[0], 0, accuracy: 0.000_001)
+        XCTAssertGreaterThan(
+            abs(firstSamples[1]),
+            0.05,
+            "refill must skip the silent sample at frame 30 and begin at video frame 31"
+        )
+    }
+
+    func testFRAUD007DecodedCacheRefusesOfflineAndDeletedButRefreshesNilHashSource() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("editor-ajar-audio-cache-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sourceURL = directory.appendingPathComponent("source.wav")
+
+        func writeWave(amplitude: Float, frameCount: AVAudioFrameCount) throws {
+            let format = try XCTUnwrap(
+                AVAudioFormat(standardFormatWithSampleRate: 8_000, channels: 1)
+            )
+            let buffer = try XCTUnwrap(
+                AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+            )
+            buffer.frameLength = frameCount
+            let channelData = try XCTUnwrap(buffer.floatChannelData)
+            for frame in 0..<Int(frameCount) {
+                channelData[0][frame] = amplitude
+            }
+            let file = try AVAudioFile(forWriting: sourceURL, settings: format.settings)
+            try file.write(from: buffer)
+        }
+
+        try writeWave(amplitude: 0.1, frameCount: 80)
+        let mediaID = UUID()
+        let metadata = MediaMetadata(
+            codecID: "pcm_f32le",
+            pixelDimensions: nil,
+            frameRate: nil,
+            duration: try RationalTime(value: 1, timescale: 100),
+            colorSpace: .unspecified,
+            audioChannelLayout: AudioChannelLayout(channelCount: 1),
+            isVariableFrameRate: false,
+            conformedFrameRate: nil
+        )
+        let media = MediaRef(
+            id: mediaID,
+            sourceURL: sourceURL,
+            contentHash: nil,
+            metadata: metadata
+        )
+        let window = AudioSourceTimeWindow(
+            mediaID: mediaID,
+            range: try TimeRange(start: .zero, duration: metadata.duration)
+        )
+        let cache = EditorAjarDecodedAudioWindowCache()
+        let first = try await cache.decode(media: media, window: window)
+        XCTAssertEqual(first.frameCount, 80, "cache alignment must clamp to the probed EOF")
+        XCTAssertEqual(try XCTUnwrap(first.samples.first), 0.1, accuracy: 0.000_1)
+
+        try FileManager.default.removeItem(at: sourceURL)
+        do {
+            _ = try await cache.decode(media: media, window: window)
+            XCTFail("Deleted media must not be served from decoded cache")
+        } catch {
+            XCTAssertEqual(error as? AudioPCMDecodeError, .missingSource(sourceURL))
+        }
+
+        try writeWave(amplitude: 0.35, frameCount: 160)
+        let replaced = try await cache.decode(media: media, window: window)
+        XCTAssertEqual(try XCTUnwrap(replaced.samples.first), 0.35, accuracy: 0.000_1)
+
+        let offline = MediaRef(
+            id: mediaID,
+            sourceURL: sourceURL,
+            contentHash: nil,
+            metadata: metadata,
+            availability: .offline
+        )
+        do {
+            _ = try await cache.decode(media: offline, window: window)
+            XCTFail("Offline media must not be served from decoded cache")
+        } catch {
+            XCTAssertEqual(error as? AudioPCMDecodeError, .missingSource(sourceURL))
+        }
+    }
+
+    func testFRAUD007DecodedCacheRefusesReplacedBytesWithDurableHash() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("editor-ajar-audio-identity-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let sourceURL = directory.appendingPathComponent("source.wav")
+
+        func writeWave(amplitude: Float, frameCount: AVAudioFrameCount) throws {
+            let format = try XCTUnwrap(
+                AVAudioFormat(standardFormatWithSampleRate: 8_000, channels: 1)
+            )
+            let buffer = try XCTUnwrap(
+                AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+            )
+            buffer.frameLength = frameCount
+            let channelData = try XCTUnwrap(buffer.floatChannelData)
+            for frame in 0..<Int(frameCount) {
+                channelData[0][frame] = amplitude
+            }
+            let file = try AVAudioFile(forWriting: sourceURL, settings: format.settings)
+            try file.write(from: buffer)
+        }
+
+        try writeWave(amplitude: 0.1, frameCount: 80)
+        let durableHash = try SHA256MediaFileHasher().contentHash(of: sourceURL)
+        let mediaID = UUID()
+        let metadata = MediaMetadata(
+            codecID: "pcm_f32le",
+            pixelDimensions: nil,
+            frameRate: nil,
+            duration: try RationalTime(value: 1, timescale: 100),
+            colorSpace: .unspecified,
+            audioChannelLayout: AudioChannelLayout(channelCount: 1),
+            isVariableFrameRate: false,
+            conformedFrameRate: nil
+        )
+        let media = MediaRef(
+            id: mediaID,
+            sourceURL: sourceURL,
+            contentHash: durableHash,
+            metadata: metadata
+        )
+        let window = AudioSourceTimeWindow(
+            mediaID: mediaID,
+            range: try TimeRange(start: .zero, duration: metadata.duration)
+        )
+        let cache = EditorAjarDecodedAudioWindowCache(
+            identityVerifier: MediaSourceIdentityVerifier()
+        )
+
+        let first = try await cache.decode(media: media, window: window)
+        XCTAssertEqual(try XCTUnwrap(first.samples.first), 0.1, accuracy: 0.000_1)
+
+        try writeWave(amplitude: 0.35, frameCount: 160)
+        let replacementHash = try SHA256MediaFileHasher().contentHash(of: sourceURL)
+        do {
+            _ = try await cache.decode(media: media, window: window)
+            XCTFail("replacement bytes must not be decoded under the stale project hash")
+        } catch let error as MediaSourceIdentityVerificationError {
+            XCTAssertEqual(
+                error,
+                .playableContentHashMismatch(
+                    url: sourceURL.standardizedFileURL,
+                    expected: durableHash,
+                    actual: replacementHash
+                )
+            )
+        }
+    }
+
+    func testFRAUD007CoordinatorResamplesNon48KProjectToDeviceFacingRate() async throws {
+        let driver = FakeAudioOutputDriver()
+        let coordinator = EditorAjarLiveAudioCoordinator(driver: driver)
+        let fixture = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let settings = ProjectSettings(
+            frameRate: fixture.settings.frameRate,
+            resolution: fixture.settings.resolution,
+            colorSpace: fixture.settings.colorSpace,
+            audioSampleRate: 44_100
+        )
+        let project = Project(
+            schemaVersion: fixture.schemaVersion,
+            settings: settings,
+            mediaPool: fixture.mediaPool,
+            sequences: fixture.sequences
+        )
+        let sequence = try XCTUnwrap(project.sequences.first)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: try Self.durationFrames(for: sequence)
+        )
+        await coordinator.drainPendingRendersForTesting()
+
+        XCTAssertEqual(driver.publishCount, 1)
+        XCTAssertEqual(
+            driver.publishedFrameCounts,
+            [96_000],
+            "two seconds of live output must stay two seconds at the fixed 48 kHz device rate"
+        )
+    }
+
+    func testFRAUD007CoordinatorStartsOutputOnlyAfterInitialPlanIsReady() async throws {
+        let driver = FakeAudioOutputDriver()
+        let gate = AudioProviderPreparationGate()
+        let coordinator = EditorAjarLiveAudioCoordinator(
+            driver: driver,
+            sourceProviderFactory: { project, sequence, range in
+                await gate.suspendUntilReleased()
+                return try EditorAjarProjectAudioSourceProvider(
+                    project: project,
+                    sequence: sequence,
+                    range: range
+                )
+            }
+        )
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: try Self.durationFrames(for: sequence)
+        )
+        await gate.waitUntilEntered()
+
+        XCTAssertEqual(driver.startCount, 0)
+        XCTAssertEqual(driver.publishCount, 0)
+
+        await gate.release()
+        await coordinator.drainPendingRendersForTesting()
+        XCTAssertEqual(driver.publishCount, 1)
+        XCTAssertEqual(driver.startCount, 1)
+    }
+
+    func testFRAUD007InitialPlanEventPrecedesAudioDeviceStart() async throws {
+        let driver = FakeAudioOutputDriver()
+        let coordinator = EditorAjarLiveAudioCoordinator(driver: driver)
+        let planPublished = expectation(description: "video may begin before audio device")
+        coordinator.setEventHandler { event in
+            guard event == .planPublished else {
+                return
+            }
+            XCTAssertEqual(
+                driver.startCount,
+                0,
+                "audio must wait until the MainActor video-start handler has returned"
+            )
+            planPublished.fulfill()
+        }
+        coordinator.drainControlQueueForTesting()
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: try Self.durationFrames(for: sequence)
+        )
+        await fulfillment(of: [planPublished], timeout: 2)
+        coordinator.drainControlQueueForTesting()
+
+        XCTAssertEqual(driver.publishCount, 1)
+        XCTAssertEqual(driver.startCount, 1)
+    }
+
+    func testFRAUD007StopSuppressesInitialPlanEventQueuedOnMainActor() async throws {
+        let driver = FakeAudioOutputDriver()
+        let coordinator = EditorAjarLiveAudioCoordinator(driver: driver)
+        var receivedEvents: [EditorAjarLiveAudioEvent] = []
+        coordinator.setEventHandler { event in
+            receivedEvents.append(event)
+        }
+        coordinator.drainControlQueueForTesting()
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: try Self.durationFrames(for: sequence)
+        )
+        XCTAssertTrue(
+            driver.waitForNextPublish(),
+            "the render queue must publish while this test deliberately holds the MainActor"
+        )
+
+        coordinator.stop()
+        coordinator.drainControlQueueForTesting()
+        await coordinator.drainPlanPublishedDeliveryForTesting()
+
+        XCTAssertTrue(receivedEvents.isEmpty)
+        XCTAssertEqual(driver.startCount, 0)
+    }
+
+    func testFRAUD007StopSuppressesFailureQueuedOnMainActor() async throws {
+        let driver = FakeAudioOutputDriver(publishError: TestAudioOutputError.unavailable)
+        let coordinator = EditorAjarLiveAudioCoordinator(driver: driver)
+        var receivedEvents: [EditorAjarLiveAudioEvent] = []
+        coordinator.setEventHandler { event in
+            receivedEvents.append(event)
+        }
+        coordinator.drainControlQueueForTesting()
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: try Self.durationFrames(for: sequence)
+        )
+        XCTAssertTrue(
+            driver.waitForNextPublish(),
+            "publish must queue its failure while this test deliberately holds the MainActor"
+        )
+
+        coordinator.stop()
+        coordinator.drainControlQueueForTesting()
+        await coordinator.drainFailureDeliveryForTesting()
+
+        XCTAssertTrue(receivedEvents.isEmpty)
+        XCTAssertEqual(driver.startCount, 0)
+    }
+
+    func testFRAUD007SeekSuppressesStalePlanEventButDeliversCurrentReplacement() async throws {
+        let driver = FakeAudioOutputDriver()
+        let gate = AudioRefillPreparationGate()
+        let coordinator = EditorAjarLiveAudioCoordinator(
+            driver: driver,
+            sourceProviderFactory: { project, sequence, range in
+                try await gate.prepare(project: project, sequence: sequence, range: range)
+            }
+        )
+        var receivedEvents: [EditorAjarLiveAudioEvent] = []
+        coordinator.setEventHandler { event in
+            receivedEvents.append(event)
+        }
+        coordinator.drainControlQueueForTesting()
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+        let durationFrames = try Self.durationFrames(for: sequence)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: durationFrames
+        )
+        XCTAssertTrue(
+            driver.waitForNextPublish(),
+            "the first plan must queue its MainActor event before the seek invalidates it"
+        )
+
+        try coordinator.publishSeek(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 1,
+            durationFrames: durationFrames
+        )
+        coordinator.drainControlQueueForTesting()
+        await gate.waitUntilRefillEntered()
+        await coordinator.drainPlanPublishedDeliveryForTesting()
+
+        XCTAssertTrue(receivedEvents.isEmpty)
+        XCTAssertEqual(driver.startCount, 0)
+
+        await gate.releaseRefill()
+        await coordinator.drainPendingRendersForTesting()
+        await coordinator.drainPlanPublishedDeliveryForTesting()
+        coordinator.drainControlQueueForTesting()
+
+        XCTAssertEqual(receivedEvents, [.planPublished])
+        XCTAssertEqual(driver.publishCount, 2)
+        XCTAssertEqual(driver.startCount, 1)
+        coordinator.stop()
+    }
+
+    func testFRAUD007DecodeFailureStopsOutputAndPublishesTypedErrorNotSilence() async throws {
+        let driver = FakeAudioOutputDriver()
+        let failed = expectation(description: "typed live audio failure")
+        let coordinator = EditorAjarLiveAudioCoordinator(
+            driver: driver,
+            sourceProviderFactory: { _, _, _ in
+                throw TestAudioPreparationError.unreadable
+            }
+        )
+        coordinator.setEventHandler { event in
+            guard case .failed(.sourcePreparationFailed(let reason)) = event else {
+                return
+            }
+            XCTAssertTrue(reason.contains("unreadable"))
+            failed.fulfill()
+        }
+        let project = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let sequence = try XCTUnwrap(project.sequences.first)
+
+        try coordinator.start(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            durationFrames: try Self.durationFrames(for: sequence)
+        )
+        await coordinator.drainPendingRendersForTesting()
+        await fulfillment(of: [failed], timeout: 2)
+
+        XCTAssertEqual(driver.publishCount, 0)
+        XCTAssertEqual(driver.startCount, 0)
+        XCTAssertGreaterThanOrEqual(driver.stopCount, 1)
+    }
+
+    func testFRAUD007AppModelSurfacesTypedLiveAudioFailure() async throws {
+        let driver = FakeAudioOutputDriver()
+        let preparation = RecoverableAudioPreparation()
+        let coordinator = EditorAjarLiveAudioCoordinator(
+            driver: driver,
+            sourceProviderFactory: { project, sequence, range in
+                try await preparation.prepare(
+                    project: project,
+                    sequence: sequence,
+                    range: range
+                )
+            }
+        )
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            audioCoordinator: coordinator,
+            opensSampleProjectWhenNoRecovery: true
+        )
+
+        model.shuttleForward()
+        await coordinator.drainPendingRendersForTesting()
+        for _ in 0..<10 where model.audioPlaybackError == nil {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(
+            model.audioPlaybackError,
+            .sourcePreparationFailed("unreadable")
+        )
+        XCTAssertTrue(model.loadMessage.contains("Audio playback unavailable"))
+        XCTAssertEqual(driver.publishCount, 0)
+        XCTAssertFalse(model.isPlaying)
+
+        await preparation.allowSuccess()
+        model.shuttleForward()
+        await coordinator.drainPendingRendersForTesting()
+        for _ in 0..<200 where model.audioPlaybackError != nil || driver.publishCount != 1 {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertNil(model.audioPlaybackError)
+        XCTAssertTrue(model.isPlaying)
+        XCTAssertFalse(model.loadMessage.contains("Audio playback unavailable"))
+        XCTAssertEqual(driver.publishCount, 1)
     }
 
     func testFRPLAY001DisplayLinkAdvancesPlayheadAtSequenceFrameRate() throws {
@@ -2357,6 +2900,176 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertEqual(originalVideo.linkGroupID, fixture.linkGroupID)
     }
 
+    func testIssue240ReviewLiftVideoSelectionRemovesLinkedPairInOneUndoStep() throws {
+        let fixture = try makeLinkedPairProject()
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        model.selectClip(
+            trackID: fixture.videoTrackID,
+            clipID: fixture.videoClipID,
+            mode: .replace
+        )
+        let before = model.project
+
+        XCTAssertTrue(model.liftSelection())
+        let lifted = try XCTUnwrap(model.activeSequence)
+        XCTAssertNil(
+            lifted.videoTracks[0].items.compactMap(timelineClip).first(where: {
+                $0.id == fixture.videoClipID
+            })
+        )
+        XCTAssertNil(
+            lifted.audioTracks[0].items.compactMap(timelineClip).first(where: {
+                $0.id == fixture.audioClipID
+            })
+        )
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    func testIssue240ReviewRippleVideoSelectionRemovesLinkedPairInOneUndoStep() throws {
+        let fixture = try makeLinkedPairProject()
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        model.selectClip(
+            trackID: fixture.videoTrackID,
+            clipID: fixture.videoClipID,
+            mode: .replace
+        )
+        let before = model.project
+
+        XCTAssertTrue(model.rippleDeleteSelection())
+        let deleted = try XCTUnwrap(model.activeSequence)
+        XCTAssertNil(
+            deleted.videoTracks[0].items.compactMap(timelineClip).first(where: {
+                $0.id == fixture.videoClipID
+            })
+        )
+        XCTAssertNil(
+            deleted.audioTracks[0].items.compactMap(timelineClip).first(where: {
+                $0.id == fixture.audioClipID
+            })
+        )
+        XCTAssertNotNil(
+            clipStarting(
+                atFrame: 50,
+                in: deleted.videoTracks[0],
+                frameRate: fixture.frameRate
+            )
+        )
+
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    func testIssue240ReviewCutVideoSelectionCopiesAndRemovesSameLinkedPair() throws {
+        let fixture = try makeLinkedPairProject()
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        model.selectClip(
+            trackID: fixture.videoTrackID,
+            clipID: fixture.videoClipID,
+            mode: .replace
+        )
+        let before = model.project
+
+        XCTAssertTrue(model.cutTimelineClips())
+        let cut = try XCTUnwrap(model.activeSequence)
+        XCTAssertNil(
+            cut.videoTracks[0].items.compactMap(timelineClip).first(where: {
+                $0.id == fixture.videoClipID
+            })
+        )
+        XCTAssertNil(
+            cut.audioTracks[0].items.compactMap(timelineClip).first(where: {
+                $0.id == fixture.audioClipID
+            })
+        )
+        let afterCut = model.project
+
+        model.scrub(to: 20)
+        XCTAssertTrue(model.pasteTimelineClips())
+        let pasted = try XCTUnwrap(model.activeSequence)
+        let pastedVideo = try XCTUnwrap(
+            clipStarting(atFrame: 20, in: pasted.videoTracks[0], frameRate: fixture.frameRate)
+        )
+        let pastedAudio = try XCTUnwrap(
+            clipStarting(atFrame: 20, in: pasted.audioTracks[0], frameRate: fixture.frameRate)
+        )
+        XCTAssertEqual(pastedVideo.linkGroupID, pastedAudio.linkGroupID)
+        XCTAssertNotNil(pastedVideo.linkGroupID)
+
+        model.undo()
+        XCTAssertEqual(model.project, afterCut)
+        model.undo()
+        XCTAssertEqual(model.project, before)
+    }
+
+    func testIssue240ReviewDestructiveSelectionRefusesLockedLinkedPartnerWithoutUndo() throws {
+        let fixture = try makeLinkedPairProject()
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        model.selectClip(
+            trackID: fixture.videoTrackID,
+            clipID: fixture.videoClipID,
+            mode: .replace
+        )
+        let beforeLock = model.project
+        let sequenceID = try XCTUnwrap(model.activeSequence?.id)
+        model.setTrackState(
+            sequenceID: sequenceID,
+            trackID: fixture.audioTrackID,
+            locked: true
+        )
+        let locked = model.project
+
+        XCTAssertFalse(model.liftSelection())
+        XCTAssertFalse(model.rippleDeleteSelection())
+        XCTAssertEqual(model.project, locked)
+
+        model.undo()
+        XCTAssertEqual(model.project, beforeLock, "refusals must not add an undo entry")
+    }
+
+    func testIssue240ReviewPasteLinkedPairRefusesWhenAllAudioTracksLocked() throws {
+        let fixture = try makeLinkedPairProject()
+        let model = try makeModel(loading: fixture.project)
+        model.focusTimeline()
+        model.selectClip(
+            trackID: fixture.videoTrackID,
+            clipID: fixture.videoClipID,
+            mode: .replace
+        )
+        model.selectClip(
+            trackID: fixture.audioTrackID,
+            clipID: fixture.audioClipID,
+            mode: .toggle
+        )
+        XCTAssertTrue(model.copyTimelineClips())
+
+        let beforeLock = model.project
+        let sequenceID = try XCTUnwrap(model.activeSequence?.id)
+        for track in try XCTUnwrap(model.activeSequence).audioTracks {
+            model.setTrackState(sequenceID: sequenceID, trackID: track.id, locked: true)
+        }
+        model.scrub(to: 20)
+        let locked = model.project
+
+        XCTAssertFalse(model.pasteTimelineClips())
+        XCTAssertEqual(model.project, locked)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        XCTAssertNil(
+            clipStarting(atFrame: 20, in: sequence.videoTracks[0], frameRate: fixture.frameRate)
+        )
+        XCTAssertNil(
+            clipStarting(atFrame: 20, in: sequence.audioTracks[0], frameRate: fixture.frameRate)
+        )
+
+        model.undo()
+        XCTAssertEqual(model.project, beforeLock, "failed paste must not add an undo entry")
+    }
+
     /// #240 review finding 5: pasting a single member of a linked pair unlinks the copy.
     func testIssue240ReviewPastingLoneLinkedMemberUnlinksTheCopy() throws {
         let fixture = try makeLinkedPairProject()
@@ -2596,6 +3309,11 @@ final class EditorAjarAppModelTests: XCTestCase {
             return clip
         }
         return nil
+    }
+
+    private func timelineClip(_ item: TimelineItem) -> Clip? {
+        guard case .clip(let clip) = item else { return nil }
+        return clip
     }
 
     private func makeModel(loading project: Project) throws -> EditorAjarAppModel {
@@ -3353,6 +4071,9 @@ private final class FakeAudioCoordinator: EditorAjarAudioCoordinating {
     private(set) var seekFrames: [Int64] = []
     private(set) var ensuredFrames: [Int64] = []
     private(set) var stopCount = 0
+    var startError: Error?
+    var seekError: Error?
+    var ensureError: Error?
 
     func start(
         project: Project,
@@ -3360,6 +4081,9 @@ private final class FakeAudioCoordinator: EditorAjarAudioCoordinating {
         playheadFrame: Int64,
         durationFrames: Int64
     ) throws {
+        if let startError {
+            throw startError
+        }
         startedFrames.append(playheadFrame)
     }
 
@@ -3373,6 +4097,9 @@ private final class FakeAudioCoordinator: EditorAjarAudioCoordinating {
         playheadFrame: Int64,
         durationFrames: Int64
     ) throws {
+        if let seekError {
+            throw seekError
+        }
         seekFrames.append(playheadFrame)
     }
 
@@ -3382,34 +4109,191 @@ private final class FakeAudioCoordinator: EditorAjarAudioCoordinating {
         playheadFrame: Int64,
         durationFrames: Int64
     ) throws {
+        if let ensureError {
+            throw ensureError
+        }
         ensuredFrames.append(playheadFrame)
     }
 }
 
 private final class FakeAudioOutputDriver: EditorAjarAudioOutputDriving {
-    private(set) var publishedFrameCounts: [Int] = []
-    private(set) var publishWasOnMainThread: [Bool] = []
-    private(set) var startCount = 0
-    private(set) var stopCount = 0
+    private let lock = NSLock()
+    private let publishSemaphore = DispatchSemaphore(value: 0)
+    private var publishedFrameCountsValue: [Int] = []
+    private var publishWasOnMainThreadValue: [Bool] = []
+    private var publishedFirstSamplesValue: [Float] = []
+    private var startCountValue = 0
+    private var stopCountValue = 0
+    private let publishError: Error?
+
+    init(publishError: Error? = nil) {
+        self.publishError = publishError
+    }
+
+    var publishedFrameCounts: [Int] {
+        lock.withLock { publishedFrameCountsValue }
+    }
+
+    var publishWasOnMainThread: [Bool] {
+        lock.withLock { publishWasOnMainThreadValue }
+    }
+
+    var publishedFirstSamples: [Float] {
+        lock.withLock { publishedFirstSamplesValue }
+    }
+
+    var startCount: Int {
+        lock.withLock { startCountValue }
+    }
+
+    var stopCount: Int {
+        lock.withLock { stopCountValue }
+    }
 
     var publishCount: Int {
         publishedFrameCounts.count
     }
 
     func publish(_ plan: RealtimeAudioRenderPlan) throws {
-        publishedFrameCounts.append(plan.safetyReport().preparedFrameCount)
-        publishWasOnMainThread.append(Thread.isMainThread)
+        var inspectablePlan = plan
+        var firstFrame = Array(repeating: Float(0), count: plan.format.channelCount)
+        firstFrame.withUnsafeMutableBufferPointer { output in
+            _ = inspectablePlan.render(into: output)
+        }
+        lock.withLock {
+            publishedFrameCountsValue.append(plan.safetyReport().preparedFrameCount)
+            publishWasOnMainThreadValue.append(Thread.isMainThread)
+            publishedFirstSamplesValue.append(firstFrame[0])
+        }
+        publishSemaphore.signal()
+        if let publishError {
+            throw publishError
+        }
+    }
+
+    func waitForNextPublish() -> Bool {
+        publishSemaphore.wait(timeout: .now() + .seconds(2)) == .success
     }
 
     func start() throws {
-        startCount += 1
+        lock.withLock {
+            startCountValue += 1
+        }
     }
 
     func stop() {
-        stopCount += 1
+        lock.withLock {
+            stopCountValue += 1
+        }
     }
 
     func safetyReport() -> RealtimeAudioSafetyReport? {
         nil
     }
+}
+
+private enum TestAudioOutputError: Error {
+    case unavailable
+}
+
+private actor AudioProviderPreparationGate {
+    private var entered = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func suspendUntilReleased() async {
+        entered = true
+        for waiter in enteredWaiters {
+            waiter.resume()
+        }
+        enteredWaiters.removeAll()
+        await withCheckedContinuation { continuation in
+            releaseContinuation = continuation
+        }
+    }
+
+    func waitUntilEntered() async {
+        guard !entered else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            enteredWaiters.append(continuation)
+        }
+    }
+
+    func release() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
+    }
+}
+
+private actor AudioRefillPreparationGate {
+    private var preparationCount = 0
+    private var refillEntered = false
+    private var refillEnteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var refillReleaseContinuation: CheckedContinuation<Void, Never>?
+
+    func prepare(
+        project: Project,
+        sequence: Sequence,
+        range: TimeRange
+    ) async throws -> any AudioSourceProvider {
+        preparationCount += 1
+        if preparationCount == 2 {
+            refillEntered = true
+            for waiter in refillEnteredWaiters {
+                waiter.resume()
+            }
+            refillEnteredWaiters.removeAll()
+            await withCheckedContinuation { continuation in
+                refillReleaseContinuation = continuation
+            }
+        }
+        return try EditorAjarProjectAudioSourceProvider(
+            project: project,
+            sequence: sequence,
+            range: range
+        )
+    }
+
+    func waitUntilRefillEntered() async {
+        guard !refillEntered else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            refillEnteredWaiters.append(continuation)
+        }
+    }
+
+    func releaseRefill() {
+        refillReleaseContinuation?.resume()
+        refillReleaseContinuation = nil
+    }
+}
+
+private actor RecoverableAudioPreparation {
+    private var shouldFail = true
+
+    func prepare(
+        project: Project,
+        sequence: Sequence,
+        range: TimeRange
+    ) throws -> any AudioSourceProvider {
+        if shouldFail {
+            throw TestAudioPreparationError.unreadable
+        }
+        return try EditorAjarProjectAudioSourceProvider(
+            project: project,
+            sequence: sequence,
+            range: range
+        )
+    }
+
+    func allowSuccess() {
+        shouldFail = false
+    }
+}
+
+private enum TestAudioPreparationError: Error {
+    case unreadable
 }

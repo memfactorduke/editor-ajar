@@ -137,11 +137,16 @@ public struct RealtimeAudioRenderPlan: Sendable {
     private var nextFrame: Int
 
     /// Creates a callback plan from an already-rendered buffer.
-    public init(buffer: RenderedAudioBuffer) {
+    ///
+    /// `startingAtFrame` lets a control-thread producer publish a window that was prepared
+    /// asynchronously without replaying samples that elapsed while preparation was in flight.
+    /// The cursor is clamped to the owned buffer so a late publication becomes clean silence
+    /// instead of reading beyond its immutable storage.
+    public init(buffer: RenderedAudioBuffer, startingAtFrame: Int = 0) {
         format = buffer.format
         storage = RealtimeAudioSampleStorage(samples: buffer.samples)
         frameCount = buffer.frameCount
-        nextFrame = 0
+        nextFrame = min(max(0, startingAtFrame), frameCount)
     }
 
     /// Returns the realtime-safety contract for this plan.
@@ -229,7 +234,8 @@ public struct RealtimeAudioRenderPlan: Sendable {
             guard buffers[channelIndex].mData != nil else {
                 return 0
             }
-            let bufferFrameCapacity = Int(buffers[channelIndex].mDataByteSize)
+            let bufferFrameCapacity =
+                Int(buffers[channelIndex].mDataByteSize)
                 / MemoryLayout<Float>.stride
             frameCapacity = min(frameCapacity, bufferFrameCapacity)
         }

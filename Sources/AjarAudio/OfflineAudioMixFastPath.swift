@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// swiftlint:disable file_length
 
 import AjarCore
 import Foundation
@@ -33,17 +34,28 @@ extension OfflineAudioMixer {
         into output: inout [Float],
         context: OfflineTrackMixContext,
         environment: inout OfflineAudioRenderEnvironment,
-        nestingDepth: Int
+        nestingDepth: Int,
+        renderPath: [UUID] = []
     ) throws {
         for item in track.items {
+            try context.mix.cancellationCheck()
             guard case .clip(let clip) = item, clipCarriesAudio(clip, on: track) else {
+                continue
+            }
+            let sourceWindow = try requiredSourceWindow(
+                for: clip,
+                renderRange: context.mix.range
+            )
+            guard let sourceWindow else {
                 continue
             }
             let source = try sourceBuffer(
                 for: clip,
+                requiredSourceWindow: sourceWindow,
                 context: context.mix,
                 environment: &environment,
-                nestingDepth: nestingDepth
+                nestingDepth: nestingDepth,
+                renderPath: renderPath
             )
             try validateTailSourceDelivery(
                 clip: clip,
@@ -108,6 +120,7 @@ extension OfflineAudioMixer {
         intersection: Range<Int>
     ) throws {
         for outputFrame in intersection {
+            try context.mix.checkCancellation(atFrame: outputFrame)
             let renderTime = try renderTime(
                 rangeStart: context.mix.range.start,
                 outputFrame: outputFrame,
@@ -209,10 +222,11 @@ extension OfflineAudioMixer {
             format: context.mix.format,
             originSourceFrame: mapping.originSourceFrame
         )
-        return mixClipUnitRateIntegerSource(
+        return try mixClipUnitRateIntegerSource(
             request: request,
             into: &output,
-            duckingMultipliers: context.duckingMultipliers
+            duckingMultipliers: context.duckingMultipliers,
+            cancellationCheck: context.mix.cancellationCheck
         )
     }
 
@@ -358,8 +372,9 @@ extension OfflineAudioMixer {
     static func mixClipUnitRateIntegerSource(
         request: OfflineUnitRateMixRequest,
         into output: inout [Float],
-        duckingMultipliers: [Double]?
-    ) -> Bool {
+        duckingMultipliers: [Double]?,
+        cancellationCheck: AudioRenderCancellationCheck = {}
+    ) throws -> Bool {
         let source = request.source
         let intersection = request.intersection
         let plan = request.plan
@@ -372,27 +387,32 @@ extension OfflineAudioMixer {
         }
 
         if sourceChannels == outputChannels {
-            mixMatchingChannelUnitRate(
+            try mixMatchingChannelUnitRate(
                 request: request,
                 into: &output,
                 localOrigin: localOrigin,
-                duckingMultipliers: duckingMultipliers
+                duckingMultipliers: duckingMultipliers,
+                cancellationCheck: cancellationCheck
             )
             return true
         }
 
         if sourceChannels == 1 {
-            mixMonoSourceUnitRate(
+            try mixMonoSourceUnitRate(
                 request: request,
                 into: &output,
                 localOrigin: localOrigin,
-                duckingMultipliers: duckingMultipliers
+                duckingMultipliers: duckingMultipliers,
+                cancellationCheck: cancellationCheck
             )
             return true
         }
 
         // N→1 / 5.1→stereo / etc.: same float order via mappedSourceSample at integer frames.
         for (offset, outputFrame) in intersection.enumerated() {
+            if outputFrame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let sourceFrame = Double(request.originSourceFrame + offset)
             let gainF = floatGain(
                 baseGain: plan.baseGain,
@@ -414,13 +434,17 @@ extension OfflineAudioMixer {
         request: OfflineUnitRateMixRequest,
         into output: inout [Float],
         localOrigin: Int,
-        duckingMultipliers: [Double]?
-    ) {
+        duckingMultipliers: [Double]?,
+        cancellationCheck: AudioRenderCancellationCheck = {}
+    ) throws {
         let channelCount = request.format.channelCount
         let plan = request.plan
         var outputIndex = request.intersection.lowerBound * channelCount
         var sourceIndex = localOrigin * channelCount
         for outputFrame in request.intersection {
+            if outputFrame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let gainF = floatGain(
                 baseGain: plan.baseGain,
                 ducking: duckingMultipliers,
@@ -440,13 +464,17 @@ extension OfflineAudioMixer {
         request: OfflineUnitRateMixRequest,
         into output: inout [Float],
         localOrigin: Int,
-        duckingMultipliers: [Double]?
-    ) {
+        duckingMultipliers: [Double]?,
+        cancellationCheck: AudioRenderCancellationCheck = {}
+    ) throws {
         let outputChannels = request.format.channelCount
         let plan = request.plan
         var outputIndex = request.intersection.lowerBound * outputChannels
         var sourceIndex = localOrigin
         for outputFrame in request.intersection {
+            if outputFrame & 1_023 == 0 {
+                try cancellationCheck()
+            }
             let gainF = floatGain(
                 baseGain: plan.baseGain,
                 ducking: duckingMultipliers,

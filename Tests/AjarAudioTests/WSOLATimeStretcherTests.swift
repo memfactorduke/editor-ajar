@@ -177,6 +177,63 @@ final class WSOLATimeStretcherTests: XCTestCase {
         }
     }
 
+    func testFRSPD001WorkingSetEstimateAccountsForEverySimultaneouslyLiveArray() throws {
+        // 1,000 stereo input frames at 2x produce 500 output frames. At 2 kHz the
+        // analysis window is 40 frames, so overlap-add retains 540 padded frames.
+        // input Float: 8,000; mono Double: 8,000; Hann Double: 320;
+        // OLA Double: 8,640; window sums Double: 4,320; output Float: 4,000.
+        XCTAssertEqual(
+            try WSOLATimeStretcher.estimatedWorkingSetByteCount(
+                inputFrameCount: 1_000,
+                channelCount: 2,
+                sampleRate: 2_000,
+                speed: try RationalValue(numerator: 2, denominator: 1)
+            ),
+            33_280
+        )
+    }
+
+    func testFRSPD001WorkingSetLimitRefusesWithoutAllocatingTheClaimedInput() throws {
+        let inputFrameCount = (WSOLATimeStretcher.maximumWorkingSetByteCount / 4) + 1
+
+        XCTAssertThrowsError(
+            try WSOLATimeStretcher.validateWorkingSet(
+                inputFrameCount: inputFrameCount,
+                channelCount: 1,
+                sampleRate: 48_000,
+                speed: .one
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WSOLATimeStretchError,
+                .workingSetLimitExceeded(
+                    estimatedByteCount: WSOLATimeStretcher.maximumWorkingSetByteCount + 4,
+                    maximumByteCount: WSOLATimeStretcher.maximumWorkingSetByteCount
+                )
+            )
+        }
+    }
+
+    func testFRSPD001WorkingSetEstimateOverflowIsTyped() {
+        XCTAssertThrowsError(
+            try WSOLATimeStretcher.estimatedWorkingSetByteCount(
+                inputFrameCount: Int.max,
+                channelCount: 2,
+                sampleRate: 48_000,
+                speed: .one
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WSOLATimeStretchError,
+                .workingSetByteCountOverflow(
+                    inputFrameCount: Int.max,
+                    channelCount: 2,
+                    speed: .one
+                )
+            )
+        }
+    }
+
     func testFRSPD001AnalysisWindowIs960FramesAt48kHz() {
         XCTAssertEqual(WSOLATimeStretcher.analysisWindowFrameCount(sampleRate: 48_000), 960)
         XCTAssertEqual(WSOLATimeStretcher.synthesisHopFrameCount(sampleRate: 48_000), 480)

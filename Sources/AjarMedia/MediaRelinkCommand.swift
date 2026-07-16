@@ -189,6 +189,7 @@ public struct MediaRelinkCommand {
         } catch let error as FFmpegTranscodeError {
             throw MediaRelinkCommandError.retranscodeFailed(error)
         }
+        let playableContentHash = try preparedContentHash(at: result.outputURL)
         let bookmark = try preparedBookmark(at: result.outputURL)
         let replacement = MediaRef(
             id: media.id,
@@ -200,7 +201,8 @@ public struct MediaRelinkCommand {
             proxyState: .none,
             transcodeProvenance: MediaTranscodeProvenance(
                 originalSourceURL: originalURL,
-                originalContentHash: originalHash
+                originalContentHash: originalHash,
+                playableContentHash: playableContentHash
             )
         )
         return .ready(

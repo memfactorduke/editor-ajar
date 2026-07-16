@@ -29,6 +29,35 @@ final class CompoundEditCommandTests: XCTestCase {
         )
         XCTAssertEqual(videoTrack.items.count, 2)
         XCTAssertEqual(audioTrack.items.count, 2)
+        let leftVideo = try requiredClip(
+            fixture.videoClipID,
+            trackID: fixture.videoTrackID,
+            in: after,
+            sequenceID: fixture.sequenceID
+        )
+        let leftAudio = try requiredClip(
+            fixture.audioClipID,
+            trackID: fixture.audioTrackID,
+            in: after,
+            sequenceID: fixture.sequenceID
+        )
+        let rightVideo = try requiredClip(
+            try editUUID(51),
+            trackID: fixture.videoTrackID,
+            in: after,
+            sequenceID: fixture.sequenceID
+        )
+        let rightAudio = try requiredClip(
+            try editUUID(52),
+            trackID: fixture.audioTrackID,
+            in: after,
+            sequenceID: fixture.sequenceID
+        )
+        XCTAssertEqual(leftVideo.linkGroupID, fixture.linkGroupID)
+        XCTAssertEqual(leftAudio.linkGroupID, fixture.linkGroupID)
+        XCTAssertEqual(rightVideo.linkGroupID, rightAudio.linkGroupID)
+        XCTAssertEqual(rightVideo.linkGroupID, try editUUID(53))
+        XCTAssertNotEqual(rightVideo.linkGroupID, fixture.linkGroupID)
 
         // One undo returns the exact prior project.
         let undone = try XCTUnwrap(history.undo())
@@ -235,20 +264,36 @@ final class CompoundEditCommandTests: XCTestCase {
         fixture: LinkedEditFixture,
         cutFrame: Int64
     ) throws -> EditCommand {
-        .transaction([
+        let rightVideoClipID = try editUUID(Int(cutFrame) * 10 + 1)
+        let rightAudioClipID = try editUUID(Int(cutFrame) * 10 + 2)
+        return .transaction([
             .bladeClip(
                 sequenceID: fixture.sequenceID,
                 trackID: fixture.videoTrackID,
                 clipID: fixture.videoClipID,
                 atTime: try editTime(cutFrame),
-                rightClipID: try editUUID(Int(cutFrame) * 10 + 1)
+                rightClipID: rightVideoClipID
             ),
             .bladeClip(
                 sequenceID: fixture.sequenceID,
                 trackID: fixture.audioTrackID,
                 clipID: fixture.audioClipID,
                 atTime: try editTime(cutFrame),
-                rightClipID: try editUUID(Int(cutFrame) * 10 + 2)
+                rightClipID: rightAudioClipID
+            ),
+            .linkClips(
+                sequenceID: fixture.sequenceID,
+                linkGroupID: try editUUID(Int(cutFrame) * 10 + 3),
+                clips: [
+                    ClipReference(
+                        trackID: fixture.videoTrackID,
+                        clipID: rightVideoClipID
+                    ),
+                    ClipReference(
+                        trackID: fixture.audioTrackID,
+                        clipID: rightAudioClipID
+                    )
+                ]
             )
         ])
     }

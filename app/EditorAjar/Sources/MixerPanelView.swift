@@ -11,6 +11,25 @@ struct MixerPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            if let meterError = model.mixerMeterError {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    Text(
+                        "\(AppString.localized("mixer.meter.error", "Meters unavailable")): "
+                            + meterError.description
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(AppString.localized("mixer.meter.retry", "Retry")) {
+                        model.refreshMixerMeters()
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .accessibilityIdentifier("Mixer Meter Error")
+            }
             if let sequence = model.activeSequence {
                 ScrollView(.horizontal, showsIndicators: true) {
                     HStack(alignment: .bottom, spacing: 14) {

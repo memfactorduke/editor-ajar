@@ -114,7 +114,11 @@ final class EditorAjarExportQueueController: ObservableObject {
                 frameRate: project.settings.frameRate,
                 colorSpace: colorSpace
             ),
-            audio: nil
+            audio: ExportAudioSettings(
+                codec: .linearPCM,
+                sampleRate: project.settings.audioSampleRate,
+                channelCount: 2
+            )
         )
     }
 
@@ -134,7 +138,14 @@ final class EditorAjarExportQueueController: ObservableObject {
                     id: jobID,
                     request: request,
                     frameProvider: frameProvider,
-                    audioSourceProvider: nil,
+                    audioSourceProviderFactory: { audioRange in
+                        try await EditorAjarProjectAudioSourceProvider.prepare(
+                            project: request.project,
+                            sequence: request.sequence,
+                            range: audioRange,
+                            outputSampleRate: request.settings.audio?.sampleRate
+                        )
+                    },
                     onFrameProgress: onProgress
                 )
             } catch {
@@ -144,7 +155,14 @@ final class EditorAjarExportQueueController: ObservableObject {
                     frameProvider: FailingExportFrameProvider(
                         reason: String(describing: error)
                     ),
-                    audioSourceProvider: nil,
+                    audioSourceProviderFactory: { audioRange in
+                        try await EditorAjarProjectAudioSourceProvider.prepare(
+                            project: request.project,
+                            sequence: request.sequence,
+                            range: audioRange,
+                            outputSampleRate: request.settings.audio?.sampleRate
+                        )
+                    },
                     onFrameProgress: onProgress
                 )
             }

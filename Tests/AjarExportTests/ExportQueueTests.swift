@@ -375,9 +375,14 @@ private final class TrackingLifecycleWriter: ExportWriting {
 
     func appendAudioIfReady(
         _ buffer: RenderedAudioBuffer,
-        frames: Range<Int>
+        frames: Range<Int>,
+        presentationFrameOffset: Int
     ) throws -> Bool {
-        try inner.appendAudioIfReady(buffer, frames: frames)
+        try inner.appendAudioIfReady(
+            buffer,
+            frames: frames,
+            presentationFrameOffset: presentationFrameOffset
+        )
     }
 
     func checkForFailure() throws {

@@ -147,6 +147,124 @@ final class AudioMixUITests: XCTestCase {
         XCTAssertNotNil(snapshot.masterTruePeak)
     }
 
+    func testFRAUD003MeterPreparationFailurePublishesTypedErrorNotSilence() async throws {
+        let fixture = try makeAudioProjectFixture(clipCount: 1)
+        let project = fixture.project
+        let sequence = try XCTUnwrap(project.sequences.first)
+        let failed = expectation(description: "typed meter preparation failure")
+        var publishedError: EditorAjarAudioPipelineError?
+        let publisher = EditorAjarMixerMeterPublisher(
+            publish: { _ in },
+            publishError: { error in
+                guard let error else {
+                    return
+                }
+                publishedError = error
+                failed.fulfill()
+            }
+        )
+
+        publisher.requestMeter(
+            project: project,
+            sequence: sequence,
+            playheadFrame: 0,
+            sourceProviderFactory: { _, _, _ in
+                throw MeterPreparationTestError.unreadable
+            },
+            masterGainLinear: 1
+        )
+        await fulfillment(of: [failed], timeout: 2)
+
+        XCTAssertEqual(
+            publishedError,
+            .sourcePreparationFailed("unreadable")
+        )
+    }
+
+    func testFRAUD003MeterRequestsCancelActiveWorkAndRetainOnlyLatestPendingAnalysis() async throws {
+        let fixture = try makeAudioProjectFixture(clipCount: 1)
+        let sequence = try XCTUnwrap(fixture.project.sequences.first)
+        let probe = MeterAnalysisCancellationProbe()
+        let publishedLatest = expectation(description: "latest meter snapshot published")
+        var publishedSnapshot: MixerMeterSnapshot?
+        let publisher = EditorAjarMixerMeterPublisher(
+            publish: { snapshot in
+                guard snapshot.masterTruePeak == 100 else {
+                    return
+                }
+                publishedSnapshot = snapshot
+                publishedLatest.fulfill()
+            },
+            publishError: { error in
+                if let error {
+                    XCTFail("Cancelled stale analysis must not publish an error: \(error)")
+                }
+            },
+            measureSnapshot: { _, _, playheadFrame, _, _, cancellation in
+                try probe.measure(
+                    playheadFrame: playheadFrame,
+                    cancellationCheck: { try cancellation.check() }
+                )
+            }
+        )
+        let provider = InMemoryAudioSourceProvider(sources: [:])
+
+        publisher.requestMeter(
+            project: fixture.project,
+            sequence: sequence,
+            playheadFrame: 0,
+            sourceProvider: provider,
+            masterGainLinear: 1
+        )
+        for _ in 0..<200 where !probe.didStartFirstAnalysis {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertTrue(probe.didStartFirstAnalysis)
+
+        for frame in 1...100 {
+            publisher.requestMeter(
+                project: fixture.project,
+                sequence: sequence,
+                playheadFrame: Int64(frame),
+                sourceProvider: provider,
+                masterGainLinear: 1
+            )
+        }
+
+        await fulfillment(of: [publishedLatest], timeout: 2)
+        XCTAssertTrue(probe.didCancelFirstAnalysis)
+        XCTAssertEqual(probe.invocationCount, 2, "Only the active and newest request may run")
+        XCTAssertLessThanOrEqual(
+            publisher.maximumRetainedAnalysisCountForTesting,
+            2,
+            "The scheduler must retain at most one active and one latest pending request"
+        )
+        XCTAssertEqual(publishedSnapshot?.masterTruePeak, 100)
+    }
+
+    func testNFRSTAB001SourcePreparationBudgetFailsBeforeAggregateRetentionGrowsUnbounded() {
+        let mediaID = UUID()
+
+        XCTAssertThrowsError(
+            try EditorAjarProjectAudioSourceProvider.validatedPreparedByteTotal(
+                currentBytes: EditorAjarProjectAudioSourceProvider.maximumPreparedSourceBytes,
+                frameCount: 1,
+                channelCount: 1,
+                mediaID: mediaID
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? EditorAjarAudioSourcePreparationError,
+                .memoryBudgetExceeded(
+                    mediaID: mediaID,
+                    preparedBytes: EditorAjarProjectAudioSourceProvider.maximumPreparedSourceBytes,
+                    requestedBytes: MemoryLayout<Float>.size,
+                    maximumBytes: EditorAjarProjectAudioSourceProvider.maximumPreparedSourceBytes
+                )
+            )
+        }
+    }
+
     func testFRAUD003MasterGainScalesMasterMeterClipIndicator() throws {
         let fixture = try makeAudioProjectFixture(clipCount: 1)
         let loaded = try loadAudioFixture(project: fixture.project, named: "MasterMeter.ajar")
@@ -494,5 +612,60 @@ final class AudioMixUITests: XCTestCase {
             }
         }
         return try XCTUnwrap(nil)
+    }
+}
+
+private enum MeterPreparationTestError: Error {
+    case unreadable
+}
+
+private final class MeterAnalysisCancellationProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var invocationCountValue = 0
+    private var didStartFirstAnalysisValue = false
+    private var didCancelFirstAnalysisValue = false
+
+    var invocationCount: Int {
+        lock.withLock { invocationCountValue }
+    }
+
+    var didStartFirstAnalysis: Bool {
+        lock.withLock { didStartFirstAnalysisValue }
+    }
+
+    var didCancelFirstAnalysis: Bool {
+        lock.withLock { didCancelFirstAnalysisValue }
+    }
+
+    func measure(
+        playheadFrame: Int64,
+        cancellationCheck: @escaping AudioRenderCancellationCheck
+    ) throws -> MixerMeterSnapshot {
+        let invocation = lock.withLock { () -> Int in
+            invocationCountValue += 1
+            if invocationCountValue == 1 {
+                didStartFirstAnalysisValue = true
+            }
+            return invocationCountValue
+        }
+        if invocation == 1 {
+            while true {
+                do {
+                    try cancellationCheck()
+                } catch {
+                    lock.withLock {
+                        didCancelFirstAnalysisValue = true
+                    }
+                    throw error
+                }
+                Thread.sleep(forTimeInterval: 0.000_5)
+            }
+        }
+        try cancellationCheck()
+        return MixerMeterSnapshot(
+            trackLevels: [:],
+            mixLevels: [],
+            masterTruePeak: Double(playheadFrame)
+        )
     }
 }

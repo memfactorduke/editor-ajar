@@ -8,6 +8,7 @@ import XCTest
 
 @testable import AjarExport
 
+// swiftlint:disable:next type_body_length
 final class ExportWriterLifecycleTests: XCTestCase {
     func testFREXP001StartAppendFinalizePublishesOnlyCompletedFile() async throws {
         let fixture = try LifecycleFixture(frameCount: 3)
@@ -233,6 +234,146 @@ final class ExportWriterLifecycleTests: XCTestCase {
         XCTAssertEqual(writer.appendedAudioRanges, [0..<4_096, 4_096..<4_800])
     }
 
+    func testFREXP002AsyncAudioProviderFactoryIsAwaitedBeforeWriting() async throws {
+        let fixture = try LifecycleFixture(frameCount: 3, includeAudio: true)
+        let writer = LifecycleWriter(outputURL: fixture.destinationURL)
+        writer.audioReady = true
+        let probe = AudioProviderFactoryProbe()
+        let session = fixture.session(
+            frameProvider: LifecycleFrameProvider(),
+            audioSourceProviderFactory: { _ in
+                await probe.recordInvocation()
+                return InMemoryAudioSourceProvider(sources: [:])
+            },
+            writerFactory: { _, _ in writer }
+        )
+
+        let result = try await session.run()
+        let invocationCount = await probe.invocationCount
+
+        XCTAssertEqual(invocationCount, 1)
+        XCTAssertEqual(result.audioFrameCount, 4_800)
+        XCTAssertEqual(writer.appendedAudioRanges, [0..<4_096, 4_096..<4_800])
+        XCTAssertTrue(writer.didStart)
+    }
+
+    func testFREXP002LongAudioPreparesAndRendersOnlyBoundedContiguousWindows() async throws {
+        let duration = try RationalTime(value: 5, timescale: 2)
+        let fixture = try LifecycleFixture(
+            frameCount: 75,
+            includeAudio: true,
+            duration: duration
+        )
+        let writer = LifecycleWriter(outputURL: fixture.destinationURL)
+        writer.audioReady = true
+        let probe = AudioProviderRangeProbe()
+        let session = fixture.session(
+            frameProvider: LifecycleFrameProvider(),
+            audioSourceProviderFactory: { range in
+                await probe.record(range)
+                return InMemoryAudioSourceProvider(sources: [:])
+            },
+            writerFactory: { _, _ in writer }
+        )
+
+        let result = try await session.run()
+        let ranges = await probe.ranges
+
+        XCTAssertEqual(result.audioFrameCount, 120_000)
+        XCTAssertEqual(ranges.count, 3)
+        XCTAssertEqual(ranges.map(\.start), [
+            .zero,
+            try RationalTime(value: 1, timescale: 1),
+            try RationalTime(value: 2, timescale: 1)
+        ])
+        XCTAssertEqual(ranges.map(\.duration), [
+            try RationalTime(value: 1, timescale: 1),
+            try RationalTime(value: 1, timescale: 1),
+            try RationalTime(value: 1, timescale: 2)
+        ])
+        XCTAssertLessThanOrEqual(writer.maximumAudioBufferFrameCount, 48_000)
+        XCTAssertEqual(writer.appendedAudioRanges.first?.lowerBound, 0)
+        XCTAssertEqual(writer.appendedAudioRanges.last?.upperBound, result.audioFrameCount)
+        for pair in zip(writer.appendedAudioRanges, writer.appendedAudioRanges.dropFirst()) {
+            XCTAssertEqual(pair.0.upperBound, pair.1.lowerBound)
+        }
+    }
+
+    func testFREXP005CancellationInterruptsAsyncAudioProviderPreparation() async throws {
+        let fixture = try LifecycleFixture(frameCount: 3, includeAudio: true)
+        let writer = LifecycleWriter(outputURL: fixture.destinationURL)
+        let factoryStarted = expectation(description: "audio provider factory started")
+        let session = fixture.session(
+            frameProvider: LifecycleFrameProvider(),
+            audioSourceProviderFactory: { _ in
+                factoryStarted.fulfill()
+                try await Task<Never, Never>.sleep(nanoseconds: 60_000_000_000)
+                return InMemoryAudioSourceProvider(sources: [:])
+            },
+            writerFactory: { _, _ in writer }
+        )
+
+        let runTask = Task { try await session.run() }
+        await fulfillment(of: [factoryStarted], timeout: 2)
+        session.cancel()
+
+        do {
+            _ = try await runTask.value
+            XCTFail("expected cancellation")
+        } catch let error as ExportError {
+            XCTAssertEqual(error, .cancelled)
+        }
+
+        XCTAssertEqual(session.state, .cancelled)
+        XCTAssertFalse(writer.didStart)
+        XCTAssertTrue(writer.didCancel)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destinationURL.path))
+        try fixture.assertNoPartialFiles()
+    }
+
+    func testFREXP005CancellationInterruptsSynchronousCPUMixPromptly() async throws {
+        let sampleRate = 192_000
+        let fixture = try LifecycleFixture(
+            frameCount: 30,
+            includeAudio: true,
+            duration: try RationalTime(value: 1, timescale: 1),
+            audioSampleRate: sampleRate,
+            audioTrackCount: 500
+        )
+        let writer = LifecycleWriter(outputURL: fixture.destinationURL)
+        let mixStarted = expectation(description: "synchronous mixer acquired its source")
+        let source = try AudioSourceBuffer(
+            format: AudioRenderFormat(sampleRate: sampleRate, channelCount: 1),
+            frameCount: sampleRate,
+            samples: [Float](repeating: 0.25, count: sampleRate)
+        )
+        let provider = MixStartSignallingProvider(source: source, started: mixStarted)
+        let session = fixture.session(
+            frameProvider: LifecycleFrameProvider(),
+            audioSourceProvider: provider,
+            writerFactory: { _, _ in writer }
+        )
+
+        let runTask = Task { try await session.run() }
+        await fulfillment(of: [mixStarted], timeout: 2)
+
+        let cancelInstant = ContinuousClock.now
+        session.cancel()
+        do {
+            _ = try await runTask.value
+            XCTFail("expected cancellation")
+        } catch let error as ExportError {
+            XCTAssertEqual(error, .cancelled)
+        }
+        let cancelLatency = cancelInstant.duration(to: .now)
+
+        XCTAssertLessThan(cancelLatency, .seconds(1))
+        XCTAssertEqual(session.state, .cancelled)
+        XCTAssertFalse(writer.didStart)
+        XCTAssertTrue(writer.didCancel)
+        try fixture.assertNoPartialFiles()
+    }
+
     func testFREXP001FinalizeUsesTheExactRequestedNonFrameAlignedEndTime() async throws {
         let frameRate = try FrameRate(frames: 30_000, per: 1_001)
         let duration = try RationalTime(value: 1, timescale: 10)
@@ -290,5 +431,21 @@ final class ExportWriterLifecycleTests: XCTestCase {
         let lastPTS = try ExportTimeMapping.presentationTime(forFrame: 11, frameRate: frameRate)
         XCTAssertEqual(lastPTS, CMTime(value: 11, timescale: 30))
         XCTAssertTrue(CMTimeCompare(lastPTS, end) < 0)
+    }
+}
+
+private actor AudioProviderFactoryProbe {
+    private(set) var invocationCount = 0
+
+    func recordInvocation() {
+        invocationCount += 1
+    }
+}
+
+private actor AudioProviderRangeProbe {
+    private(set) var ranges: [TimeRange] = []
+
+    func record(_ range: TimeRange) {
+        ranges.append(range)
     }
 }

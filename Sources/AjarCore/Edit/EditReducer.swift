@@ -59,6 +59,12 @@ public func apply(_ command: EditCommand, to project: Project) throws -> Project
 public enum EditReducer {
     /// Applies `command` to `project`, returning a new validated project.
     public static func apply(_ command: EditCommand, to project: Project) throws -> Project {
-        try validated(try applyUnchecked(command, to: project))
+        let editedProject = try applyUnchecked(command, to: project)
+        try validateLinkedTopologyEdit(
+            command,
+            from: project,
+            to: editedProject
+        )
+        return try validated(editedProject)
     }
 }
