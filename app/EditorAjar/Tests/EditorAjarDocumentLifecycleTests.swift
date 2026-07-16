@@ -751,6 +751,20 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         let previousMediaBytes = try Data(
             contentsOf: packageURL.appendingPathComponent("media.json")
         )
+        let previousRecoveryBytes = try Data(
+            contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")
+        )
+        let previousVersionURLs = try EditorAjarDocumentStore().versionSnapshotURLs(
+            in: packageURL
+        )
+        let previousVersionURL = try XCTUnwrap(previousVersionURLs.first)
+        XCTAssertEqual(previousVersionURLs.count, 1)
+        let previousVersionProjectBytes = try Data(
+            contentsOf: previousVersionURL.appendingPathComponent("project.json")
+        )
+        let previousVersionMediaBytes = try Data(
+            contentsOf: previousVersionURL.appendingPathComponent("media.json")
+        )
 
         let projectWithoutClip = try apply(
             .removeClip(sequenceID: sequence.id, trackID: track.id, clipID: clip.id),
@@ -764,15 +778,12 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             sequences: projectWithoutClip.sequences,
             looks: projectWithoutClip.looks
         )
-        let attemptedPackage = try AjarProjectCodec.encode(
-            attemptedProject,
-            openMode: .editable
-        )
         var restorationStarted = false
         var reportedReason: String?
         let synchronizationEvents = InPlaceSaveSynchronizationEvents(
-            failingFileURL: packageURL.appendingPathComponent("project.json"),
-            shouldFailFile: { restorationStarted }
+            failingDirectoryURL: packageURL,
+            directoryFailureMatchOffset: 3,
+            shouldFailDirectory: { restorationStarted }
         )
         let store = EditorAjarDocumentStore(
             saveDidPublishContents: {
@@ -805,7 +816,7 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             reportedReason = reason
         }
 
-        XCTAssertEqual(synchronizationEvents.remainingFileFailures, 0)
+        XCTAssertEqual(synchronizationEvents.remainingDirectoryFailures, 0)
         let retainedBackups = try fixture.stagingPackages()
         let retainedBackupURL = try XCTUnwrap(retainedBackups.first)
         XCTAssertEqual(retainedBackups.count, 1)
@@ -818,22 +829,76 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             try Data(contentsOf: retainedBackupURL.appendingPathComponent("media.json")),
             previousMediaBytes
         )
+        XCTAssertEqual(
+            try Data(
+                contentsOf: retainedBackupURL.appendingPathComponent("recovery/snapshot.json")
+            ),
+            previousRecoveryBytes
+        )
+        let retainedVersions = try EditorAjarDocumentStore().versionSnapshotURLs(
+            in: retainedBackupURL
+        )
+        let retainedVersionURL = try XCTUnwrap(retainedVersions.first)
+        XCTAssertEqual(
+            retainedVersions.map(\.lastPathComponent),
+            previousVersionURLs.map(\.lastPathComponent)
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: retainedVersionURL.appendingPathComponent("project.json")),
+            previousVersionProjectBytes
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: retainedVersionURL.appendingPathComponent("media.json")),
+            previousVersionMediaBytes
+        )
+        let rollbackRecoveryDirectoryIndex = try eventIndex(
+            in: synchronizationEvents.values,
+            kind: .directory,
+            pathSuffix: "/\(retainedBackupURL.lastPathComponent)/recovery"
+        )
+        for name in [
+            "snapshot.json",
+            "manifest.json",
+            "edit-journal.jsonl",
+            "save-transaction.json",
+        ] {
+            let fileIndex = try eventIndex(
+                in: synchronizationEvents.values,
+                kind: .file,
+                pathSuffix: "/\(retainedBackupURL.lastPathComponent)/recovery/\(name)"
+            )
+            XCTAssertLessThan(fileIndex, rollbackRecoveryDirectoryIndex)
+        }
+        let rollbackRootIndex = try XCTUnwrap(
+            synchronizationEvents.values.indices.first { index in
+                guard index > rollbackRecoveryDirectoryIndex,
+                    case .directory(let path) = synchronizationEvents.values[index]
+                else {
+                    return false
+                }
+                return path.hasSuffix("/\(retainedBackupURL.lastPathComponent)")
+            }
+        )
+        let failedDestinationRootIndex = try XCTUnwrap(
+            synchronizationEvents.values.lastIndex(of: .directory(packageURL.path))
+        )
+        XCTAssertLessThan(rollbackRecoveryDirectoryIndex, rollbackRootIndex)
+        XCTAssertLessThan(rollbackRootIndex, failedDestinationRootIndex)
 
-        // Restoration replaced project.json before its injected barrier failed, but media.json is
-        // still the newly published generation. The retained backup is therefore essential.
+        // The failure is injected after versions and recovery were restored from disposable copies.
+        // The original rollback package must still be complete even though its final root barrier
+        // failed and the published package's durability is therefore not guaranteed.
         XCTAssertEqual(
             try Data(contentsOf: packageURL.appendingPathComponent("project.json")),
             previousProjectBytes
         )
         XCTAssertEqual(
             try Data(contentsOf: packageURL.appendingPathComponent("media.json")),
-            attemptedPackage.mediaJSON
+            previousMediaBytes
         )
-        XCTAssertThrowsError(
-            try AjarProjectCodec.decode(
-                projectJSON: previousProjectBytes,
-                mediaJSON: attemptedPackage.mediaJSON
-            )
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("recovery/snapshot.json")),
+            previousRecoveryBytes
         )
     }
 
@@ -1029,20 +1094,31 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: previousJournalURL.path))
         XCTAssertEqual(try Data(contentsOf: sidecarURL), Data("sidecar".utf8))
         XCTAssertEqual(try Data(contentsOf: nestedSidecarURL), Data("nested sidecar".utf8))
-        let sidecarSynchronizations = synchronizationEvents.values.filter { event in
-            guard case let .file(path) = event else {
-                return false
+        let sidecarSynchronizationPaths: [String] = synchronizationEvents.values.compactMap {
+            event -> String? in
+            guard case let .file(path) = event,
+                  path.hasSuffix("/recovery/session.bin")
+            else {
+                return nil
             }
-            return path.hasSuffix("/recovery/session.bin")
+            return path
         }
-        let nestedSidecarSynchronizations = synchronizationEvents.values.filter { event in
-            guard case let .file(path) = event else {
-                return false
+        let nestedSidecarSynchronizationPaths: [String] = synchronizationEvents.values.compactMap {
+            event -> String? in
+            guard case let .file(path) = event,
+                  path.hasSuffix("/recovery/plugins/session.bin")
+            else {
+                return nil
             }
-            return path.hasSuffix("/recovery/plugins/session.bin")
+            return path
         }
-        XCTAssertEqual(sidecarSynchronizations.count, 2)
-        XCTAssertEqual(nestedSidecarSynchronizations.count, 2)
+        // The staged replacement, immutable rollback backup, and disposable restoration copy must
+        // each be synchronized independently. Distinct paths prove restoration did not consume the
+        // retained backup while making the destination durable.
+        XCTAssertEqual(sidecarSynchronizationPaths.count, 3)
+        XCTAssertEqual(Set(sidecarSynchronizationPaths).count, 3)
+        XCTAssertEqual(nestedSidecarSynchronizationPaths.count, 3)
+        XCTAssertEqual(Set(nestedSidecarSynchronizationPaths).count, 3)
         XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
 
@@ -1785,21 +1861,19 @@ private final class InPlaceSaveSynchronizationEvents {
 
     var values: [Event] = []
     let failingDirectoryURL: URL?
-    let failingFileURL: URL?
-    let shouldFailFile: () -> Bool
+    let shouldFailDirectory: () -> Bool
+    var remainingDirectoryMatchesBeforeFailure: Int
     var remainingDirectoryFailures: Int
-    var remainingFileFailures: Int
 
     init(
         failingDirectoryURL: URL? = nil,
-        failingFileURL: URL? = nil,
-        shouldFailFile: @escaping () -> Bool = { true }
+        directoryFailureMatchOffset: Int = 0,
+        shouldFailDirectory: @escaping () -> Bool = { true }
     ) {
         self.failingDirectoryURL = failingDirectoryURL
-        self.failingFileURL = failingFileURL
-        self.shouldFailFile = shouldFailFile
+        self.shouldFailDirectory = shouldFailDirectory
+        remainingDirectoryMatchesBeforeFailure = directoryFailureMatchOffset
         remainingDirectoryFailures = failingDirectoryURL == nil ? 0 : 1
-        remainingFileFailures = failingFileURL == nil ? 0 : 1
     }
 }
 
@@ -1808,24 +1882,18 @@ private struct RecordingInPlaceSaveSynchronizer: EditorAjarSaveAsSynchronizing {
 
     func synchronizeFile(at url: URL) throws {
         events.values.append(.file(url.path))
-        if url.standardizedFileURL == events.failingFileURL?.standardizedFileURL,
-            events.remainingFileFailures > 0,
-            events.shouldFailFile()
-        {
-            events.remainingFileFailures -= 1
-            throw EditorAjarDocumentStoreError.saveAsSynchronization(
-                path: url.path,
-                operation: "injected in-place Save file synchronization failure",
-                code: EIO
-            )
-        }
     }
 
     func synchronizeDirectory(at url: URL, descriptor _: Int32?) throws {
         events.values.append(.directory(url.path))
         if url.standardizedFileURL == events.failingDirectoryURL?.standardizedFileURL,
-            events.remainingDirectoryFailures > 0
+            events.remainingDirectoryFailures > 0,
+            events.shouldFailDirectory()
         {
+            if events.remainingDirectoryMatchesBeforeFailure > 0 {
+                events.remainingDirectoryMatchesBeforeFailure -= 1
+                return
+            }
             events.remainingDirectoryFailures -= 1
             throw EditorAjarDocumentStoreError.saveAsSynchronization(
                 path: url.path,

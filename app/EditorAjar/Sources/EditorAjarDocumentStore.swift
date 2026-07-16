@@ -1853,9 +1853,10 @@ private extension EditorAjarDocumentStore {
     }
 
     func restoreCanonicalContents(from rollbackURL: URL, to destinationURL: URL) throws {
-        // The rollback copy itself is newly written data. Make it durable before any atomic
-        // replacement consumes/moves its files and directories.
-        try synchronizeSaveAsPackage(at: rollbackURL)
+        // The rollback copy itself is newly written data. Make that immutable backup durable;
+        // directory restoration below publishes disposable copies so a later failure cannot
+        // consume the only complete pre-Save generation.
+        try synchronizeRollbackPackage(at: rollbackURL)
         for name in ["project.json", "media.json"] {
             let backup = rollbackURL.appendingPathComponent(name)
             if fileManager.fileExists(atPath: backup.path) {
@@ -1889,15 +1890,26 @@ private extension EditorAjarDocumentStore {
     /// Restores only recovery when canonical publication never began, leaving valid saved files
     /// and their metadata untouched. The copied backup is fully durable before its atomic rename.
     func restoreRecoveryContents(from rollbackURL: URL, to destinationURL: URL) throws {
+        try synchronizeRollbackPackage(at: rollbackURL)
         let backupRecoveryURL = rollbackURL.appendingPathComponent("recovery", isDirectory: true)
         if fileManager.fileExists(atPath: backupRecoveryURL.path) {
+            let restorationURL = makeStagingURL(for: destinationURL)
+            try fileManager.createDirectory(at: restorationURL, withIntermediateDirectories: true)
+            defer {
+                try? fileManager.removeItem(at: restorationURL)
+            }
+            let stagedRecoveryURL = restorationURL.appendingPathComponent(
+                "recovery",
+                isDirectory: true
+            )
+            try fileManager.copyItem(at: backupRecoveryURL, to: stagedRecoveryURL)
             try synchronizeRecoveryDirectory(
-                backupRecoveryURL,
+                stagedRecoveryURL,
                 requiringTransactionMarker: false
             )
             try publishStagedDirectory(
                 named: "recovery",
-                from: rollbackURL,
+                from: restorationURL,
                 to: destinationURL
             )
         } else {
@@ -1912,6 +1924,21 @@ private extension EditorAjarDocumentStore {
         try saveAsSynchronizer.synchronizeDirectory(at: destinationURL, descriptor: nil)
     }
 
+    /// Makes the complete immutable pre-Save generation durable before restoration starts.
+    func synchronizeRollbackPackage(at rollbackURL: URL) throws {
+        try synchronizeSaveAsPackage(at: rollbackURL)
+        let backupRecoveryURL = rollbackURL.appendingPathComponent("recovery", isDirectory: true)
+        if fileManager.fileExists(atPath: backupRecoveryURL.path) {
+            try synchronizeRecoveryDirectory(
+                backupRecoveryURL,
+                requiringTransactionMarker: false
+            )
+        }
+        // synchronizeSaveAsPackage crosses the root before recovery; repeat the root afterward so
+        // the retained backup's recovery directory entry is ordered behind all of its contents.
+        try saveAsSynchronizer.synchronizeDirectory(at: rollbackURL, descriptor: nil)
+    }
+
     func restoreStagedDirectory(
         named name: String,
         from rollbackURL: URL,
@@ -1919,7 +1946,15 @@ private extension EditorAjarDocumentStore {
     ) throws {
         let backupURL = rollbackURL.appendingPathComponent(name, isDirectory: true)
         if fileManager.fileExists(atPath: backupURL.path) {
-            try publishStagedDirectory(named: name, from: rollbackURL, to: destinationURL)
+            let restorationURL = makeStagingURL(for: destinationURL)
+            try fileManager.createDirectory(at: restorationURL, withIntermediateDirectories: true)
+            defer {
+                try? fileManager.removeItem(at: restorationURL)
+            }
+            let stagedDirectoryURL = restorationURL.appendingPathComponent(name, isDirectory: true)
+            try fileManager.copyItem(at: backupURL, to: stagedDirectoryURL)
+            try synchronizePackageTree(at: stagedDirectoryURL)
+            try publishStagedDirectory(named: name, from: restorationURL, to: destinationURL)
         } else {
             let destination = destinationURL.appendingPathComponent(name, isDirectory: true)
             if fileManager.fileExists(atPath: destination.path) {
