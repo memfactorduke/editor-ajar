@@ -65,6 +65,32 @@ enum EditorAjarSaveAsCleanupWarning: Equatable {
     case skippedSafely(error: EditorAjarDocumentStoreError)
 }
 
+/// Hashes that identify one complete canonical `project.json` + `media.json` generation.
+private struct EditorAjarCanonicalGeneration: Codable, Equatable, Sendable {
+    let project: ContentHash
+    let media: ContentHash
+}
+
+/// Recovery-side proof for the exact before/after generations of one in-place Save.
+///
+/// The random identifier makes each marker unique even when a no-op Save produces identical
+/// canonical bytes. The hashes are the authority when recognizing an interrupted publication.
+private struct EditorAjarSaveTransactionMarker: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let generationID: UUID
+    let previous: EditorAjarCanonicalGeneration
+    let saved: EditorAjarCanonicalGeneration
+
+    init(previous: EditorAjarCanonicalGeneration, saved: EditorAjarCanonicalGeneration) {
+        schemaVersion = Self.currentSchemaVersion
+        generationID = UUID()
+        self.previous = previous
+        self.saved = saved
+    }
+}
+
 protocol EditorAjarSaveAsSynchronizing {
     func synchronizeFile(at url: URL) throws
     func synchronizeDirectory(at url: URL, descriptor: Int32?) throws
@@ -935,6 +961,7 @@ struct EditorAjarDocumentStore {
     private let fileManager: FileManager
     private let packageMediaSaveAs: EditorAjarPackageMediaSaveAs
     private let saveDidPublishRecovery: () throws -> Void
+    private let saveDidPublishProject: () throws -> Void
     private let saveDidPublishContents: () throws -> Void
     private let saveAsSynchronizer: any EditorAjarSaveAsSynchronizing
     private let saveAsWillPublish: () throws -> Void
@@ -952,6 +979,7 @@ struct EditorAjarDocumentStore {
         mediaFileCopier: any EditorAjarPackageMediaFileCopying =
             EditorAjarDefaultPackageMediaFileCopier(),
         saveDidPublishRecovery: @escaping () throws -> Void = {},
+        saveDidPublishProject: @escaping () throws -> Void = {},
         saveDidPublishContents: @escaping () throws -> Void = {},
         saveAsSynchronizer: any EditorAjarSaveAsSynchronizing =
             EditorAjarDefaultSaveAsSynchronizer(),
@@ -967,6 +995,7 @@ struct EditorAjarDocumentStore {
     ) {
         self.fileManager = fileManager
         self.saveDidPublishRecovery = saveDidPublishRecovery
+        self.saveDidPublishProject = saveDidPublishProject
         self.saveDidPublishContents = saveDidPublishContents
         self.saveAsSynchronizer = saveAsSynchronizer
         self.saveAsWillPublish = saveAsWillPublish
@@ -1311,28 +1340,49 @@ private extension EditorAjarDocumentStore {
     }
 
     /// Recovers the complete staged checkpoint when a crash leaves the top-level canonical pair
-    /// split across two Save generations. At least one canonical file must byte-match the recovery
-    /// envelope, tying this fallback to the recovery-first publication transaction.
+    /// split across two Save generations. Recovery must carry a marker for this exact Save, its
+    /// snapshot must match the marker's complete saved generation, and the canonical pair must be
+    /// one of the states reachable in the recovery -> project -> media publication order.
     func recoverInterruptedSave(at packageURL: URL) throws -> EditorAjarOpenedDocument? {
         let recoverySnapshotURL = packageURL.appendingPathComponent(
             "recovery/snapshot.json"
         )
-        guard fileManager.isReadableFile(atPath: recoverySnapshotURL.path) else {
+        let transactionMarkerURL = packageURL.appendingPathComponent(
+            "recovery/save-transaction.json"
+        )
+        guard fileManager.isReadableFile(atPath: recoverySnapshotURL.path),
+              fileManager.isReadableFile(atPath: transactionMarkerURL.path)
+        else {
             return nil
         }
 
+        let marker = try JSONDecoder().decode(
+            EditorAjarSaveTransactionMarker.self,
+            from: Data(contentsOf: transactionMarkerURL)
+        )
+        guard marker.schemaVersion == EditorAjarSaveTransactionMarker.currentSchemaVersion else {
+            return nil
+        }
         let snapshot = try AjarAutosaveStore.readSnapshot(
             from: packageURL,
             fileManager: fileManager
         )
-        let canonicalProject = try? Data(
-            contentsOf: packageURL.appendingPathComponent("project.json")
+        let snapshotGeneration = canonicalGeneration(
+            projectJSON: snapshot.package.projectJSON,
+            mediaJSON: snapshot.package.mediaJSON
         )
-        let canonicalMedia = try? Data(
-            contentsOf: packageURL.appendingPathComponent("media.json")
+        guard snapshotGeneration == marker.saved else {
+            return nil
+        }
+
+        let canonical = try canonicalGeneration(in: packageURL)
+        let projectPublished = EditorAjarCanonicalGeneration(
+            project: marker.saved.project,
+            media: marker.previous.media
         )
-        guard canonicalProject == snapshot.package.projectJSON
-            || canonicalMedia == snapshot.package.mediaJSON
+        guard canonical == marker.previous
+            || canonical == projectPublished
+            || canonical == marker.saved
         else {
             return nil
         }
@@ -1454,6 +1504,7 @@ private extension EditorAjarDocumentStore {
                 "manifest.json",
                 "snapshot.json",
                 "edit-journal.jsonl",
+                "save-transaction.json",
             ])
             for sidecarURL in try fileManager.contentsOfDirectory(
                 at: sourceRecoveryURL,
@@ -1476,6 +1527,40 @@ private extension EditorAjarDocumentStore {
             with: [],
             in: stagingURL,
             fileManager: fileManager
+        )
+        try stageSaveTransactionMarker(sourceURL: sourceURL, stagingURL: stagingURL)
+    }
+
+    /// Records the exact canonical pair before and after this Save. A single unchanged file is not
+    /// enough evidence because `media.json` commonly remains identical across timeline-only saves.
+    func stageSaveTransactionMarker(sourceURL: URL, stagingURL: URL) throws {
+        let marker = EditorAjarSaveTransactionMarker(
+            previous: try canonicalGeneration(in: sourceURL),
+            saved: try canonicalGeneration(in: stagingURL)
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        try AjarAtomicFileWriter.write(
+            encoder.encode(marker),
+            to: stagingURL.appendingPathComponent("recovery/save-transaction.json"),
+            fileManager: fileManager
+        )
+    }
+
+    func canonicalGeneration(in packageURL: URL) throws -> EditorAjarCanonicalGeneration {
+        try canonicalGeneration(
+            projectJSON: Data(contentsOf: packageURL.appendingPathComponent("project.json")),
+            mediaJSON: Data(contentsOf: packageURL.appendingPathComponent("media.json"))
+        )
+    }
+
+    func canonicalGeneration(
+        projectJSON: Data,
+        mediaJSON: Data
+    ) -> EditorAjarCanonicalGeneration {
+        EditorAjarCanonicalGeneration(
+            project: ContentHash.sha256(data: projectJSON),
+            media: ContentHash.sha256(data: mediaJSON)
         )
     }
 
@@ -1534,6 +1619,7 @@ private extension EditorAjarDocumentStore {
             )
             try saveDidPublishRecovery()
             try publishStagedFile(named: "project.json", from: stagingURL, to: destinationURL)
+            try saveDidPublishProject()
             try publishStagedFile(named: "media.json", from: stagingURL, to: destinationURL)
             try publishStagedVersions(from: stagingURL, to: destinationURL)
             try saveDidPublishContents()

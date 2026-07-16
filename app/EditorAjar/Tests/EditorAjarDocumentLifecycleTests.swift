@@ -662,9 +662,6 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         let store = EditorAjarDocumentStore()
         let validVersionsBeforeInterruption = try store.versionSnapshotURLs(in: packageURL)
         XCTAssertEqual(validVersionsBeforeInterruption.count, 1)
-        let previousMediaBytes = try Data(
-            contentsOf: packageURL.appendingPathComponent("media.json")
-        )
 
         let duration = try RationalTime(value: 1, timescale: 1)
         let media = MediaRef(
@@ -704,30 +701,39 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         )
         let interruptedSaveProject = try XCTUnwrap(model.project)
 
-        // Simulate process loss after recovery and project.json publish, but before media.json.
-        try AjarAutosaveStore.writeSnapshot(
-            interruptedSaveProject,
-            appliedCommandCount: 2,
-            openMode: .editable,
-            to: packageURL
+        // Capture the real on-disk state after recovery and project.json publish, but before
+        // media.json. The throwing hook then lets the source package roll back normally.
+        let interruptedPackageURL = fixture.packageURL(named: "InterruptedCopy.ajar")
+        let interruptingStore = EditorAjarDocumentStore(
+            saveDidPublishProject: {
+                try FileManager.default.copyItem(at: packageURL, to: interruptedPackageURL)
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: packageURL.path,
+                    reason: "injected project-first boundary failure"
+                )
+            }
         )
-        try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
-        try previousMediaBytes.write(
-            to: packageURL.appendingPathComponent("media.json")
+        XCTAssertThrowsError(
+            try interruptingStore.save(
+                project: interruptedSaveProject,
+                openMode: .editable,
+                appliedCommandCount: 2,
+                to: packageURL
+            )
         )
         XCTAssertThrowsError(
             try AjarProjectCodec.decode(
                 projectJSON: Data(
-                    contentsOf: packageURL.appendingPathComponent("project.json")
+                    contentsOf: interruptedPackageURL.appendingPathComponent("project.json")
                 ),
                 mediaJSON: Data(
-                    contentsOf: packageURL.appendingPathComponent("media.json")
+                    contentsOf: interruptedPackageURL.appendingPathComponent("media.json")
                 )
             )
         )
 
         let reopened = fixture.makeModel()
-        try reopened.openProject(at: packageURL)
+        try reopened.openProject(at: interruptedPackageURL)
 
         XCTAssertEqual(reopened.project, interruptedSaveProject)
         XCTAssertTrue(reopened.isDocumentDirty)
@@ -735,8 +741,11 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
 
         try reopened.saveProject()
         XCTAssertFalse(reopened.isDocumentDirty)
-        let versionsAfterRepair = try store.versionSnapshotURLs(in: packageURL)
-        XCTAssertEqual(versionsAfterRepair, validVersionsBeforeInterruption)
+        let versionsAfterRepair = try store.versionSnapshotURLs(in: interruptedPackageURL)
+        XCTAssertEqual(
+            versionsAfterRepair.map(\.lastPathComponent),
+            validVersionsBeforeInterruption.map(\.lastPathComponent)
+        )
         for versionURL in versionsAfterRepair {
             XCTAssertNoThrow(
                 try AjarProjectCodec.decode(
@@ -750,7 +759,7 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             )
         }
         let cleanReopen = fixture.makeModel()
-        try cleanReopen.openProject(at: packageURL)
+        try cleanReopen.openProject(at: interruptedPackageURL)
         XCTAssertEqual(cleanReopen.project, interruptedSaveProject)
         XCTAssertFalse(cleanReopen.isDocumentDirty)
     }
@@ -775,6 +784,49 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         )
         try Data("unrelated corrupt media".utf8).write(
             to: packageURL.appendingPathComponent("media.json")
+        )
+
+        let reopened = fixture.makeModel()
+        XCTAssertThrowsError(try reopened.openProject(at: packageURL))
+        XCTAssertNil(reopened.project)
+    }
+
+    func testNFRSTAB002OpenRejectsStaleRecoveryWhenOnlyUnchangedMediaMatches() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let packageURL = fixture.packageURL(named: "StaleGeneration.ajar")
+        let staleRecoveryURL = fixture.rootURL.appendingPathComponent(
+            "StaleRecovery",
+            isDirectory: true
+        )
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+        try model.saveProjectAs(to: packageURL)
+
+        XCTAssertTrue(model.addSequence())
+        try model.saveProject()
+        let staleProject = try XCTUnwrap(model.project)
+        try FileManager.default.copyItem(
+            at: packageURL.appendingPathComponent("recovery", isDirectory: true),
+            to: staleRecoveryURL
+        )
+        let unchangedMedia = try Data(
+            contentsOf: packageURL.appendingPathComponent("media.json")
+        )
+
+        XCTAssertTrue(model.addSequence())
+        try model.saveProject()
+        XCTAssertNotEqual(model.project, staleProject)
+        XCTAssertEqual(
+            try Data(contentsOf: packageURL.appendingPathComponent("media.json")),
+            unchangedMedia
+        )
+
+        let recoveryURL = packageURL.appendingPathComponent("recovery", isDirectory: true)
+        try FileManager.default.removeItem(at: recoveryURL)
+        try FileManager.default.copyItem(at: staleRecoveryURL, to: recoveryURL)
+        try Data("corrupt newer project".utf8).write(
+            to: packageURL.appendingPathComponent("project.json")
         )
 
         let reopened = fixture.makeModel()
