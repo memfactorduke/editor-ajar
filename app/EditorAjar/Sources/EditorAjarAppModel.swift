@@ -5016,33 +5016,22 @@ final class EditorAjarAppModel: ObservableObject {
     /// Production proxy session factory: original-media decode via `MediaTranscodeFrameProvider`.
     private static func makeProxySessionFactory() -> ProxySessionFactory {
         { jobID, request, onProgress in
-            do {
-                let mediaProvider = MediaTranscodeFrameProvider(
-                    mediaID: request.mediaID,
-                    sourceURL: request.sourceURL,
-                    frameRate: request.frameRate,
-                    frameCount: request.frameCount,
-                    outputResolution: request.resolution
-                )
-                let adapter = ClosureProxySourceFrameProvider { index, buffer in
-                    try await mediaProvider.provideFrame(index: index, into: buffer)
-                }
-                return ProxyGenerationSession(
-                    id: jobID,
-                    request: request,
-                    frameProvider: adapter,
-                    onFrameProgress: onProgress
-                )
-            } catch {
-                return ProxyGenerationSession(
-                    id: jobID,
-                    request: request,
-                    frameProvider: FailingProxySourceFrameProvider(
-                        reason: String(describing: error)
-                    ),
-                    onFrameProgress: onProgress
-                )
+            let mediaProvider = MediaTranscodeFrameProvider(
+                mediaID: request.mediaID,
+                sourceURL: request.sourceURL,
+                frameRate: request.frameRate,
+                frameCount: request.frameCount,
+                outputResolution: request.resolution
+            )
+            let adapter = ClosureProxySourceFrameProvider { index, buffer in
+                try await mediaProvider.provideFrame(index: index, into: buffer)
             }
+            return ProxyGenerationSession(
+                id: jobID,
+                request: request,
+                frameProvider: adapter,
+                onFrameProgress: onProgress
+            )
         }
     }
 
