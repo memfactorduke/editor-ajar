@@ -52,6 +52,18 @@ final class EditorAjarLocalizationTests: XCTestCase {
             "workspace.header.export": "Export…",
             "banner.readOnly.title": "Read-only project",
             "sequenceTabs.new": "New Sequence",
+            "compound.defaultName": "Compound Clip %lld",
+            "menu.clip.makeCompound": "Make Compound Clip",
+            "menu.clip.openCompound": "Open Compound Clip",
+            "menu.clip.decomposeCompound": "Decompose Compound Clip",
+            "compound.make.refusal.locked":
+                "Unlock every selected or linked track before making a compound clip.",
+            "compound.make.refusal.ducking":
+                "The selection crosses an audio ducking boundary. Include every affected ducking track or change the ducking setup first.",
+            "compound.decompose.refusal.attributes":
+                "Remove compound-level transforms, effects, keyframes, time remapping, reverse or freeze settings, audio adjustments, and nested track keyframes before decomposing.",
+            "sequence.close.refusal.referenced":
+                "This sequence is used by a compound clip. Decompose every instance before removing it.",
             "transport.play": "Play",
             "inspector.title": "Inspector",
             "timeline.tool.fit": "Fit Timeline",

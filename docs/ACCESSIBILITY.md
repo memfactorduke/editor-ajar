@@ -37,7 +37,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Open Project | `⌘O` | File menu + launch welcome |
 | Save / Save As | `⌘S` / `⇧⌘S` | File menu; Save opens Save As for Untitled |
 | New Sequence | `⌥⌘N` | Sequences menu + tab bar |
-| Close Sequence | `⌘W` | When more than one sequence |
+| Close Sequence | `⌘W` | When more than one sequence; referenced nested sequences consume the shortcut and refuse removal so it cannot fall through to Close Window |
 | Add Marker | `⇧⌘M` | Timeline + Markers menu |
 | Previous / Next Marker | `⌘[` / `⌘]` | |
 | Delete Marker | `⌘⌫` | Selected marker |
@@ -63,6 +63,9 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Three-point insert / overwrite (fit marks) | `⇧F9` / `⇧F10` | Fits the media selection into the in/out marks (FR-TL-003); Clip menu |
 | Replace selected clip source | `⌥⌘R` | Selected media-browser item |
 | Select forward from playhead | `⇧⌘A` | Clip menu |
+| Make Compound Clip | `⌥G` | Clip menu; expands complete linked A/V groups |
+| Open Compound Clip | Clip menu | Selects the referenced nested sequence tab |
+| Decompose Compound Clip | `⇧⌘G` | Clip menu; one selected compound on an unlocked track |
 | Save look… | `⌥⌘L` | Clip menu → naming sheet |
 | Toggle scopes | `⌥⌘S` | Clip menu / scopes panel |
 | Apply / remove video transition | Clip → Transition | Needs abutting cut; typed refusal otherwise (FR-FX-001) |
@@ -80,7 +83,7 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 1. **Launch welcome** (when no project) → New Project → Open Project → recent projects  
 2. **Read-only banner** (when visible) → Dismiss  
 3. **Workspace header** → Mixer → Export… → Exports / Hide Exports  
-4. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence  
+4. **Sequence tab bar** → sequence tabs (select, then per-tab close) → New Sequence → Close Sequence; close is disabled for every referenced nested sequence
 5. **Media browser** → Import Media → layout → search → codec/state filters → media rows/cards → proxy/relink actions; VoiceOver navigation also exposes import progress  
 6. **Program monitor** → safe-area guides toggle → canvas title boxes (focusable) → transform handles when a clip is selected  
 7. **Scopes panel** (when visible, `⌥⌘S`) → type picker → hide  
@@ -390,6 +393,9 @@ Meters never observe the real-time audio callback; they are published from the
 | Slip / slide | `⌥[` / `⌥]`; `⌃⌥←` / `⌃⌥→` | Clip menu | one-frame commands; repeat to adjust |
 | Blade tool | `B`, then click clip / `⌘B` | Toggle Blade Tool | mouse click splits at the pointer position; `⌘B` blades the selected clip at the playhead (keyboard / VoiceOver path); a linked A/V clip blades together in one undo step |
 | Three-point edit | `⇧F9` insert / `⇧F10` overwrite | Three-Point Insert/Overwrite Fit to Marks | fits the media-browser selection into the in/out marks; Clip menu; disabled without marks + selection |
+| Make compound | `⌥G` / Clip menu | Make Compound Clip from Selected Clips | disabled for read-only/text-editing/locked/no-video selections; linked A/V partners follow atomically |
+| Open compound | Clip menu | Open Selected Compound Clip Sequence | activates the existing nested sequence tab; available for read-only inspection |
+| Decompose compound | `⇧⌘G` / Clip menu | Decompose Selected Compound Clip | one unlocked selected compound; safe core refusals are localized; restored clips receive a valid selection |
 | Snap indicator | — | Snapped at frame {n} | playhead, markers, clip edges, and transform keyframes; `⌃` disables during drag |
 | Add/remove track | Sequence menu / Full Keyboard Access | menu item title | remove requires a selected empty track header |
 | Marker flag | click | Marker {name} | selection + color + frame + note |
@@ -520,9 +526,9 @@ launch-time tree test.
 |------|----------------|
 | File | New Project (`⌘N`), Open, Recent Projects, Import Media… (`⌘I`), Consolidate Media…, Save, Save As, Revert to Saved |
 | Edit | Undo / Redo (dynamic titles) |
-| Sequences | New Sequence, Close Sequence |
+| Sequences | New Sequence, Close Sequence (referenced nested sequences are protected) |
 | Markers | Add / Previous / Next / Delete Marker |
-| Clip | Copy/Paste Grade, Save Look, Apply Look…, Transition (apply kinds / Remove), Detach Audio |
+| Clip | Make/Open/Decompose Compound Clip, Copy/Paste Grade, Save Look, Apply Look…, Transition (apply kinds / Remove), Detach Audio |
 | Title | Insert Title (`⌘T`), Edit Canvas Title, Nudge Title Right/Down |
 | Export | Open export dialog, Export Active Sequence, Show/Hide Export Queue |
 | Help | Open Sample Project |

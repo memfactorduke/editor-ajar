@@ -209,10 +209,10 @@ The transforms the user explicitly asked for, plus the rest of the standard set.
 | FR-CMP-005 | Nested compound clips (compounds within compounds) with cycle detection (a compound can never contain itself — enforced in `AjarCore`). | v1.x[^adr-0020] |
 | FR-CMP-006 | Render caching of unchanged compound clips to keep playback real-time (ties to `PLAY` cache). | v1 |
 
-Implementation note: M7 has started with the headless sequence-backed clip model, query-time
-compound duration/timebase resolution, `AjarCore` cycle validation, and nested video rendering
-through the content-hash cache. Compound creation/open/decompose UI, nested audio, disk cache
-warming, and retiming remain in later M7 follow-ups.
+Implementation note: the sequence-backed model, nested video/audio rendering, cache integration,
+retiming, and make/decompose commands are complete in `AjarCore`. Issue #269 adds the macOS app
+workflow: linked-group-safe Make, nested-sequence Open, validated one-step Decompose, protected
+referenced sequence tabs, localized refusals, and whole-compound inspector editing.
 
 ### 6.7 Color — area `COL`
 

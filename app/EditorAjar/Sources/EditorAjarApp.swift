@@ -196,7 +196,7 @@ struct EditorAjarApp: App {
                     model.closeActiveSequence()
                 }
                 .keyboardShortcut("w", modifiers: [.command])
-                .disabled(!model.canCloseActiveSequence)
+                .disabled(!model.canInvokeCloseActiveSequenceCommand)
                 .accessibilityLabel(AppString.localized("menu.sequences.close", "Close Sequence"))
 
                 Divider()
@@ -365,6 +365,47 @@ struct EditorAjarApp: App {
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(model.isTextEditingActive)
+                Divider()
+                Button(AppString.localized("menu.clip.makeCompound", "Make Compound Clip")) {
+                    _ = model.makeCompoundClip()
+                }
+                .keyboardShortcut("g", modifiers: [.option])
+                .disabled(!model.canMakeCompoundClip)
+                .accessibilityLabel(
+                    AppString.localized(
+                        "menu.clip.makeCompound.ax",
+                        "Make Compound Clip from Selected Clips"
+                    )
+                )
+                .accessibilityIdentifier("Make Compound Clip")
+
+                Button(AppString.localized("menu.clip.openCompound", "Open Compound Clip")) {
+                    _ = model.openCompoundClip()
+                }
+                .disabled(!model.canOpenCompoundClip)
+                .accessibilityLabel(
+                    AppString.localized(
+                        "menu.clip.openCompound.ax",
+                        "Open Selected Compound Clip Sequence"
+                    )
+                )
+                .accessibilityIdentifier("Open Compound Clip")
+
+                Button(
+                    AppString.localized("menu.clip.decomposeCompound", "Decompose Compound Clip")
+                ) {
+                    _ = model.decomposeCompoundClip()
+                }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(!model.canDecomposeCompoundClip)
+                .accessibilityLabel(
+                    AppString.localized(
+                        "menu.clip.decomposeCompound.ax",
+                        "Decompose Selected Compound Clip"
+                    )
+                )
+                .accessibilityIdentifier("Decompose Compound Clip")
+
                 Divider()
                 Button(AppString.localized("menu.clip.insert", "Insert Selected Media")) {
                     model.editSelectedMedia(.insert)

@@ -94,6 +94,73 @@ final class EditorAjarUISmokeTests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
     }
 
+    func testFRCMP001002004ClipMenuMakesOpensAndDecomposesCompoundSafely() throws {
+        let app = try XCTUnwrap(launchedApp)
+        openSampleProjectFromHelp(in: app)
+
+        let sourceClip = app.buttons["Clip Sample Playback Clip"]
+        XCTAssertTrue(sourceClip.waitForExistence(timeout: 10))
+        // Direct XCUI clicks on the SwiftUI timeline block can be swallowed by its simultaneous
+        // drag gesture on macOS 14 even though the synthesized event lands on the clip. Use the
+        // existing accessible track action, then prove the selection precondition before opening
+        // the menu. The linked audio partner is still expanded by the production compound action.
+        let selectSourceTrack = app.buttons["Select all Video track 1"]
+        XCTAssertTrue(selectSourceTrack.waitForExistence(timeout: 5))
+        selectSourceTrack.click()
+        waitForElementValue(sourceClip, containing: "Selected", timeout: 5)
+
+        let clipMenu = app.menuBars.menuBarItems["Clip"]
+        XCTAssertTrue(clipMenu.waitForExistence(timeout: 5))
+        clipMenu.click()
+        let make = app.menuItems["Make Compound Clip"]
+        XCTAssertTrue(make.waitForExistence(timeout: 5))
+        XCTAssertTrue(make.isEnabled)
+        make.click()
+
+        XCTAssertTrue(
+            app.buttons["Sequence tab Compound Clip 1"].waitForExistence(timeout: 10)
+        )
+        let nestedClose = app.buttons["Close Compound Clip 1"]
+        XCTAssertTrue(nestedClose.waitForExistence(timeout: 5))
+        XCTAssertFalse(nestedClose.isEnabled, "referenced nested sequence must be protected")
+        XCTAssertTrue(app.buttons["Clip Compound Clip 1"].waitForExistence(timeout: 5))
+
+        clipMenu.click()
+        let open = app.menuItems["Open Compound Clip"]
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        XCTAssertTrue(open.isEnabled)
+        open.click()
+        XCTAssertEqual(
+            app.buttons["Sequence tab Compound Clip 1"].value as? String,
+            "Selected"
+        )
+        let window = app.windows.firstMatch
+        app.typeKey("w", modifierFlags: [.command])
+        XCTAssertTrue(window.waitForExistence(timeout: 5), "protected Cmd-W must not close the window")
+        XCTAssertEqual(
+            app.buttons["Sequence tab Compound Clip 1"].value as? String,
+            "Selected",
+            "protected Cmd-W must leave the nested sequence active"
+        )
+
+        app.buttons["Sequence tab Sample Playback Sequence"].click()
+        clipMenu.click()
+        let decompose = app.menuItems["Decompose Compound Clip"]
+        XCTAssertTrue(decompose.waitForExistence(timeout: 5))
+        XCTAssertTrue(decompose.isEnabled)
+        decompose.click()
+
+        XCTAssertFalse(app.buttons["Clip Compound Clip 1"].exists)
+        XCTAssertTrue(
+            nestedClose.waitForExistence(timeout: 5) && nestedClose.isEnabled,
+            "orphaned nested sequence may be removed normally"
+        )
+
+        app.typeKey("z", modifierFlags: [.command])
+        XCTAssertTrue(app.buttons["Clip Compound Clip 1"].waitForExistence(timeout: 5))
+        XCTAssertFalse(nestedClose.isEnabled, "undo must restore sequence protection")
+    }
+
     // #210 / NFR-A11Y-001 canvas edit smoke — **local-only**.
     //
     // Why not un-gated for CI (honest verdict): this path depends on NSTextView first-responder
