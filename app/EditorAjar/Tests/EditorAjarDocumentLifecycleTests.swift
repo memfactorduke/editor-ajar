@@ -1210,6 +1210,66 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
 
+    func testNFRSTAB002SaveRejectsSymlinkedCanonicalManifestsBeforePublication() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        for manifestName in ["project.json", "media.json"] {
+            let packageURL = fixture.packageURL(named: "Symlinked-\(manifestName).ajar")
+            let model = fixture.makeModel()
+            try model.createNewProject(settings: .sensibleDefaults)
+            try model.saveProjectAs(to: packageURL)
+            let savedProject = try XCTUnwrap(model.project)
+
+            let manifestURL = packageURL.appendingPathComponent(manifestName)
+            let externalURL = fixture.rootURL.appendingPathComponent("external-\(manifestName)")
+            let externalBytes = try Data(contentsOf: manifestURL)
+            try externalBytes.write(to: externalURL)
+            try FileManager.default.removeItem(at: manifestURL)
+            try FileManager.default.createSymbolicLink(
+                at: manifestURL,
+                withDestinationURL: externalURL
+            )
+
+            let counterpartName = manifestName == "project.json" ? "media.json" : "project.json"
+            let counterpartURL = packageURL.appendingPathComponent(counterpartName)
+            let counterpartBytes = try Data(contentsOf: counterpartURL)
+            let counterpartFileNumber = try fileNumber(at: counterpartURL)
+            let packageEntries = try FileManager.default.contentsOfDirectory(atPath: packageURL.path)
+                .sorted()
+
+            XCTAssertThrowsError(
+                try EditorAjarDocumentStore().save(
+                    project: savedProject,
+                    openMode: .editable,
+                    appliedCommandCount: 0,
+                    to: packageURL
+                )
+            ) { error in
+                guard let documentError = error as? EditorAjarDocumentStoreError,
+                    case .fileOperation(let path, let reason) = documentError
+                else {
+                    return XCTFail("Expected a typed canonical-manifest rejection, got \(error)")
+                }
+                XCTAssertEqual(path, manifestURL.path)
+                XCTAssertTrue(reason.contains("symbolic links"))
+            }
+
+            XCTAssertEqual(try Data(contentsOf: externalURL), externalBytes)
+            XCTAssertEqual(try Data(contentsOf: counterpartURL), counterpartBytes)
+            XCTAssertEqual(try fileNumber(at: counterpartURL), counterpartFileNumber)
+            XCTAssertEqual(
+                try FileManager.default.destinationOfSymbolicLink(atPath: manifestURL.path),
+                externalURL.path
+            )
+            XCTAssertEqual(
+                try FileManager.default.contentsOfDirectory(atPath: packageURL.path).sorted(),
+                packageEntries
+            )
+            XCTAssertTrue(try fixture.stagingPackages().isEmpty)
+        }
+    }
+
     func testFRPROJ002SaveAsCopiesCanonicalHistoryButNotRegeneratableCachesOrRecovery() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }

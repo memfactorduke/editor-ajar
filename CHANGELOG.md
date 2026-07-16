@@ -66,7 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generation, preserved opaque sidecars (including nested trees), and its package directory entry
   before publishing either canonical file. Each canonical temp file is also fully synchronized
   before rename; the renamed project/media files, version tree, and package directory entries cross
-  barriers before Save reports success. A recovery-barrier failure restores only recovery, leaving
+  barriers before Save reports success. Symlinked or special-file canonical manifests are rejected
+  before publication so rollback always owns regular backup files. A recovery-barrier failure
+  restores only recovery, leaving
   untouched canonical files and their metadata alone. Both
   old/new file orderings are recognized because power loss can make later replacements durable out
   of process order, while a merely unchanged `media.json` can no longer make stale recovery look

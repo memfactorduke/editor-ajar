@@ -1097,6 +1097,7 @@ struct EditorAjarDocumentStore {
     ) throws {
         try validatePackageExtension(packageURL)
         try validateExistingPackage(packageURL)
+        try validateCanonicalManifestsAreRegularFiles(in: packageURL)
         let stagingURL = makeStagingURL(for: packageURL)
         do {
             _ = try stagePackageContents(
@@ -1618,7 +1619,32 @@ private extension EditorAjarDocumentStore {
         }
     }
 
+    /// Canonical manifests must be package-owned regular files so rollback never preserves a link
+    /// to data outside the project package.
+    func validateCanonicalManifestsAreRegularFiles(in packageURL: URL) throws {
+        for name in ["project.json", "media.json"] {
+            let manifestURL = packageURL.appendingPathComponent(name)
+            var information = stat()
+            let result = manifestURL.path.withCString { lstat($0, &information) }
+            let code = errno
+            guard result == 0 else {
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: manifestURL.path,
+                    reason: "The canonical manifest could not be inspected (error \(code))."
+                )
+            }
+            guard information.st_mode & S_IFMT == S_IFREG else {
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: manifestURL.path,
+                    reason: "Canonical manifests must be regular files, not symbolic links or special files."
+                )
+            }
+        }
+    }
+
     func publishCanonicalContents(stagingURL: URL, destinationURL: URL) throws {
+        // Reject a malformed package before recovery or either canonical file is displaced.
+        try validateCanonicalManifestsAreRegularFiles(in: destinationURL)
         let rollbackURL = makeStagingURL(for: destinationURL)
         try fileManager.createDirectory(at: rollbackURL, withIntermediateDirectories: true)
         var didBeginRecoveryPublication = false
@@ -1630,6 +1656,9 @@ private extension EditorAjarDocumentStore {
                 to: rollbackURL
             )
             try copyCanonicalFileIfPresent(named: "media.json", from: destinationURL, to: rollbackURL)
+            // FileManager copies a symbolic link as a link. Revalidate the private backup before
+            // relying on it so a concurrent substitution cannot poison rollback.
+            try validateCanonicalManifestsAreRegularFiles(in: rollbackURL)
             let destinationVersionsURL = destinationURL.appendingPathComponent(
                 "versions",
                 isDirectory: true
