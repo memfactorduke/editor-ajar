@@ -1355,7 +1355,8 @@ private extension EditorAjarDocumentStore {
     /// Recovers the complete staged checkpoint when a crash leaves the top-level canonical pair
     /// split across two Save generations. Recovery must carry a marker for this exact Save, its
     /// snapshot must match the marker's complete saved generation, and the canonical pair must be
-    /// the exact project-published/media-pending state in the recovery -> project -> media order.
+    /// one exact old/new split. Both splits are accepted because power loss can persist otherwise
+    /// unsynchronized file replacements in a different order than the process issued them.
     func recoverInterruptedSave(at packageURL: URL) throws -> EditorAjarOpenedDocument? {
         let recoverySnapshotURL = packageURL.appendingPathComponent(
             "recovery/snapshot.json"
@@ -1392,9 +1393,15 @@ private extension EditorAjarDocumentStore {
         }
 
         let canonical = try canonicalGeneration(in: packageURL)
-        guard marker.previous.media != marker.saved.media,
-              canonical.project == marker.saved.project,
-              canonical.media == marker.previous.media
+        let projectPersistedFirst = marker.previous.media != marker.saved.media
+            && canonical.project == marker.saved.project
+            && canonical.media == marker.previous.media
+        let mediaPersistedFirst = marker.previous.project != marker.saved.project
+            && canonical.project == marker.previous.project
+            && canonical.media == marker.saved.media
+        guard canonical != marker.previous,
+              canonical != marker.saved,
+              projectPersistedFirst || mediaPersistedFirst
         else {
             return nil
         }
@@ -1638,8 +1645,8 @@ private extension EditorAjarDocumentStore {
             }
 
             didBeginPublishing = true
-            // Recovery and its generation marker move first. If the process stops after project
-            // publication but before media, open can prove and recover that exact transition.
+            // Recovery and its generation marker move first. If a power loss durably retains only
+            // one later canonical replacement, open can prove either old/new split and recover.
             try publishStagedDirectory(
                 named: "recovery",
                 from: stagingURL,

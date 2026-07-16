@@ -650,7 +650,7 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
 
-    func testNFRSTAB002OpenRecoversCanonicalPairSplitByInterruptedSave() throws {
+    func testNFRSTAB002OpenRecoversBothCanonicalPairSplitsByInterruptedSave() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
         let packageURL = fixture.packageURL(named: "SplitCanonicalPair.ajar")
@@ -683,19 +683,20 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         let sequence = try XCTUnwrap(model.project?.sequences.first)
         let track = try XCTUnwrap(sequence.videoTracks.first)
         let range = try TimeRange(start: .zero, duration: duration)
+        let interruptedClip = Clip(
+            id: UUID(),
+            source: .media(id: media.id),
+            sourceRange: range,
+            timelineRange: range,
+            kind: .video,
+            name: "Interrupted Save Clip"
+        )
         XCTAssertTrue(
             model.applyEditForTesting(
                 .addClip(
                     sequenceID: sequence.id,
                     trackID: track.id,
-                    clip: Clip(
-                        id: UUID(),
-                        source: .media(id: media.id),
-                        sourceRange: range,
-                        timelineRange: range,
-                        kind: .video,
-                        name: "Interrupted Save Clip"
-                    )
+                    clip: interruptedClip
                 )
             )
         )
@@ -774,6 +775,77 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         try cleanReopen.openProject(at: interruptedPackageURL)
         XCTAssertEqual(cleanReopen.project, interruptedSaveProject)
         XCTAssertFalse(cleanReopen.isDocumentDirty)
+
+        // Removing the clip and its media makes the inverse old-project/new-media split invalid.
+        // Although media.json is replaced second in process order, an unsynchronized power loss can
+        // persist it while retaining the previous project.json, so that state must recover too.
+        let projectWithoutClip = try apply(
+            .removeClip(
+                sequenceID: sequence.id,
+                trackID: track.id,
+                clipID: interruptedClip.id
+            ),
+            to: interruptedSaveProject
+        )
+        let removedMediaProject = Project(
+            schemaVersion: projectWithoutClip.schemaVersion,
+            schemaMinor: projectWithoutClip.schemaMinor,
+            settings: projectWithoutClip.settings,
+            mediaPool: [],
+            sequences: projectWithoutClip.sequences,
+            looks: projectWithoutClip.looks
+        )
+        let previousProjectJSON = try Data(
+            contentsOf: interruptedPackageURL.appendingPathComponent("project.json")
+        )
+        let savedPackage = try AjarProjectCodec.encode(
+            removedMediaProject,
+            openMode: .editable
+        )
+        let inverseSplitPackageURL = fixture.packageURL(named: "InverseSplit.ajar")
+        let inverseInterruptingStore = EditorAjarDocumentStore(
+            saveDidPublishProject: {
+                try FileManager.default.copyItem(
+                    at: interruptedPackageURL,
+                    to: inverseSplitPackageURL
+                )
+                try previousProjectJSON.write(
+                    to: inverseSplitPackageURL.appendingPathComponent("project.json")
+                )
+                try savedPackage.mediaJSON.write(
+                    to: inverseSplitPackageURL.appendingPathComponent("media.json")
+                )
+                throw EditorAjarDocumentStoreError.fileOperation(
+                    path: interruptedPackageURL.path,
+                    reason: "injected inverse durability ordering"
+                )
+            }
+        )
+        XCTAssertThrowsError(
+            try inverseInterruptingStore.save(
+                project: removedMediaProject,
+                openMode: .editable,
+                appliedCommandCount: 3,
+                to: interruptedPackageURL
+            )
+        )
+        XCTAssertThrowsError(
+            try AjarProjectCodec.decode(
+                projectJSON: Data(
+                    contentsOf: inverseSplitPackageURL.appendingPathComponent("project.json")
+                ),
+                mediaJSON: Data(
+                    contentsOf: inverseSplitPackageURL.appendingPathComponent("media.json")
+                )
+            )
+        )
+
+        let inverseReopen = fixture.makeModel()
+        try inverseReopen.openProject(at: inverseSplitPackageURL)
+        XCTAssertEqual(inverseReopen.project, removedMediaProject)
+        XCTAssertTrue(inverseReopen.isDocumentDirty)
+        try inverseReopen.saveProject()
+        XCTAssertFalse(inverseReopen.isDocumentDirty)
     }
 
     func testNFRSTAB002OpenRejectsUnrelatedRecoveryForCorruptCanonicalPair() throws {
