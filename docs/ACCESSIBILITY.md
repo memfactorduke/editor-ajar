@@ -37,7 +37,7 @@ controls. Keyboard-first defaults are FCP/Premiere-familiar where practical.
 | Open Project | `⌘O` | File menu + launch welcome |
 | Save / Save As | `⌘S` / `⇧⌘S` | File menu; Save opens Save As for Untitled |
 | New Sequence | `⌥⌘N` | Sequences menu + tab bar |
-| Close Sequence | `⌘W` | When more than one sequence; disabled while the sequence is referenced by any compound clip |
+| Close Sequence | `⌘W` | When more than one sequence; referenced nested sequences consume the shortcut and refuse removal so it cannot fall through to Close Window |
 | Add Marker | `⇧⌘M` | Timeline + Markers menu |
 | Previous / Next Marker | `⌘[` / `⌘]` | |
 | Delete Marker | `⌘⌫` | Selected marker |

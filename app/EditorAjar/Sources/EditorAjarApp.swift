@@ -196,7 +196,7 @@ struct EditorAjarApp: App {
                     model.closeActiveSequence()
                 }
                 .keyboardShortcut("w", modifiers: [.command])
-                .disabled(!model.canCloseActiveSequence)
+                .disabled(!model.canInvokeCloseActiveSequenceCommand)
                 .accessibilityLabel(AppString.localized("menu.sequences.close", "Close Sequence"))
 
                 Divider()

@@ -134,6 +134,14 @@ final class EditorAjarUISmokeTests: XCTestCase {
             app.buttons["Sequence tab Compound Clip 1"].value as? String,
             "Selected"
         )
+        let window = app.windows.firstMatch
+        app.typeKey("w", modifierFlags: [.command])
+        XCTAssertTrue(window.waitForExistence(timeout: 5), "protected Cmd-W must not close the window")
+        XCTAssertEqual(
+            app.buttons["Sequence tab Compound Clip 1"].value as? String,
+            "Selected",
+            "protected Cmd-W must leave the nested sequence active"
+        )
 
         app.buttons["Sequence tab Sample Playback Sequence"].click()
         clipMenu.click()

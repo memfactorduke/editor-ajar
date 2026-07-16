@@ -1436,6 +1436,16 @@ final class EditorAjarAppModel: ObservableObject {
         return !Self.isSequenceReferenced(sequenceID, in: project)
     }
 
+    /// Keeps the Sequences-menu command active when a nested sequence is protected.
+    ///
+    /// A disabled custom Command-W item does not consume its shortcut, so AppKit would otherwise
+    /// route the key equivalent to Close Window. `closeActiveSequence()` owns the referenced-
+    /// sequence refusal and leaves the project untouched; the tab-bar close control continues to
+    /// use `canCloseActiveSequence` so it remains visibly disabled.
+    var canInvokeCloseActiveSequenceCommand: Bool {
+        isProjectEditable && (project?.sequences.count ?? 0) > 1 && activeSequence != nil
+    }
+
     /// Whether the Clip menu can safely collapse the current selection (FR-CMP-001/005).
     ///
     /// Engine-only overlap/ducking checks run when invoked so an otherwise eligible selection can

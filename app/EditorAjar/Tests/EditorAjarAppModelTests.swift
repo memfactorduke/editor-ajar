@@ -748,6 +748,15 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertTrue(model.canOpenCompoundClip)
         XCTAssertTrue(model.openCompoundClip())
         XCTAssertEqual(model.activeSequenceID, nestedSequenceID)
+        XCTAssertFalse(model.canCloseActiveSequence)
+        XCTAssertTrue(
+            model.canInvokeCloseActiveSequenceCommand,
+            "the menu command must consume Cmd-W while the nested sequence refuses removal"
+        )
+        let projectBeforeProtectedShortcut = model.project
+        XCTAssertFalse(model.closeActiveSequence())
+        XCTAssertEqual(model.project, projectBeforeProtectedShortcut)
+        XCTAssertEqual(model.activeSequenceID, nestedSequenceID)
         let innerVideoTrack = try XCTUnwrap(model.activeSequence?.videoTracks.first)
         let innerVideo = try firstClip(in: innerVideoTrack)
         model.selectClip(trackID: innerVideoTrack.id, clipID: innerVideo.id, mode: .replace)
