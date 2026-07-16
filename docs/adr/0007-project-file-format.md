@@ -50,6 +50,11 @@ This additive `MediaRef` provenance shape advances ADR-0018 `schemaMinor` from 1
 references decode with no provenance (nested optional/default decode), and current encoding writes
 the nested value only for fallback-transcoded sources.
 
+Issue #277 adds optional `MediaTranscodeProvenance.playableContentHash` so the durable working
+transcode can be verified independently of `originalContentHash`. This additive persisted field
+advances ADR-0018 `schemaMinor` to 15. Legacy references decode the field as `nil` and establish a
+session-only baseline after the playable source is verified.
+
 ## Consequences
 
 - Human-readable, diffable, inspectable projects; no lock-in.

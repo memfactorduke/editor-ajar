@@ -171,6 +171,8 @@ final class MediaRefTests: XCTestCase {
     }
 
     func testFRMED003TranscodeProvenanceRoundTripsAndLegacyDefaultsNil() throws {
+        XCTAssertEqual(AjarProjectCodec.currentSchemaMinor, 15)
+
         let originalURL = URL(fileURLWithPath: "/original/legacy.mkv")
         let originalHash = ContentHash.sha256(data: Data("legacy bytes".utf8))
         let playableHash = ContentHash.sha256(data: Data("working bytes".utf8))
