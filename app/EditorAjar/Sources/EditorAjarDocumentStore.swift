@@ -1651,6 +1651,13 @@ private extension EditorAjarDocumentStore {
                 )
             }
 
+            // Make the complete staged tree durable before displacing the prior recovery copy.
+            // This includes opaque sidecars that Editor Ajar preserves without interpreting.
+            try synchronizeRecoveryDirectory(
+                stagingURL.appendingPathComponent("recovery", isDirectory: true),
+                requiringTransactionMarker: true
+            )
+
             // Recovery and its generation marker move first. If a power loss durably retains only
             // one later canonical replacement, open can prove either old/new split and recover.
             didBeginRecoveryPublication = true
@@ -1659,7 +1666,7 @@ private extension EditorAjarDocumentStore {
                 from: stagingURL,
                 to: destinationURL
             )
-            try synchronizePublishedRecovery(in: destinationURL)
+            try saveAsSynchronizer.synchronizeDirectory(at: destinationURL, descriptor: nil)
             try saveDidPublishRecovery()
             didBeginCanonicalPublication = true
             try publishStagedFile(named: "project.json", from: stagingURL, to: destinationURL)
@@ -1694,18 +1701,6 @@ private extension EditorAjarDocumentStore {
         try publishStagedDirectory(named: "versions", from: stagingURL, to: destinationURL)
     }
 
-    /// Makes the complete recovery generation durable before either canonical file can change.
-    ///
-    /// Synchronizing only the renamed directory entry is insufficient after power loss: each file
-    /// must reach stable storage, then `recovery/` must retain its children, and finally the package
-    /// root must retain the replacement `recovery/` entry. The marker can then safely prove either
-    /// mixed canonical generation if a later project/media replacement is only partly durable.
-    func synchronizePublishedRecovery(in packageURL: URL) throws {
-        let recoveryURL = packageURL.appendingPathComponent("recovery", isDirectory: true)
-        try synchronizeRecoveryDirectory(recoveryURL, requiringTransactionMarker: true)
-        try saveAsSynchronizer.synchronizeDirectory(at: packageURL, descriptor: nil)
-    }
-
     func synchronizeRecoveryDirectory(
         _ recoveryURL: URL,
         requiringTransactionMarker: Bool
@@ -1729,7 +1724,46 @@ private extension EditorAjarDocumentStore {
                 at: recoveryURL.appendingPathComponent(name)
             )
         }
+        let authoritativeNameSet = Set(candidateNames)
+        let sidecarURLs = try fileManager.contentsOfDirectory(
+            at: recoveryURL,
+            includingPropertiesForKeys: nil
+        ).filter { !authoritativeNameSet.contains($0.lastPathComponent) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        for sidecarURL in sidecarURLs {
+            try synchronizeRecoverySidecar(at: sidecarURL)
+        }
         try saveAsSynchronizer.synchronizeDirectory(at: recoveryURL, descriptor: nil)
+    }
+
+    /// Synchronizes opaque recovery content without following links outside the package.
+    func synchronizeRecoverySidecar(at url: URL) throws {
+        var information = stat()
+        let result = url.path.withCString { lstat($0, &information) }
+        guard result == 0 else {
+            throw EditorAjarDocumentStoreError.fileOperation(
+                path: url.path,
+                reason: "The recovery sidecar could not be inspected."
+            )
+        }
+        switch information.st_mode & S_IFMT {
+        case S_IFREG:
+            try saveAsSynchronizer.synchronizeFile(at: url)
+        case S_IFDIR:
+            let children = try fileManager.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: nil
+            ).sorted { $0.lastPathComponent < $1.lastPathComponent }
+            for child in children {
+                try synchronizeRecoverySidecar(at: child)
+            }
+            try saveAsSynchronizer.synchronizeDirectory(at: url, descriptor: nil)
+        default:
+            throw EditorAjarDocumentStoreError.fileOperation(
+                path: url.path,
+                reason: "Recovery sidecars must be regular files or directories."
+            )
+        }
     }
 
     func publishStagedDirectory(

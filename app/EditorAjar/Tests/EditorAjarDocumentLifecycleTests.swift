@@ -463,11 +463,25 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
         let packageURL = fixture.packageURL(named: "InPlace.ajar")
-        let model = fixture.makeModel()
+        let synchronizationEvents = InPlaceSaveSynchronizationEvents()
+        let model = fixture.makeModel(
+            documentStore: EditorAjarDocumentStore(
+                saveDidPublishRecovery: {
+                    synchronizationEvents.values.append(.recoveryPublished)
+                },
+                saveAsSynchronizer: RecordingInPlaceSaveSynchronizer(
+                    events: synchronizationEvents
+                )
+            )
+        )
         try model.createNewProject(settings: .sensibleDefaults)
         try model.saveProjectAs(to: packageURL)
+        synchronizationEvents.values.removeAll()
         let cacheURL = packageURL.appendingPathComponent("caches/render/cache.bin")
         let recoveryURL = packageURL.appendingPathComponent("recovery/session.bin")
+        let nestedRecoveryURL = packageURL.appendingPathComponent(
+            "recovery/plugins/session.bin"
+        )
         try FileManager.default.createDirectory(
             at: cacheURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -476,14 +490,50 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
             at: recoveryURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        try FileManager.default.createDirectory(
+            at: nestedRecoveryURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try Data("cache".utf8).write(to: cacheURL)
         try Data("recovery".utf8).write(to: recoveryURL)
+        try Data("nested recovery".utf8).write(to: nestedRecoveryURL)
 
         XCTAssertTrue(model.addSequence())
         try model.saveProject()
 
         XCTAssertEqual(try Data(contentsOf: cacheURL), Data("cache".utf8))
         XCTAssertEqual(try Data(contentsOf: recoveryURL), Data("recovery".utf8))
+        XCTAssertEqual(try Data(contentsOf: nestedRecoveryURL), Data("nested recovery".utf8))
+        let nestedFileIndex = try eventIndex(
+            in: synchronizationEvents.values,
+            kind: .file,
+            pathSuffix: "/recovery/plugins/session.bin"
+        )
+        let topLevelFileIndex = try eventIndex(
+            in: synchronizationEvents.values,
+            kind: .file,
+            pathSuffix: "/recovery/session.bin"
+        )
+        let nestedDirectoryIndex = try eventIndex(
+            in: synchronizationEvents.values,
+            kind: .directory,
+            pathSuffix: "/recovery/plugins"
+        )
+        let recoveryDirectoryIndex = try stagingRecoveryDirectoryIndex(
+            in: synchronizationEvents.values,
+            destinationRecoveryURL: recoveryURL.deletingLastPathComponent()
+        )
+        let packageDirectoryIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex(of: .directory(packageURL.path))
+        )
+        let publicationBoundaryIndex = try XCTUnwrap(
+            synchronizationEvents.values.firstIndex(of: .recoveryPublished)
+        )
+        XCTAssertLessThan(topLevelFileIndex, recoveryDirectoryIndex)
+        XCTAssertLessThan(nestedFileIndex, nestedDirectoryIndex)
+        XCTAssertLessThan(nestedDirectoryIndex, recoveryDirectoryIndex)
+        XCTAssertLessThan(recoveryDirectoryIndex, packageDirectoryIndex)
+        XCTAssertLessThan(packageDirectoryIndex, publicationBoundaryIndex)
         let recovery = try AjarAutosaveStore.recoverProject(from: packageURL)
         XCTAssertEqual(recovery.project, model.project)
         XCTAssertEqual(recovery.appliedJournalEntryCount, 0)
@@ -645,12 +695,21 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
 
         XCTAssertEqual(projectObservedAtBoundary, attemptedProject)
         XCTAssertEqual(canonicalBytesObservedAtBoundary, previousProjectBytes)
+        let stagingRecoveryIndex = try stagingRecoveryDirectoryIndex(
+            in: synchronizationEvents.values,
+            destinationRecoveryURL: recoveryURL
+        )
+        guard case .directory(let stagingRecoveryPath) =
+            synchronizationEvents.values[stagingRecoveryIndex]
+        else {
+            return XCTFail("Expected a staged recovery directory event")
+        }
         let publicationEvents: [InPlaceSaveSynchronizationEvents.Event] = [
-            .file(recoveryURL.appendingPathComponent("snapshot.json").path),
-            .file(recoveryURL.appendingPathComponent("manifest.json").path),
-            .file(recoveryURL.appendingPathComponent("edit-journal.jsonl").path),
-            .file(recoveryURL.appendingPathComponent("save-transaction.json").path),
-            .directory(recoveryURL.path),
+            .file(stagingRecoveryPath + "/snapshot.json"),
+            .file(stagingRecoveryPath + "/manifest.json"),
+            .file(stagingRecoveryPath + "/edit-journal.jsonl"),
+            .file(stagingRecoveryPath + "/save-transaction.json"),
+            .directory(stagingRecoveryPath),
             .directory(packageURL.path),
             .recoveryPublished,
         ]
@@ -688,6 +747,14 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         try AjarAutosaveStore.replaceJournal(with: [], in: packageURL)
         let previousManifestURL = packageURL.appendingPathComponent("recovery/manifest.json")
         let previousJournalURL = packageURL.appendingPathComponent("recovery/edit-journal.jsonl")
+        let sidecarURL = packageURL.appendingPathComponent("recovery/session.bin")
+        let nestedSidecarURL = packageURL.appendingPathComponent("recovery/plugins/session.bin")
+        try FileManager.default.createDirectory(
+            at: nestedSidecarURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("sidecar".utf8).write(to: sidecarURL)
+        try Data("nested sidecar".utf8).write(to: nestedSidecarURL)
         try FileManager.default.removeItem(at: previousManifestURL)
         try FileManager.default.removeItem(at: previousJournalURL)
         let previousProjectBytes = try Data(
@@ -761,6 +828,22 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         )
         XCTAssertFalse(FileManager.default.fileExists(atPath: previousManifestURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: previousJournalURL.path))
+        XCTAssertEqual(try Data(contentsOf: sidecarURL), Data("sidecar".utf8))
+        XCTAssertEqual(try Data(contentsOf: nestedSidecarURL), Data("nested sidecar".utf8))
+        let sidecarSynchronizations = synchronizationEvents.values.filter { event in
+            guard case let .file(path) = event else {
+                return false
+            }
+            return path.hasSuffix("/recovery/session.bin")
+        }
+        let nestedSidecarSynchronizations = synchronizationEvents.values.filter { event in
+            guard case let .file(path) = event else {
+                return false
+            }
+            return path.hasSuffix("/recovery/plugins/session.bin")
+        }
+        XCTAssertEqual(sidecarSynchronizations.count, 2)
+        XCTAssertEqual(nestedSidecarSynchronizations.count, 2)
         XCTAssertTrue(try fixture.stagingPackages().isEmpty)
     }
 
@@ -1298,6 +1381,35 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         return try XCTUnwrap((attributes[.systemFileNumber] as? NSNumber)?.uint64Value)
     }
 
+    private func eventIndex(
+        in events: [InPlaceSaveSynchronizationEvents.Event],
+        kind: InPlaceSaveSynchronizationEvents.Kind,
+        pathSuffix: String
+    ) throws -> Int {
+        try XCTUnwrap(events.firstIndex { event in
+            switch (kind, event) {
+            case (.file, .file(let path)), (.directory, .directory(let path)):
+                path.hasSuffix(pathSuffix)
+            default:
+                false
+            }
+        })
+    }
+
+    private func stagingRecoveryDirectoryIndex(
+        in events: [InPlaceSaveSynchronizationEvents.Event],
+        destinationRecoveryURL: URL
+    ) throws -> Int {
+        try XCTUnwrap(events.firstIndex { event in
+            guard case .directory(let path) = event else {
+                return false
+            }
+            return path.hasSuffix("/recovery")
+                && URL(fileURLWithPath: path).standardizedFileURL
+                    != destinationRecoveryURL.standardizedFileURL
+        })
+    }
+
     private func writeHigherMinorPackage(
         project: Project,
         schemaMinor: Int,
@@ -1375,6 +1487,11 @@ private struct DocumentLifecycleFixture {
 }
 
 private final class InPlaceSaveSynchronizationEvents {
+    enum Kind {
+        case file
+        case directory
+    }
+
     enum Event: Equatable {
         case file(String)
         case directory(String)
