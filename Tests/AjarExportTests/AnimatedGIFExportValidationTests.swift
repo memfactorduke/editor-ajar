@@ -125,6 +125,20 @@ final class AnimatedGIFExportValidationTests: XCTestCase {
             [3, 2]
         )
     }
+
+    func testFREXP006ClippedFinalFrameKeepsPositiveCentisecondDelay() throws {
+        let context = try AnimatedGIFValidationContext()
+        let durationJustPastOneFrame = try RationalTime(value: 34, timescale: 1_000)
+        let request = try context.makeRequest(
+            range: TimeRange(start: .zero, duration: durationJustPastOneFrame)
+        )
+
+        XCTAssertEqual(try request.frameCount(), 2)
+        XCTAssertEqual(
+            try (0..<2).map { try request.delayCentiseconds(forFrame: Int64($0)) },
+            [3, 1]
+        )
+    }
 }
 
 private struct AnimatedGIFValidationContext {

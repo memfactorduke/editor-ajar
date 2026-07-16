@@ -204,7 +204,10 @@ public struct AnimatedGIFExportRequest: Sendable {
         }
         let previous = try cumulativeCentiseconds(afterFrame: index - 1)
         let current = try cumulativeCentiseconds(afterFrame: index)
-        return Int(current - previous)
+        // The final nominal boundary can be clipped to the requested range and round to the
+        // same centisecond as the preceding boundary. Keep every encoded GIF frame visible for
+        // at least one timing tick while retaining cumulative rounding for all other frames.
+        return Int(max(1, current - previous))
     }
 
     private func cumulativeCentiseconds(afterFrame index: Int64) throws -> Int64 {
