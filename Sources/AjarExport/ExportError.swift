@@ -90,6 +90,9 @@ public enum ExportError: Error, Equatable, Sendable, CustomStringConvertible {
     /// The destination's parent directory is missing or not a directory.
     case destinationDirectoryUnavailable(URL)
 
+    /// A file appeared after a vacant destination was chosen and needs fresh overwrite consent.
+    case destinationRequiresOverwriteConfirmation(URL)
+
     /// AVAssetWriter could not be constructed.
     case writerCreationFailed(String)
 
@@ -184,6 +187,8 @@ public enum ExportError: Error, Equatable, Sendable, CustomStringConvertible {
             "export destination must be a file URL: \(url)"
         case .destinationDirectoryUnavailable(let url):
             "export destination directory is unavailable: \(url.path)"
+        case .destinationRequiresOverwriteConfirmation(let url):
+            "export destination now exists and replacement was not confirmed: \(url.path)"
         case .writerCreationFailed(let reason):
             "asset writer creation failed: \(reason)"
         case .encoderRefused(let codec, let reason):

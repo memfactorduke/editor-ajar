@@ -112,6 +112,15 @@ final class AnimatedGIFExportValidationTests: XCTestCase {
         }
     }
 
+    func testFREXP006RequestAcceptsNativeSRGBProjectDelivery() throws {
+        let context = try AnimatedGIFValidationContext(colorSpace: .sRGB)
+
+        let request = try context.makeRequest(sourceColorSpace: .sRGB)
+
+        XCTAssertEqual(request.project.settings.colorSpace, .sRGB)
+        XCTAssertEqual(request.settings.sourceColorSpace, .sRGB)
+    }
+
     func testFREXP006PartialFinalFrameRoundsCountUpAndClipsTotalDelay() throws {
         let context = try AnimatedGIFValidationContext()
         let partialDuration = try RationalTime(value: 1, timescale: 20)
@@ -149,7 +158,7 @@ private struct AnimatedGIFValidationContext {
     let sequenceDuration: RationalTime
     let destinationURL: URL
 
-    init() throws {
+    init(colorSpace: MediaColorSpace = .rec709) throws {
         frameRate = try FrameRate(frames: 30)
         frameDuration = try frameRate.duration(ofFrames: 1)
         sequenceDuration = try frameRate.duration(ofFrames: 2)
@@ -167,7 +176,7 @@ private struct AnimatedGIFValidationContext {
             settings: ProjectSettings(
                 frameRate: frameRate,
                 resolution: PixelDimensions(width: 16, height: 16),
-                colorSpace: .rec709,
+                colorSpace: colorSpace,
                 audioSampleRate: 48_000
             ),
             mediaPool: [],

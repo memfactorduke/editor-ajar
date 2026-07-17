@@ -128,7 +128,8 @@ public final class AnimatedGIFExportSession: @unchecked Sendable {
         try checkCancellation()
         let frameCount = try request.frameCount()
         let preparedTransaction = try ExportOutputTransaction(
-            destinationURL: request.destinationURL
+            destinationURL: request.destinationURL,
+            destinationCollisionPolicy: request.destinationCollisionPolicy
         )
         transaction = preparedTransaction
         let writer = try makeWriter(
@@ -142,11 +143,14 @@ public final class AnimatedGIFExportSession: @unchecked Sendable {
         try finalize(writer: writer)
         beforePublish?()
         try publish(preparedTransaction)
+        let sourceSelections = sourceSelectionRecords
         return ExportResult(
             destinationURL: request.destinationURL,
             duration: request.range.duration,
             videoFrameCount: frameCount,
-            audioFrameCount: 0
+            audioFrameCount: 0,
+            sourceSelectionRecordCount: sourceSelections.count,
+            usedProxyMedia: sourceSelections.contains { $0.tier == .proxy }
         )
     }
 

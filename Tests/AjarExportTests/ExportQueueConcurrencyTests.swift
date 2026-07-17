@@ -69,7 +69,7 @@ final class ExportQueueConcurrencyTests: XCTestCase {
             destinationURL: destination,
             frameCount: 3
         )
-        let jobID = await queue.enqueue(
+        let jobID = try await queue.enqueue(
             request: request,
             displayName: "running-stress-\(iteration)"
         )
@@ -189,7 +189,8 @@ final class ExportQueueConcurrencyTests: XCTestCase {
             "iteration \(iteration): illegal final state \(finalState)"
         )
 
-        let isNonSuccess = finalState == .cancelled
+        let isNonSuccess =
+            finalState == .cancelled
             || finalState == .failed
             || finalState == .pausedWillRestart
         if isNonSuccess {
@@ -238,7 +239,7 @@ final class ExportQueueConcurrencyTests: XCTestCase {
                     destinationURL: directory.appendingPathComponent("s-\(index).mp4"),
                     frameCount: 2
                 )
-                return await queue.enqueue(request: request, displayName: "s-\(index)")
+                return try await queue.enqueue(request: request, displayName: "s-\(index)")
             }
         }
         var jobIDs: [UUID] = []

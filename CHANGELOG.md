@@ -9,16 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Animated GIF export engine foundation (#275, FR-EXP-006): a dedicated ImageIO session samples the
+- Animated GIF export (#275/#279, FR-EXP-006): a dedicated ImageIO session samples the
   production render graph at exact rational times, accumulates integral-centisecond frame delays,
-  writes play-once or forever loop policy, converts tagged Rec.709/Display-P3 SDR pixels to sRGB,
+  writes play-once or forever loop policy, converts tagged Rec.709/sRGB/Display-P3 SDR pixels to sRGB,
   and applies a deterministic binary-alpha policy before palette generation. It shares the
   original-media audit, cancellation lifecycle, progress, and same-directory atomic publication
   guarantees of movie export without inventing a fake video codec. Unit coverage includes odd
   dimensions, fractional frame rates, timing, loops, color, transparency, cancellation, and failure
-  cleanup; the hard CI golden decodes and checks all 12 animated title frames. Consumer export-dialog
-  and heterogeneous background-queue integration remain follow-up work; GIF import is still
-  intentionally first-frame-only.
+  cleanup; the hard CI golden decodes and checks all 12 animated title frames. The consumer export
+  dialog now exposes size, frame-rate, whole/in-out range, and play-once/forever controls and submits
+  immutable `.gif` requests through the same strictly serial queue as movie jobs. Mixed-format
+  ordering, progress, pause/restart, cancellation, atomic publication, localized/VoiceOver UI, and a
+  production app-path ImageIO decode are covered. Movie/GIF submission now asks the user to choose a
+  visible filename and location, inherits the project's delivery color/audio settings, and rejects
+  repeated Return or double-click submission until the queue accepts or rejects the first request.
+  The queue also reserves each normalized output path across every nonterminal movie/GIF job and
+  shows a localized refusal instead of allowing a later job to replace an earlier result. Queue job
+  identities are immutable, so a duplicate identifier cannot replace an active record or drop its
+  reservation. Existing files require an explicit app-owned confirmation after the Save panel;
+  that consent is carried into both enqueue and atomic publication. If a file appears after a
+  vacant path was chosen, the app requires fresh confirmation instead of replacing it. GIF import
+  is still intentionally first-frame-only.
 
 - Complete compound-clip app workflow (#269, FR-CMP-001…005): localized, VoiceOver-labelled Clip
   menu actions Make (`⌥G`), Open, and Decompose (`⇧⌘G`) reuse the atomic `AjarCore` commands.

@@ -129,13 +129,17 @@ public struct AnimatedGIFExportRequest: Sendable {
     /// Validated raster, timing, color, and loop settings.
     public let settings: AnimatedGIFExportSettings
 
+    /// Whether atomic publication may replace an existing file at the chosen destination.
+    public let destinationCollisionPolicy: ExportDestinationCollisionPolicy
+
     /// Creates and validates an animated-GIF request.
     public init(
         project: Project,
         sequenceID: UUID,
         range: TimeRange,
         destinationURL: URL,
-        settings: AnimatedGIFExportSettings
+        settings: AnimatedGIFExportSettings,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
     ) throws {
         do {
             try settings.validate()
@@ -173,6 +177,7 @@ public struct AnimatedGIFExportRequest: Sendable {
         self.range = range
         self.destinationURL = destinationURL
         self.settings = settings
+        self.destinationCollisionPolicy = destinationCollisionPolicy
     }
 
     /// Number of sequential image frames required for the half-open range.

@@ -815,7 +815,9 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         switch project.settings.colorSpace {
         case .displayP3:
             colorSpace = .displayP3
-        case .rec709, .sRGB, .rec2020, .unspecified, .unknown:
+        case .sRGB:
+            colorSpace = .sRGB
+        case .rec709, .rec2020, .unspecified, .unknown:
             colorSpace = .rec709
         }
         return try ExportSettings(

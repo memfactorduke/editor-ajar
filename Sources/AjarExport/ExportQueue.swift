@@ -5,10 +5,12 @@ import Foundation
 /// Sequential background export queue (FR-EXP-005).
 ///
 /// ## Execution model
-/// Drains **one hardware-encode job at a time**. VideoToolbox / AVAssetWriter sessions contend
-/// for the hardware encoder; parallel encodes are rejected by design for v1. Work runs off the
-/// main actor inside this `actor` (session `run()` is async). The pure job state machine is
-/// `ExportJobStateMachine`; this type owns scheduling, progress aggregation, and session cancel.
+/// Drains **one export job at a time**, including a heterogeneous mix of movie and animated-GIF
+/// sessions. VideoToolbox / AVAssetWriter movie sessions contend for the hardware encoder, and a
+/// single serial schedule also gives every output family predictable queue ordering and control.
+/// Work runs off the main actor inside this `actor` (session `run()` is async). The pure job state
+/// machine is `ExportJobStateMachine`; this type owns scheduling, progress aggregation, and
+/// session cancel.
 ///
 /// ## Pause
 /// Pause cooperatively cancels the active session (`pausedWillRestart`). Resume requeues the job
@@ -17,6 +19,36 @@ import Foundation
 /// ## Persistence
 /// Jobs are in-memory only; they are **not** restored after app relaunch.
 public actor ExportQueue {
+    private struct QueuedJob: Sendable {
+        let id: UUID
+        let displayName: String
+        let request: ExportQueueRequest
+        let enqueuedAt: Date
+    }
+
+    private enum ActiveSession: Sendable {
+        case movie(ExportSession)
+        case animatedGIF(AnimatedGIFExportSession)
+
+        func cancel() {
+            switch self {
+            case .movie(let session):
+                session.cancel()
+            case .animatedGIF(let session):
+                session.cancel()
+            }
+        }
+
+        func run() async throws -> ExportResult {
+            switch self {
+            case .movie(let session):
+                try await session.run()
+            case .animatedGIF(let session):
+                try await session.run()
+            }
+        }
+    }
+
     private enum StopIntent: Equatable, Sendable {
         case none
         case cancel
@@ -24,7 +56,7 @@ public actor ExportQueue {
     }
 
     private struct JobRecord: Sendable {
-        var job: ExportJob
+        var job: QueuedJob
         var state: ExportJobState
         var progress: ExportProgressEstimate
         var estimator: ExportProgressEstimator
@@ -33,10 +65,11 @@ public actor ExportQueue {
     }
 
     private let sessionFactory: ExportSessionFactory
+    private let animatedGIFSessionFactory: AnimatedGIFExportSessionFactory?
     private var records: [UUID: JobRecord] = [:]
     private var order: [UUID] = []
     private var activeJobID: UUID?
-    private var activeSession: ExportSession?
+    private var activeSession: ActiveSession?
     private var stopIntent: StopIntent = .none
     private var drainTask: Task<Void, Never>?
     private var observers: [UUID: AsyncStream<[ExportJobSnapshot]>.Continuation] = [:]
@@ -44,6 +77,16 @@ public actor ExportQueue {
     /// Creates a queue that builds sessions through `sessionFactory`.
     public init(sessionFactory: @escaping ExportSessionFactory) {
         self.sessionFactory = sessionFactory
+        animatedGIFSessionFactory = nil
+    }
+
+    /// Creates a heterogeneous queue with movie and animated-GIF session factories.
+    public init(
+        sessionFactory: @escaping ExportSessionFactory,
+        animatedGIFSessionFactory: @escaping AnimatedGIFExportSessionFactory
+    ) {
+        self.sessionFactory = sessionFactory
+        self.animatedGIFSessionFactory = animatedGIFSessionFactory
     }
 
     /// Ordered job snapshots for UI and tests.
@@ -67,7 +110,40 @@ public actor ExportQueue {
 
     /// Enqueues an export. `request.project` must already be the immutable snapshot to encode.
     @discardableResult
-    public func enqueue(_ job: ExportJob) -> UUID {
+    public func enqueue(_ job: ExportJob) throws -> UUID {
+        try enqueue(
+            QueuedJob(
+                id: job.id,
+                displayName: job.displayName,
+                request: .movie(job.request),
+                enqueuedAt: job.enqueuedAt
+            )
+        )
+    }
+
+    private func enqueue(_ job: QueuedJob) throws -> UUID {
+        guard records[job.id] == nil else {
+            throw ExportQueueError.duplicateJobID(job.id)
+        }
+        let destinationKey = ExportDestinationReservation.key(for: job.request.destinationURL)
+        let destinationIsReserved = records.values.contains { record in
+            !ExportJobStateMachine.isTerminal(record.state)
+                && ExportDestinationReservation.key(for: record.job.request.destinationURL)
+                    == destinationKey
+        }
+        guard !destinationIsReserved else {
+            throw ExportQueueError.destinationAlreadyQueued(job.request.destinationURL)
+        }
+        let destinationExists = FileManager.default.fileExists(
+            atPath: job.request.destinationURL.path
+        )
+        guard
+            job.request.destinationCollisionPolicy == .replaceExisting || !destinationExists
+        else {
+            throw ExportQueueError.destinationRequiresOverwriteConfirmation(
+                job.request.destinationURL
+            )
+        }
         let record = JobRecord(
             job: job,
             state: .pending,
@@ -90,12 +166,30 @@ public actor ExportQueue {
         displayName: String,
         id: UUID = UUID(),
         enqueuedAt: Date = Date()
-    ) -> UUID {
-        enqueue(
+    ) throws -> UUID {
+        try enqueue(
             ExportJob(
                 id: id,
                 displayName: displayName,
                 request: request,
+                enqueuedAt: enqueuedAt
+            )
+        )
+    }
+
+    /// Enqueues an animated-GIF request in the same strict-serial order as movie exports.
+    @discardableResult
+    public func enqueue(
+        animatedGIFRequest request: AnimatedGIFExportRequest,
+        displayName: String,
+        id: UUID = UUID(),
+        enqueuedAt: Date = Date()
+    ) throws -> UUID {
+        try enqueue(
+            QueuedJob(
+                id: id,
+                displayName: displayName,
+                request: .animatedGIF(request),
                 enqueuedAt: enqueuedAt
             )
         )
@@ -158,15 +252,29 @@ public actor ExportQueue {
 
     /// Captured request for snapshot-isolation tests (returns nil if unknown).
     public func request(for jobID: UUID) -> ExportRequest? {
-        records[jobID]?.job.request
+        guard case .movie(let request) = records[jobID]?.job.request else {
+            return nil
+        }
+        return request
+    }
+
+    /// Captured animated-GIF request (returns nil for movie or unknown jobs).
+    public func animatedGIFRequest(for jobID: UUID) -> AnimatedGIFExportRequest? {
+        guard case .animatedGIF(let request) = records[jobID]?.job.request else {
+            return nil
+        }
+        return request
     }
 
     /// Job state for tests and polling adapters.
     public func state(for jobID: UUID) -> ExportJobState? {
         records[jobID]?.state
     }
+}
 
-    // MARK: - Drain
+// MARK: - Drain and lifecycle
+
+extension ExportQueue {
 
     private func ensureDrain() {
         guard drainTask == nil else {
@@ -213,8 +321,12 @@ public actor ExportQueue {
         stopIntent = .none
         publish()
 
-        let session = sessionFactory(jobID, record.job.request) { [weak self] progress in
-            Task { [weak self] in await self?.handleProgress(jobID: jobID, progress: progress) }
+        guard let session = makeSession(jobID: jobID, request: record.job.request) else {
+            finishExportError(
+                jobID: jobID,
+                error: .writerFailed("animated GIF export is not configured for this queue")
+            )
+            return
         }
         activeSession = session
 
@@ -227,6 +339,24 @@ public actor ExportQueue {
             finishExportError(
                 jobID: jobID,
                 error: ExportError.writerFailed(String(describing: error))
+            )
+        }
+    }
+
+    private func makeSession(jobID: UUID, request: ExportQueueRequest) -> ActiveSession? {
+        let onProgress: @Sendable (ExportProgress) -> Void = { [weak self] progress in
+            Task { [weak self] in await self?.handleProgress(jobID: jobID, progress: progress) }
+        }
+
+        switch request {
+        case .movie(let movieRequest):
+            return .movie(sessionFactory(jobID, movieRequest, onProgress))
+        case .animatedGIF(let animatedGIFRequest):
+            guard let animatedGIFSessionFactory else {
+                return nil
+            }
+            return .animatedGIF(
+                animatedGIFSessionFactory(jobID, animatedGIFRequest, onProgress)
             )
         }
     }
@@ -329,6 +459,7 @@ public actor ExportQueue {
         ExportJobSnapshot(
             id: record.job.id,
             displayName: record.job.displayName,
+            kind: record.job.request.kind,
             destinationURL: record.job.request.destinationURL,
             state: record.state,
             progress: record.progress,

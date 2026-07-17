@@ -71,14 +71,25 @@ rounds the total frame count upward. GIF delays are integral centiseconds, so cu
 duration is rounded at each frame boundary; each stored delay is the difference between adjacent
 rounded boundaries. This bounds total timing drift instead of rounding every frame independently.
 
-ImageIO receives owned sRGB BGRA images. Display-P3 source pixels are converted to sRGB before
-palette generation. GIF has only one-bit transparency, so fully transparent pixels remain
+ImageIO receives owned sRGB BGRA images. Rec.709 and Display-P3 source pixels are converted to
+sRGB before palette generation; sRGB projects retain their native transfer/primaries. GIF has only
+one-bit transparency, so fully transparent pixels remain
 transparent while partially covered premultiplied pixels are composited against black and written
 opaque. This makes antialiased title edges deterministic across ImageIO versions and avoids an
 implicit, platform-dependent alpha threshold. Loop metadata is omitted for play-once output and a
-loop count of zero means forever. The v1.x engine accepts 1...100 fps and odd raster dimensions;
-the consumer export dialog and heterogeneous background-queue adapter are separate integration
-work.
+loop count of zero means forever. The v1.x engine accepts 1...100 fps and odd raster dimensions.
+#279 added consumer size, frame-rate, range, and loop controls plus one strictly serial background
+queue that schedules both movie and animated-GIF sessions without erasing their distinct writer
+lifecycles. Enqueue canonicalizes the selected output path and rejects a movie or GIF while any
+nonterminal job already reserves that destination; terminal cancellation, failure, or completion
+releases it. This queue-level invariant prevents a later serial job from silently replacing an
+earlier result before the first destination exists on disk. A job UUID is also accepted only once;
+an attempted duplicate cannot replace the record that owns an active session or reservation.
+After the Save panel returns, the app checks the selected path itself and requires an explicit,
+localized replacement confirmation when a file exists. It passes the resulting `replaceExisting`
+or `requireVacant` policy into the request. Enqueue rechecks that policy after the actor obtains the
+reservation, and the output transaction enforces it again at publication. A file that appears after
+the vacant-path observation is preserved and requires a fresh visible replacement confirmation.
 
 ### Proxy exclusion audit hook (FR-EXP-007 / FR-MED-004)
 

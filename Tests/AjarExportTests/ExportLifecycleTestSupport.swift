@@ -165,7 +165,8 @@ final class LifecycleFixture {
         frameRate: FrameRate? = nil,
         duration: RationalTime? = nil,
         audioSampleRate: Int = 48_000,
-        audioTrackCount: Int = 0
+        audioTrackCount: Int = 0,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
     ) throws {
         directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(
             "ajar-export-lifecycle-\(UUID().uuidString)",
@@ -184,7 +185,8 @@ final class LifecycleFixture {
             duration: resolvedDuration,
             includeAudio: includeAudio,
             audioSampleRate: audioSampleRate,
-            audioTrackCount: audioTrackCount
+            audioTrackCount: audioTrackCount,
+            destinationCollisionPolicy: destinationCollisionPolicy
         )
     }
 
@@ -236,7 +238,8 @@ final class LifecycleFixture {
         duration: RationalTime,
         includeAudio: Bool,
         audioSampleRate: Int,
-        audioTrackCount: Int
+        audioTrackCount: Int,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy
     ) throws -> ExportRequest {
         let range = try TimeRange(start: .zero, duration: duration)
         let sequenceID = UUID()
@@ -321,7 +324,8 @@ final class LifecycleFixture {
             sequenceID: sequenceID,
             range: range,
             destinationURL: destinationURL,
-            settings: settings
+            settings: settings,
+            destinationCollisionPolicy: destinationCollisionPolicy
         )
     }
 }

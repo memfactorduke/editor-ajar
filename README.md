@@ -36,13 +36,18 @@ The current app exposes multi-track timeline editing; move, zoom, rotate, crop, 
 transforms; parameter keyframes; chroma/luma keying, rectangle/ellipse masks, and blend modes;
 color correction, scopes, and LUTs; multitrack mixing and fades; titles and animated text; effects
 and transitions; constant-speed, reverse, and freeze controls; proxies and cached playback; and
-hardware-accelerated H.264, HEVC, and ProRes export. File > Consolidate Media gathers referenced
-originals into a saved project's `.ajar/media` folder with progress, cancellation, undoable
-reference updates, and a strict never-delete-originals policy. Save As carries that package-owned
-media into the new project while leaving external originals referenced in place.
+hardware-accelerated H.264, HEVC, and ProRes export. The export dialog can also submit animated GIF
+jobs with size, frame-rate, range, and loop controls through the same background queue. Movie and
+GIF submission asks where to save the output before adding exactly one job, and active jobs cannot
+share an output path. The app explicitly confirms replacement after the Save panel returns, and a
+file that appears after a vacant path was chosen is never silently replaced. File >
+Consolidate Media gathers referenced originals into a saved project's `.ajar/media` folder with
+progress, cancellation, undoable reference updates, and a strict never-delete-originals policy.
+Save As carries that package-owned media into the new project while leaving external originals
+referenced in place.
 
 Some deeper engine capabilities do not yet have consumer-facing controls. The curve editor, speed
-ramp editor, compound-clip workflows, free-form mask drawing, automatic ducking setup,
+ramp editor, free-form mask drawing, automatic ducking setup,
 background-render scheduling, and HDR ingest/export are explicitly tracked for
 v1.x in [ADR-0020](docs/adr/0020-v1-scope-deferrals.md). We do not present those as shipped UI.
 

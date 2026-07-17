@@ -1343,6 +1343,39 @@
         }
       }
     },
+    "export.dialog.addToQueue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to Queue"
+          }
+        }
+      }
+    },
+    "export.dialog.addToQueue.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add export to queue"
+          }
+        }
+      }
+    },
+    "export.dialog.addingToQueue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adding…"
+          }
+        }
+      }
+    },
     "export.dialog.ax": {
       "extractionState": "manual",
       "localizations": {
@@ -1376,6 +1409,61 @@
         }
       }
     },
+    "export.dialog.destination.panelTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Export Destination"
+          }
+        }
+      }
+    },
+    "export.dialog.overwrite.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "export.dialog.overwrite.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A file already exists at %@. Replace it with this export?"
+          }
+        }
+      }
+    },
+    "export.dialog.overwrite.replace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace"
+          }
+        }
+      }
+    },
+    "export.dialog.overwrite.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace Existing Export?"
+          }
+        }
+      }
+    },
     "export.dialog.title": {
       "extractionState": "manual",
       "localizations": {
@@ -1405,6 +1493,149 @@
           "stringUnit": {
             "state": "translated",
             "value": "Validate export settings"
+          }
+        }
+      }
+    },
+    "export.gif.frameRate.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animated GIF frame rate"
+          }
+        }
+      }
+    },
+    "export.gif.frameRate.fps10": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 fps"
+          }
+        }
+      }
+    },
+    "export.gif.frameRate.fps15": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 fps"
+          }
+        }
+      }
+    },
+    "export.gif.frameRate.fps24": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "24 fps"
+          }
+        }
+      }
+    },
+    "export.gif.frameRate.fps30": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 fps"
+          }
+        }
+      }
+    },
+    "export.gif.loop.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animated GIF playback"
+          }
+        }
+      }
+    },
+    "export.gif.loop.forever": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forever"
+          }
+        }
+      }
+    },
+    "export.gif.loop.playOnce": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play once"
+          }
+        }
+      }
+    },
+    "export.gif.size.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animated GIF size"
+          }
+        }
+      }
+    },
+    "export.gif.size.half": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Half"
+          }
+        }
+      }
+    },
+    "export.gif.size.original": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original"
+          }
+        }
+      }
+    },
+    "export.gif.size.quarter": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quarter"
+          }
+        }
+      }
+    },
+    "export.mode.animatedGIF": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animated GIF"
           }
         }
       }
@@ -1519,6 +1750,39 @@
         }
       }
     },
+    "export.section.gifFrameRate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frame rate"
+          }
+        }
+      }
+    },
+    "export.section.gifLoop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback"
+          }
+        }
+      }
+    },
+    "export.section.gifSize": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size"
+          }
+        }
+      }
+    },
     "export.section.mode": {
       "extractionState": "manual",
       "localizations": {
@@ -1559,6 +1823,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Still format"
+          }
+        }
+      }
+    },
+    "export.status.destinationAlreadyQueued": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another export is already queued for %@. Choose a different filename or wait for it to finish."
+          }
+        }
+      }
+    },
+    "export.status.destinationRequiresOverwriteConfirmation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The export destination now exists at %@. Choose it again to confirm replacement, or choose a different filename."
           }
         }
       }
@@ -1669,6 +1955,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "exportQueue.job.failure.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export failure"
           }
         }
       }

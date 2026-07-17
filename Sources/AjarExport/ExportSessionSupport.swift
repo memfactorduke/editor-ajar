@@ -26,7 +26,8 @@ extension ExportSession {
     ) async throws -> ExportResult {
         try checkCancellation()
         let preparedTransaction = try ExportOutputTransaction(
-            destinationURL: request.destinationURL
+            destinationURL: request.destinationURL,
+            destinationCollisionPolicy: request.destinationCollisionPolicy
         )
         transaction = preparedTransaction
         let preparedWriter = try writerFactory(
@@ -59,11 +60,14 @@ extension ExportSession {
         )
         beforePublish?()
         try publish(preparedTransaction)
+        let sourceSelections = sourceSelectionRecords
         return ExportResult(
             destinationURL: request.destinationURL,
             duration: request.range.duration,
             videoFrameCount: videoFrameCount,
-            audioFrameCount: audioStream?.totalFrameCount ?? 0
+            audioFrameCount: audioStream?.totalFrameCount ?? 0,
+            sourceSelectionRecordCount: sourceSelections.count,
+            usedProxyMedia: sourceSelections.contains { $0.tier == .proxy }
         )
     }
 

@@ -203,9 +203,11 @@ seek latency (NFR-PERF-005).
   the offline mixer supplies audio; VideoToolbox hardware encoders handle H.264/HEVC and
   AVAssetWriter handles ProRes/muxing. A separate ImageIO session writes animated GIF frames with
   cumulative centisecond timing and explicit sRGB/binary-alpha conversion. Movie and animated
-  sessions share the render provider, transactional publication, and the same exact-time,
-  original-only graph contract; still/GIF delivery uses its codec-free image initializer. Output is
-  converted and tagged per ADR-0010, then atomically published (FR-EXP-006/007, ADR-0019).
+  sessions share one strictly serial background queue, the render provider, transactional
+  publication, immutable job identities, destination reservations across every nonterminal job,
+  post-panel explicit overwrite confirmation, and the same exact-time, original-only graph
+  contract; still/GIF delivery uses its codec-free image initializer. Output is converted and
+  tagged per ADR-0010, then atomically published (FR-EXP-005/006/007, ADR-0019).
 - **Licensing:** FFmpeg is integrated as a GPL-compatible component consistent with the
   project license (ADR-0004); the boundary keeps it cleanly separable.
 

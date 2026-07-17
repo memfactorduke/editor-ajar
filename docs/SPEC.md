@@ -295,13 +295,15 @@ referenced sequence tabs, localized refusals, and whole-compound inspector editi
 | FR-EXP-002 | Container support: MP4, MOV; audio AAC/PCM; correct color tagging on output (ADR-0010). | v1 |
 | FR-EXP-003 | Presets for common targets (YouTube 1080p/4K, square, vertical 9:16, etc.); custom presets. | v1 |
 | FR-EXP-004 | Export range (whole timeline / in-out), still-frame export (PNG/JPEG), and audio-only export. | v1 |
-| FR-EXP-005 | **Background export queue:** batch multiple exports; continue editing while exporting; progress + time estimate; cancel/pause. | v1 |
+| FR-EXP-005 | **Background export queue:** batch multiple exports; continue editing while exporting; progress + time estimate; cancel/pause; reserve each active job's chosen destination. | v1 |
 | FR-EXP-006 | GIF and animated-image export. | v1.x |
 | FR-EXP-007 | Export is deterministic and uses original (not proxy) media; verified by golden-frame export tests. | v1 |
 | FR-EXP-008 | Direct upload to YouTube and similar. | future |
 
-The FR-EXP-006 ImageIO engine and all-frame CI golden are complete in #275. The requirement remains
-open until the consumer export dialog and heterogeneous background queue can submit GIF jobs.
+FR-EXP-006 is complete: #275 delivered the ImageIO engine and all-frame CI golden, and #279 added
+consumer size/frame-rate/range/loop controls plus movie/GIF scheduling in one background queue with
+explicit save destinations, exclusive reservations until each job reaches a terminal state, and
+fresh overwrite confirmation when a file appears after a vacant destination was selected.
 
 ### 6.14 Project & document model — area `PROJ`
 
@@ -354,9 +356,9 @@ skeleton early (ROADMAP M2) for review.
 | Class | v1 native (fast path) | v1 via FFmpeg fallback | Export |
 |-------|----------------------|------------------------|--------|
 | Video | H.264, HEVC (8/10-bit), ProRes (Proxy/LT/422/HQ/4444), HDV/AVCHD where AVFoundation supports | VP9, AV1, legacy/DV, MKV-wrapped, odd codecs → transcode-to-ProRes on import | H.264, HEVC, ProRes |
-| Image | PNG, JPEG, HEIF, TIFF, GIF (still) | WebP, exotic raw stills | PNG, JPEG |
+| Image | PNG, JPEG, HEIF, TIFF, GIF (still) | WebP, exotic raw stills | PNG, JPEG, animated GIF |
 | Audio | AAC, ALAC, PCM/WAV, AIFF, MP3 | FLAC, OGG/Vorbis, AC-3 | AAC, PCM |
-| Color | Rec.709, sRGB, Display-P3; HDR HLG/PQ Rec.2020 (tone-mapped) | — | Tagged Rec.709 / P3 (HDR `[v1.x]`) |
+| Color | Rec.709, sRGB, Display-P3; HDR HLG/PQ Rec.2020 (tone-mapped) | — | Tagged Rec.709 / sRGB / P3 (HDR `[v1.x]`) |
 
 Exotic formats are normalized at the import boundary so the playback engine only ever sees a
 small set of well-behaved formats (ADR-0003). Hardware decode/encode is preferred everywhere

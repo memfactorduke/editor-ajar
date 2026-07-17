@@ -36,7 +36,7 @@ final class ExportQueueSnapshotIsolationTests: XCTestCase {
             namesAtFrameRender: namesAtFrameRender
         )
 
-        let jobID = await queue.enqueue(
+        let jobID = try await queue.enqueue(
             request: enqueuedRequest,
             displayName: originalSequenceName
         )

@@ -23,13 +23,17 @@ public struct ExportRequest: Sendable {
     /// Validated encoder, container, color, and audio settings.
     public let settings: ExportSettings
 
+    /// Whether atomic publication may replace an existing file at the chosen destination.
+    public let destinationCollisionPolicy: ExportDestinationCollisionPolicy
+
     /// Creates and validates a captured export request.
     public init(
         project: Project,
         sequenceID: UUID,
         range: TimeRange,
         destinationURL: URL,
-        settings: ExportSettings
+        settings: ExportSettings,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
     ) throws {
         do {
             try settings.validate()
@@ -75,6 +79,7 @@ public struct ExportRequest: Sendable {
         self.range = range
         self.destinationURL = destinationURL
         self.settings = settings
+        self.destinationCollisionPolicy = destinationCollisionPolicy
     }
 
     func videoFrameCount() throws -> Int64 {
@@ -113,16 +118,26 @@ public struct ExportResult: Equatable, Sendable {
     /// Number of offline-mixed audio frames appended.
     public let audioFrameCount: Int
 
+    /// Number of executed per-frame source selections observed by the render graph.
+    public let sourceSelectionRecordCount: Int
+
+    /// Whether any executed source selection used proxy media (must stay false in production).
+    public let usedProxyMedia: Bool
+
     /// Creates an export result.
     public init(
         destinationURL: URL,
         duration: RationalTime,
         videoFrameCount: Int64,
-        audioFrameCount: Int
+        audioFrameCount: Int,
+        sourceSelectionRecordCount: Int = 0,
+        usedProxyMedia: Bool = false
     ) {
         self.destinationURL = destinationURL
         self.duration = duration
         self.videoFrameCount = videoFrameCount
         self.audioFrameCount = audioFrameCount
+        self.sourceSelectionRecordCount = sourceSelectionRecordCount
+        self.usedProxyMedia = usedProxyMedia
     }
 }

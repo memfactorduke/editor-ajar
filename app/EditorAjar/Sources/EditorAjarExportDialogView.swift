@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarExport
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Minimal export dialog: mode, preset, range, still/audio format (FR-EXP-003/004).
 ///
@@ -28,6 +30,11 @@ struct EditorAjarExportDialogView: View {
             if model.exportDialog.mode == .audioOnly {
                 ExportAudioOnlyFormatPicker(model: model)
             }
+            if model.exportDialog.mode == .animatedGIF {
+                ExportAnimatedGIFSizePicker(model: model)
+                ExportAnimatedGIFFrameRatePicker(model: model)
+                ExportAnimatedGIFLoopPicker(model: model)
+            }
 
             if let status = model.exportDialog.statusMessage {
                 Text(status)
@@ -46,15 +53,42 @@ struct EditorAjarExportDialogView: View {
                 .keyboardShortcut(.cancelAction)
                 .accessibilityLabel(AppString.localized("export.dialog.cancel.ax", "Cancel export"))
                 .accessibilityIdentifier("Export Dialog Cancel")
+                .disabled(model.isExportDialogSubmitting)
 
-                Button(AppString.localized("export.dialog.validate", "Validate")) {
-                    _ = model.validateExportDialogSelection()
+                if model.exportDialog.mode == .video
+                    || model.exportDialog.mode == .animatedGIF
+                {
+                    Button {
+                        presentDestinationPanelAndEnqueue()
+                    } label: {
+                        Text(
+                            model.isExportDialogSubmitting
+                                ? AppString.localized(
+                                    "export.dialog.addingToQueue", "Adding…"
+                                )
+                                : AppString.localized(
+                                    "export.dialog.addToQueue", "Add to Queue"
+                                )
+                        )
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityLabel(
+                        AppString.localized("export.dialog.addToQueue.ax", "Add export to queue")
+                    )
+                    .accessibilityIdentifier("Export Dialog Add to Queue")
+                    .disabled(model.isExportDialogSubmitting)
+                } else {
+                    Button(AppString.localized("export.dialog.validate", "Validate")) {
+                        _ = model.validateExportDialogSelection()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityLabel(
+                        AppString.localized(
+                            "export.dialog.validate.ax", "Validate export settings"
+                        )
+                    )
+                    .accessibilityIdentifier("Export Dialog Validate")
                 }
-                .keyboardShortcut(.defaultAction)
-                .accessibilityLabel(
-                    AppString.localized("export.dialog.validate.ax", "Validate export settings")
-                )
-                .accessibilityIdentifier("Export Dialog Validate")
             }
         }
         .padding(20)
@@ -62,6 +96,83 @@ struct EditorAjarExportDialogView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(AppString.localized("export.dialog.ax", "Export dialog"))
         .accessibilityIdentifier("Export Dialog")
+    }
+
+    private func presentDestinationPanelAndEnqueue() {
+        guard !model.isExportDialogSubmitting else {
+            return
+        }
+        let pathExtension = model.exportDialog.suggestedPathExtension
+        let panel = NSSavePanel()
+        panel.title = AppString.localized(
+            "export.dialog.destination.panelTitle", "Choose Export Destination"
+        )
+        panel.prompt = AppString.localized("export.dialog.addToQueue", "Add to Queue")
+        panel.allowedContentTypes = [UTType(filenameExtension: pathExtension) ?? .data]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.allowsOtherFileTypes = false
+        panel.directoryURL =
+            FileManager.default.urls(
+                for: .moviesDirectory,
+                in: .userDomainMask
+            ).first
+        let safeSequenceName = model.activeSequenceName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        panel.nameFieldStringValue = "\(safeSequenceName).\(pathExtension)"
+        guard panel.runModal() == .OK, let destinationURL = panel.url else {
+            return
+        }
+        guard
+            let destinationCollisionPolicy = ExportDestinationOverwriteConfirmation.policy(
+                for: destinationURL,
+                destinationExists: {
+                    FileManager.default.fileExists(atPath: $0.path)
+                },
+                confirmReplacement: confirmReplacingExistingExport
+            )
+        else {
+            return
+        }
+        model.enqueueExportDialogSelection(
+            destinationURL: destinationURL,
+            destinationCollisionPolicy: destinationCollisionPolicy
+        )
+    }
+
+    private func confirmReplacingExistingExport(at destinationURL: URL) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = AppString.localized(
+            "export.dialog.overwrite.title",
+            "Replace Existing Export?"
+        )
+        alert.informativeText = AppString.localized(
+            "export.dialog.overwrite.message",
+            "A file already exists at \(destinationURL.path). Replace it with this export?"
+        )
+        alert.addButton(withTitle: AppString.localized(
+            "export.dialog.overwrite.replace", "Replace"
+        ))
+        alert.addButton(withTitle: AppString.localized(
+            "export.dialog.overwrite.cancel", "Cancel"
+        ))
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+}
+
+/// Converts a post-panel destination observation plus explicit app confirmation into queue policy.
+enum ExportDestinationOverwriteConfirmation {
+    static func policy(
+        for destinationURL: URL,
+        destinationExists: (URL) -> Bool,
+        confirmReplacement: (URL) -> Bool
+    ) -> ExportDestinationCollisionPolicy? {
+        guard destinationExists(destinationURL) else {
+            return .requireVacant
+        }
+        return confirmReplacement(destinationURL) ? .replaceExisting : nil
     }
 }
 
@@ -233,6 +344,105 @@ private struct ExportAudioOnlyFormatPicker: View {
         Binding(
             get: { model.exportDialog.audioOnlyFormat },
             set: { model.setAudioOnlyFormat($0) }
+        )
+    }
+}
+
+private struct ExportAnimatedGIFSizePicker: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(AppString.localized("export.section.gifSize", "Size"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Picker(
+                AppString.localized("export.gif.size.ax", "Animated GIF size"),
+                selection: sizeBinding
+            ) {
+                ForEach(EditorAjarAnimatedGIFSizeChoice.allCases) { choice in
+                    Text(choice.displayName).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel(
+                AppString.localized("export.gif.size.ax", "Animated GIF size")
+            )
+            .accessibilityIdentifier("Export Animated GIF Size Picker")
+            .accessibilityValue(model.exportDialog.animatedGIFSizeChoice.displayName)
+        }
+    }
+
+    private var sizeBinding: Binding<EditorAjarAnimatedGIFSizeChoice> {
+        Binding(
+            get: { model.exportDialog.animatedGIFSizeChoice },
+            set: { model.setAnimatedGIFSizeChoice($0) }
+        )
+    }
+}
+
+private struct ExportAnimatedGIFFrameRatePicker: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(AppString.localized("export.section.gifFrameRate", "Frame rate"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Picker(
+                AppString.localized("export.gif.frameRate.ax", "Animated GIF frame rate"),
+                selection: frameRateBinding
+            ) {
+                ForEach(EditorAjarAnimatedGIFFrameRateChoice.allCases) { choice in
+                    Text(choice.displayName).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel(
+                AppString.localized("export.gif.frameRate.ax", "Animated GIF frame rate")
+            )
+            .accessibilityIdentifier("Export Animated GIF Frame Rate Picker")
+            .accessibilityValue(model.exportDialog.animatedGIFFrameRateChoice.displayName)
+        }
+    }
+
+    private var frameRateBinding: Binding<EditorAjarAnimatedGIFFrameRateChoice> {
+        Binding(
+            get: { model.exportDialog.animatedGIFFrameRateChoice },
+            set: { model.setAnimatedGIFFrameRateChoice($0) }
+        )
+    }
+}
+
+private struct ExportAnimatedGIFLoopPicker: View {
+    @ObservedObject var model: EditorAjarAppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(AppString.localized("export.section.gifLoop", "Playback"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Picker(
+                AppString.localized("export.gif.loop.ax", "Animated GIF playback"),
+                selection: loopBinding
+            ) {
+                ForEach(EditorAjarAnimatedGIFLoopChoice.allCases) { choice in
+                    Text(choice.displayName).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel(
+                AppString.localized("export.gif.loop.ax", "Animated GIF playback")
+            )
+            .accessibilityIdentifier("Export Animated GIF Loop Picker")
+            .accessibilityValue(model.exportDialog.animatedGIFLoopChoice.displayName)
+        }
+    }
+
+    private var loopBinding: Binding<EditorAjarAnimatedGIFLoopChoice> {
+        Binding(
+            get: { model.exportDialog.animatedGIFLoopChoice },
+            set: { model.setAnimatedGIFLoopChoice($0) }
         )
     }
 }

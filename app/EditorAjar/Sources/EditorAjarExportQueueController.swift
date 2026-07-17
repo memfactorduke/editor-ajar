@@ -28,6 +28,22 @@ final class EditorAjarExportQueueController: ObservableObject {
     /// Creates a controller with an injectable session factory (tests use stubs).
     init(sessionFactory: @escaping ExportSessionFactory) {
         queue = ExportQueue(sessionFactory: sessionFactory)
+        startObservingQueue()
+    }
+
+    /// Creates a controller whose single serial queue can run movie and animated-GIF jobs.
+    init(
+        sessionFactory: @escaping ExportSessionFactory,
+        animatedGIFSessionFactory: @escaping AnimatedGIFExportSessionFactory
+    ) {
+        queue = ExportQueue(
+            sessionFactory: sessionFactory,
+            animatedGIFSessionFactory: animatedGIFSessionFactory
+        )
+        startObservingQueue()
+    }
+
+    private func startObservingQueue() {
         observeTask = Task { [weak self] in
             guard let stream = await self?.queue.snapshotStream() else {
                 return
@@ -43,7 +59,10 @@ final class EditorAjarExportQueueController: ObservableObject {
 
     /// Production factory: render-graph frames + AVFoundation hardware encode.
     convenience init() {
-        self.init(sessionFactory: Self.makeProductionSessionFactory())
+        self.init(
+            sessionFactory: Self.makeProductionSessionFactory(),
+            animatedGIFSessionFactory: Self.makeProductionAnimatedGIFSessionFactory()
+        )
     }
 
     deinit {
@@ -58,7 +77,8 @@ final class EditorAjarExportQueueController: ObservableObject {
         range: TimeRange,
         destinationURL: URL,
         settings: ExportSettings,
-        displayName: String
+        displayName: String,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
     ) async throws -> UUID {
         // `ExportRequest` stores `project` by value — live edits after this line cannot race the job.
         let request = try ExportRequest(
@@ -66,9 +86,37 @@ final class EditorAjarExportQueueController: ObservableObject {
             sequenceID: sequenceID,
             range: range,
             destinationURL: destinationURL,
-            settings: settings
+            settings: settings,
+            destinationCollisionPolicy: destinationCollisionPolicy
         )
-        let jobID = await queue.enqueue(request: request, displayName: displayName)
+        let jobID = try await queue.enqueue(request: request, displayName: displayName)
+        statusMessage = nil
+        return jobID
+    }
+
+    /// Enqueues a deterministic animated-GIF export in the same serial background queue.
+    @discardableResult
+    func enqueueAnimatedGIFExport(
+        project: Project,
+        sequenceID: UUID,
+        range: TimeRange,
+        destinationURL: URL,
+        settings: AnimatedGIFExportSettings,
+        displayName: String,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
+    ) async throws -> UUID {
+        let request = try AnimatedGIFExportRequest(
+            project: project,
+            sequenceID: sequenceID,
+            range: range,
+            destinationURL: destinationURL,
+            settings: settings,
+            destinationCollisionPolicy: destinationCollisionPolicy
+        )
+        let jobID = try await queue.enqueue(
+            animatedGIFRequest: request,
+            displayName: displayName
+        )
         statusMessage = nil
         return jobID
     }
@@ -98,9 +146,11 @@ final class EditorAjarExportQueueController: ObservableObject {
         switch project.settings.colorSpace {
         case .displayP3:
             colorSpace = .displayP3
+        case .sRGB:
+            colorSpace = .sRGB
         case .rec709:
             colorSpace = .rec709
-        case .sRGB, .rec2020, .unspecified, .unknown:
+        case .rec2020, .unspecified, .unknown:
             throw ExportError.colorSpaceMismatch(
                 project: project.settings.colorSpace,
                 export: .rec709
@@ -163,6 +213,40 @@ final class EditorAjarExportQueueController: ObservableObject {
                             outputSampleRate: request.settings.audio?.sampleRate
                         )
                     },
+                    onFrameProgress: onProgress
+                )
+            }
+        }
+    }
+
+    private static func makeProductionAnimatedGIFSessionFactory()
+        -> AnimatedGIFExportSessionFactory
+    {
+        { jobID, request, onProgress in
+            do {
+                let sourceProvider = try EditorAjarExportSourceProvider(
+                    project: request.project
+                )
+                let frameProvider = try RenderGraphExportFrameProvider(
+                    project: request.project,
+                    sequence: request.sequence,
+                    resolution: request.settings.resolution,
+                    colorSpace: request.settings.sourceColorSpace,
+                    sourceProvider: sourceProvider
+                )
+                return AnimatedGIFExportSession(
+                    id: jobID,
+                    request: request,
+                    frameProvider: frameProvider,
+                    onFrameProgress: onProgress
+                )
+            } catch {
+                return AnimatedGIFExportSession(
+                    id: jobID,
+                    request: request,
+                    frameProvider: FailingExportFrameProvider(
+                        reason: String(describing: error)
+                    ),
                     onFrameProgress: onProgress
                 )
             }
