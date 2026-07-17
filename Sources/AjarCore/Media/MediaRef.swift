@@ -245,6 +245,17 @@ public struct MediaRef: Codable, Hashable, Sendable {
         availability == .offline
     }
 
+    /// Durable SHA-256 identity for the playable bytes at `sourceURL`, when known.
+    ///
+    /// Ordinary references play their original bytes. Transcoded references instead play the
+    /// working transcode, whose hash is unavailable in projects created before it was persisted.
+    public var playableSourceContentHash: ContentHash? {
+        guard let transcodeProvenance else {
+            return contentHash
+        }
+        return transcodeProvenance.playableContentHash
+    }
+
     /// Returns the relink match quality for `candidate`, if it can be matched.
     public func relinkMatch(for candidate: MediaRelinkCandidate) -> MediaRelinkMatch? {
         if let contentHash, let candidateHash = candidate.contentHash {

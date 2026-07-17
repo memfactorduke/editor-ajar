@@ -76,8 +76,14 @@ enum EditorAjarDocumentOperation {
 }
 
 private struct MediaPreviewTaskKey: Hashable {
-    let mediaID: UUID
+    let taskIdentity: MediaPreviewTaskIdentity
+    let contentIdentity: MediaPreviewContentIdentity
     let kind: MediaPreviewKind
+}
+
+private struct MediaPreviewTaskRecord {
+    let generation: UUID
+    let task: Task<Void, Never>
 }
 
 @MainActor
@@ -198,6 +204,7 @@ final class EditorAjarAppModel: ObservableObject {
     @Published private(set) var mediaThumbnailData: [UUID: Data] = [:]
     /// Transient hover-scrub frames only — never written into `mediaThumbnailData` (M4).
     @Published private(set) var mediaHoverPreviewData: [UUID: Data] = [:]
+    @Published private(set) var mediaPreviewGeneration: UInt64 = 0
     /// Decoded audio waveform summaries for media-browser tiles (M6).
     @Published private(set) var mediaWaveformSummary: [UUID: AudioWaveformSummary] = [:]
     /// Stable offline item currently awaiting a single-file relink choice.
@@ -306,7 +313,8 @@ final class EditorAjarAppModel: ObservableObject {
     var projectSessionGeneration: UInt64 = 0
     private var mediaHoverTask: Task<Void, Never>?
     private var mediaHoverMediaID: UUID?
-    private var mediaPreviewTasks: [MediaPreviewTaskKey: Task<Void, Never>] = [:]
+    private var mediaHoverTaskIdentity: MediaPreviewTaskIdentity?
+    private var mediaPreviewTasks: [MediaPreviewTaskKey: MediaPreviewTaskRecord] = [:]
     private var mediaPreviewCache: MediaPreviewCache?
     private let automaticallyResolvesMediaReferences: Bool
     private var autosaveCommandCount = 0
@@ -707,10 +715,16 @@ final class EditorAjarAppModel: ObservableObject {
             sourceURL: documentURL,
             destinationURL: standardizedURL
         )
+        let previousProject = self.project
+        cancelAllMediaPreviews()
+        mediaPreviewCache = nil
+        mediaPreviewGeneration &+= 1
+        invalidateMediaPreviews(replacing: previousProject, with: saveAsResult.project)
         self.project = saveAsResult.project
         editHistory = saveAsResult.editHistory
         documentSecurityScope = newScope
         didSave(project: saveAsResult.project, at: standardizedURL)
+        ensureTimelineAudioWaveforms()
         switch saveAsResult.cleanupWarning {
         case .retainedPackage(let retainedURL, _):
             documentWarningMessage = AppString.localized(
@@ -1114,8 +1128,8 @@ final class EditorAjarAppModel: ObservableObject {
         proxyObserveTask?.cancel()
         renderTask?.cancel()
         mediaHoverTask?.cancel()
-        for task in mediaPreviewTasks.values {
-            task.cancel()
+        for record in mediaPreviewTasks.values {
+            record.task.cancel()
         }
         if let mediaPreviewCache {
             Task {
@@ -4457,6 +4471,7 @@ final class EditorAjarAppModel: ObservableObject {
         unsavedName: String?
     ) {
         projectSessionGeneration &+= 1
+        mediaPreviewGeneration &+= 1
         displayLinkDriver?.stop()
         audioCoordinator?.stop()
         mediaResolutionTask?.cancel()
@@ -4613,13 +4628,46 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Test seam: replaces the open project while preserving edit history (availability flips).
     func replaceProjectPreservingHistoryForTesting(_ next: Project) {
+        let replacement: Project
         if var history = editHistory {
-            project = history.replaceCurrentProjectPreservingHistory(next)
+            replacement = history.replaceCurrentProjectPreservingHistory(next)
             editHistory = history
-            refreshDirtyState()
         } else {
-            project = next
-            refreshDirtyState()
+            replacement = next
+        }
+        updateProject(replacement)
+    }
+
+    /// Test seam: installs a deterministic preview cache/extractor for race coverage.
+    func setMediaPreviewCacheForTesting(_ cache: MediaPreviewCache?) {
+        cancelAllMediaPreviews()
+        mediaPreviewCache = cache
+    }
+
+    /// Test seam: active preview records after cancellation/restart cleanup.
+    var mediaPreviewTaskCountForTesting: Int {
+        mediaPreviewTasks.count
+    }
+
+    /// Test seam: confirms package transitions discard the cache actor bound to the old root.
+    var hasMediaPreviewCacheForTesting: Bool {
+        mediaPreviewCache != nil
+    }
+
+    /// Test seam: generation retained by the first active preview record for a media id.
+    func mediaPreviewTaskGenerationForTesting(_ mediaID: UUID) -> UUID? {
+        mediaPreviewTasks.first {
+            $0.key.taskIdentity.mediaID == mediaID
+        }?.value.generation
+    }
+
+    /// Test seam: exercises a delayed completion without depending on task-scheduler timing.
+    func finishMediaPreviewTaskForTesting(mediaID: UUID, generation: UUID) {
+        let matchingKeys = mediaPreviewTasks.keys.filter {
+            $0.taskIdentity.mediaID == mediaID
+        }
+        for key in matchingKeys {
+            finishMediaPreviewTask(key, generation: generation)
         }
     }
 
@@ -5410,6 +5458,7 @@ final class EditorAjarAppModel: ObservableObject {
 
     private func updateProject(_ project: Project) {
         persistActiveSequenceContext()
+        invalidateMediaPreviews(replacing: self.project, with: project)
         self.project = project
         refreshDirtyState()
         bindRenderPackageRoot()
@@ -5435,6 +5484,47 @@ final class EditorAjarAppModel: ObservableObject {
         ensureTimelineAudioWaveforms()
         if isMixerPanelVisible {
             refreshMixerMeters()
+        }
+    }
+
+    /// Drops regeneratable data and work whose stable media id now points at different bytes.
+    ///
+    /// This runs before installing `nextProject`, so an old task cannot race the relink and publish
+    /// its result into the new project. Each cache request retains the identity captured when its
+    /// task began; waiter accounting propagates cancellation without aborting a coalesced
+    /// extraction that another media tile still needs.
+    private func invalidateMediaPreviews(
+        replacing previousProject: Project?,
+        with nextProject: Project
+    ) {
+        guard let previousProject else { return }
+        var nextIdentities: [UUID: MediaPreviewTaskIdentity] = [:]
+        for media in nextProject.mediaPool {
+            nextIdentities[media.id] = MediaPreviewTaskIdentity(media: media)
+        }
+        let changedMediaIDs = Set(previousProject.mediaPool.compactMap { media -> UUID? in
+            let previousIdentity = MediaPreviewTaskIdentity(media: media)
+            return nextIdentities[media.id] == previousIdentity ? nil : media.id
+        })
+        guard !changedMediaIDs.isEmpty else { return }
+
+        let matchingKeys = mediaPreviewTasks.keys.filter {
+            changedMediaIDs.contains($0.taskIdentity.mediaID)
+        }
+        for key in matchingKeys {
+            mediaPreviewTasks[key]?.task.cancel()
+            mediaPreviewTasks[key] = nil
+        }
+
+        for mediaID in changedMediaIDs {
+            mediaThumbnailData[mediaID] = nil
+            mediaWaveformSummary[mediaID] = nil
+            mediaHoverPreviewData[mediaID] = nil
+        }
+        if let hoverIdentity = mediaHoverTaskIdentity,
+           changedMediaIDs.contains(hoverIdentity.mediaID)
+        {
+            cancelMediaHoverPreview()
         }
     }
 
@@ -5793,37 +5883,86 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func requestMediaPreview(for media: MediaRef, kind: MediaPreviewKind) async {
-        guard !media.isOffline, media.contentHash != nil else { return }
-        let key = MediaPreviewTaskKey(mediaID: media.id, kind: kind)
-        if mediaPreviewTasks[key] != nil { return }
+        guard !media.isOffline else { return }
+        let taskIdentity = MediaPreviewTaskIdentity(media: media)
+        let sessionGeneration = projectSessionGeneration
         guard let cache = ensureMediaPreviewCache() else { return }
-        let mediaID = media.id
+        let contentIdentity: MediaPreviewContentIdentity
+        do {
+            contentIdentity = try await cache.contentIdentity(for: media)
+        } catch {
+            return
+        }
+        guard !Task.isCancelled,
+              projectSessionGeneration == sessionGeneration,
+              mediaPreviewCache === cache,
+              let current = project?.mediaPool.first(where: { $0.id == media.id }),
+              MediaPreviewTaskIdentity(media: current) == taskIdentity
+        else {
+            return
+        }
+        let key = MediaPreviewTaskKey(
+            taskIdentity: taskIdentity,
+            contentIdentity: contentIdentity,
+            kind: kind
+        )
+        if mediaPreviewTasks[key] != nil { return }
+        let generation = UUID()
         let task = Task { [weak self] in
             defer {
                 Task { @MainActor in
-                    self?.mediaPreviewTasks[key] = nil
+                    self?.finishMediaPreviewTask(key, generation: generation)
                 }
             }
-            switch kind {
-            case .thumbnail:
-                guard let data = try? await cache.data(for: media, kind: .thumbnail),
-                      !Task.isCancelled
-                else { return }
-                await MainActor.run { self?.mediaThumbnailData[mediaID] = data }
-            case .waveform:
-                guard let data = try? await cache.data(for: media, kind: .waveform),
-                      !Task.isCancelled,
-                      let summary = try? JSONDecoder().decode(AudioWaveformSummary.self, from: data)
-                else { return }
-                await MainActor.run { self?.mediaWaveformSummary[mediaID] = summary }
-            }
+            guard let data = try? await cache.data(
+                for: media,
+                identity: contentIdentity,
+                kind: kind
+            ), !Task.isCancelled else { return }
+            self?.publishMediaPreview(
+                data,
+                for: key,
+                generation: generation
+            )
         }
-        mediaPreviewTasks[key] = task
+        mediaPreviewTasks[key] = MediaPreviewTaskRecord(generation: generation, task: task)
         // Propagate SwiftUI `.task` cancellation into the per-id extraction task (M1).
         await withTaskCancellationHandler {
             await task.value
         } onCancel: {
             task.cancel()
+        }
+    }
+
+    private func finishMediaPreviewTask(_ key: MediaPreviewTaskKey, generation: UUID) {
+        guard mediaPreviewTasks[key]?.generation == generation else { return }
+        mediaPreviewTasks[key] = nil
+    }
+
+    private func publishMediaPreview(
+        _ data: Data,
+        for key: MediaPreviewTaskKey,
+        generation: UUID
+    ) {
+        guard !Task.isCancelled,
+              mediaPreviewTasks[key]?.generation == generation,
+              let current = project?.mediaPool.first(
+                  where: { $0.id == key.taskIdentity.mediaID }
+              ),
+              MediaPreviewTaskIdentity(media: current) == key.taskIdentity
+        else {
+            return
+        }
+
+        switch key.kind {
+        case .thumbnail:
+            mediaThumbnailData[key.taskIdentity.mediaID] = data
+        case .waveform:
+            guard let summary = try? JSONDecoder().decode(
+                AudioWaveformSummary.self,
+                from: data
+            ) else { return }
+            mediaWaveformSummary[key.taskIdentity.mediaID] = summary
         }
     }
 
@@ -5837,27 +5976,21 @@ final class EditorAjarAppModel: ObservableObject {
         Task { await requestMediaPreview(for: media, kind: kind) }
     }
 
-    /// Cancels per-id preview extraction (tile disappear) and notifies the cache (M1).
+    /// Cancels per-id preview extraction; cache waiter accounting handles shared work (M1).
     func cancelMediaPreview(for mediaID: UUID) {
-        for kind in [MediaPreviewKind.thumbnail, .waveform] {
-            let key = MediaPreviewTaskKey(mediaID: mediaID, kind: kind)
-            mediaPreviewTasks[key]?.cancel()
-            mediaPreviewTasks[key] = nil
+        let matchingKeys = mediaPreviewTasks.keys.filter {
+            $0.taskIdentity.mediaID == mediaID
         }
-        if let media = project?.mediaPool.first(where: { $0.id == mediaID }),
-           let cache = mediaPreviewCache
-        {
-            Task {
-                await cache.cancel(for: media, kind: .thumbnail)
-                await cache.cancel(for: media, kind: .waveform)
-            }
+        for key in matchingKeys {
+            mediaPreviewTasks[key]?.task.cancel()
+            mediaPreviewTasks[key] = nil
         }
     }
 
     /// Panel close / project swap — drop all preview and hover work.
     func cancelAllMediaPreviews() {
-        for (_, task) in mediaPreviewTasks {
-            task.cancel()
+        for (_, record) in mediaPreviewTasks {
+            record.task.cancel()
         }
         mediaPreviewTasks.removeAll()
         cancelMediaHoverPreview()
@@ -5869,12 +6002,14 @@ final class EditorAjarAppModel: ObservableObject {
     /// Throttled grid hover decode via the bounded cache scheduler (M5); transient store only (M4).
     func requestMediaHoverPreview(mediaID: UUID, fraction: Double) {
         mediaHoverTask?.cancel()
-        mediaHoverMediaID = mediaID
         guard let media = project?.mediaPool.first(where: { $0.id == mediaID }),
               !media.isOffline,
               media.metadata.pixelDimensions != nil,
               let cache = ensureMediaPreviewCache()
         else { return }
+        let taskIdentity = MediaPreviewTaskIdentity(media: media)
+        mediaHoverMediaID = mediaID
+        mediaHoverTaskIdentity = taskIdentity
         mediaHoverTask = Task { [weak self] in
             guard let scaled = try? media.metadata.duration.multiplied(
                 by: Int64((fraction * 1_000).rounded())
@@ -5886,8 +6021,15 @@ final class EditorAjarAppModel: ObservableObject {
                   !Task.isCancelled
             else { return }
             await MainActor.run {
-                guard self?.mediaHoverMediaID == mediaID else { return }
-                self?.mediaHoverPreviewData = [mediaID: data]
+                guard let self,
+                      self.mediaHoverMediaID == mediaID,
+                      self.mediaHoverTaskIdentity == taskIdentity,
+                      let current = self.project?.mediaPool.first(
+                          where: { $0.id == mediaID }
+                      ),
+                      MediaPreviewTaskIdentity(media: current) == taskIdentity
+                else { return }
+                self.mediaHoverPreviewData = [mediaID: data]
             }
         }
     }
@@ -5896,6 +6038,7 @@ final class EditorAjarAppModel: ObservableObject {
         mediaHoverTask?.cancel()
         mediaHoverTask = nil
         mediaHoverMediaID = nil
+        mediaHoverTaskIdentity = nil
         // Restore durable thumbnail display by clearing the transient hover store (M4).
         if !mediaHoverPreviewData.isEmpty {
             mediaHoverPreviewData = [:]

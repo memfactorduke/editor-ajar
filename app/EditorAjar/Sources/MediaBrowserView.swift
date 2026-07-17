@@ -265,7 +265,12 @@ private struct MediaPreviewTile: View {
                 .foregroundStyle(.orange)
             }
         }
-        .task(id: media.contentHash) {
+        .task(
+            id: MediaPreviewViewTaskIdentity(
+                media: MediaPreviewTaskIdentity(media: media),
+                cacheGeneration: model.mediaPreviewGeneration
+            )
+        ) {
             await model.requestMediaPreview(for: media)
         }
         .onDisappear {

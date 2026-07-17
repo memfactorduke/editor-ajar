@@ -139,7 +139,7 @@ public actor MediaSourceIdentityVerifier {
         }
 
         let sourceURL = unstandardizedURL.standardizedFileURL
-        let revision = try Self.securityScopedRevision(for: sourceURL)
+        let revision = try Self.sourceRevision(for: sourceURL)
         let expectedIdentity = Self.expectedIdentity(for: media, sourceURL: sourceURL)
         let playableContentHash: ContentHash?
 
@@ -285,7 +285,7 @@ public actor MediaSourceIdentityVerifier {
     ) throws {
         let currentRevision: MediaSourceRevision
         do {
-            currentRevision = try Self.securityScopedRevision(for: sourceURL)
+            currentRevision = try Self.sourceRevision(for: sourceURL)
         } catch {
             throw MediaSourceIdentityVerificationError.sourceChangedDuringRead(sourceURL)
         }
@@ -294,10 +294,12 @@ public actor MediaSourceIdentityVerifier {
         }
     }
 
-    private static func securityScopedRevision(for sourceURL: URL) throws -> MediaSourceRevision {
-        guard sourceURL.isFileURL else {
-            throw MediaSourceIdentityVerificationError.sourceMustBeFileURL(sourceURL)
+    /// Captures a standardized local file's current revision without reading its contents.
+    public static func sourceRevision(for unstandardizedURL: URL) throws -> MediaSourceRevision {
+        guard unstandardizedURL.isFileURL else {
+            throw MediaSourceIdentityVerificationError.sourceMustBeFileURL(unstandardizedURL)
         }
+        let sourceURL = unstandardizedURL.standardizedFileURL
         let startedSecurityScope = sourceURL.startAccessingSecurityScopedResource()
         defer {
             if startedSecurityScope {
