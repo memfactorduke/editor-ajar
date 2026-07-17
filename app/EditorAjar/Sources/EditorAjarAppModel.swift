@@ -310,6 +310,7 @@ final class EditorAjarAppModel: ObservableObject {
     private var mediaImportTask: Task<Void, Never>?
     var mediaConsolidationTask: Task<Void, Never>?
     private var renderTask: Task<Void, Never>?
+    private var isPreparingForTermination = false
     var projectSessionGeneration: UInt64 = 0
     private var mediaHoverTask: Task<Void, Never>?
     private var mediaHoverMediaID: UUID?
@@ -592,6 +593,19 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Waits for the latest queued recovery write/removal before the process terminates.
     func finishPendingDocumentWrites() async {
+        isPreparingForTermination = true
+        playbackController?.shuttlePause()
+        isPlaying = false
+        stopAudioPlayback()
+        displayLinkDriver?.stop()
+        let pendingRenderTask = renderTask
+        let pipeline = renderPipeline
+        renderTask?.cancel()
+        renderTask = nil
+        renderGeneration += 1
+        pipeline?.cancelDiskWriteBehind()
+        await pendingRenderTask?.value
+        await pipeline?.shutdownDiskWriteBehind()
         mediaConsolidationTask?.cancel()
         await mediaConsolidationTask?.value
         await autosaveWriteTask?.value
@@ -705,16 +719,27 @@ final class EditorAjarAppModel: ObservableObject {
             throw EditorAjarDocumentLifecycleError.noProject
         }
         try requireEditableSaveMode()
+        // Save As can replace/move the old package. Revoke the render generation first so a
+        // decode started against that package cannot later publish a texture or disk-cache write.
+        cancelRenderForProjectTransition()
         let standardizedURL = destinationURL.standardizedFileURL
         let newScope = EditorAjarSecurityScopedAccess(url: standardizedURL)
-        let saveAsResult = try documentStore.saveAs(
-            project: project,
-            editHistory: editHistory,
-            openMode: projectOpenMode,
-            appliedCommandCount: autosaveCommandCount,
-            sourceURL: documentURL,
-            destinationURL: standardizedURL
-        )
+        let saveAsResult: EditorAjarSaveAsResult
+        do {
+            saveAsResult = try documentStore.saveAs(
+                project: project,
+                editHistory: editHistory,
+                openMode: projectOpenMode,
+                appliedCommandCount: autosaveCommandCount,
+                sourceURL: documentURL,
+                destinationURL: standardizedURL
+            )
+        } catch {
+            // The old document remains installed after a failed Save As, so replace the render
+            // that was invalidated for the attempted package transition.
+            requestRenderForCurrentFrame()
+            throw error
+        }
         let previousProject = self.project
         cancelAllMediaPreviews()
         mediaPreviewCache = nil
@@ -739,6 +764,7 @@ final class EditorAjarAppModel: ObservableObject {
         case nil:
             documentWarningMessage = nil
         }
+        requestRenderForCurrentFrame()
     }
 
     /// Discards unsaved edits and reloads only the explicit saved bytes (no journal replay).
@@ -1127,6 +1153,7 @@ final class EditorAjarAppModel: ObservableObject {
         mediaConsolidationTask?.cancel()
         proxyObserveTask?.cancel()
         renderTask?.cancel()
+        renderPipeline?.cancelDiskWriteBehind()
         mediaHoverTask?.cancel()
         for record in mediaPreviewTasks.values {
             record.task.cancel()
@@ -4169,6 +4196,16 @@ final class EditorAjarAppModel: ObservableObject {
         displayLinkTick(deltaSeconds)
     }
 
+    /// Test seam: render generations must stop advancing once termination preparation begins.
+    var renderGenerationForTesting: Int {
+        renderGeneration
+    }
+
+    /// Test seam: termination is a one-way boundary because the disk writer has been shut down.
+    var isPreparingForTerminationForTesting: Bool {
+        isPreparingForTermination
+    }
+
     private func applyAudioMixEdit(
         _ command: EditCommand,
         gestureKey: AudioMixGestureKey,
@@ -4475,8 +4512,7 @@ final class EditorAjarAppModel: ObservableObject {
         displayLinkDriver?.stop()
         audioCoordinator?.stop()
         mediaResolutionTask?.cancel()
-        renderTask?.cancel()
-        renderTask = nil
+        cancelRenderForProjectTransition()
         cancelAllMediaPreviews()
         mediaThumbnailData = [:]
         mediaWaveformSummary = [:]
@@ -4489,7 +4525,6 @@ final class EditorAjarAppModel: ObservableObject {
         mixerMeterError = nil
         masterGainLinear = AudioMixUISupport.defaultMasterGainLinear
         audioMixGestureKey = nil
-        renderGeneration += 1
         isPlaying = false
         project = loadResult.project
         projectOpenMode = loadResult.openMode
@@ -4551,6 +4586,16 @@ final class EditorAjarAppModel: ObservableObject {
         if automaticallyResolvesMediaReferences {
             startMediaResolution(for: loadResult)
         }
+    }
+
+    /// Synchronous render invalidation for document/package transitions. The old write owner is
+    /// cancelled immediately; its at-most-two admitted writes drain off-main through the shared
+    /// coordinator while new renders use a fresh owner.
+    private func cancelRenderForProjectTransition() {
+        renderTask?.cancel()
+        renderTask = nil
+        renderGeneration += 1
+        renderPipeline?.beginNewProjectSession()
     }
 
     private func refreshDirtyState() {
@@ -4686,7 +4731,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func displayLinkTick(_ deltaSeconds: Double) {
-        guard isPlaying else {
+        guard !isPreparingForTermination, isPlaying else {
             return
         }
 
@@ -4837,7 +4882,8 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func requestRenderForCurrentFrame() {
-        guard let project,
+        guard !isPreparingForTermination,
+              let project,
               let sequence = activeSequence,
               let renderPipeline
         else {
@@ -4852,6 +4898,7 @@ final class EditorAjarAppModel: ObservableObject {
         let generation = renderGeneration
         let frame = playheadFrame
         let allowDiskWriteBehind = playbackRate == 0
+        let renderDocumentScope = documentSecurityScope
         loadMessage = AppString.localized("status.renderingFrame", "Rendering frame \(frame)")
 
         renderTask = Task { [
@@ -4861,8 +4908,10 @@ final class EditorAjarAppModel: ObservableObject {
             renderPipeline,
             frame,
             generation,
-            allowDiskWriteBehind
+            allowDiskWriteBehind,
+            renderDocumentScope
         ] in
+            defer { withExtendedLifetime(renderDocumentScope) {} }
             do {
                 let renderedFrame = try await renderPipeline.renderFrame(
                     project: project,

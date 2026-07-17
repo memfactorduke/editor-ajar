@@ -391,6 +391,29 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertFalse(AjarAutosaveStore.hasRecoverableSnapshot(at: recoveryURL))
     }
 
+    func testNFRSTAB001TerminationStopsAndRejectsNewRenderProducers() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let model = fixture.makeModel()
+        try model.createNewProject(settings: .sensibleDefaults)
+
+        model.shuttleForward()
+        XCTAssertTrue(model.isPlaying)
+
+        await model.finishPendingDocumentWrites()
+
+        XCTAssertTrue(model.isPreparingForTerminationForTesting)
+        XCTAssertFalse(model.isPlaying)
+        let generationAfterDrain = model.renderGenerationForTesting
+        let playheadAfterDrain = model.playheadFrame
+
+        model.simulateDisplayLinkTickForTesting(1)
+        model.stepForward()
+
+        XCTAssertEqual(model.playheadFrame, playheadAfterDrain)
+        XCTAssertEqual(model.renderGenerationForTesting, generationAfterDrain)
+    }
+
     func testFRPROJ002VersionSnapshotsKeepNewestTenAndPruneOldest() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }

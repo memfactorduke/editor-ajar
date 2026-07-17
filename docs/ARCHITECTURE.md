@@ -249,6 +249,12 @@ seek latency (NFR-PERF-005).
   (NFR-PERF-009).
 - **Two-tier render cache:** hot frames in RAM, warm frames spilled to a disk cache under the
   `.ajar` package's `caches/` (excluded from project identity).
+- **Bounded disk write-behind:** completed-frame spill is admitted through one process-wide
+  coordinator with at most two physical writes. Admission is best-effort and drop-on-full, so
+  playback never waits for disk capacity or retains an unbounded queue of full-frame textures.
+  Each render pipeline owns a cancellable generation: project/package replacement invalidates the
+  old generation at the disk publication boundary, while explicit shutdown rejects new work and
+  drains every admitted write before the pipeline is considered closed.
 - **Zero-copy** GPU texture handling on the decode→composite path; CPU readback only for export
   and scopes, off the interactive path.
 - **No leaks:** a 1-hour soak test must stay flat (NFR-STAB-005).

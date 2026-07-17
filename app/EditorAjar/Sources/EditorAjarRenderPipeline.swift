@@ -12,16 +12,25 @@ final class EditorAjarRenderPipeline {
     private let decoder: VideoFrameDecoder
     private let executor: MetalRenderExecutor
     private let diskCache: MetalDiskFrameCache
-    private let writeBehindTracker = DiskWriteBehindTracker()
+    private let writeBehindTracker: DiskWriteBehindTracker
     private let offlineSlateCache: AppOfflineSlateTextureCache
+    private let packageRootLock = NSLock()
+    private var packageRootURLValue: URL?
     /// Optional `.ajar` package root for resolving `caches/proxies/` paths (FR-MED-004).
-    var packageRootURL: URL?
+    var packageRootURL: URL? {
+        get { packageRootLock.withLock { packageRootURLValue } }
+        set { packageRootLock.withLock { packageRootURLValue = newValue } }
+    }
 
-    init(cacheDirectoryURL: URL? = nil) throws {
+    init(
+        cacheDirectoryURL: URL? = nil,
+        writeBehindCoordinator: DiskWriteBehindCoordinator = .shared
+    ) throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw MetalRenderError.metalDeviceUnavailable
         }
         self.device = device
+        writeBehindTracker = DiskWriteBehindTracker(coordinator: writeBehindCoordinator)
         decoder = try VideoFrameDecoder(device: device)
         diskCache = try MetalDiskFrameCache(
             device: device,
@@ -31,27 +40,24 @@ final class EditorAjarRenderPipeline {
         offlineSlateCache = AppOfflineSlateTextureCache(device: device)
     }
 
+    deinit {
+        // Awaited shutdown is used at explicit lifecycle boundaries. This synchronous fallback
+        // still closes admission and cancels the owner if a caller releases a pipeline directly.
+        writeBehindTracker.shutdown()
+    }
+
     func renderFrame(
         project: Project,
         sequence: Sequence,
         frame: Int64,
         allowDiskWriteBehind: Bool = true
     ) async throws -> EditorAjarRenderedFrame {
-        let time = try RationalTime.atFrame(frame, frameRate: sequence.timebase)
         let packageRoot = packageRootURL
-        let proxyFileExists: @Sendable (UUID) -> Bool = { mediaID in
-            guard let media = project.mediaPool.first(where: { $0.id == mediaID }),
-                  let relative = media.proxyState.readyRelativePath,
-                  let packageRoot
-            else {
-                return false
-            }
-            let url = ProxyStorageLayout.absoluteURL(
-                packageRootURL: packageRoot,
-                relativePath: relative
-            )
-            return FileManager.default.isReadableFile(atPath: url.path)
-        }
+        let diskWriteBehindSession = try captureDiskWriteBehindSession()
+        let time = try RationalTime.atFrame(frame, frameRate: sequence.timebase)
+        let proxyFileExists = Self.proxyFileExistsResolver(
+            project: project, packageRoot: packageRoot
+        )
         var graph = try buildRenderGraph(
             for: sequence,
             at: time,
@@ -81,6 +87,7 @@ final class EditorAjarRenderPipeline {
             offlineSlateCache: offlineSlateCache,
             packageRootURL: packageRoot
         )
+        try Task.checkCancellation()
         if !sourceProvider.runtimeOfflineMediaIDs.isEmpty {
             let runtimeProject = project.updatingMediaAvailability(
                 .offline,
@@ -98,13 +105,36 @@ final class EditorAjarRenderPipeline {
             output: output,
             sourceProvider: sourceProvider
         )
+        return try await finishRender(
+            renderedFrame,
+            output: output,
+            sourceProvider: sourceProvider,
+            allowDiskWriteBehind: allowDiskWriteBehind,
+            diskWriteBehindSession: diskWriteBehindSession
+        )
+    }
 
+    private func captureDiskWriteBehindSession() throws -> DiskWriteBehindSession? {
+        try Task.checkCancellation()
+        return writeBehindTracker.captureSession()
+    }
+
+    private func finishRender(
+        _ renderedFrame: RenderedFrame,
+        output: RenderOutputDescriptor,
+        sourceProvider: AppSourceTextureProvider,
+        allowDiskWriteBehind: Bool,
+        diskWriteBehindSession: DiskWriteBehindSession?
+    ) async throws -> EditorAjarRenderedFrame {
         try await renderedFrame.waitForCompletion()
-        if allowDiskWriteBehind, !renderedFrame.cacheHit {
+        try Task.checkCancellation()
+        if allowDiskWriteBehind, !renderedFrame.cacheHit, let diskWriteBehindSession {
+            let persistenceFrame = try await renderedFrame.diskCachePersistenceFrame()
             await writeBehindTracker.submit(
                 diskCache: diskCache,
-                frame: renderedFrame,
-                output: output
+                frame: persistenceFrame,
+                output: output,
+                session: diskWriteBehindSession
             )
         }
         return EditorAjarRenderedFrame(
@@ -114,6 +144,24 @@ final class EditorAjarRenderPipeline {
             runtimeOfflineMediaIDs: sourceProvider.runtimeOfflineMediaIDs,
             mediaIDsNeedingProxyGeneration: sourceProvider.mediaIDsNeedingProxyGeneration
         )
+    }
+
+    private static func proxyFileExistsResolver(
+        project: Project,
+        packageRoot: URL?
+    ) -> @Sendable (UUID) -> Bool {
+        { mediaID in
+            guard let media = project.mediaPool.first(where: { $0.id == mediaID }),
+                  let relative = media.proxyState.readyRelativePath,
+                  let packageRoot else {
+                return false
+            }
+            let url = ProxyStorageLayout.absoluteURL(
+                packageRootURL: packageRoot,
+                relativePath: relative
+            )
+            return FileManager.default.isReadableFile(atPath: url.path)
+        }
     }
 
     func removeAllCachedFramesForTesting() {
@@ -135,6 +183,36 @@ final class EditorAjarRenderPipeline {
         await writeBehindTracker.waitForAll()
     }
 
+    func waitForDiskCacheIOForTesting() {
+        diskCache.waitUntilIdle()
+    }
+
+    /// Invalidates best-effort writes admitted for the previous project/package session.
+    /// New renders immediately receive a fresh owner, while obsolete work is cancelled and
+    /// drained in the background without blocking the main or playback paths.
+    func beginNewProjectSession() {
+        writeBehindTracker.beginNewSession()
+    }
+
+    /// Synchronous close used by deinit and tests that need to reject late submissions first.
+    func cancelDiskWriteBehind() {
+        writeBehindTracker.shutdown()
+    }
+
+    /// Closes admission, cancels the pipeline's writes, and waits for their physical completion.
+    func shutdownDiskWriteBehind() async {
+        await writeBehindTracker.shutdownAndWait()
+    }
+
+    /// Deterministic scheduler seam: exercises ownership/backpressure without allocating frame
+    /// payloads. Production rendering always uses the typed `DiskWriteBehindRequest` below.
+    @discardableResult
+    func submitDiskWriteBehindForTesting(
+        _ operation: @escaping DiskWriteBehindCoordinator.Operation
+    ) async -> Bool {
+        await writeBehindTracker.submit(operation)
+    }
+
     private static func defaultCacheDirectoryURL() throws -> URL {
         guard let cachesURL = FileManager.default.urls(
             for: .cachesDirectory,
@@ -154,37 +232,6 @@ struct EditorAjarRenderedFrame {
     let cacheDisposition: RenderFrameCacheDisposition
     let runtimeOfflineMediaIDs: Set<UUID>
     let mediaIDsNeedingProxyGeneration: Set<UUID>
-}
-
-private actor DiskWriteBehindTracker {
-    private static let maximumPendingWrites = 2
-    private var tasks: [UUID: Task<Void, Never>] = [:]
-
-    func submit(
-        diskCache: MetalDiskFrameCache,
-        frame: RenderedFrame,
-        output: RenderOutputDescriptor
-    ) {
-        guard tasks.count < Self.maximumPendingWrites else {
-            return
-        }
-        let id = UUID()
-        tasks[id] = Task.detached(priority: .background) { [weak self] in
-            try? await diskCache.persist(frame: frame, output: output)
-            await self?.complete(id)
-        }
-    }
-
-    func waitForAll() async {
-        let pending = tasks.values
-        for task in pending {
-            await task.value
-        }
-    }
-
-    private func complete(_ id: UUID) {
-        tasks[id] = nil
-    }
 }
 
 private struct AppSourceTextureKey: Hashable {
