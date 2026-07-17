@@ -20,7 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dialog now exposes size, frame-rate, whole/in-out range, and play-once/forever controls and submits
   immutable `.gif` requests through the same strictly serial queue as movie jobs. Mixed-format
   ordering, progress, pause/restart, cancellation, atomic publication, localized/VoiceOver UI, and a
-  production app-path ImageIO decode are covered. GIF import is still intentionally first-frame-only.
+  production app-path ImageIO decode are covered. Movie/GIF submission now asks the user to choose a
+  visible filename and location, inherits the project's delivery color/audio settings, and rejects
+  repeated Return or double-click submission until the queue accepts or rejects the first request.
+  GIF import is still intentionally first-frame-only.
 
 - Complete compound-clip app workflow (#269, FR-CMP-001…005): localized, VoiceOver-labelled Clip
   menu actions Make (`⌥G`), Open, and Decompose (`⇧⌘G`) reuse the atomic `AjarCore` commands.

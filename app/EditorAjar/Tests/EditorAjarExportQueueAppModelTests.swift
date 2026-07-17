@@ -154,7 +154,12 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
 
         model.presentExportDialog()
         model.setExportMode(.video)
+        XCTAssertFalse(model.isExportDialogSubmitting)
         model.enqueueExportDialogSelection(destinationURL: destination)
+        XCTAssertTrue(model.isExportDialogSubmitting)
+        model.enqueueExportDialogSelection(destinationURL: destination)
+        model.dismissExportDialog()
+        XCTAssertTrue(model.exportDialog.isPresented)
 
         let completed = await waitUntil(timeout: 5) {
             let state = model.exportQueueController.jobs.first?.state
@@ -165,7 +170,9 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         XCTAssertNil(model.exportDialog.statusMessage)
         XCTAssertNil(model.exportQueueController.statusMessage)
         XCTAssertFalse(model.exportDialog.isPresented)
+        XCTAssertFalse(model.isExportDialogSubmitting)
         XCTAssertTrue(model.isExportQueuePanelVisible)
+        XCTAssertEqual(model.exportQueueController.jobs.count, 1)
         XCTAssertEqual(model.exportQueueController.jobs.first?.state, .done)
 
         let request = try XCTUnwrap(capture.request)

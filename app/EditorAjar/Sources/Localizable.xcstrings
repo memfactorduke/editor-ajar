@@ -1365,6 +1365,17 @@
         }
       }
     },
+    "export.dialog.addingToQueue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adding…"
+          }
+        }
+      }
+    },
     "export.dialog.ax": {
       "extractionState": "manual",
       "localizations": {
@@ -1394,6 +1405,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel export"
+          }
+        }
+      }
+    },
+    "export.dialog.destination.panelTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Export Destination"
           }
         }
       }

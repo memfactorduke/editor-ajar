@@ -142,6 +142,9 @@ final class EditorAjarAppModel: ObservableObject {
     /// Minimal export dialog state (FR-EXP-003/004).
     @Published private(set) var exportDialog = EditorAjarExportDialogModel()
 
+    /// True from synchronous queue submission until the actor accepts or rejects the request.
+    @Published private(set) var isExportDialogSubmitting = false
+
     /// Whether the FR-EXP-005 export queue panel is visible.
     @Published var isExportQueuePanelVisible = false
 
@@ -789,6 +792,9 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Opens the export dialog with the current preset list.
     func presentExportDialog() {
+        guard !isExportDialogSubmitting else {
+            return
+        }
         reloadExportPresets()
         var dialog = exportDialog
         dialog.isPresented = true
@@ -798,6 +804,9 @@ final class EditorAjarAppModel: ObservableObject {
 
     /// Closes the export dialog without starting an export.
     func dismissExportDialog() {
+        guard !isExportDialogSubmitting else {
+            return
+        }
         var dialog = exportDialog
         dialog.isPresented = false
         dialog.statusMessage = nil
@@ -926,8 +935,13 @@ final class EditorAjarAppModel: ObservableObject {
     ///
     /// Still-frame and audio-only modes retain their existing validation-only behavior until their
     /// dedicated exporters gain queue adapters. Movie and GIF jobs capture the current project by
-    /// value, then the dialog closes only after the queue accepts that immutable request.
-    func enqueueExportDialogSelection(destinationURL: URL? = nil) {
+    /// value at the destination visibly chosen by the caller, then the dialog closes only after
+    /// the queue accepts that immutable request. Repeated calls are ignored while submission is
+    /// pending so one user action cannot create duplicate jobs.
+    func enqueueExportDialogSelection(destinationURL: URL) {
+        guard !isExportDialogSubmitting else {
+            return
+        }
         guard let project, let sequence = activeSequence else {
             presentExportDialogError(
                 AppString.localized("export.status.noSequence", "No sequence available to export")
@@ -938,6 +952,7 @@ final class EditorAjarAppModel: ObservableObject {
             _ = validateExportDialogSelection()
             return
         }
+        isExportDialogSubmitting = true
 
         do {
             let range = try exportDialog.resolvedRange(
@@ -945,26 +960,6 @@ final class EditorAjarAppModel: ObservableObject {
                 selectionInFrame: timelineState.selectionInFrame,
                 selectionOutFrame: timelineState.selectionOutFrame
             )
-            let exportsDirectory =
-                FileManager.default.urls(
-                    for: .moviesDirectory,
-                    in: .userDomainMask
-                ).first?
-                .appendingPathComponent("Editor Ajar Exports", isDirectory: true)
-                ?? FileManager.default.temporaryDirectory
-            try FileManager.default.createDirectory(
-                at: exportsDirectory,
-                withIntermediateDirectories: true
-            )
-            let safeSequenceName = sequence.name
-                .replacingOccurrences(of: "/", with: "-")
-                .replacingOccurrences(of: ":", with: "-")
-            let outputURL =
-                destinationURL
-                ?? exportsDirectory.appendingPathComponent(
-                    "\(safeSequenceName)-\(UUID().uuidString.prefix(8))"
-                        + ".\(exportDialog.suggestedPathExtension)"
-                )
             let snapshot = project
 
             switch exportDialog.mode {
@@ -977,7 +972,7 @@ final class EditorAjarAppModel: ObservableObject {
                             project: snapshot,
                             sequenceID: sequence.id,
                             range: range,
-                            destinationURL: outputURL,
+                            destinationURL: destinationURL,
                             settings: settings,
                             displayName: sequence.name
                         )
@@ -995,7 +990,7 @@ final class EditorAjarAppModel: ObservableObject {
                             project: snapshot,
                             sequenceID: sequence.id,
                             range: range,
-                            destinationURL: outputURL,
+                            destinationURL: destinationURL,
                             settings: settings,
                             displayName: "\(sequence.name) GIF"
                         )
@@ -1013,6 +1008,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func finishExportDialogEnqueue() {
+        isExportDialogSubmitting = false
         var dialog = exportDialog
         dialog.isPresented = false
         dialog.statusMessage = nil
@@ -1021,6 +1017,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     private func presentExportDialogError(_ message: String) {
+        isExportDialogSubmitting = false
         var dialog = exportDialog
         dialog.statusMessage = message
         exportDialog = dialog

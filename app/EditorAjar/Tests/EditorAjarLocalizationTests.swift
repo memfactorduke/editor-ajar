@@ -74,6 +74,8 @@ final class EditorAjarLocalizationTests: XCTestCase {
             "export.dialog.title": "Export",
             "export.dialog.addToQueue": "Add to Queue",
             "export.dialog.addToQueue.ax": "Add export to queue",
+            "export.dialog.addingToQueue": "Adding…",
+            "export.dialog.destination.panelTitle": "Choose Export Destination",
             "export.mode.animatedGIF": "Animated GIF",
             "export.gif.size.ax": "Animated GIF size",
             "export.gif.size.half": "Half",

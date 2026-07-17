@@ -96,7 +96,9 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 
 **Sheets:** New Project focuses Resolution → Frame Rate → Color Space → Audio Rate → Cancel →
 Create. Export focuses Mode → Preset/Range/format or GIF size/frame-rate/playback pickers → Cancel →
-Add to Queue for video/GIF, or Validate for still/audio. The import summary
+Add to Queue for video/GIF, or Validate for still/audio. Add to Queue opens the native Choose Export
+Destination panel before submission; while the queue accepts the request, the action reads Adding…
+and both submission and dismissal are disabled to prevent duplicate jobs. The import summary
 exposes categorized result rows to VoiceOver, then the Done button to keyboard focus. Save Look
 focuses Look name → Cancel → Save.
 
@@ -430,7 +432,7 @@ Sheet; not present at launch (open with `⇧⌘E`).
 | GIF playback | — | Animated GIF playback | Forever / Play once |
 | Status | — | Export status: {msg} | when present |
 | Cancel | `Esc` | Cancel export | id: `Export Dialog Cancel` |
-| Add to Queue | Return | Add export to queue | video/GIF; id: `Export Dialog Add to Queue` |
+| Add to Queue | Return | Add export to queue | video/GIF; opens native destination panel, then disables as Adding… while submitting; id: `Export Dialog Add to Queue` |
 | Validate | Return | Validate export settings | still/audio; id: `Export Dialog Validate` |
 
 ---

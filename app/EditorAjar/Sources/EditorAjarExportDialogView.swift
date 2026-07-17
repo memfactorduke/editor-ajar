@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarExport
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Minimal export dialog: mode, preset, range, still/audio format (FR-EXP-003/004).
 ///
@@ -51,18 +53,30 @@ struct EditorAjarExportDialogView: View {
                 .keyboardShortcut(.cancelAction)
                 .accessibilityLabel(AppString.localized("export.dialog.cancel.ax", "Cancel export"))
                 .accessibilityIdentifier("Export Dialog Cancel")
+                .disabled(model.isExportDialogSubmitting)
 
                 if model.exportDialog.mode == .video
                     || model.exportDialog.mode == .animatedGIF
                 {
-                    Button(AppString.localized("export.dialog.addToQueue", "Add to Queue")) {
-                        model.enqueueExportDialogSelection()
+                    Button {
+                        presentDestinationPanelAndEnqueue()
+                    } label: {
+                        Text(
+                            model.isExportDialogSubmitting
+                                ? AppString.localized(
+                                    "export.dialog.addingToQueue", "Adding…"
+                                )
+                                : AppString.localized(
+                                    "export.dialog.addToQueue", "Add to Queue"
+                                )
+                        )
                     }
                     .keyboardShortcut(.defaultAction)
                     .accessibilityLabel(
                         AppString.localized("export.dialog.addToQueue.ax", "Add export to queue")
                     )
                     .accessibilityIdentifier("Export Dialog Add to Queue")
+                    .disabled(model.isExportDialogSubmitting)
                 } else {
                     Button(AppString.localized("export.dialog.validate", "Validate")) {
                         _ = model.validateExportDialogSelection()
@@ -82,6 +96,35 @@ struct EditorAjarExportDialogView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(AppString.localized("export.dialog.ax", "Export dialog"))
         .accessibilityIdentifier("Export Dialog")
+    }
+
+    private func presentDestinationPanelAndEnqueue() {
+        guard !model.isExportDialogSubmitting else {
+            return
+        }
+        let pathExtension = model.exportDialog.suggestedPathExtension
+        let panel = NSSavePanel()
+        panel.title = AppString.localized(
+            "export.dialog.destination.panelTitle", "Choose Export Destination"
+        )
+        panel.prompt = AppString.localized("export.dialog.addToQueue", "Add to Queue")
+        panel.allowedContentTypes = [UTType(filenameExtension: pathExtension) ?? .data]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.allowsOtherFileTypes = false
+        panel.directoryURL =
+            FileManager.default.urls(
+                for: .moviesDirectory,
+                in: .userDomainMask
+            ).first
+        let safeSequenceName = model.activeSequenceName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        panel.nameFieldStringValue = "\(safeSequenceName).\(pathExtension)"
+        guard panel.runModal() == .OK, let destinationURL = panel.url else {
+            return
+        }
+        model.enqueueExportDialogSelection(destinationURL: destinationURL)
     }
 }
 
