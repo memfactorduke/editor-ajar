@@ -236,9 +236,13 @@ final class MediaBrowserTests: XCTestCase {
         hashSeed: String,
         offline: Bool = false
     ) throws -> MediaRef {
-        MediaRef(
+        let sourceURL = temporaryDirectory().appendingPathComponent(name)
+        if !offline {
+            try Data(hashSeed.utf8).write(to: sourceURL, options: .atomic)
+        }
+        return MediaRef(
             id: UUID(),
-            sourceURL: URL(fileURLWithPath: "/tmp/\(name)"),
+            sourceURL: sourceURL,
             contentHash: .sha256(data: Data(hashSeed.utf8)),
             metadata: MediaMetadata(
                 codecID: codec,
