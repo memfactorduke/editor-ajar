@@ -43,6 +43,31 @@ extension MediaPreviewCache {
         try Self.validate(identity: identity, for: media)
     }
 
+    /// Verifies that a durable cache identity still describes the bytes at this media's URL.
+    ///
+    /// Two references may legitimately share a content hash, but each URL must independently
+    /// prove that it contains those bytes before it can reuse or join the shared cache request.
+    func verifiedDurableSource(
+        identity: MediaPreviewContentIdentity,
+        for media: MediaRef
+    ) async throws -> VerifiedMediaSource? {
+        try Self.validate(identity: identity, for: media)
+        guard case .durable(let expectedContentHash) = identity else { return nil }
+        let verifiedSource = try await MediaSourceIdentityVerifier.shared.verifyBeforeReading(media)
+        guard verifiedSource.playableContentHash == expectedContentHash else {
+            throw MediaPreviewCacheError.contentIdentityMismatch
+        }
+        return verifiedSource
+    }
+
+    /// Refuses a cache result when its request's durable source changed while work was in flight.
+    func validateDurableSourceAfterReading(
+        _ verifiedSource: VerifiedMediaSource?
+    ) async throws {
+        guard let verifiedSource else { return }
+        try await MediaSourceIdentityVerifier.shared.verifyAfterReading(verifiedSource)
+    }
+
     nonisolated static func validate(
         identity: MediaPreviewContentIdentity,
         for media: MediaRef

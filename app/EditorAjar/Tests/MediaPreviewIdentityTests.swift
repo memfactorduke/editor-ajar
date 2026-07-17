@@ -19,20 +19,28 @@ final class MediaPreviewIdentityTests: XCTestCase {
             return Self.minimalPNGData
         }
         let originalHash = ContentHash.sha256(data: Data("same-original".utf8))
-        let playableA = ContentHash.sha256(data: Data("playable-a".utf8))
-        let playableB = ContentHash.sha256(data: Data("playable-b".utf8))
+        let playableAData = Data("playable-a".utf8)
+        let playableBData = Data("playable-b".utf8)
+        let playableA = ContentHash.sha256(data: playableAData)
+        let playableB = ContentHash.sha256(data: playableBData)
+        let firstAURL = root.appendingPathComponent("working-a.mov")
+        let secondAURL = root.appendingPathComponent("same-working-a.mov")
+        let changedBURL = root.appendingPathComponent("working-b.mov")
+        try writePlayableSource(playableAData, to: firstAURL)
+        try writePlayableSource(playableAData, to: secondAURL)
+        try writePlayableSource(playableBData, to: changedBURL)
         let firstA = try transcodedMedia(
-            sourceURL: root.appendingPathComponent("working-a.mov"),
+            sourceURL: firstAURL,
             originalHash: originalHash,
             playableHash: playableA
         )
         let secondA = try transcodedMedia(
-            sourceURL: root.appendingPathComponent("same-working-a.mov"),
+            sourceURL: secondAURL,
             originalHash: originalHash,
             playableHash: playableA
         )
         let changedB = try transcodedMedia(
-            sourceURL: root.appendingPathComponent("working-b.mov"),
+            sourceURL: changedBURL,
             originalHash: originalHash,
             playableHash: playableB
         )
@@ -53,9 +61,12 @@ final class MediaPreviewIdentityTests: XCTestCase {
 
     func testCancelingOneCoalescedWaiterPreservesTheSurvivor() async throws {
         let root = try temporaryDirectory(named: "coalesced-waiter-cancellation")
+        let sourceURL = root.appendingPathComponent("shared.mov")
+        let sourceData = Data("shared".utf8)
+        try writePlayableSource(sourceData, to: sourceURL)
         let media = try ordinaryMedia(
-            sourceURL: root.appendingPathComponent("shared.mov"),
-            contentHash: ContentHash.sha256(data: Data("shared".utf8))
+            sourceURL: sourceURL,
+            contentHash: ContentHash.sha256(data: sourceData)
         )
         let probe = ControlledPreviewProbe(blockedCalls: [1])
         let cache = MediaPreviewCache(packageURL: root) { media, kind in
@@ -89,9 +100,12 @@ final class MediaPreviewIdentityTests: XCTestCase {
 
     func testCancelingFinalWaiterCancelsUnderlyingExtraction() async throws {
         let root = try temporaryDirectory(named: "final-waiter-cancellation")
+        let sourceURL = root.appendingPathComponent("only.mov")
+        let sourceData = Data("only".utf8)
+        try writePlayableSource(sourceData, to: sourceURL)
         let media = try ordinaryMedia(
-            sourceURL: root.appendingPathComponent("only.mov"),
-            contentHash: ContentHash.sha256(data: Data("only".utf8))
+            sourceURL: sourceURL,
+            contentHash: ContentHash.sha256(data: sourceData)
         )
         let probe = CancellationAwarePreviewProbe()
         let cache = MediaPreviewCache(packageURL: root) { media, kind in
@@ -121,9 +135,12 @@ final class MediaPreviewIdentityTests: XCTestCase {
         let root = try temporaryDirectory(named: "legacy-revision-identity")
         let sourceURL = root.appendingPathComponent("legacy-working.mov")
         try Data("legacy-working-a".utf8).write(to: sourceURL)
-        let originalHash = ContentHash.sha256(data: Data("legacy-original".utf8))
+        let originalData = Data("legacy-original".utf8)
+        let originalHash = ContentHash.sha256(data: originalData)
+        let ordinaryURL = root.appendingPathComponent("ordinary.mov")
+        try writePlayableSource(originalData, to: ordinaryURL)
         let ordinary = try ordinaryMedia(
-            sourceURL: root.appendingPathComponent("ordinary.mov"),
+            sourceURL: ordinaryURL,
             contentHash: originalHash
         )
         let legacy = try transcodedMedia(

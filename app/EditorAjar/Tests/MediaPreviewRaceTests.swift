@@ -11,16 +11,22 @@ extension MediaPreviewIdentityTests {
     func testRelinkDuringIdentityLookupCannotStartObsoleteExtraction() async throws {
         let root = try temporaryDirectory(named: "identity-lookup-relink-race")
         let originalHash = ContentHash.sha256(data: Data("lookup-original".utf8))
+        let oldURL = root.appendingPathComponent("lookup-old.mov")
+        let replacementURL = root.appendingPathComponent("lookup-new.mov")
+        let oldData = Data("lookup-old".utf8)
+        let replacementData = Data("lookup-new".utf8)
+        try writePlayableSource(oldData, to: oldURL)
+        try writePlayableSource(replacementData, to: replacementURL)
         let old = try transcodedMedia(
-            sourceURL: root.appendingPathComponent("lookup-old.mov"),
+            sourceURL: oldURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("lookup-old".utf8))
+            playableHash: ContentHash.sha256(data: oldData)
         )
         let replacement = try transcodedMedia(
             id: old.id,
-            sourceURL: root.appendingPathComponent("lookup-new.mov"),
+            sourceURL: replacementURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("lookup-new".utf8))
+            playableHash: ContentHash.sha256(data: replacementData)
         )
         let identityProbe = ControlledContentIdentityProbe(blockedCalls: [1])
         let extractionProbe = PreviewExtractionProbe()
@@ -57,9 +63,12 @@ extension MediaPreviewIdentityTests {
 
     func testProjectSessionSwapDuringIdentityLookupRejectsOldRequest() async throws {
         let root = try temporaryDirectory(named: "identity-lookup-session-race")
+        let sourceURL = root.appendingPathComponent("same-media.mov")
+        let sourceData = Data("same-media".utf8)
+        try writePlayableSource(sourceData, to: sourceURL)
         let media = try ordinaryMedia(
-            sourceURL: root.appendingPathComponent("same-media.mov"),
-            contentHash: ContentHash.sha256(data: Data("same-media".utf8))
+            sourceURL: sourceURL,
+            contentHash: ContentHash.sha256(data: sourceData)
         )
         let identityProbe = ControlledContentIdentityProbe(blockedCalls: [1])
         let extractionProbe = PreviewExtractionProbe()
@@ -152,16 +161,22 @@ extension MediaPreviewIdentityTests {
     func testRelinkRejectsStaleInFlightThumbnailPublication() async throws {
         let root = try temporaryDirectory(named: "thumbnail-relink-race")
         let originalHash = ContentHash.sha256(data: Data("thumbnail-original".utf8))
+        let oldURL = root.appendingPathComponent("thumbnail-old.mov")
+        let replacementURL = root.appendingPathComponent("thumbnail-new.mov")
+        let oldData = Data("thumbnail-old".utf8)
+        let replacementData = Data("thumbnail-new".utf8)
+        try writePlayableSource(oldData, to: oldURL)
+        try writePlayableSource(replacementData, to: replacementURL)
         let old = try transcodedMedia(
-            sourceURL: root.appendingPathComponent("thumbnail-old.mov"),
+            sourceURL: oldURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("thumbnail-old".utf8))
+            playableHash: ContentHash.sha256(data: oldData)
         )
         let replacement = try transcodedMedia(
             id: old.id,
-            sourceURL: root.appendingPathComponent("thumbnail-new.mov"),
+            sourceURL: replacementURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("thumbnail-new".utf8))
+            playableHash: ContentHash.sha256(data: replacementData)
         )
         let probe = ControlledPreviewProbe(blockedCalls: [1])
         let cache = MediaPreviewCache(packageURL: root, workerLimit: 2) { media, kind in
@@ -191,17 +206,23 @@ extension MediaPreviewIdentityTests {
     func testRelinkClearsTimelineWaveformBeforeSchedulingReplacement() async throws {
         let root = try temporaryDirectory(named: "waveform-relink-refresh")
         let originalHash = ContentHash.sha256(data: Data("waveform-original".utf8))
+        let oldURL = root.appendingPathComponent("waveform-old.wav")
+        let replacementURL = root.appendingPathComponent("waveform-new.wav")
+        let oldData = Data("waveform-old".utf8)
+        let replacementData = Data("waveform-new".utf8)
+        try writePlayableSource(oldData, to: oldURL)
+        try writePlayableSource(replacementData, to: replacementURL)
         let old = try transcodedMedia(
-            sourceURL: root.appendingPathComponent("waveform-old.wav"),
+            sourceURL: oldURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("waveform-old".utf8)),
+            playableHash: ContentHash.sha256(data: oldData),
             isVideo: false
         )
         let replacement = try transcodedMedia(
             id: old.id,
-            sourceURL: root.appendingPathComponent("waveform-new.wav"),
+            sourceURL: replacementURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("waveform-new".utf8)),
+            playableHash: ContentHash.sha256(data: replacementData),
             isVideo: false
         )
         let warmCache = MediaPreviewCache(packageURL: root) { _, _ in
@@ -244,9 +265,12 @@ extension MediaPreviewIdentityTests {
 
     func testDelayedOldCleanupCannotDeleteRestartedPreviewRecord() async throws {
         let root = try temporaryDirectory(named: "preview-generation-race")
+        let sourceURL = root.appendingPathComponent("restart.wav")
+        let sourceData = Data("restart".utf8)
+        try writePlayableSource(sourceData, to: sourceURL)
         let media = try ordinaryMedia(
-            sourceURL: root.appendingPathComponent("restart.wav"),
-            contentHash: ContentHash.sha256(data: Data("restart".utf8)),
+            sourceURL: sourceURL,
+            contentHash: ContentHash.sha256(data: sourceData),
             isVideo: false
         )
         let probe = ControlledPreviewProbe(blockedCalls: [1, 2])
@@ -289,16 +313,22 @@ extension MediaPreviewIdentityTests {
     func testRelinkRejectsStaleInFlightHoverPublication() async throws {
         let root = try temporaryDirectory(named: "hover-relink-race")
         let originalHash = ContentHash.sha256(data: Data("hover-original".utf8))
+        let oldURL = root.appendingPathComponent("hover-old.mov")
+        let replacementURL = root.appendingPathComponent("hover-new.mov")
+        let oldData = Data("hover-old".utf8)
+        let replacementData = Data("hover-new".utf8)
+        try writePlayableSource(oldData, to: oldURL)
+        try writePlayableSource(replacementData, to: replacementURL)
         let old = try transcodedMedia(
-            sourceURL: root.appendingPathComponent("hover-old.mov"),
+            sourceURL: oldURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("hover-old".utf8))
+            playableHash: ContentHash.sha256(data: oldData)
         )
         let replacement = try transcodedMedia(
             id: old.id,
-            sourceURL: root.appendingPathComponent("hover-new.mov"),
+            sourceURL: replacementURL,
             originalHash: originalHash,
-            playableHash: ContentHash.sha256(data: Data("hover-new".utf8))
+            playableHash: ContentHash.sha256(data: replacementData)
         )
         let hoverProbe = ControlledHoverProbe(blockedCalls: [1])
         let cache = MediaPreviewCache(

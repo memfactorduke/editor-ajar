@@ -56,6 +56,7 @@
 		8138BEB352470D5D2BB68627 /* EditorAjarColorInspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAD0E295D4D75205756419E8 /* EditorAjarColorInspectorViews.swift */; };
 		82335CFC47EF374D100C07DB /* EditorAjarEffectTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E9E4915657576ABA037FD00 /* EditorAjarEffectTypes.swift */; };
 		859809191F61E0E85C7B4D8E /* EditorAjarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15CAC1EB41C553C298F4AC33 /* EditorAjarApp.swift */; };
+		913AAB1E22051FC139F1F02D /* MediaPreviewSourceVerificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF435C2DF0AC95BDFF6C9D2 /* MediaPreviewSourceVerificationTests.swift */; };
 		9B8F53B6A36006FB11F00533 /* EditorAjarReleaseAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 043B5F1AE1187CFBE8BA6C88 /* EditorAjarReleaseAcceptanceTests.swift */; };
 		9F6F87B3A5D74C63EEED7ABA /* EditorAjarEffectsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADC6426534A1AF23334061D8 /* EditorAjarEffectsUITests.swift */; };
 		A34A4BEDBC84D704C0891449 /* EditorAjarExportQueueController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E765A9F0A9CAED2B6A7198 /* EditorAjarExportQueueController.swift */; };
@@ -169,6 +170,7 @@
 		D9B9F5543F761E84DAF360B1 /* ProgramMetalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramMetalView.swift; sourceTree = "<group>"; };
 		DAB9D82E8B078CC4C4C51D63 /* AudioClipInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioClipInspectorView.swift; sourceTree = "<group>"; };
 		DAF934E19339DC9EEF4DB2EE /* EditorAjarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EditorAjarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBF435C2DF0AC95BDFF6C9D2 /* MediaPreviewSourceVerificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewSourceVerificationTests.swift; sourceTree = "<group>"; };
 		DCFA6C6935E779909C66E11A /* EditorAjarNewProjectSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarNewProjectSettings.swift; sourceTree = "<group>"; };
 		DE3E3DDD104F9FD8F2349EB2 /* AudioWaveformBarsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWaveformBarsView.swift; sourceTree = "<group>"; };
 		E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarPlaybackController.swift; sourceTree = "<group>"; };
@@ -234,6 +236,7 @@
 				92DC8542CE997AA86110B61E /* MediaBrowserTests.swift */,
 				7532B1B7ABDDFCCACE0621DA /* MediaPreviewIdentityTests.swift */,
 				AB4B04E0370B165DC58EF5C6 /* MediaPreviewRaceTests.swift */,
+				DBF435C2DF0AC95BDFF6C9D2 /* MediaPreviewSourceVerificationTests.swift */,
 				C2F3DC76E223C422B05ECD5B /* MediaPreviewTestSupport.swift */,
 			);
 			path = Tests;
@@ -540,6 +543,7 @@
 				6C5EFECCC919C8FA75EF5745 /* MediaBrowserTests.swift in Sources */,
 				D5C6185271343F772AB3713F /* MediaPreviewIdentityTests.swift in Sources */,
 				0725EAF25B6E8BA60483C5BE /* MediaPreviewRaceTests.swift in Sources */,
+				913AAB1E22051FC139F1F02D /* MediaPreviewSourceVerificationTests.swift in Sources */,
 				FCD3A4D6D7FC0B3599A3F48A /* MediaPreviewTestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

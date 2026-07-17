@@ -89,6 +89,14 @@ extension MediaPreviewIdentityTests {
         return url
     }
 
+    func writePlayableSource(_ data: Data, to sourceURL: URL) throws {
+        try FileManager.default.createDirectory(
+            at: sourceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: sourceURL, options: .atomic)
+    }
+
     func waitUntil(
         timeout: TimeInterval = 3,
         _ predicate: @escaping () async -> Bool

@@ -154,23 +154,29 @@ actor MediaPreviewCache {
         identity: MediaPreviewContentIdentity,
         kind: MediaPreviewKind
     ) async throws -> Data {
-        try validate(identity: identity, for: media)
+        let verifiedSource = try await verifiedDurableSource(identity: identity, for: media)
         let key = RequestKey(identity: identity, kind: kind)
         let destination = cacheURL(for: key)
         if let data = try? Data(contentsOf: destination), isValidCachedData(data, kind: kind) {
-            // A legacy file can be replaced while its regeneratable cache survives. Recheck the
-            // captured revision after reading and before returning those cached bytes.
+            // A source can be replaced while its regeneratable cache survives. Recheck the
+            // legacy revision or durable verification after reading and before returning bytes.
             try validate(identity: identity, for: media)
+            try await validateDurableSourceAfterReading(verifiedSource)
             return data
         }
 
-        return try await waitForRequest(
+        let data = try await waitForRequest(
             key: key,
             media: media,
             identity: identity,
             kind: kind,
             destination: destination
         )
+        // Every coalesced caller validates its own URL before joining above and again after the
+        // shared work completes. One valid reference therefore cannot lend trust to another URL.
+        try validate(identity: identity, for: media)
+        try await validateDurableSourceAfterReading(verifiedSource)
+        return data
     }
 
     /// Administratively cancels all waiters for one exact content identity and preview kind.
@@ -309,8 +315,14 @@ actor MediaPreviewCache {
         }
     }
 
-    func cachedData(for media: MediaRef, kind: MediaPreviewKind) -> Data? {
+    func cachedData(for media: MediaRef, kind: MediaPreviewKind) async -> Data? {
         guard let identity = try? Self.resolveContentIdentity(for: media) else { return nil }
+        let verifiedSource: VerifiedMediaSource?
+        do {
+            verifiedSource = try await verifiedDurableSource(identity: identity, for: media)
+        } catch {
+            return nil
+        }
         let key = RequestKey(identity: identity, kind: kind)
         guard let data = try? Data(contentsOf: cacheURL(for: key)),
             isValidCachedData(data, kind: kind)
@@ -318,6 +330,9 @@ actor MediaPreviewCache {
             return nil
         }
         guard (try? validate(identity: identity, for: media)) != nil else { return nil }
+        guard (try? await validateDurableSourceAfterReading(verifiedSource)) != nil else {
+            return nil
+        }
         return data
     }
 
