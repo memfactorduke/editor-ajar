@@ -14,6 +14,12 @@ enum ExportColorTagging {
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
             ]
+        case .sRGB:
+            return [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                AVVideoTransferFunctionKey: "IEC_sRGB",
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
+            ]
         case .displayP3:
             // AVVideoTransferFunction_IEC_sRGB is only declared in the macOS 15+ SDK headers
             // (API_AVAILABLE macos(15.0)); older CI SDKs fail to compile the symbol even under
@@ -31,6 +37,8 @@ enum ExportColorTagging {
         switch colorSpace {
         case .rec709:
             name = CGColorSpace.itur_709
+        case .sRGB:
+            name = CGColorSpace.sRGB
         case .displayP3:
             name = CGColorSpace.displayP3
         }
@@ -54,6 +62,10 @@ enum ExportColorTagging {
         case .rec709:
             primaries = kCVImageBufferColorPrimaries_ITU_R_709_2
             transfer = kCVImageBufferTransferFunction_ITU_R_709_2
+            matrix = kCVImageBufferYCbCrMatrix_ITU_R_709_2
+        case .sRGB:
+            primaries = kCVImageBufferColorPrimaries_ITU_R_709_2
+            transfer = kCVImageBufferTransferFunction_sRGB
             matrix = kCVImageBufferYCbCrMatrix_ITU_R_709_2
         case .displayP3:
             primaries = kCVImageBufferColorPrimaries_P3_D65

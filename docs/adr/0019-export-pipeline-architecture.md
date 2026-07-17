@@ -71,14 +71,16 @@ rounds the total frame count upward. GIF delays are integral centiseconds, so cu
 duration is rounded at each frame boundary; each stored delay is the difference between adjacent
 rounded boundaries. This bounds total timing drift instead of rounding every frame independently.
 
-ImageIO receives owned sRGB BGRA images. Display-P3 source pixels are converted to sRGB before
-palette generation. GIF has only one-bit transparency, so fully transparent pixels remain
+ImageIO receives owned sRGB BGRA images. Rec.709 and Display-P3 source pixels are converted to
+sRGB before palette generation; sRGB projects retain their native transfer/primaries. GIF has only
+one-bit transparency, so fully transparent pixels remain
 transparent while partially covered premultiplied pixels are composited against black and written
 opaque. This makes antialiased title edges deterministic across ImageIO versions and avoids an
 implicit, platform-dependent alpha threshold. Loop metadata is omitted for play-once output and a
-loop count of zero means forever. The v1.x engine accepts 1...100 fps and odd raster dimensions;
-the consumer export dialog and heterogeneous background-queue adapter are separate integration
-work.
+loop count of zero means forever. The v1.x engine accepts 1...100 fps and odd raster dimensions.
+#279 added consumer size, frame-rate, range, and loop controls plus one strictly serial background
+queue that schedules both movie and animated-GIF sessions without erasing their distinct writer
+lifecycles.
 
 ### Proxy exclusion audit hook (FR-EXP-007 / FR-MED-004)
 

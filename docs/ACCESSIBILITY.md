@@ -95,7 +95,8 @@ Order is top-to-bottom, left-to-right within each chrome band (SwiftUI default).
 13. **Export queue panel** (when visible) → Enqueue → Hide → per-job Pause/Resume/Cancel  
 
 **Sheets:** New Project focuses Resolution → Frame Rate → Color Space → Audio Rate → Cancel →
-Create. Export focuses Mode → Preset/Range/format pickers → Cancel → Validate. The import summary
+Create. Export focuses Mode → Preset/Range/format or GIF size/frame-rate/playback pickers → Cancel →
+Add to Queue for video/GIF, or Validate for still/audio. The import summary
 exposes categorized result rows to VoiceOver, then the Done button to keyboard focus. Save Look
 focuses Look name → Cancel → Save.
 
@@ -419,14 +420,18 @@ Sheet; not present at launch (open with `⇧⌘E`).
 | Control | Shortcut | AX label | value |
 |---------|----------|----------|-------|
 | Dialog | — | Export dialog | id: `Export Dialog` |
-| Mode picker | — | Export mode | Video / Still frame / Audio only |
+| Mode picker | — | Export mode | Video / Animated GIF / Still frame / Audio only |
 | Preset picker | — | Export preset | preset name (video mode) |
 | Range picker | — | Export range | Whole timeline / In/out range |
 | Still format | — | Still frame format | PNG / JPEG |
 | Audio format | — | Audio-only format | WAV (PCM) / M4A (AAC) |
+| GIF size | — | Animated GIF size | Original / Half / Quarter |
+| GIF frame rate | — | Animated GIF frame rate | 10 / 15 / 24 / 30 fps |
+| GIF playback | — | Animated GIF playback | Forever / Play once |
 | Status | — | Export status: {msg} | when present |
 | Cancel | `Esc` | Cancel export | id: `Export Dialog Cancel` |
-| Validate | Return | Validate export settings | id: `Export Dialog Validate` |
+| Add to Queue | Return | Add export to queue | video/GIF; id: `Export Dialog Add to Queue` |
+| Validate | Return | Validate export settings | still/audio; id: `Export Dialog Validate` |
 
 ---
 

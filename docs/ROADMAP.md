@@ -210,11 +210,16 @@ so the new project does not depend on its previous package. Originals are never 
 acceptance verifies consolidate, Save As, removal of the old package, reopen, and export with the
 rewritten package references.
 
+**FR-EXP-006 animated GIF delivery is complete (#275/#279, 2026-07-16).** The ImageIO engine,
+all-frame golden, consumer size/frame-rate/range/loop controls, and strictly serial heterogeneous
+movie/GIF background queue share immutable snapshots, progress, pause/restart, cancellation,
+atomic publication, and the original-only production render path. GIF import remains intentionally
+first-frame-only.
+
 Plugin API (ADR-0013, FR-FX-006), expanded effects, optical-flow slow-mo, HDR timeline
 (FR-COL-006), smart bins (FR-MED-006), adjustment layers (FR-TL-013), title templates
-(FR-TXT-006), corner-pin (FR-XFORM-006), animated masks/roto (FR-COMP-004), and GIF export app/queue
-integration (FR-EXP-006; engine and CI golden complete in #275). Longer-horizon items (NLE
-interchange, stabilization, AI features, iPad, cross-platform) live in
+(FR-TXT-006), corner-pin (FR-XFORM-006), and animated masks/roto (FR-COMP-004). Longer-horizon
+items (NLE interchange, stabilization, AI features, iPad, cross-platform) live in
 [SPEC §13](SPEC.md#13-out-of-scope-for-v1--future).
 
 ## How the loop uses this file

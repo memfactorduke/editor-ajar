@@ -834,6 +834,24 @@ final class EditorAjarAppModel: ObservableObject {
         exportDialog = dialog
     }
 
+    func setAnimatedGIFSizeChoice(_ choice: EditorAjarAnimatedGIFSizeChoice) {
+        var dialog = exportDialog
+        dialog.animatedGIFSizeChoice = choice
+        exportDialog = dialog
+    }
+
+    func setAnimatedGIFFrameRateChoice(_ choice: EditorAjarAnimatedGIFFrameRateChoice) {
+        var dialog = exportDialog
+        dialog.animatedGIFFrameRateChoice = choice
+        exportDialog = dialog
+    }
+
+    func setAnimatedGIFLoopChoice(_ choice: EditorAjarAnimatedGIFLoopChoice) {
+        var dialog = exportDialog
+        dialog.animatedGIFLoopChoice = choice
+        exportDialog = dialog
+    }
+
     /// Validates the current dialog selection against the open project (unit-test surface).
     ///
     /// Does not write media files; the FR-EXP-005 queue owns background export execution.
@@ -852,6 +870,13 @@ final class EditorAjarAppModel: ObservableObject {
             switch exportDialog.mode {
             case .video:
                 _ = try exportDialog.makeVideoSettings()
+                _ = try exportDialog.resolvedRange(
+                    sequence: sequence,
+                    selectionInFrame: timelineState.selectionInFrame,
+                    selectionOutFrame: timelineState.selectionOutFrame
+                )
+            case .animatedGIF:
+                _ = try exportDialog.makeAnimatedGIFSettings(project: project)
                 _ = try exportDialog.resolvedRange(
                     sequence: sequence,
                     selectionInFrame: timelineState.selectionInFrame,
@@ -895,6 +920,110 @@ final class EditorAjarAppModel: ObservableObject {
             exportDialog = dialog
             return false
         }
+    }
+
+    /// Validates and submits the current movie/GIF dialog selection to the background queue.
+    ///
+    /// Still-frame and audio-only modes retain their existing validation-only behavior until their
+    /// dedicated exporters gain queue adapters. Movie and GIF jobs capture the current project by
+    /// value, then the dialog closes only after the queue accepts that immutable request.
+    func enqueueExportDialogSelection(destinationURL: URL? = nil) {
+        guard let project, let sequence = activeSequence else {
+            presentExportDialogError(
+                AppString.localized("export.status.noSequence", "No sequence available to export")
+            )
+            return
+        }
+        guard exportDialog.mode == .video || exportDialog.mode == .animatedGIF else {
+            _ = validateExportDialogSelection()
+            return
+        }
+
+        do {
+            let range = try exportDialog.resolvedRange(
+                sequence: sequence,
+                selectionInFrame: timelineState.selectionInFrame,
+                selectionOutFrame: timelineState.selectionOutFrame
+            )
+            let exportsDirectory =
+                FileManager.default.urls(
+                    for: .moviesDirectory,
+                    in: .userDomainMask
+                ).first?
+                .appendingPathComponent("Editor Ajar Exports", isDirectory: true)
+                ?? FileManager.default.temporaryDirectory
+            try FileManager.default.createDirectory(
+                at: exportsDirectory,
+                withIntermediateDirectories: true
+            )
+            let safeSequenceName = sequence.name
+                .replacingOccurrences(of: "/", with: "-")
+                .replacingOccurrences(of: ":", with: "-")
+            let outputURL =
+                destinationURL
+                ?? exportsDirectory.appendingPathComponent(
+                    "\(safeSequenceName)-\(UUID().uuidString.prefix(8))"
+                        + ".\(exportDialog.suggestedPathExtension)"
+                )
+            let snapshot = project
+
+            switch exportDialog.mode {
+            case .video:
+                let settings = try exportDialog.makeVideoSettings()
+                Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        _ = try await self.exportQueueController.enqueueExport(
+                            project: snapshot,
+                            sequenceID: sequence.id,
+                            range: range,
+                            destinationURL: outputURL,
+                            settings: settings,
+                            displayName: sequence.name
+                        )
+                        self.finishExportDialogEnqueue()
+                    } catch {
+                        self.presentExportDialogError(String(describing: error))
+                    }
+                }
+            case .animatedGIF:
+                let settings = try exportDialog.makeAnimatedGIFSettings(project: snapshot)
+                Task { [weak self] in
+                    guard let self else { return }
+                    do {
+                        _ = try await self.exportQueueController.enqueueAnimatedGIFExport(
+                            project: snapshot,
+                            sequenceID: sequence.id,
+                            range: range,
+                            destinationURL: outputURL,
+                            settings: settings,
+                            displayName: "\(sequence.name) GIF"
+                        )
+                        self.finishExportDialogEnqueue()
+                    } catch {
+                        self.presentExportDialogError(String(describing: error))
+                    }
+                }
+            case .stillFrame, .audioOnly:
+                break
+            }
+        } catch {
+            presentExportDialogError(String(describing: error))
+        }
+    }
+
+    private func finishExportDialogEnqueue() {
+        var dialog = exportDialog
+        dialog.isPresented = false
+        dialog.statusMessage = nil
+        exportDialog = dialog
+        isExportQueuePanelVisible = true
+    }
+
+    private func presentExportDialogError(_ message: String) {
+        var dialog = exportDialog
+        dialog.statusMessage = message
+        exportDialog = dialog
     }
 
     /// Saves a custom preset app-side (Application Support JSON — not the project package).
@@ -6572,7 +6701,9 @@ final class EditorAjarAppModel: ObservableObject {
         switch media {
         case .displayP3:
             return .displayP3
-        case .rec709, .sRGB, .rec2020, .unspecified, .unknown:
+        case .sRGB:
+            return .sRGB
+        case .rec709, .rec2020, .unspecified, .unknown:
             return .rec709
         }
     }

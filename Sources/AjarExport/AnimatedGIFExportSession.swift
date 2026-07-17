@@ -142,11 +142,14 @@ public final class AnimatedGIFExportSession: @unchecked Sendable {
         try finalize(writer: writer)
         beforePublish?()
         try publish(preparedTransaction)
+        let sourceSelections = sourceSelectionRecords
         return ExportResult(
             destinationURL: request.destinationURL,
             duration: request.range.duration,
             videoFrameCount: frameCount,
-            audioFrameCount: 0
+            audioFrameCount: 0,
+            sourceSelectionRecordCount: sourceSelections.count,
+            usedProxyMedia: sourceSelections.contains { $0.tier == .proxy }
         )
     }
 

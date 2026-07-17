@@ -355,7 +355,9 @@ extension ExportColorSpace {
         switch media {
         case .displayP3:
             .displayP3
-        case .rec709, .sRGB, .rec2020, .unspecified, .unknown:
+        case .sRGB:
+            .sRGB
+        case .rec709, .rec2020, .unspecified, .unknown:
             .rec709
         }
     }

@@ -2,6 +2,7 @@
 
 import AjarCore
 import AVFoundation
+import CoreGraphics
 import CoreVideo
 import Foundation
 import XCTest
@@ -118,6 +119,32 @@ final class ExportBoundaryTests: XCTestCase {
             CVBufferCopyAttachment(buffer, kCVImageBufferAlphaChannelModeKey, nil),
             "codec-free image delivery must not pretend to be ProRes 4444"
         )
+    }
+
+    func testFREXP006SRGBDeliveryRetainsSRGBTransferAnd709Primaries() throws {
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            nil,
+            3,
+            3,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pixelBuffer
+        )
+        XCTAssertEqual(status, kCVReturnSuccess)
+        let buffer = try XCTUnwrap(pixelBuffer)
+
+        try ExportColorTagging.attach(to: buffer, colorSpace: .sRGB)
+
+        XCTAssertEqual(
+            CVBufferCopyAttachment(buffer, kCVImageBufferColorPrimariesKey, nil) as? String,
+            kCVImageBufferColorPrimaries_ITU_R_709_2 as String
+        )
+        XCTAssertEqual(
+            CVBufferCopyAttachment(buffer, kCVImageBufferTransferFunctionKey, nil) as? String,
+            kCVImageBufferTransferFunction_sRGB as String
+        )
+        XCTAssertEqual(try ExportColorTagging.cgColorSpace(for: .sRGB).name, CGColorSpace.sRGB)
     }
 
     func testNFRSTAB002MapsNativeAVFoundationDiskFullToTheRequestedURL() {

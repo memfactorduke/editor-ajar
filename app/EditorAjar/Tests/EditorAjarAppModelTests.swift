@@ -70,6 +70,67 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(model.exportDialog.isPresented)
     }
 
+    func testFREXP006AnimatedGIFDialogBuildsAspectPreservingSettingsAndExtension() throws {
+        let project = try EditorAjarNewProjectFactory.makeProject(settings: .sensibleDefaults)
+        var dialog = EditorAjarExportDialogModel(mode: .animatedGIF)
+
+        XCTAssertEqual(dialog.animatedGIFSizeChoice, .half)
+        XCTAssertEqual(dialog.animatedGIFFrameRateChoice, .fps15)
+        XCTAssertEqual(dialog.animatedGIFLoopChoice, .forever)
+        XCTAssertEqual(dialog.suggestedPathExtension, "gif")
+
+        var settings = try dialog.makeAnimatedGIFSettings(project: project)
+        XCTAssertEqual(settings.resolution, PixelDimensions(width: 960, height: 540))
+        XCTAssertEqual(
+            settings.resolution.width * project.settings.resolution.height,
+            settings.resolution.height * project.settings.resolution.width,
+            "uniform GIF scaling must preserve the project canvas aspect ratio"
+        )
+        XCTAssertEqual(settings.frameRate, try FrameRate(frames: 15))
+        XCTAssertEqual(settings.sourceColorSpace, .rec709)
+        XCTAssertEqual(settings.loopPolicy, .forever)
+
+        dialog.animatedGIFSizeChoice = .quarter
+        dialog.animatedGIFFrameRateChoice = .fps30
+        dialog.animatedGIFLoopChoice = .playOnce
+        settings = try dialog.makeAnimatedGIFSettings(project: project)
+        XCTAssertEqual(settings.resolution, PixelDimensions(width: 480, height: 270))
+        XCTAssertEqual(settings.frameRate, try FrameRate(frames: 30))
+        XCTAssertEqual(settings.loopPolicy, .playOnce)
+
+        var sRGBProjectSettings = EditorAjarNewProjectSettings.sensibleDefaults
+        sRGBProjectSettings.colorSpaceChoice = .sRGB
+        let sRGBProject = try EditorAjarNewProjectFactory.makeProject(
+            settings: sRGBProjectSettings
+        )
+        settings = try dialog.makeAnimatedGIFSettings(project: sRGBProject)
+        XCTAssertEqual(settings.sourceColorSpace, .sRGB)
+    }
+
+    func testFREXP006AnimatedGIFDialogOffersOnlySupportedSizeRateAndLoopChoices() throws {
+        XCTAssertEqual(EditorAjarAnimatedGIFSizeChoice.allCases, [.original, .half, .quarter])
+        XCTAssertEqual(
+            EditorAjarAnimatedGIFFrameRateChoice.allCases,
+            [.fps10, .fps15, .fps24, .fps30]
+        )
+        XCTAssertEqual(EditorAjarAnimatedGIFLoopChoice.allCases, [.forever, .playOnce])
+
+        for choice in EditorAjarAnimatedGIFFrameRateChoice.allCases {
+            XCTAssertEqual(
+                try choice.makeFrameRate(),
+                try FrameRate(frames: Int64(choice.rawValue))
+            )
+        }
+        let localizedControlValues =
+            EditorAjarAnimatedGIFSizeChoice.allCases.map(\.displayName)
+            + EditorAjarAnimatedGIFFrameRateChoice.allCases.map(\.displayName)
+            + EditorAjarAnimatedGIFLoopChoice.allCases.map(\.displayName)
+        XCTAssertTrue(
+            localizedControlValues.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
+            "Every GIF picker value must expose a nonempty VoiceOver value"
+        )
+    }
+
     func testFREXP003CustomPresetsPersistAppSideNotInProject() throws {
         let storeURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ajar-export-presets-\(UUID().uuidString).json")

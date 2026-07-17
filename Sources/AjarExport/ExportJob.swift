@@ -2,6 +2,15 @@
 
 import Foundation
 
+/// Output family scheduled by the heterogeneous export queue.
+public enum ExportJobKind: String, Codable, CaseIterable, Equatable, Sendable {
+    /// A container export driven by ``ExportSession``.
+    case movie
+
+    /// An ImageIO animated-GIF export driven by ``AnimatedGIFExportSession``.
+    case animatedGIF
+}
+
 /// Immutable description of one enqueued export (FR-EXP-005).
 ///
 /// `request` already captures a project **value** snapshot at enqueue time; concurrent edits to
@@ -41,6 +50,9 @@ public struct ExportJobSnapshot: Equatable, Sendable, Identifiable {
     /// UI label.
     public let displayName: String
 
+    /// Output family for choosing the appropriate queue-row treatment.
+    public let kind: ExportJobKind
+
     /// Destination URL from the captured request.
     public let destinationURL: URL
 
@@ -66,6 +78,7 @@ public struct ExportJobSnapshot: Equatable, Sendable, Identifiable {
     public init(
         id: UUID,
         displayName: String,
+        kind: ExportJobKind = .movie,
         destinationURL: URL,
         state: ExportJobState,
         progress: ExportProgressEstimate,
@@ -76,6 +89,7 @@ public struct ExportJobSnapshot: Equatable, Sendable, Identifiable {
     ) {
         self.id = id
         self.displayName = displayName
+        self.kind = kind
         self.destinationURL = destinationURL
         self.state = state
         self.progress = progress
@@ -90,8 +104,20 @@ public struct ExportJobSnapshot: Equatable, Sendable, Identifiable {
 ///
 /// The factory owns frame/audio provider injection (ADR-0019). The queue only schedules and
 /// cancels sessions; it never imports AppKit or decodes media.
-public typealias ExportSessionFactory = @Sendable (
-    _ jobID: UUID,
-    _ request: ExportRequest,
-    _ onFrameProgress: (@Sendable (ExportProgress) -> Void)?
-) -> ExportSession
+public typealias ExportSessionFactory =
+    @Sendable (
+        _ jobID: UUID,
+        _ request: ExportRequest,
+        _ onFrameProgress: (@Sendable (ExportProgress) -> Void)?
+    ) -> ExportSession
+
+/// Builds one-shot animated-GIF sessions for the heterogeneous export queue.
+///
+/// Like ``ExportSessionFactory``, the factory owns render-provider injection. The queue keeps
+/// movie and GIF requests in one strict-serial schedule and only drives their shared lifecycle.
+public typealias AnimatedGIFExportSessionFactory =
+    @Sendable (
+        _ jobID: UUID,
+        _ request: AnimatedGIFExportRequest,
+        _ onFrameProgress: (@Sendable (ExportProgress) -> Void)?
+    ) -> AnimatedGIFExportSession

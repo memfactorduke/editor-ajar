@@ -113,16 +113,26 @@ public struct ExportResult: Equatable, Sendable {
     /// Number of offline-mixed audio frames appended.
     public let audioFrameCount: Int
 
+    /// Number of executed per-frame source selections observed by the render graph.
+    public let sourceSelectionRecordCount: Int
+
+    /// Whether any executed source selection used proxy media (must stay false in production).
+    public let usedProxyMedia: Bool
+
     /// Creates an export result.
     public init(
         destinationURL: URL,
         duration: RationalTime,
         videoFrameCount: Int64,
-        audioFrameCount: Int
+        audioFrameCount: Int,
+        sourceSelectionRecordCount: Int = 0,
+        usedProxyMedia: Bool = false
     ) {
         self.destinationURL = destinationURL
         self.duration = duration
         self.videoFrameCount = videoFrameCount
         self.audioFrameCount = audioFrameCount
+        self.sourceSelectionRecordCount = sourceSelectionRecordCount
+        self.usedProxyMedia = usedProxyMedia
     }
 }

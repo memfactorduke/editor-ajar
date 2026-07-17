@@ -50,6 +50,9 @@ public enum ExportColorSpace: String, Codable, CaseIterable, Equatable, Sendable
     /// ITU-R BT.709 primaries and transfer function.
     case rec709
 
+    /// Rec.709/sRGB primaries with the IEC sRGB transfer function.
+    case sRGB
+
     /// Display-P3 D65 primaries with the sRGB transfer function.
     case displayP3
 
@@ -58,6 +61,8 @@ public enum ExportColorSpace: String, Codable, CaseIterable, Equatable, Sendable
         switch self {
         case .rec709:
             .rec709
+        case .sRGB:
+            .sRGB
         case .displayP3:
             .displayP3
         }

@@ -5,6 +5,8 @@ import AjarAudio
 import CoreMedia
 import CoreVideo
 import Foundation
+import ImageIO
+import Metal
 import XCTest
 
 @testable import AjarExport
@@ -114,6 +116,162 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
                 || state == .pausedWillRestart || state == .pending || state == .running
         }
         XCTAssertNotNil(model.exportQueueController.jobs.first(where: { $0.id == jobID }))
+    }
+
+    func testFREXP006DialogEnqueuesCapturedAnimatedGIFRequestAndCloses() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ajar-app-export-gif-request-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let capture = AppAnimatedGIFRequestCapture()
+        let controller = EditorAjarExportQueueController(
+            sessionFactory: Self.makeStubSessionFactory(),
+            animatedGIFSessionFactory: { jobID, request, onProgress in
+                capture.record(request)
+                return AnimatedGIFExportSession(
+                    id: jobID,
+                    request: request,
+                    frameProvider: AppAnimatedGIFFrameProvider(),
+                    onFrameProgress: onProgress
+                )
+            }
+        )
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportQueueController: controller,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let originalProject = try XCTUnwrap(model.project)
+        let sequence = try XCTUnwrap(model.activeSequence)
+        let destination = directory.appendingPathComponent("captured.gif")
+
+        model.presentExportDialog()
+        model.setExportMode(.animatedGIF)
+        model.setAnimatedGIFSizeChoice(.quarter)
+        model.setAnimatedGIFFrameRateChoice(.fps10)
+        model.setAnimatedGIFLoopChoice(.playOnce)
+        model.enqueueExportDialogSelection(destinationURL: destination)
+
+        let enqueued = await waitUntil(timeout: 3) {
+            (model.exportQueueController.jobs.first?.kind == .animatedGIF
+                && !model.exportDialog.isPresented
+                && model.isExportQueuePanelVisible)
+                || model.exportQueueController.statusMessage != nil
+                || model.exportDialog.statusMessage != nil
+        }
+        XCTAssertTrue(enqueued)
+        XCTAssertNil(model.exportQueueController.statusMessage)
+        XCTAssertNil(model.exportDialog.statusMessage)
+        XCTAssertFalse(model.exportDialog.isPresented)
+        XCTAssertTrue(model.isExportQueuePanelVisible)
+
+        let editedProject = originalProject.updatingPreferProxyPlayback(true)
+        model.replaceProjectPreservingHistoryForTesting(editedProject)
+        XCTAssertEqual(model.project, editedProject)
+        XCTAssertNotEqual(model.project, originalProject)
+
+        let job = try XCTUnwrap(model.exportQueueController.jobs.first)
+        XCTAssertEqual(job.kind, .animatedGIF)
+        XCTAssertEqual(job.destinationURL, destination)
+        XCTAssertEqual(job.snapshotSequenceID, sequence.id)
+
+        let request = try XCTUnwrap(capture.request)
+        XCTAssertEqual(request.project, originalProject)
+        XCTAssertEqual(request.sequenceID, sequence.id)
+        XCTAssertEqual(request.destinationURL, destination)
+        XCTAssertEqual(request.settings.resolution, PixelDimensions(width: 80, height: 45))
+        XCTAssertEqual(request.settings.frameRate, try FrameRate(frames: 10))
+        XCTAssertEqual(request.settings.loopPolicy, .playOnce)
+
+        let completed = await waitUntil(timeout: 5) {
+            model.exportQueueController.jobs.first?.state == .done
+                || model.exportQueueController.jobs.first?.state == .failed
+        }
+        XCTAssertTrue(completed)
+        XCTAssertEqual(model.exportQueueController.jobs.first?.state, .done)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testFREXP006ProductionAppPathPublishesDecodableAnimatedGIF() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else {
+            throw XCTSkip("Metal device unavailable for production GIF acceptance")
+        }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ajar-app-export-gif-production-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let originalProject = try XCTUnwrap(model.project)
+        let videoMediaID = try XCTUnwrap(
+            originalProject.mediaPool.first(where: { $0.metadata.pixelDimensions != nil })?.id
+        )
+        let proxyEnabledProject = originalProject
+            .updatingPreferProxyPlayback(true)
+            .updatingMediaProxyState(
+                .ready(relativePath: "caches/proxies/acceptance.mov"),
+                for: [videoMediaID]
+            )
+        model.replaceProjectPreservingHistoryForTesting(proxyEnabledProject)
+        XCTAssertTrue(model.preferProxyPlayback)
+        XCTAssertEqual(
+            model.project?.mediaPool.first(where: { $0.id == videoMediaID })?.proxyState,
+            .ready(relativePath: "caches/proxies/acceptance.mov")
+        )
+        let destination = directory.appendingPathComponent("production.gif")
+        model.scrub(to: 0)
+        model.setTimelineRangeIn()
+        model.scrub(to: 8)
+        model.setTimelineRangeOut()
+        model.presentExportDialog()
+        model.setExportMode(.animatedGIF)
+        model.setExportRangeChoice(.inOutMarks)
+        model.setAnimatedGIFSizeChoice(.quarter)
+        model.setAnimatedGIFFrameRateChoice(.fps10)
+        model.setAnimatedGIFLoopChoice(.forever)
+
+        model.enqueueExportDialogSelection(destinationURL: destination)
+        let completed = await waitUntil(timeout: 30) {
+            let state = model.exportQueueController.jobs.first?.state
+            return state == .done || state == .failed || state == .cancelled
+        }
+        XCTAssertTrue(completed)
+        let job = try XCTUnwrap(model.exportQueueController.jobs.first)
+        if job.state == .failed {
+            return XCTFail(
+                "production animated GIF export failed: \(String(describing: job.failure))")
+        }
+        XCTAssertEqual(job.kind, .animatedGIF)
+        XCTAssertEqual(job.state, .done)
+        let result = try XCTUnwrap(job.result)
+        XCTAssertGreaterThan(result.sourceSelectionRecordCount, 0)
+        XCTAssertFalse(result.usedProxyMedia)
+
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(destination as CFURL, nil))
+        XCTAssertEqual(CGImageSourceGetCount(source), 3)
+        let firstFrame = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        XCTAssertEqual(firstFrame.width, 80)
+        XCTAssertEqual(firstFrame.height, 45)
+
+        let globalProperties = CGImageSourceCopyProperties(source, nil) as? [CFString: Any]
+        let globalGIF = globalProperties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+        XCTAssertEqual((globalGIF?[kCGImagePropertyGIFLoopCount] as? NSNumber)?.intValue, 0)
+        let frameProperties =
+            CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+            as? [CFString: Any]
+        let frameGIF = frameProperties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+        let delay =
+            (frameGIF?[kCGImagePropertyGIFUnclampedDelayTime] as? NSNumber)?.doubleValue
+            ?? (frameGIF?[kCGImagePropertyGIFDelayTime] as? NSNumber)?.doubleValue
+        XCTAssertEqual(try XCTUnwrap(delay), 0.1, accuracy: 0.000_1)
     }
 
     private func waitUntil(
@@ -267,5 +425,35 @@ private final class AppStubWriter: ExportWriting {
         lock.lock()
         didCancel = true
         lock.unlock()
+    }
+}
+
+private final class AppAnimatedGIFRequestCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedRequest: AnimatedGIFExportRequest?
+
+    var request: AnimatedGIFExportRequest? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedRequest
+    }
+
+    func record(_ request: AnimatedGIFExportRequest) {
+        lock.lock()
+        storedRequest = request
+        lock.unlock()
+    }
+}
+
+private final class AppAnimatedGIFFrameProvider: ExportVideoFrameProvider, @unchecked Sendable {
+    func renderFrame(at _: RationalTime, into pixelBuffer: CVPixelBuffer) async throws {
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
+            throw ExportError.frameRenderFailed(frameIndex: 0, reason: "missing GIF test pixels")
+        }
+        let byteCount =
+            CVPixelBufferGetBytesPerRow(pixelBuffer) * CVPixelBufferGetHeight(pixelBuffer)
+        baseAddress.initializeMemory(as: UInt8.self, repeating: 96, count: byteCount)
     }
 }
