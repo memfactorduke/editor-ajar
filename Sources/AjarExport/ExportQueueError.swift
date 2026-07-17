@@ -13,6 +13,13 @@ public enum ExportQueueError: Error, Equatable, Sendable, CustomStringConvertibl
     /// Only one hardware-encode job may run at a time; an internal drain invariant broke.
     case concurrentEncodeInvariantViolated
 
+    /// Queue job identifiers are immutable and may never replace an existing record.
+    case duplicateJobID(UUID)
+
+    /// A nonterminal movie or GIF job already owns the same output path.
+    case destinationAlreadyQueued(URL)
+
+    /// Stable diagnostic text for logs and nonlocalized adapters.
     public var description: String {
         switch self {
         case .jobNotFound(let id):
@@ -21,6 +28,10 @@ public enum ExportQueueError: Error, Equatable, Sendable, CustomStringConvertibl
             error.description
         case .concurrentEncodeInvariantViolated:
             "export queue attempted to start a second concurrent hardware encode"
+        case .duplicateJobID(let id):
+            "export queue already contains job \(id)"
+        case .destinationAlreadyQueued(let url):
+            "another export is already queued for \(url.path)"
         }
     }
 }

@@ -37,7 +37,7 @@ final class ExportQueueProResIntegrationTests: XCTestCase {
             )
         }
 
-        let jobID = await queue.enqueue(request: request, displayName: "prores-queue")
+        let jobID = try await queue.enqueue(request: request, displayName: "prores-queue")
         let done = await ExportQueueFixtures.waitUntil(timeout: 30) {
             let state = await queue.state(for: jobID)
             return state == .done || state == .failed || state == .cancelled

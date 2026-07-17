@@ -80,7 +80,11 @@ implicit, platform-dependent alpha threshold. Loop metadata is omitted for play-
 loop count of zero means forever. The v1.x engine accepts 1...100 fps and odd raster dimensions.
 #279 added consumer size, frame-rate, range, and loop controls plus one strictly serial background
 queue that schedules both movie and animated-GIF sessions without erasing their distinct writer
-lifecycles.
+lifecycles. Enqueue canonicalizes the selected output path and rejects a movie or GIF while any
+nonterminal job already reserves that destination; terminal cancellation, failure, or completion
+releases it. This queue-level invariant prevents a later serial job from silently replacing an
+earlier result before the first destination exists on disk. A job UUID is also accepted only once;
+an attempted duplicate cannot replace the record that owns an active session or reservation.
 
 ### Proxy exclusion audit hook (FR-EXP-007 / FR-MED-004)
 

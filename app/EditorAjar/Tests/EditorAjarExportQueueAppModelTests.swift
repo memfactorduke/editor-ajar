@@ -128,7 +128,11 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
 
         let capture = AppMovieRequestCapture()
         let controller = EditorAjarExportQueueController(
-            sessionFactory: Self.makeStubSessionFactory(capture: capture)
+            sessionFactory: Self.makeStubSessionFactory(
+                holdFirstFrame: true,
+                firstFrameDelayNanoseconds: 2_000_000_000,
+                capture: capture
+            )
         )
         let model = EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
@@ -161,18 +165,39 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         model.dismissExportDialog()
         XCTAssertTrue(model.exportDialog.isPresented)
 
-        let completed = await waitUntil(timeout: 5) {
-            let state = model.exportQueueController.jobs.first?.state
-            return state == .done || state == .failed
-                || model.exportDialog.statusMessage != nil
+        let acceptedAndRunning = await waitUntil(timeout: 3) {
+            model.exportQueueController.jobs.first?.state == .running
+                && !model.exportDialog.isPresented
+                && !model.isExportDialogSubmitting
         }
-        XCTAssertTrue(completed)
+        XCTAssertTrue(acceptedAndRunning)
         XCTAssertNil(model.exportDialog.statusMessage)
         XCTAssertNil(model.exportQueueController.statusMessage)
         XCTAssertFalse(model.exportDialog.isPresented)
         XCTAssertFalse(model.isExportDialogSubmitting)
         XCTAssertTrue(model.isExportQueuePanelVisible)
         XCTAssertEqual(model.exportQueueController.jobs.count, 1)
+
+        model.presentExportDialog()
+        model.setExportMode(.video)
+        model.enqueueExportDialogSelection(destinationURL: destination)
+        let collisionRefused = await waitUntil(timeout: 3) {
+            model.exportDialog.statusMessage != nil && !model.isExportDialogSubmitting
+        }
+        XCTAssertTrue(collisionRefused)
+        XCTAssertTrue(model.exportDialog.isPresented)
+        XCTAssertEqual(model.exportQueueController.jobs.count, 1)
+        XCTAssertEqual(
+            model.exportDialog.statusMessage,
+            "Another export is already queued for \(destination.path). Choose a different filename or wait for it to finish."
+        )
+        model.dismissExportDialog()
+
+        let completed = await waitUntil(timeout: 5) {
+            let state = model.exportQueueController.jobs.first?.state
+            return state == .done || state == .failed
+        }
+        XCTAssertTrue(completed)
         XCTAssertEqual(model.exportQueueController.jobs.first?.state, .done)
 
         let request = try XCTUnwrap(capture.request)
@@ -357,6 +382,7 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
     /// Deterministic, fast stub — no Metal decode, no AVAssetWriter hardware encode.
     private static func makeStubSessionFactory(
         holdFirstFrame: Bool = false,
+        firstFrameDelayNanoseconds: UInt64 = 200_000_000,
         capture: AppMovieRequestCapture? = nil
     ) -> ExportSessionFactory {
         { jobID, request, onProgress in
@@ -364,7 +390,10 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
             return ExportSession(
                 id: jobID,
                 request: request,
-                frameProvider: AppStubFrameProvider(holdFirstFrame: holdFirstFrame),
+                frameProvider: AppStubFrameProvider(
+                    holdFirstFrame: holdFirstFrame,
+                    firstFrameDelayNanoseconds: firstFrameDelayNanoseconds
+                ),
                 audioSourceProvider: AppStubAudioSourceProvider(
                     sampleRate: request.project.settings.audioSampleRate
                 ),
@@ -398,11 +427,13 @@ private final class AppMovieRequestCapture: @unchecked Sendable {
 
 private final class AppStubFrameProvider: ExportVideoFrameProvider, @unchecked Sendable {
     private let holdFirstFrame: Bool
+    private let firstFrameDelayNanoseconds: UInt64
     private let lock = NSLock()
     private var heldOnce = false
 
-    init(holdFirstFrame: Bool) {
+    init(holdFirstFrame: Bool, firstFrameDelayNanoseconds: UInt64) {
         self.holdFirstFrame = holdFirstFrame
+        self.firstFrameDelayNanoseconds = firstFrameDelayNanoseconds
     }
 
     func renderFrame(
@@ -416,7 +447,7 @@ private final class AppStubFrameProvider: ExportVideoFrameProvider, @unchecked S
             lock.unlock()
             if shouldHold {
                 // Brief hold so cancel can land on a RUNNING job without real encode cost.
-                try await Task.sleep(nanoseconds: 200_000_000)
+                try await Task.sleep(nanoseconds: firstFrameDelayNanoseconds)
             }
         }
         try Task.checkCancellation()

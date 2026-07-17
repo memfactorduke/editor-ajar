@@ -142,8 +142,8 @@ public actor ExportQueue {
 
     /// Enqueues an export. `request.project` must already be the immutable snapshot to encode.
     @discardableResult
-    public func enqueue(_ job: ExportJob) -> UUID {
-        enqueue(
+    public func enqueue(_ job: ExportJob) throws -> UUID {
+        try enqueue(
             QueuedJob(
                 id: job.id,
                 displayName: job.displayName,
@@ -153,7 +153,19 @@ public actor ExportQueue {
         )
     }
 
-    private func enqueue(_ job: QueuedJob) -> UUID {
+    private func enqueue(_ job: QueuedJob) throws -> UUID {
+        guard records[job.id] == nil else {
+            throw ExportQueueError.duplicateJobID(job.id)
+        }
+        let destinationKey = ExportDestinationReservation.key(for: job.request.destinationURL)
+        let destinationIsReserved = records.values.contains { record in
+            !ExportJobStateMachine.isTerminal(record.state)
+                && ExportDestinationReservation.key(for: record.job.request.destinationURL)
+                    == destinationKey
+        }
+        guard !destinationIsReserved else {
+            throw ExportQueueError.destinationAlreadyQueued(job.request.destinationURL)
+        }
         let record = JobRecord(
             job: job,
             state: .pending,
@@ -176,8 +188,8 @@ public actor ExportQueue {
         displayName: String,
         id: UUID = UUID(),
         enqueuedAt: Date = Date()
-    ) -> UUID {
-        enqueue(
+    ) throws -> UUID {
+        try enqueue(
             ExportJob(
                 id: id,
                 displayName: displayName,
@@ -194,8 +206,8 @@ public actor ExportQueue {
         displayName: String,
         id: UUID = UUID(),
         enqueuedAt: Date = Date()
-    ) -> UUID {
-        enqueue(
+    ) throws -> UUID {
+        try enqueue(
             QueuedJob(
                 id: id,
                 displayName: displayName,

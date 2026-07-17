@@ -978,7 +978,7 @@ final class EditorAjarAppModel: ObservableObject {
                         )
                         self.finishExportDialogEnqueue()
                     } catch {
-                        self.presentExportDialogError(String(describing: error))
+                        self.presentExportDialogError(error)
                     }
                 }
             case .animatedGIF:
@@ -996,14 +996,14 @@ final class EditorAjarAppModel: ObservableObject {
                         )
                         self.finishExportDialogEnqueue()
                     } catch {
-                        self.presentExportDialogError(String(describing: error))
+                        self.presentExportDialogError(error)
                     }
                 }
             case .stillFrame, .audioOnly:
                 break
             }
         } catch {
-            presentExportDialogError(String(describing: error))
+            presentExportDialogError(error)
         }
     }
 
@@ -1021,6 +1021,20 @@ final class EditorAjarAppModel: ObservableObject {
         var dialog = exportDialog
         dialog.statusMessage = message
         exportDialog = dialog
+    }
+
+    private func presentExportDialogError(_ error: Error) {
+        if let queueError = error as? ExportQueueError,
+           case .destinationAlreadyQueued(let url) = queueError {
+            presentExportDialogError(
+                AppString.localized(
+                    "export.status.destinationAlreadyQueued",
+                    "Another export is already queued for \(url.path). Choose a different filename or wait for it to finish."
+                )
+            )
+            return
+        }
+        presentExportDialogError(String(describing: error))
     }
 
     /// Saves a custom preset app-side (Application Support JSON — not the project package).

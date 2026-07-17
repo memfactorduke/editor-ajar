@@ -430,7 +430,7 @@ Sheet; not present at launch (open with `⇧⌘E`).
 | GIF size | — | Animated GIF size | Original / Half / Quarter |
 | GIF frame rate | — | Animated GIF frame rate | 10 / 15 / 24 / 30 fps |
 | GIF playback | — | Animated GIF playback | Forever / Play once |
-| Status | — | Export status: {msg} | when present |
+| Status | — | Export status: {msg} | when present; announces an active destination collision with the selected path |
 | Cancel | `Esc` | Cancel export | id: `Export Dialog Cancel` |
 | Add to Queue | Return | Add export to queue | video/GIF; opens native destination panel, then disables as Adding… while submitting; id: `Export Dialog Add to Queue` |
 | Validate | Return | Validate export settings | still/audio; id: `Export Dialog Validate` |

@@ -32,7 +32,7 @@ final class ExportQueueTests: XCTestCase {
                 destinationURL: directory.appendingPathComponent("job-\(index).mp4"),
                 frameCount: 3
             )
-            _ = await queue.enqueue(request: request, displayName: "job-\(index)")
+            _ = try await queue.enqueue(request: request, displayName: "job-\(index)")
         }
 
         let finished = await ExportQueueFixtures.waitUntil(timeout: 5) {
@@ -72,7 +72,7 @@ final class ExportQueueTests: XCTestCase {
             return session
         }
 
-        let jobID = await queue.enqueue(request: request, displayName: "cancel-me")
+        let jobID = try await queue.enqueue(request: request, displayName: "cancel-me")
         let cancelled = await ExportQueueFixtures.waitUntil(timeout: 3) {
             await queue.state(for: jobID) == .cancelled
         }
@@ -107,7 +107,7 @@ final class ExportQueueTests: XCTestCase {
             )
         }
 
-        let jobID = await queue.enqueue(request: request, displayName: "slow")
+        let jobID = try await queue.enqueue(request: request, displayName: "slow")
         let running = await ExportQueueFixtures.waitUntil {
             await queue.state(for: jobID) == .running
         }
@@ -148,7 +148,7 @@ final class ExportQueueTests: XCTestCase {
             )
         }
 
-        let jobID = await queue.enqueue(request: request, displayName: "pause-me")
+        let jobID = try await queue.enqueue(request: request, displayName: "pause-me")
         let running = await ExportQueueFixtures.waitUntil {
             await queue.state(for: jobID) == .running
         }
@@ -197,7 +197,7 @@ final class ExportQueueTests: XCTestCase {
         }
 
         let fractions = FractionCollector()
-        let jobID = await queue.enqueue(request: request, displayName: "prog")
+        let jobID = try await queue.enqueue(request: request, displayName: "prog")
         let stream = await queue.snapshotStream()
         let collector = Task {
             for await snaps in stream {
@@ -253,8 +253,8 @@ final class ExportQueueTests: XCTestCase {
             destinationURL: directory.appendingPathComponent("b.mp4"),
             frameCount: 2
         )
-        let firstID = await queue.enqueue(request: first, displayName: "a")
-        let secondID = await queue.enqueue(request: second, displayName: "b")
+        let firstID = try await queue.enqueue(request: first, displayName: "a")
+        let secondID = try await queue.enqueue(request: second, displayName: "b")
 
         let firstRunning = await ExportQueueFixtures.waitUntil {
             await queue.state(for: firstID) == .running

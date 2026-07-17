@@ -23,7 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   production app-path ImageIO decode are covered. Movie/GIF submission now asks the user to choose a
   visible filename and location, inherits the project's delivery color/audio settings, and rejects
   repeated Return or double-click submission until the queue accepts or rejects the first request.
-  GIF import is still intentionally first-frame-only.
+  The queue also reserves each normalized output path across every nonterminal movie/GIF job and
+  shows a localized refusal instead of allowing a later job to replace an earlier result. Queue job
+  identities are immutable, so a duplicate identifier cannot replace an active record or drop its
+  reservation. GIF import is still intentionally first-frame-only.
 
 - Complete compound-clip app workflow (#269, FR-CMP-001…005): localized, VoiceOver-labelled Clip
   menu actions Make (`⌥G`), Open, and Decompose (`⇧⌘G`) reuse the atomic `AjarCore` commands.

@@ -295,13 +295,14 @@ referenced sequence tabs, localized refusals, and whole-compound inspector editi
 | FR-EXP-002 | Container support: MP4, MOV; audio AAC/PCM; correct color tagging on output (ADR-0010). | v1 |
 | FR-EXP-003 | Presets for common targets (YouTube 1080p/4K, square, vertical 9:16, etc.); custom presets. | v1 |
 | FR-EXP-004 | Export range (whole timeline / in-out), still-frame export (PNG/JPEG), and audio-only export. | v1 |
-| FR-EXP-005 | **Background export queue:** batch multiple exports; continue editing while exporting; progress + time estimate; cancel/pause. | v1 |
+| FR-EXP-005 | **Background export queue:** batch multiple exports; continue editing while exporting; progress + time estimate; cancel/pause; reserve each active job's chosen destination. | v1 |
 | FR-EXP-006 | GIF and animated-image export. | v1.x |
 | FR-EXP-007 | Export is deterministic and uses original (not proxy) media; verified by golden-frame export tests. | v1 |
 | FR-EXP-008 | Direct upload to YouTube and similar. | future |
 
 FR-EXP-006 is complete: #275 delivered the ImageIO engine and all-frame CI golden, and #279 added
-consumer size/frame-rate/range/loop controls plus movie/GIF scheduling in one background queue.
+consumer size/frame-rate/range/loop controls plus movie/GIF scheduling in one background queue with
+explicit save destinations and exclusive reservations until each job reaches a terminal state.
 
 ### 6.14 Project & document model — area `PROJ`
 

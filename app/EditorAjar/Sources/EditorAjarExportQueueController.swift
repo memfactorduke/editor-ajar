@@ -87,7 +87,7 @@ final class EditorAjarExportQueueController: ObservableObject {
             destinationURL: destinationURL,
             settings: settings
         )
-        let jobID = await queue.enqueue(request: request, displayName: displayName)
+        let jobID = try await queue.enqueue(request: request, displayName: displayName)
         statusMessage = nil
         return jobID
     }
@@ -109,7 +109,7 @@ final class EditorAjarExportQueueController: ObservableObject {
             destinationURL: destinationURL,
             settings: settings
         )
-        let jobID = await queue.enqueue(
+        let jobID = try await queue.enqueue(
             animatedGIFRequest: request,
             displayName: displayName
         )

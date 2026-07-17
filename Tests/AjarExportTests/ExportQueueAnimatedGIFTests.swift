@@ -41,9 +41,9 @@ final class ExportQueueAnimatedGIFTests: XCTestCase {
             }
         }
 
-        await queue.enqueue(request: movieA, displayName: "movie-a", id: ids[0])
-        await queue.enqueue(animatedGIFRequest: gif, displayName: "gif-b", id: ids[1])
-        await queue.enqueue(request: movieC, displayName: "movie-c", id: ids[2])
+        try await queue.enqueue(request: movieA, displayName: "movie-a", id: ids[0])
+        try await queue.enqueue(animatedGIFRequest: gif, displayName: "gif-b", id: ids[1])
+        try await queue.enqueue(request: movieC, displayName: "movie-c", id: ids[2])
 
         let finished = await ExportQueueFixtures.waitUntil(timeout: 5) {
             let snapshots = await queue.snapshots()
@@ -79,6 +79,72 @@ final class ExportQueueAnimatedGIFTests: XCTestCase {
         XCTAssertNotNil(movieRequestC)
     }
 
+    func testFREXP005QueueReservesNonterminalDestinationAcrossOutputKinds() async throws {
+        let directory = try makeGIFQueueDirectory(prefix: "destination-reservation")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let provider = ControllableFrameProvider(sleepNanoseconds: 30_000_000)
+        let queue = makeGIFControlQueue(provider: provider, writerCount: LockedCounter())
+        let destination = directory.appendingPathComponent("shared-output.gif")
+        let movie = try ExportQueueFixtures.makeRequest(
+            destinationURL: destination,
+            frameCount: 8
+        )
+        let gif = try makeGIFQueueRequest(
+            destinationURL: destination,
+            frameCount: 2
+        )
+
+        let movieID = try await queue.enqueue(request: movie, displayName: "reserved-movie")
+        let running = await ExportQueueFixtures.waitUntil {
+            await queue.state(for: movieID) == .running
+        }
+        XCTAssertTrue(running)
+
+        do {
+            _ = try await queue.enqueue(
+                animatedGIFRequest: gif,
+                displayName: "colliding-gif"
+            )
+            XCTFail("a nonterminal job must retain exclusive ownership of its destination")
+        } catch let error as ExportQueueError {
+            XCTAssertEqual(error, .destinationAlreadyQueued(destination))
+        }
+        let snapshotsAfterRefusal = await queue.snapshots()
+        XCTAssertEqual(snapshotsAfterRefusal.count, 1)
+
+        try await queue.pause(jobID: movieID)
+        let paused = await ExportQueueFixtures.waitUntil(timeout: 3) {
+            await queue.state(for: movieID) == .pausedWillRestart
+        }
+        XCTAssertTrue(paused)
+
+        do {
+            _ = try await queue.enqueue(
+                animatedGIFRequest: gif,
+                displayName: "colliding-with-paused-movie"
+            )
+            XCTFail("a paused job must retain exclusive ownership of its destination")
+        } catch let error as ExportQueueError {
+            XCTAssertEqual(error, .destinationAlreadyQueued(destination))
+        }
+
+        try await queue.cancel(jobID: movieID)
+        let cancelled = await ExportQueueFixtures.waitUntil(timeout: 3) {
+            await queue.state(for: movieID) == .cancelled
+        }
+        XCTAssertTrue(cancelled)
+
+        let gifID = try await queue.enqueue(
+            animatedGIFRequest: gif,
+            displayName: "released-gif"
+        )
+        let completed = await ExportQueueFixtures.waitUntil(timeout: 3) {
+            await queue.state(for: gifID) == .done
+        }
+        XCTAssertTrue(completed)
+    }
+
     func testFREXP005And006GIFPauseResumesFromFrameZero() async throws {
         let directory = try makeGIFQueueDirectory(prefix: "pause")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -93,7 +159,7 @@ final class ExportQueueAnimatedGIFTests: XCTestCase {
         let existingDestination = Data("existing-pause-destination".utf8)
         try existingDestination.write(to: request.destinationURL)
 
-        let jobID = await queue.enqueue(
+        let jobID = try await queue.enqueue(
             animatedGIFRequest: request,
             displayName: "pause-gif"
         )
@@ -135,7 +201,7 @@ final class ExportQueueAnimatedGIFTests: XCTestCase {
         let existingDestination = Data("existing-cancel-destination".utf8)
         try existingDestination.write(to: request.destinationURL)
 
-        let jobID = await queue.enqueue(
+        let jobID = try await queue.enqueue(
             animatedGIFRequest: request,
             displayName: "cancel-gif"
         )
