@@ -38,7 +38,7 @@ final class ExportDestinationReservationTests: XCTestCase {
         )
     }
 
-    func testFREXP005FailedJobReleasesAndDoneJobRetainsDestinationReservation() async throws {
+    func testFREXP005FailedAndDoneJobsReleaseDestinationReservation() async throws {
         let directory = try makeDirectory(prefix: "terminal-release")
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -65,18 +65,109 @@ final class ExportDestinationReservationTests: XCTestCase {
         }
         XCTAssertTrue(firstCompleted)
 
-        // Models a Save panel that selected this path before the first success published. Even if
-        // actor scheduling delays enqueue until after completion, the stale selection must not be
-        // allowed to overwrite the just-published result without fresh user consent.
-        do {
-            _ = try await queue.enqueue(
-                request: request,
-                displayName: "stale-selection-after-completion"
-            )
-            XCTFail("a completed output must retain its reservation")
-        } catch let error as ExportQueueError {
-            XCTAssertEqual(error, .destinationAlreadyQueued(destination))
+        let secondSuccessID = try await queue.enqueue(
+            request: request,
+            displayName: "after-completion"
+        )
+        let secondCompleted = await ExportQueueFixtures.waitUntil(timeout: 3) {
+            await queue.state(for: secondSuccessID) == .done
         }
+        XCTAssertTrue(secondCompleted)
+    }
+
+    func testFREXP005VacantSelectionNeedsFreshConsentAfterEarlierJobPublishes() async throws {
+        let directory = try makeDirectory(prefix: "stale-consent")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let destination = directory.appendingPathComponent("handoff.mp4")
+        let initialRequest = try ExportQueueFixtures.makeRequest(
+            destinationURL: destination,
+            frameCount: 1
+        )
+        let queue = makeFailureThenSuccessQueue(failedID: UUID())
+        let initialID = try await queue.enqueue(
+            request: initialRequest,
+            displayName: "publishes-first"
+        )
+        let initialCompleted = await ExportQueueFixtures.waitUntil(timeout: 3) {
+            await queue.state(for: initialID) == .done
+        }
+        XCTAssertTrue(initialCompleted)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+
+        let staleSelection = try ExportQueueFixtures.makeRequest(
+            destinationURL: destination,
+            frameCount: 1,
+            destinationCollisionPolicy: .requireVacant
+        )
+        do {
+            _ = try await queue.enqueue(request: staleSelection, displayName: "stale-selection")
+            XCTFail("a file published after selection must require fresh overwrite consent")
+        } catch let error as ExportQueueError {
+            XCTAssertEqual(error, .destinationRequiresOverwriteConfirmation(destination))
+        }
+        let snapshotsAfterRefusal = await queue.snapshots()
+        XCTAssertEqual(snapshotsAfterRefusal.count, 1)
+
+        let confirmedSelection = try ExportQueueFixtures.makeRequest(
+            destinationURL: destination,
+            frameCount: 1,
+            destinationCollisionPolicy: .replaceExisting
+        )
+        let replacementID = try await queue.enqueue(
+            request: confirmedSelection,
+            displayName: "confirmed-replacement"
+        )
+        let replacementCompleted = await ExportQueueFixtures.waitUntil(timeout: 3) {
+            await queue.state(for: replacementID) == .done
+        }
+        XCTAssertTrue(replacementCompleted)
+    }
+
+    func testFREXP005PublicationCollisionIsVisibleOnTheFailedQueueJob() async throws {
+        let directory = try makeDirectory(prefix: "publication-collision")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let destination = directory.appendingPathComponent("late-file.mp4")
+        let intruder = Data("published-by-another-owner".utf8)
+        let request = try ExportQueueFixtures.makeRequest(
+            destinationURL: destination,
+            frameCount: 1,
+            destinationCollisionPolicy: .requireVacant
+        )
+        let queue = ExportQueue { jobID, request, onProgress in
+            ExportSession(
+                id: jobID,
+                request: request,
+                frameProvider: ControllableFrameProvider(),
+                writerFactory: { temporaryURL, _ in
+                    LifecycleWriter(outputURL: temporaryURL)
+                },
+                beforePublish: {
+                    try? intruder.write(to: destination)
+                },
+                onFrameProgress: onProgress
+            )
+        }
+
+        let jobID = try await queue.enqueue(request: request, displayName: "late collision")
+        let failed = await ExportQueueFixtures.waitUntil(timeout: 3) {
+            await queue.state(for: jobID) == .failed
+        }
+        XCTAssertTrue(failed)
+
+        let snapshots = await queue.snapshots()
+        let snapshot = try XCTUnwrap(snapshots.first)
+        XCTAssertEqual(
+            snapshot.failure,
+            .destinationRequiresOverwriteConfirmation(destination)
+        )
+        XCTAssertEqual(try Data(contentsOf: destination), intruder)
+        let leftovers = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertFalse(leftovers.contains { $0.lastPathComponent.contains(".ajar-partial") })
     }
 
     private func makeFailureThenSuccessQueue(failedID: UUID) -> ExportQueue {

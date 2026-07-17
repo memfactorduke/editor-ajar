@@ -1420,6 +1420,50 @@
         }
       }
     },
+    "export.dialog.overwrite.cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "export.dialog.overwrite.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A file already exists at %@. Replace it with this export?"
+          }
+        }
+      }
+    },
+    "export.dialog.overwrite.replace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace"
+          }
+        }
+      }
+    },
+    "export.dialog.overwrite.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace Existing Export?"
+          }
+        }
+      }
+    },
     "export.dialog.title": {
       "extractionState": "manual",
       "localizations": {
@@ -1789,7 +1833,18 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "An export is already queued or completed for %@. Choose a different filename."
+            "value": "Another export is already queued for %@. Choose a different filename or wait for it to finish."
+          }
+        }
+      }
+    },
+    "export.status.destinationRequiresOverwriteConfirmation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The export destination now exists at %@. Choose it again to confirm replacement, or choose a different filename."
           }
         }
       }
@@ -1900,6 +1955,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "exportQueue.job.failure.ax": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export failure"
           }
         }
       }

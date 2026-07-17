@@ -124,7 +124,55 @@ struct EditorAjarExportDialogView: View {
         guard panel.runModal() == .OK, let destinationURL = panel.url else {
             return
         }
-        model.enqueueExportDialogSelection(destinationURL: destinationURL)
+        guard
+            let destinationCollisionPolicy = ExportDestinationOverwriteConfirmation.policy(
+                for: destinationURL,
+                destinationExists: {
+                    FileManager.default.fileExists(atPath: $0.path)
+                },
+                confirmReplacement: confirmReplacingExistingExport
+            )
+        else {
+            return
+        }
+        model.enqueueExportDialogSelection(
+            destinationURL: destinationURL,
+            destinationCollisionPolicy: destinationCollisionPolicy
+        )
+    }
+
+    private func confirmReplacingExistingExport(at destinationURL: URL) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = AppString.localized(
+            "export.dialog.overwrite.title",
+            "Replace Existing Export?"
+        )
+        alert.informativeText = AppString.localized(
+            "export.dialog.overwrite.message",
+            "A file already exists at \(destinationURL.path). Replace it with this export?"
+        )
+        alert.addButton(withTitle: AppString.localized(
+            "export.dialog.overwrite.replace", "Replace"
+        ))
+        alert.addButton(withTitle: AppString.localized(
+            "export.dialog.overwrite.cancel", "Cancel"
+        ))
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+}
+
+/// Converts a post-panel destination observation plus explicit app confirmation into queue policy.
+enum ExportDestinationOverwriteConfirmation {
+    static func policy(
+        for destinationURL: URL,
+        destinationExists: (URL) -> Bool,
+        confirmReplacement: (URL) -> Bool
+    ) -> ExportDestinationCollisionPolicy? {
+        guard destinationExists(destinationURL) else {
+            return .requireVacant
+        }
+        return confirmReplacement(destinationURL) ? .replaceExisting : nil
     }
 }
 

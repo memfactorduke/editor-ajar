@@ -19,42 +19,10 @@ import Foundation
 /// ## Persistence
 /// Jobs are in-memory only; they are **not** restored after app relaunch.
 public actor ExportQueue {
-    private enum QueueRequest: Sendable {
-        case movie(ExportRequest)
-        case animatedGIF(AnimatedGIFExportRequest)
-
-        var kind: ExportJobKind {
-            switch self {
-            case .movie:
-                .movie
-            case .animatedGIF:
-                .animatedGIF
-            }
-        }
-
-        var destinationURL: URL {
-            switch self {
-            case .movie(let request):
-                request.destinationURL
-            case .animatedGIF(let request):
-                request.destinationURL
-            }
-        }
-
-        var sequenceID: UUID {
-            switch self {
-            case .movie(let request):
-                request.sequenceID
-            case .animatedGIF(let request):
-                request.sequenceID
-            }
-        }
-    }
-
     private struct QueuedJob: Sendable {
         let id: UUID
         let displayName: String
-        let request: QueueRequest
+        let request: ExportQueueRequest
         let enqueuedAt: Date
     }
 
@@ -159,18 +127,22 @@ public actor ExportQueue {
         }
         let destinationKey = ExportDestinationReservation.key(for: job.request.destinationURL)
         let destinationIsReserved = records.values.contains { record in
-            let retainsReservation = switch record.state {
-            case .cancelled, .failed:
-                false
-            case .pending, .running, .pausedWillRestart, .done:
-                true
-            }
-            return retainsReservation
+            !ExportJobStateMachine.isTerminal(record.state)
                 && ExportDestinationReservation.key(for: record.job.request.destinationURL)
-                == destinationKey
+                    == destinationKey
         }
         guard !destinationIsReserved else {
             throw ExportQueueError.destinationAlreadyQueued(job.request.destinationURL)
+        }
+        let destinationExists = FileManager.default.fileExists(
+            atPath: job.request.destinationURL.path
+        )
+        guard
+            job.request.destinationCollisionPolicy == .replaceExisting || !destinationExists
+        else {
+            throw ExportQueueError.destinationRequiresOverwriteConfirmation(
+                job.request.destinationURL
+            )
         }
         let record = JobRecord(
             job: job,
@@ -371,7 +343,7 @@ extension ExportQueue {
         }
     }
 
-    private func makeSession(jobID: UUID, request: QueueRequest) -> ActiveSession? {
+    private func makeSession(jobID: UUID, request: ExportQueueRequest) -> ActiveSession? {
         let onProgress: @Sendable (ExportProgress) -> Void = { [weak self] progress in
             Task { [weak self] in await self?.handleProgress(jobID: jobID, progress: progress) }
         }

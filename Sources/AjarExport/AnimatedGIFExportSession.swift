@@ -128,7 +128,8 @@ public final class AnimatedGIFExportSession: @unchecked Sendable {
         try checkCancellation()
         let frameCount = try request.frameCount()
         let preparedTransaction = try ExportOutputTransaction(
-            destinationURL: request.destinationURL
+            destinationURL: request.destinationURL,
+            destinationCollisionPolicy: request.destinationCollisionPolicy
         )
         transaction = preparedTransaction
         let writer = try makeWriter(

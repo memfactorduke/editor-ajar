@@ -7,9 +7,14 @@ final class ExportOutputTransaction {
     let destinationURL: URL
     let temporaryURL: URL
     private let fileManager: FileManager
+    private let destinationCollisionPolicy: ExportDestinationCollisionPolicy
     private var committed = false
 
-    init(destinationURL: URL, fileManager: FileManager = .default) throws {
+    init(
+        destinationURL: URL,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting,
+        fileManager: FileManager = .default
+    ) throws {
         guard destinationURL.isFileURL else {
             throw ExportError.destinationMustBeFileURL(destinationURL)
         }
@@ -24,6 +29,7 @@ final class ExportOutputTransaction {
 
         self.destinationURL = destinationURL
         self.fileManager = fileManager
+        self.destinationCollisionPolicy = destinationCollisionPolicy
         let extensionSuffix =
             destinationURL.pathExtension.isEmpty
             ? ""
@@ -39,8 +45,13 @@ final class ExportOutputTransaction {
             throw ExportError.finalizationFailed("writer produced no temporary output")
         }
 
+        let destinationExists = fileManager.fileExists(atPath: destinationURL.path)
+        guard destinationCollisionPolicy == .replaceExisting || !destinationExists else {
+            throw ExportError.destinationRequiresOverwriteConfirmation(destinationURL)
+        }
+
         do {
-            if fileManager.fileExists(atPath: destinationURL.path) {
+            if destinationExists {
                 _ = try fileManager.replaceItemAt(
                     destinationURL,
                     withItemAt: temporaryURL,
@@ -52,6 +63,10 @@ final class ExportOutputTransaction {
             }
             committed = true
         } catch {
+            let destinationAppeared = fileManager.fileExists(atPath: destinationURL.path)
+            if destinationCollisionPolicy == .requireVacant && destinationAppeared {
+                throw ExportError.destinationRequiresOverwriteConfirmation(destinationURL)
+            }
             let mapped = ExportErrorMapper.map(error, destinationURL: destinationURL)
             if case .diskFull = mapped {
                 throw ExportError.diskFull(destinationURL)

@@ -302,8 +302,8 @@ referenced sequence tabs, localized refusals, and whole-compound inspector editi
 
 FR-EXP-006 is complete: #275 delivered the ImageIO engine and all-frame CI golden, and #279 added
 consumer size/frame-rate/range/loop controls plus movie/GIF scheduling in one background queue with
-explicit save destinations and exclusive reservations that completed outputs retain until relaunch;
-failed and cancelled jobs release their paths for retry.
+explicit save destinations, exclusive reservations until each job reaches a terminal state, and
+fresh overwrite confirmation when a file appears after a vacant destination was selected.
 
 ### 6.14 Project & document model — area `PROJ`
 

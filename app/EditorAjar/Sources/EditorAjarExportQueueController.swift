@@ -77,7 +77,8 @@ final class EditorAjarExportQueueController: ObservableObject {
         range: TimeRange,
         destinationURL: URL,
         settings: ExportSettings,
-        displayName: String
+        displayName: String,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
     ) async throws -> UUID {
         // `ExportRequest` stores `project` by value — live edits after this line cannot race the job.
         let request = try ExportRequest(
@@ -85,7 +86,8 @@ final class EditorAjarExportQueueController: ObservableObject {
             sequenceID: sequenceID,
             range: range,
             destinationURL: destinationURL,
-            settings: settings
+            settings: settings,
+            destinationCollisionPolicy: destinationCollisionPolicy
         )
         let jobID = try await queue.enqueue(request: request, displayName: displayName)
         statusMessage = nil
@@ -100,14 +102,16 @@ final class EditorAjarExportQueueController: ObservableObject {
         range: TimeRange,
         destinationURL: URL,
         settings: AnimatedGIFExportSettings,
-        displayName: String
+        displayName: String,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
     ) async throws -> UUID {
         let request = try AnimatedGIFExportRequest(
             project: project,
             sequenceID: sequenceID,
             range: range,
             destinationURL: destinationURL,
-            settings: settings
+            settings: settings,
+            destinationCollisionPolicy: destinationCollisionPolicy
         )
         let jobID = try await queue.enqueue(
             animatedGIFRequest: request,

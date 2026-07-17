@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import AjarCore
 import AjarAudio
+import AjarCore
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -14,6 +14,60 @@ import XCTest
 
 @MainActor
 final class EditorAjarExportQueueAppModelTests: XCTestCase {
+    func testFREXP005OverwritePolicyRequiresExplicitPostPanelConfirmation() {
+        let destination = URL(fileURLWithPath: "/tmp/ajar-overwrite-consent.mp4")
+        var confirmationRequests: [URL] = []
+
+        let vacantPolicy = ExportDestinationOverwriteConfirmation.policy(
+            for: destination,
+            destinationExists: { _ in false },
+            confirmReplacement: {
+                confirmationRequests.append($0)
+                return true
+            }
+        )
+        XCTAssertEqual(vacantPolicy, .requireVacant)
+        XCTAssertTrue(confirmationRequests.isEmpty)
+
+        let cancelledPolicy = ExportDestinationOverwriteConfirmation.policy(
+            for: destination,
+            destinationExists: { _ in true },
+            confirmReplacement: {
+                confirmationRequests.append($0)
+                return false
+            }
+        )
+        XCTAssertNil(cancelledPolicy)
+        XCTAssertEqual(confirmationRequests, [destination])
+
+        let confirmedPolicy = ExportDestinationOverwriteConfirmation.policy(
+            for: destination,
+            destinationExists: { _ in true },
+            confirmReplacement: {
+                confirmationRequests.append($0)
+                return true
+            }
+        )
+        XCTAssertEqual(confirmedPolicy, .replaceExisting)
+        XCTAssertEqual(confirmationRequests, [destination, destination])
+    }
+
+    func testFREXP005QueueRowExplainsLateDestinationFailure() {
+        let destination = URL(fileURLWithPath: "/tmp/late-export.mp4")
+
+        XCTAssertEqual(
+            ExportQueueFailurePresentation.message(
+                for: .destinationRequiresOverwriteConfirmation(destination)
+            ),
+            "The export destination now exists at \(destination.path). Choose it again to confirm replacement, or choose a different filename."
+        )
+        XCTAssertNil(
+            ExportQueueFailurePresentation.message(
+                for: .frameRenderFailed(frameIndex: 0, reason: "developer-only diagnostic")
+            )
+        )
+    }
+
     func testFREXP005ToggleExportQueuePanel() {
         let model = EditorAjarAppModel(autosaveIntervalSeconds: 0)
 
@@ -189,7 +243,7 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         XCTAssertEqual(model.exportQueueController.jobs.count, 1)
         XCTAssertEqual(
             model.exportDialog.statusMessage,
-            "An export is already queued or completed for \(destination.path). Choose a different filename."
+            "Another export is already queued for \(destination.path). Choose a different filename or wait for it to finish."
         )
         model.dismissExportDialog()
 
@@ -199,6 +253,21 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         }
         XCTAssertTrue(completed)
         XCTAssertEqual(model.exportQueueController.jobs.first?.state, .done)
+
+        model.presentExportDialog()
+        model.setExportMode(.video)
+        model.enqueueExportDialogSelection(destinationURL: destination)
+        let staleConsentRefused = await waitUntil(timeout: 3) {
+            model.exportDialog.statusMessage != nil && !model.isExportDialogSubmitting
+        }
+        XCTAssertTrue(staleConsentRefused)
+        XCTAssertTrue(model.exportDialog.isPresented)
+        XCTAssertEqual(model.exportQueueController.jobs.count, 1)
+        XCTAssertEqual(
+            model.exportDialog.statusMessage,
+            "The export destination now exists at \(destination.path). Choose it again to confirm replacement, or choose a different filename."
+        )
+        model.dismissExportDialog()
 
         let request = try XCTUnwrap(capture.request)
         XCTAssertEqual(request.project, deliveryProject)
@@ -303,7 +372,8 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         let videoMediaID = try XCTUnwrap(
             originalProject.mediaPool.first(where: { $0.metadata.pixelDimensions != nil })?.id
         )
-        let proxyEnabledProject = originalProject
+        let proxyEnabledProject =
+            originalProject
             .updatingPreferProxyPlayback(true)
             .updatingMediaProxyState(
                 .ready(relativePath: "caches/proxies/acceptance.mov"),

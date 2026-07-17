@@ -26,7 +26,8 @@ extension ExportSession {
     ) async throws -> ExportResult {
         try checkCancellation()
         let preparedTransaction = try ExportOutputTransaction(
-            destinationURL: request.destinationURL
+            destinationURL: request.destinationURL,
+            destinationCollisionPolicy: request.destinationCollisionPolicy
         )
         transaction = preparedTransaction
         let preparedWriter = try writerFactory(

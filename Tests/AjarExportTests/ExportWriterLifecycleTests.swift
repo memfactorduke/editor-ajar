@@ -204,6 +204,36 @@ final class ExportWriterLifecycleTests: XCTestCase {
         try fixture.assertNoPartialFiles()
     }
 
+    func testNFRSTAB002VacantPolicyRefusesFileThatAppearsBeforePublication() async throws {
+        let fixture = try LifecycleFixture(
+            frameCount: 1,
+            destinationCollisionPolicy: .requireVacant
+        )
+        let writer = LifecycleWriter(outputURL: fixture.destinationURL)
+        let intruder = Data("appeared-after-selection".utf8)
+        let session = fixture.session(
+            frameProvider: LifecycleFrameProvider(),
+            beforePublish: {
+                try? intruder.write(to: fixture.destinationURL)
+            },
+            writerFactory: { _, _ in writer }
+        )
+
+        do {
+            _ = try await session.run()
+            XCTFail("an unconfirmed late destination must not be replaced")
+        } catch let error as ExportError {
+            XCTAssertEqual(
+                error,
+                .destinationRequiresOverwriteConfirmation(fixture.destinationURL)
+            )
+        }
+
+        XCTAssertEqual(session.state, .failed)
+        XCTAssertEqual(try Data(contentsOf: fixture.destinationURL), intruder)
+        try fixture.assertNoPartialFiles()
+    }
+
     func testFREXP005SessionMayRunOnlyOnce() async throws {
         let fixture = try LifecycleFixture(frameCount: 1)
         let session = fixture.session(frameProvider: LifecycleFrameProvider()) { url, _ in

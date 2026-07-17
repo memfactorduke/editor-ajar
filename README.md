@@ -39,7 +39,8 @@ and transitions; constant-speed, reverse, and freeze controls; proxies and cache
 hardware-accelerated H.264, HEVC, and ProRes export. The export dialog can also submit animated GIF
 jobs with size, frame-rate, range, and loop controls through the same background queue. Movie and
 GIF submission asks where to save the output before adding exactly one job, and active jobs cannot
-share an output path. File >
+share an output path. The app explicitly confirms replacement after the Save panel returns, and a
+file that appears after a vacant path was chosen is never silently replaced. File >
 Consolidate Media gathers referenced originals into a saved project's `.ajar/media` folder with
 progress, cancellation, undoable reference updates, and a strict never-delete-originals policy.
 Save As carries that package-owned media into the new project while leaving external originals

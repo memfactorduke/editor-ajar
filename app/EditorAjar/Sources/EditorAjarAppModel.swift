@@ -938,7 +938,10 @@ final class EditorAjarAppModel: ObservableObject {
     /// value at the destination visibly chosen by the caller, then the dialog closes only after
     /// the queue accepts that immutable request. Repeated calls are ignored while submission is
     /// pending so one user action cannot create duplicate jobs.
-    func enqueueExportDialogSelection(destinationURL: URL) {
+    func enqueueExportDialogSelection(
+        destinationURL: URL,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .requireVacant
+    ) {
         guard !isExportDialogSubmitting else {
             return
         }
@@ -974,7 +977,8 @@ final class EditorAjarAppModel: ObservableObject {
                             range: range,
                             destinationURL: destinationURL,
                             settings: settings,
-                            displayName: sequence.name
+                            displayName: sequence.name,
+                            destinationCollisionPolicy: destinationCollisionPolicy
                         )
                         self.finishExportDialogEnqueue()
                     } catch {
@@ -992,7 +996,8 @@ final class EditorAjarAppModel: ObservableObject {
                             range: range,
                             destinationURL: destinationURL,
                             settings: settings,
-                            displayName: "\(sequence.name) GIF"
+                            displayName: "\(sequence.name) GIF",
+                            destinationCollisionPolicy: destinationCollisionPolicy
                         )
                         self.finishExportDialogEnqueue()
                     } catch {
@@ -1029,7 +1034,26 @@ final class EditorAjarAppModel: ObservableObject {
             presentExportDialogError(
                 AppString.localized(
                     "export.status.destinationAlreadyQueued",
-                    "An export is already queued or completed for \(url.path). Choose a different filename."
+                    "Another export is already queued for \(url.path). Choose a different filename or wait for it to finish."
+                )
+            )
+            return
+        }
+        let overwriteURL: URL?
+        if let queueError = error as? ExportQueueError,
+           case .destinationRequiresOverwriteConfirmation(let url) = queueError {
+            overwriteURL = url
+        } else if let exportError = error as? ExportError,
+                  case .destinationRequiresOverwriteConfirmation(let url) = exportError {
+            overwriteURL = url
+        } else {
+            overwriteURL = nil
+        }
+        if let overwriteURL {
+            presentExportDialogError(
+                AppString.localized(
+                    "export.status.destinationRequiresOverwriteConfirmation",
+                    "The export destination now exists at \(overwriteURL.path). Choose it again to confirm replacement, or choose a different filename."
                 )
             )
             return

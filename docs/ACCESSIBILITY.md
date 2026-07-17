@@ -430,10 +430,15 @@ Sheet; not present at launch (open with `⇧⌘E`).
 | GIF size | — | Animated GIF size | Original / Half / Quarter |
 | GIF frame rate | — | Animated GIF frame rate | 10 / 15 / 24 / 30 fps |
 | GIF playback | — | Animated GIF playback | Forever / Play once |
-| Status | — | Export status: {msg} | when present; announces an active destination collision with the selected path |
+| Status | — | Export status: {msg} | when present; announces an active collision or stale overwrite confirmation with the selected path |
 | Cancel | `Esc` | Cancel export | id: `Export Dialog Cancel` |
 | Add to Queue | Return | Add export to queue | video/GIF; opens native destination panel, then disables as Adding… while submitting; id: `Export Dialog Add to Queue` |
+| Replacement confirmation | — | Replace Existing Export? | native warning after destination selection when a file exists; localized Replace / Cancel buttons |
 | Validate | Return | Validate export settings | still/audio; id: `Export Dialog Validate` |
+
+Failed export-queue rows show and announce the localized failure detail. If a file appears after a
+vacant destination was chosen, the row tells the user to choose the path again to confirm replacing
+it or to select a different filename.
 
 ---
 

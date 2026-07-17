@@ -114,6 +114,17 @@ private struct ExportQueueJobRow: View {
                 Spacer()
                 controls
             }
+
+            if let failureMessage {
+                Text(failureMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(AppString.localized(
+                        "exportQueue.job.failure.ax", "Export failure"
+                    ))
+                    .accessibilityValue(failureMessage)
+            }
         }
         .padding(8)
         .background(Color.white.opacity(0.04))
@@ -121,7 +132,7 @@ private struct ExportQueueJobRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Export Job \(job.id.uuidString)")
         .accessibilityLabel(AppString.localized("exportQueue.job.ax", "Export job \(job.displayName)"))
-        .accessibilityValue("\(stateLabel), \(progressValueLabel)")
+        .accessibilityValue(accessibilityValue)
     }
 
     @ViewBuilder
@@ -204,5 +215,27 @@ private struct ExportQueueJobRow: View {
     private var progressValueLabel: String {
         let percent = Int((job.progress.fractionCompleted * 100).rounded())
         return AppString.localized("exportQueue.job.percent", "\(percent) percent")
+    }
+
+    private var failureMessage: String? {
+        job.failure.flatMap(ExportQueueFailurePresentation.message)
+    }
+
+    private var accessibilityValue: String {
+        [stateLabel, progressValueLabel, failureMessage]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+    }
+}
+
+enum ExportQueueFailurePresentation {
+    static func message(for failure: ExportError) -> String? {
+        guard case .destinationRequiresOverwriteConfirmation(let url) = failure else {
+            return nil
+        }
+        return AppString.localized(
+            "export.status.destinationRequiresOverwriteConfirmation",
+            "The export destination now exists at \(url.path). Choose it again to confirm replacement, or choose a different filename."
+        )
     }
 }

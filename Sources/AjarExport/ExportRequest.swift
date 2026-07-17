@@ -23,13 +23,17 @@ public struct ExportRequest: Sendable {
     /// Validated encoder, container, color, and audio settings.
     public let settings: ExportSettings
 
+    /// Whether atomic publication may replace an existing file at the chosen destination.
+    public let destinationCollisionPolicy: ExportDestinationCollisionPolicy
+
     /// Creates and validates a captured export request.
     public init(
         project: Project,
         sequenceID: UUID,
         range: TimeRange,
         destinationURL: URL,
-        settings: ExportSettings
+        settings: ExportSettings,
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting
     ) throws {
         do {
             try settings.validate()
@@ -75,6 +79,7 @@ public struct ExportRequest: Sendable {
         self.range = range
         self.destinationURL = destinationURL
         self.settings = settings
+        self.destinationCollisionPolicy = destinationCollisionPolicy
     }
 
     func videoFrameCount() throws -> Int64 {

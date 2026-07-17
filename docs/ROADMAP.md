@@ -214,7 +214,8 @@ rewritten package references.
 all-frame golden, consumer size/frame-rate/range/loop controls, and strictly serial heterogeneous
 movie/GIF background queue share immutable snapshots, progress, pause/restart, cancellation,
 atomic publication, exclusive active-destination reservations, and the original-only production
-render path. GIF import remains intentionally first-frame-only.
+render path. Vacant-path selections fail safely if a file appears before enqueue or publication.
+GIF import remains intentionally first-frame-only.
 
 Plugin API (ADR-0013, FR-FX-006), expanded effects, optical-flow slow-mo, HDR timeline
 (FR-COL-006), smart bins (FR-MED-006), adjustment layers (FR-TL-013), title templates

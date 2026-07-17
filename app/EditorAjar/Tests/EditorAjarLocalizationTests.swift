@@ -76,8 +76,16 @@ final class EditorAjarLocalizationTests: XCTestCase {
             "export.dialog.addToQueue.ax": "Add export to queue",
             "export.dialog.addingToQueue": "Adding…",
             "export.dialog.destination.panelTitle": "Choose Export Destination",
+            "export.dialog.overwrite.cancel": "Cancel",
+            "export.dialog.overwrite.message":
+                "A file already exists at %@. Replace it with this export?",
+            "export.dialog.overwrite.replace": "Replace",
+            "export.dialog.overwrite.title": "Replace Existing Export?",
             "export.status.destinationAlreadyQueued":
-                "An export is already queued or completed for %@. Choose a different filename.",
+                "Another export is already queued for %@. Choose a different filename or wait for it to finish.",
+            "export.status.destinationRequiresOverwriteConfirmation":
+                "The export destination now exists at %@. Choose it again to confirm replacement, or choose a different filename.",
+            "exportQueue.job.failure.ax": "Export failure",
             "export.mode.animatedGIF": "Animated GIF",
             "export.gif.size.ax": "Animated GIF size",
             "export.gif.size.half": "Half",

@@ -16,8 +16,11 @@ public enum ExportQueueError: Error, Equatable, Sendable, CustomStringConvertibl
     /// Queue job identifiers are immutable and may never replace an existing record.
     case duplicateJobID(UUID)
 
-    /// A queued or completed movie/GIF job already owns the same output path.
+    /// A nonterminal movie or GIF job already owns the same output path.
     case destinationAlreadyQueued(URL)
+
+    /// A file appeared after a vacant destination was chosen and needs fresh overwrite consent.
+    case destinationRequiresOverwriteConfirmation(URL)
 
     /// Stable diagnostic text for logs and nonlocalized adapters.
     public var description: String {
@@ -31,7 +34,9 @@ public enum ExportQueueError: Error, Equatable, Sendable, CustomStringConvertibl
         case .duplicateJobID(let id):
             "export queue already contains job \(id)"
         case .destinationAlreadyQueued(let url):
-            "another export is already queued or completed for \(url.path)"
+            "another export is already queued for \(url.path)"
+        case .destinationRequiresOverwriteConfirmation(let url):
+            "export destination now exists and replacement was not confirmed: \(url.path)"
         }
     }
 }

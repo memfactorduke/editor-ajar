@@ -114,6 +114,7 @@ enum ExportQueueFixtures {
         destinationURL: URL,
         frameCount: Int64,
         sequenceName: String = "Queue",
+        destinationCollisionPolicy: ExportDestinationCollisionPolicy = .replaceExisting,
         projectMutator: ((inout Project) -> Void)? = nil
     ) throws -> ExportRequest {
         let frameRate = try FrameRate(frames: 30)
@@ -156,7 +157,8 @@ enum ExportQueueFixtures {
             sequenceID: sequenceID,
             range: range,
             destinationURL: destinationURL,
-            settings: settings
+            settings: settings,
+            destinationCollisionPolicy: destinationCollisionPolicy
         )
     }
 
