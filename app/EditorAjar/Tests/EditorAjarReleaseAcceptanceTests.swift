@@ -630,6 +630,7 @@ final class EditorAjarReleaseAcceptanceTests: XCTestCase {
         }
         XCTAssertTrue(playbackPublished, "real-media live playback did not publish a plan")
         XCTAssertNil(model.audioPlaybackError)
+        await coordinator.drainPlanPublishedDeliveryForTesting()
         XCTAssertGreaterThan(driver.startCount, 0)
         let samples = driver.lastPublishedSamples
         XCTAssertFalse(samples.isEmpty)
