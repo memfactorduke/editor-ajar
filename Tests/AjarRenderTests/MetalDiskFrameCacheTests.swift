@@ -337,16 +337,12 @@ final class MetalDiskFrameCacheTests: XCTestCase {
 }
 
 final class MetalDiskFrameCacheCancellationTests: XCTestCase {
-    func testNFRSTAB001CancellationWaitsForCommitThatAlreadyWon() async throws {
+    func testNFRSTAB001CancellationDoesNotWaitForCommitThatAlreadyWon() async throws {
         let commitEntered = DispatchSemaphore(value: 0)
         let releaseCommit = DispatchSemaphore(value: 0)
-        let cancelAttempted = DispatchSemaphore(value: 0)
+        let cancelReturned = DispatchSemaphore(value: 0)
         let events = PersistenceCommitEventRecorder()
-        let cancellation = MetalDiskCacheWriteCancellation(
-            cancelAttemptObserverForTesting: {
-                cancelAttempted.signal()
-            }
-        )
+        let cancellation = MetalDiskCacheWriteCancellation()
 
         let commitTask = Task.detached {
             try cancellation.commit {
@@ -360,13 +356,15 @@ final class MetalDiskFrameCacheCancellationTests: XCTestCase {
         let cancelTask = Task.detached {
             cancellation.cancel()
             events.append("cancel-returned")
+            cancelReturned.signal()
         }
-        XCTAssertEqual(cancelAttempted.wait(timeout: .now() + 2), .success)
+        XCTAssertEqual(cancelReturned.wait(timeout: .now() + 2), .success)
+        XCTAssertEqual(events.snapshot(), ["cancel-returned"])
         releaseCommit.signal()
 
         try await commitTask.value
         await cancelTask.value
-        XCTAssertEqual(events.snapshot(), ["published", "cancel-returned"])
+        XCTAssertEqual(events.snapshot(), ["cancel-returned", "published"])
         XCTAssertTrue(cancellation.isCancelled)
     }
 

@@ -2059,10 +2059,12 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func togglePlayback() {
+        guard !isPreparingForTermination else { return }
         isPlaying ? shuttlePause() : shuttleForward()
     }
 
     func shuttleBackward() {
+        guard !isPreparingForTermination else { return }
         playbackController?.shuttleBackward()
         isPlaying = true
         stopAudioPlayback()
@@ -2070,6 +2072,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func shuttlePause() {
+        guard !isPreparingForTermination else { return }
         playbackController?.shuttlePause()
         isPlaying = false
         stopAudioPlayback()
@@ -2077,6 +2080,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func shuttleForward() {
+        guard !isPreparingForTermination else { return }
         playbackController?.shuttleForward()
         isPlaying = true
         let waitsForPreparedAudio = playbackRate == 1
@@ -2094,6 +2098,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func toggleLoopRange() {
+        guard !isPreparingForTermination else { return }
         guard let lower = timelineState.selectionInFrame,
               let upper = timelineState.selectionOutFrame else {
             isLoopRangeEnabled = false
@@ -2404,6 +2409,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func stepBackward() {
+        guard !isPreparingForTermination else { return }
         isPlaying = false
         stopAudioPlayback()
         displayLinkDriver?.stop()
@@ -2414,6 +2420,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func stepForward() {
+        guard !isPreparingForTermination else { return }
         isPlaying = false
         stopAudioPlayback()
         displayLinkDriver?.stop()
@@ -2424,6 +2431,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func scrub(to frame: Int64) {
+        guard !isPreparingForTermination else { return }
         isPlaying = false
         stopAudioPlayback()
         displayLinkDriver?.stop()
@@ -2434,6 +2442,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func scrubTimeline(xPosition: Double, snappingDisabled: Bool = false) {
+        guard !isPreparingForTermination else { return }
         let proposedFrame = TimelineInteraction.frame(
             atX: xPosition,
             pixelsPerFrame: timelineState.pixelsPerFrame,
@@ -3704,6 +3713,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func jumpToNextMarker() {
+        guard !isPreparingForTermination else { return }
         guard let sequence = activeSequence,
               let currentTime = try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase),
               let marker = MarkerNavigation.nextMarker(in: sequence, after: currentTime)
@@ -3715,6 +3725,7 @@ final class EditorAjarAppModel: ObservableObject {
     }
 
     func jumpToPreviousMarker() {
+        guard !isPreparingForTermination else { return }
         guard let sequence = activeSequence,
               let currentTime = try? RationalTime.atFrame(playheadFrame, frameRate: sequence.timebase),
               let marker = MarkerNavigation.previousMarker(in: sequence, before: currentTime)

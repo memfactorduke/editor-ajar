@@ -5,34 +5,27 @@ import Darwin
 import Foundation
 import Metal
 
-/// Shared cancellation/publication boundary for one disk-cache persist operation.
+/// Shared cancellation/publication boundary for disk-cache persistence in one render generation.
 ///
-/// `cancel()` and the final atomic file commit use the same lock. Whichever reaches that lock
-/// first wins: cancellation prevents publication, while a commit already in progress finishes
-/// before cancellation returns. This makes project-generation invalidation linearizable instead
-/// of leaving a check-then-write race.
+/// `cancel()` and each final atomic file commit use the same lock only to choose which one wins.
+/// Cancellation prevents commits that have not reserved publication yet. A commit that reserves
+/// first performs its filesystem work after releasing the lock, so lifecycle invalidation never
+/// waits synchronously for disk I/O. Owners that need physical completion await the write-behind
+/// coordinator's drain instead.
 public final class MetalDiskCacheWriteCancellation: @unchecked Sendable {
     private let lock = NSLock()
-    private let cancelAttemptObserver: (@Sendable () -> Void)?
     private var cancellationRequested = false
 
     /// Creates an active persistence cancellation boundary.
-    public init() {
-        cancelAttemptObserver = nil
-    }
-
-    init(cancelAttemptObserverForTesting: @escaping @Sendable () -> Void) {
-        cancelAttemptObserver = cancelAttemptObserverForTesting
-    }
+    public init() {}
 
     /// Whether lifecycle invalidation has been requested.
     public var isCancelled: Bool {
         lock.withLock { cancellationRequested }
     }
 
-    /// Synchronously invalidates the operation, waiting out a final commit that already won.
+    /// Synchronously rejects commits that have not already reserved publication.
     public func cancel() {
-        cancelAttemptObserver?()
         lock.withLock {
             cancellationRequested = true
         }
@@ -46,14 +39,14 @@ public final class MetalDiskCacheWriteCancellation: @unchecked Sendable {
         }
     }
 
-    /// Runs the final physical publication as one critical region with `cancel()`.
+    /// Reserves publication against `cancel()`, then performs the physical work off-lock.
     func commit(_ operation: () throws -> Void) throws {
         try lock.withLock {
             if cancellationRequested || Task.isCancelled {
                 throw CancellationError()
             }
-            try operation()
         }
+        try operation()
     }
 }
 
@@ -239,9 +232,10 @@ extension MetalDiskFrameCache {
             throw MetalDiskFrameCacheError.entryWriteFailed(String(describing: error))
         }
 
-        // The final same-directory rename and owner invalidation share one critical region.
-        // Cancellation that wins removes only the private staging file; a commit that wins is
-        // physically complete and indexed before synchronous invalidation returns.
+        // The final same-directory rename first reserves publication against owner invalidation.
+        // A cancellation that wins removes only the private staging file. A commit that wins may
+        // finish off-lock after synchronous invalidation returns; explicit lifecycle drains await
+        // its physical completion through the write-behind coordinator.
         try cancellation.commit {
             try atomicRename(from: stagingURL, to: fileURL)
             stateLock.lock()
