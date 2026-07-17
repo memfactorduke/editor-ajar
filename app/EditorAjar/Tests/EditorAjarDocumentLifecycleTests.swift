@@ -391,6 +391,61 @@ final class EditorAjarDocumentLifecycleTests: XCTestCase {
         XCTAssertFalse(AjarAutosaveStore.hasRecoverableSnapshot(at: recoveryURL))
     }
 
+    func testNFRSTAB001TerminationStopsAndRejectsNewRenderProducers() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let model = fixture.makeModel(opensSampleProjectWhenNoRecovery: true)
+
+        model.scrub(to: 12)
+        model.addTimelineMarkerAtPlayhead()
+        let firstMarker = try XCTUnwrap(model.selectedMarker)
+        model.scrub(to: 24)
+        model.addTimelineMarkerAtPlayhead()
+        let secondMarker = try XCTUnwrap(model.selectedMarker)
+        XCTAssertNotEqual(firstMarker.id, secondMarker.id)
+        model.scrub(to: 20)
+        let firstVideoTrackID = try XCTUnwrap(model.activeSequence?.videoTracks.first?.id)
+        model.selectAllClips(on: firstVideoTrackID)
+        XCTAssertNil(model.selectedMarker)
+        model.setTimelineRangeIn()
+        model.setTimelineRangeOut()
+        model.toggleLoopRange()
+        XCTAssertTrue(model.isLoopRangeEnabled)
+
+        model.shuttleForward()
+        XCTAssertTrue(model.isPlaying)
+
+        await model.finishPendingDocumentWrites()
+
+        XCTAssertTrue(model.isPreparingForTerminationForTesting)
+        XCTAssertFalse(model.isPlaying)
+        let generationAfterDrain = model.renderGenerationForTesting
+        let playheadAfterDrain = model.playheadFrame
+        let selectedMarkerAfterDrain = model.selectedMarker?.id
+        let loopStateAfterDrain = model.isLoopRangeEnabled
+
+        model.simulateDisplayLinkTickForTesting(1)
+        model.togglePlayback()
+        model.shuttleBackward()
+        model.shuttlePause()
+        model.shuttleForward()
+        model.stepBackward()
+        model.stepForward()
+        model.scrub(to: 0)
+        model.scrubTimeline(xPosition: 1_000)
+        model.toggleLoopRange()
+        model.jumpToNextMarker()
+        XCTAssertEqual(model.selectedMarker?.id, selectedMarkerAfterDrain)
+        model.jumpToPreviousMarker()
+
+        XCTAssertFalse(model.isPlaying)
+        XCTAssertEqual(model.selectedMarker?.id, selectedMarkerAfterDrain)
+        XCTAssertNil(model.selectedMarker)
+        XCTAssertEqual(model.isLoopRangeEnabled, loopStateAfterDrain)
+        XCTAssertEqual(model.playheadFrame, playheadAfterDrain)
+        XCTAssertEqual(model.renderGenerationForTesting, generationAfterDrain)
+    }
+
     func testFRPROJ002VersionSnapshotsKeepNewestTenAndPruneOldest() throws {
         let fixture = try makeFixture()
         defer { fixture.cleanup() }
@@ -1830,13 +1885,15 @@ private struct DocumentLifecycleFixture {
 
     @MainActor
     func makeModel(
-        documentStore: EditorAjarDocumentStore = EditorAjarDocumentStore()
+        documentStore: EditorAjarDocumentStore = EditorAjarDocumentStore(),
+        opensSampleProjectWhenNoRecovery: Bool = false
     ) -> EditorAjarAppModel {
         EditorAjarAppModel(
             autosaveIntervalSeconds: 0,
             documentStore: documentStore,
             recentProjectsUserDefaults: userDefaults,
-            recentProjectsStorageKey: recentProjectsStorageKey
+            recentProjectsStorageKey: recentProjectsStorageKey,
+            opensSampleProjectWhenNoRecovery: opensSampleProjectWhenNoRecovery
         )
     }
 

@@ -32,6 +32,7 @@
 		3ECF68E7A4013C4EE36B1E12 /* EditorAjarTitleInspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26977FFDCBC94C691832F901 /* EditorAjarTitleInspectorViews.swift */; };
 		3F1430E80446CE0D8105F226 /* AudioWaveformBarsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE3E3DDD104F9FD8F2349EB2 /* AudioWaveformBarsView.swift */; };
 		42622E78F005B3A16AFA3F53 /* EditorAjarAppModel+Title.swift in Sources */ = {isa = PBXBuildFile; fileRef = B981DA41D93FF40F22A5CD63 /* EditorAjarAppModel+Title.swift */; };
+		46832D95F77D30D498AE77E0 /* EditorAjarRenderWriteBehind.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7809ACC6EE7603F6F784C80 /* EditorAjarRenderWriteBehind.swift */; };
 		49708A2AFB12A81D9F1ADD3C /* AjarMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 834313F8ED36DC6955A87E81 /* AjarMedia */; };
 		4B37B435C4E09BC2B3D1C844 /* AjarCore in Frameworks */ = {isa = PBXBuildFile; productRef = 85C3D209033711447AA4FAA9 /* AjarCore */; };
 		4CF000AB9597027E9BE77933 /* EditorAjarEffectsInspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FBF155D2EB057CB5664670B /* EditorAjarEffectsInspectorViews.swift */; };
@@ -151,6 +152,7 @@
 		955688DE969A074CA7489F6C /* EditorAjarSparseAudioProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarSparseAudioProviderTests.swift; sourceTree = "<group>"; };
 		9B6F3CF811C108DB83A7857D /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A451D96017C6BEF9EFEA16AD /* EditorAjarAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarAppModelTests.swift; sourceTree = "<group>"; };
+		A7809ACC6EE7603F6F784C80 /* EditorAjarRenderWriteBehind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarRenderWriteBehind.swift; sourceTree = "<group>"; };
 		A946AA9941CA1663A51C1C9E /* MediaPreviewIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewIdentity.swift; sourceTree = "<group>"; };
 		A94F86596AAD904AC2737015 /* EditorAjarExportQueueAppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorAjarExportQueueAppModelTests.swift; sourceTree = "<group>"; };
 		AB4B04E0370B165DC58EF5C6 /* MediaPreviewRaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewRaceTests.swift; sourceTree = "<group>"; };
@@ -298,6 +300,7 @@
 				E1176FE13FE9CD124B90EBFD /* EditorAjarPlaybackController.swift */,
 				017BB969221AA91DCB0ED375 /* EditorAjarRelinkSupport.swift */,
 				8B9D571B5922EC833914E9D6 /* EditorAjarRenderPipeline.swift */,
+				A7809ACC6EE7603F6F784C80 /* EditorAjarRenderWriteBehind.swift */,
 				0924F1AB529A6EA77A8D4CCE /* EditorAjarSampleProjectFactory.swift */,
 				4D4AB4BF3E056ED1EA913F7D /* EditorAjarScopesPanel.swift */,
 				26977FFDCBC94C691832F901 /* EditorAjarTitleInspectorViews.swift */,
@@ -490,6 +493,7 @@
 				B93198D47AC9EF9B34D6FC7A /* EditorAjarPlaybackController.swift in Sources */,
 				1609504734AF289DE420F40C /* EditorAjarRelinkSupport.swift in Sources */,
 				E056E9938F510F165A587C82 /* EditorAjarRenderPipeline.swift in Sources */,
+				46832D95F77D30D498AE77E0 /* EditorAjarRenderWriteBehind.swift in Sources */,
 				7817DB2C1CFFDA0D96DF4AB3 /* EditorAjarSampleProjectFactory.swift in Sources */,
 				E7C7BE013E7FE7B4B3D56F5F /* EditorAjarScopesPanel.swift in Sources */,
 				3ECF68E7A4013C4EE36B1E12 /* EditorAjarTitleInspectorViews.swift in Sources */,

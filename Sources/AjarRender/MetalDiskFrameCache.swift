@@ -58,14 +58,16 @@ public final class MetalDiskFrameCache {
     /// Maximum total entry bytes retained on disk.
     public let byteBudget: Int
 
-    private let device: MTLDevice
-    private let commandQueue: MTLCommandQueue
-    private let ioQueue = DispatchQueue(label: "org.editor-ajar.render.disk-frame-cache")
-    private let stateLock = NSLock()
-    private var index: ByteBudgetedLRUIndex<String>
+    let device: MTLDevice
+    let commandQueue: MTLCommandQueue
+    let ioQueue = DispatchQueue(label: "org.editor-ajar.render.disk-frame-cache")
+    let stateLock = NSLock()
+    var index: ByteBudgetedLRUIndex<String>
     private var diskHitCountValue = 0
     private var diskMissCountValue = 0
     private var quarantinedEntryCountValue = 0
+    private var queuedWriteCount = 0
+    private var writeQueuedWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// Creates a disk frame cache rooted at a directory, restoring any surviving entries.
     ///
@@ -140,28 +142,22 @@ public final class MetalDiskFrameCache {
         ioQueue.resume()
     }
 
-    /// Persists a completed rendered frame to the disk tier.
-    ///
-    /// This is the write-behind population route: only offline/background render paths call it,
-    /// after `frame` has finished on the GPU, so the CPU readback it performs never runs on the
-    /// playback path. The entry write happens on the cache's serial queue.
-    public func persist(frame: RenderedFrame, output: RenderOutputDescriptor) async throws {
-        try await frame.waitForCompletion()
-        let texture = frame.texture
-        guard texture.width == output.pixelDimensions.width,
-              texture.height == output.pixelDimensions.height,
-              texture.pixelFormat == output.pixelFormat else {
-            throw MetalDiskFrameCacheError.outputDescriptorMismatch
+    /// Test hook: waits until a persist operation has crossed readback and is queued at the final
+    /// serial publication boundary. Pair with `suspendIO` to force cancellation ordering.
+    func waitUntilWriteQueuedForTesting() async {
+        await withCheckedContinuation { continuation in
+            var shouldResumeImmediately = false
+            stateLock.lock()
+            if queuedWriteCount > 0 {
+                shouldResumeImmediately = true
+            } else {
+                writeQueuedWaiters.append(continuation)
+            }
+            stateLock.unlock()
+            if shouldResumeImmediately {
+                continuation.resume()
+            }
         }
-
-        let bytesPerPixel = try Self.bytesPerPixel(for: output.pixelFormat)
-        let payload = try await readbackPayload(texture: texture, bytesPerPixel: bytesPerPixel)
-        let entry = RenderFrameDiskCacheEntry(
-            identity: Self.identity(contentHash: frame.contentHash, output: output),
-            bytesPerRow: texture.width * bytesPerPixel,
-            payload: payload
-        )
-        try await write(entry: entry)
     }
 
     /// Enqueues a background disk lookup; the completion receives a GPU texture on a valid hit.
@@ -326,46 +322,24 @@ public final class MetalDiskFrameCache {
         stateLock.unlock()
     }
 
-    // MARK: - Write path (serial queue)
-
-    private func write(entry: RenderFrameDiskCacheEntry) async throws {
-        try await withCheckedThrowingContinuation { (continuation: WriteContinuation) in
-            ioQueue.async { [weak self] in
-                guard let self else {
-                    continuation.resume(
-                        throwing: MetalDiskFrameCacheError.entryWriteFailed("cache released")
-                    )
-                    return
-                }
-                do {
-                    try self.performWrite(entry: entry)
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
-    }
-
-    private typealias WriteContinuation = CheckedContinuation<Void, Error>
-
-    private func performWrite(entry: RenderFrameDiskCacheEntry) throws {
-        let fileName = entry.identity.entryFileName
-        let fileURL = directoryURL.appendingPathComponent(fileName)
-        let data = entry.encoded()
-        do {
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            throw MetalDiskFrameCacheError.entryWriteFailed(String(describing: error))
-        }
-
+    func noteWriteQueued() {
         stateLock.lock()
-        let evictedFileNames = index.recordUse(of: fileName, byteCount: data.count)
+        queuedWriteCount += 1
+        let waiters = writeQueuedWaiters
+        writeQueuedWaiters.removeAll()
         stateLock.unlock()
-        removeEntryFiles(named: evictedFileNames)
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
-    private func removeEntryFiles(named fileNames: [String]) {
+    func noteWriteCompleted() {
+        stateLock.lock()
+        queuedWriteCount = max(0, queuedWriteCount - 1)
+        stateLock.unlock()
+    }
+
+    func removeEntryFiles(named fileNames: [String]) {
         for fileName in fileNames {
             try? FileManager.default.removeItem(
                 at: directoryURL.appendingPathComponent(fileName)
@@ -375,45 +349,9 @@ public final class MetalDiskFrameCache {
 
 }
 
-// MARK: - Readback (offline/background route only) and startup restore
+// MARK: - Startup restore
 
 extension MetalDiskFrameCache {
-    private func readbackPayload(texture: MTLTexture, bytesPerPixel: Int) async throws -> Data {
-        let bytesPerRow = texture.width * bytesPerPixel
-        let byteCount = bytesPerRow * texture.height
-        guard byteCount > 0,
-              let buffer = device.makeBuffer(length: byteCount, options: .storageModeShared) else {
-            throw MetalDiskFrameCacheError.readbackFailed("could not allocate readback buffer")
-        }
-        guard let commandBuffer = commandQueue.makeCommandBuffer(),
-              let blitEncoder = commandBuffer.makeBlitCommandEncoder() else {
-            throw MetalDiskFrameCacheError.readbackFailed("could not create readback encoder")
-        }
-
-        blitEncoder.copy(
-            from: texture,
-            sourceSlice: 0,
-            sourceLevel: 0,
-            sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-            sourceSize: MTLSize(width: texture.width, height: texture.height, depth: 1),
-            to: buffer,
-            destinationOffset: 0,
-            destinationBytesPerRow: bytesPerRow,
-            destinationBytesPerImage: byteCount
-        )
-        blitEncoder.endEncoding()
-
-        let completion = RenderCompletion()
-        completion.attach(to: commandBuffer)
-        commandBuffer.commit()
-        do {
-            try await completion.wait()
-        } catch {
-            throw MetalDiskFrameCacheError.readbackFailed(String(describing: error))
-        }
-        return Data(bytes: buffer.contents(), count: byteCount)
-    }
-
     private struct RestoredEntry {
         let fileName: String
         let byteCount: Int
@@ -437,6 +375,7 @@ extension MetalDiskFrameCache {
         } catch {
             throw MetalDiskFrameCacheError.cacheDirectoryUnavailable(String(describing: error))
         }
+        removeStaleWriteStagingFiles(from: entryURLs, fileManager: fileManager)
 
         let restoredEntries = entryURLs
             .filter { $0.pathExtension == "ajarframe" }

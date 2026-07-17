@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AjarCore
+import Darwin
+import Dispatch
 import Foundation
 import Metal
 import XCTest
@@ -285,6 +287,108 @@ final class MetalDiskFrameCacheTests: XCTestCase {
             4
         )
     }
+
+    func testNFRSTAB001CancelledQueuedPersistDoesNotPublishEntry() async throws {
+        let device = try diskCacheTestDevice()
+        let directory = try makeTrackedDirectory()
+        let output = makeDiskCacheOutput()
+        let diskCache = try MetalDiskFrameCache(device: device, directoryURL: directory)
+        let executor = try MetalRenderExecutor(device: device, diskCache: diskCache)
+        let frame = try executor.render(
+            graph: try makeDiskCacheTestGraph(),
+            output: output,
+            sourceProvider: ClosureRenderSourceTextureProvider { _ in
+                try makeDiskCacheSolidTexture(device: device, bgra: [0, 0, 255, 255])
+            }
+        )
+
+        // Hold the final serial boundary, wait until persistence is definitely queued behind it,
+        // then cancel. The queued closure must observe cancellation before atomic publication.
+        diskCache.suspendIO()
+        var didResumeIO = false
+        defer {
+            if !didResumeIO {
+                diskCache.resumeIO()
+            }
+        }
+        let persistTask = Task {
+            try await diskCache.persist(frame: frame, output: output)
+        }
+        await diskCache.waitUntilWriteQueuedForTesting()
+        persistTask.cancel()
+        diskCache.resumeIO()
+        didResumeIO = true
+
+        do {
+            try await persistTask.value
+            XCTFail("Cancelled queued persist unexpectedly published")
+        } catch is CancellationError {
+            // Expected lifecycle invalidation.
+        } catch {
+            XCTFail("Unexpected cancellation error: \(error)")
+        }
+        diskCache.waitUntilIdle()
+
+        XCTAssertEqual(diskCache.storedEntryCount, 0)
+        XCTAssertEqual(try diskCacheEntryFileURLs(in: directory), [])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [])
+    }
+
+}
+
+final class MetalDiskFrameCacheCancellationTests: XCTestCase {
+    func testNFRSTAB001CancellationDoesNotWaitForCommitThatAlreadyWon() async throws {
+        let commitEntered = DispatchSemaphore(value: 0)
+        let releaseCommit = DispatchSemaphore(value: 0)
+        let cancelReturned = DispatchSemaphore(value: 0)
+        let events = PersistenceCommitEventRecorder()
+        let cancellation = MetalDiskCacheWriteCancellation()
+
+        let commitTask = Task.detached {
+            try cancellation.commit {
+                commitEntered.signal()
+                releaseCommit.wait()
+                events.append("published")
+            }
+        }
+        XCTAssertEqual(commitEntered.wait(timeout: .now() + 2), .success)
+
+        let cancelTask = Task.detached {
+            cancellation.cancel()
+            events.append("cancel-returned")
+            cancelReturned.signal()
+        }
+        XCTAssertEqual(cancelReturned.wait(timeout: .now() + 2), .success)
+        XCTAssertEqual(events.snapshot(), ["cancel-returned"])
+        releaseCommit.signal()
+
+        try await commitTask.value
+        await cancelTask.value
+        XCTAssertEqual(events.snapshot(), ["cancel-returned", "published"])
+        XCTAssertTrue(cancellation.isCancelled)
+    }
+
+    func testNFRSTAB001StartupRemovesOnlyStagingFilesOwnedByDeadProcesses() throws {
+        let directory = try makeDiskCacheTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let deadProcessID = pid_t.max
+        let staleURL = directory.appendingPathComponent(
+            MetalDiskFrameCache.writeStagingFileName(ownerProcessID: deadProcessID)
+        )
+        let liveURL = directory.appendingPathComponent(
+            MetalDiskFrameCache.writeStagingFileName()
+        )
+        try Data(repeating: 0xA5, count: 64).write(to: staleURL)
+        try Data(repeating: 0x5A, count: 64).write(to: liveURL)
+
+        _ = try MetalDiskFrameCache(
+            device: diskCacheTestDevice(),
+            directoryURL: directory
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staleURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: liveURL.path))
+    }
 }
 
 // MARK: - Helpers
@@ -356,5 +460,20 @@ private final class CountingDiskCacheSourceProvider: RenderSourceTextureProvider
         requestCountValue += 1
         lock.unlock()
         return texture
+    }
+}
+
+private final class PersistenceCommitEventRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var events: [String] = []
+
+    func append(_ event: String) {
+        lock.withLock {
+            events.append(event)
+        }
+    }
+
+    func snapshot() -> [String] {
+        lock.withLock { events }
     }
 }
