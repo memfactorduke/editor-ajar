@@ -15,11 +15,11 @@ enum ExportDestinationReservation {
             standardized.lastPathComponent,
             isDirectory: false
         )
-        let normalizedPath = resolvedDestination.standardizedFileURL.path
+        return resolvedDestination.standardizedFileURL.path
+            .folding(
+                options: [.caseInsensitive],
+                locale: Locale(identifier: "en_US_POSIX")
+            )
             .precomposedStringWithCanonicalMapping
-        return normalizedPath.folding(
-            options: [.caseInsensitive],
-            locale: Locale(identifier: "en_US_POSIX")
-        )
     }
 }
