@@ -70,6 +70,38 @@ final class EditorAjarAppModelTests: XCTestCase {
         XCTAssertFalse(model.exportDialog.isPresented)
     }
 
+    func testFREXP005VideoDialogAdaptsPresetToProjectDeliverySettings() throws {
+        let fixture = try EditorAjarSampleProjectFactory.makeSampleProject()
+        let dialog = EditorAjarExportDialogModel()
+        let deliveryCases: [(MediaColorSpace, ExportColorSpace, Int)] = [
+            (.sRGB, .sRGB, 96_000),
+            (.displayP3, .displayP3, 44_100)
+        ]
+
+        for (projectColorSpace, expectedExportColorSpace, sampleRate) in deliveryCases {
+            let project = Project(
+                schemaVersion: fixture.schemaVersion,
+                schemaMinor: fixture.schemaMinor,
+                settings: ProjectSettings(
+                    frameRate: fixture.settings.frameRate,
+                    resolution: fixture.settings.resolution,
+                    colorSpace: projectColorSpace,
+                    audioSampleRate: sampleRate
+                ),
+                mediaPool: fixture.mediaPool,
+                sequences: fixture.sequences,
+                looks: fixture.looks
+            )
+
+            let settings = try dialog.makeVideoSettings(project: project)
+
+            XCTAssertEqual(settings.video.colorSpace, expectedExportColorSpace)
+            XCTAssertEqual(settings.audio?.sampleRate, sampleRate)
+            XCTAssertEqual(settings.video.codec, dialog.selectedPreset?.videoCodec)
+            XCTAssertEqual(settings.container, dialog.selectedPreset?.container)
+        }
+    }
+
     func testFREXP006AnimatedGIFDialogBuildsAspectPreservingSettingsAndExtension() throws {
         let project = try EditorAjarNewProjectFactory.makeProject(settings: .sensibleDefaults)
         var dialog = EditorAjarExportDialogModel(mode: .animatedGIF)

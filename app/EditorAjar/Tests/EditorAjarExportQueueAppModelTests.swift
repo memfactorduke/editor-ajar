@@ -118,6 +118,63 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         XCTAssertNotNil(model.exportQueueController.jobs.first(where: { $0.id == jobID }))
     }
 
+    func testFREXP005MovieDialogQueuesProjectCompatibleDeliverySettings() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ajar-app-export-movie-request-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let capture = AppMovieRequestCapture()
+        let controller = EditorAjarExportQueueController(
+            sessionFactory: Self.makeStubSessionFactory(capture: capture)
+        )
+        let model = EditorAjarAppModel(
+            autosaveIntervalSeconds: 0,
+            exportQueueController: controller,
+            opensSampleProjectWhenNoRecovery: true
+        )
+        let fixture = try XCTUnwrap(model.project)
+        let deliveryProject = Project(
+            schemaVersion: fixture.schemaVersion,
+            schemaMinor: fixture.schemaMinor,
+            settings: ProjectSettings(
+                frameRate: fixture.settings.frameRate,
+                resolution: fixture.settings.resolution,
+                colorSpace: .displayP3,
+                audioSampleRate: 44_100
+            ),
+            mediaPool: fixture.mediaPool,
+            sequences: fixture.sequences,
+            looks: fixture.looks
+        )
+        model.replaceProjectPreservingHistoryForTesting(deliveryProject)
+        let destination = directory.appendingPathComponent("captured.mp4")
+
+        model.presentExportDialog()
+        model.setExportMode(.video)
+        model.enqueueExportDialogSelection(destinationURL: destination)
+
+        let completed = await waitUntil(timeout: 5) {
+            let state = model.exportQueueController.jobs.first?.state
+            return state == .done || state == .failed
+                || model.exportDialog.statusMessage != nil
+        }
+        XCTAssertTrue(completed)
+        XCTAssertNil(model.exportDialog.statusMessage)
+        XCTAssertNil(model.exportQueueController.statusMessage)
+        XCTAssertFalse(model.exportDialog.isPresented)
+        XCTAssertTrue(model.isExportQueuePanelVisible)
+        XCTAssertEqual(model.exportQueueController.jobs.first?.state, .done)
+
+        let request = try XCTUnwrap(capture.request)
+        XCTAssertEqual(request.project, deliveryProject)
+        XCTAssertEqual(request.settings.video.colorSpace, .displayP3)
+        XCTAssertEqual(request.settings.audio?.sampleRate, 44_100)
+        XCTAssertEqual(request.destinationURL, destination)
+    }
+
     func testFREXP006DialogEnqueuesCapturedAnimatedGIFRequestAndCloses() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "ajar-app-export-gif-request-\(UUID().uuidString)",
@@ -292,10 +349,12 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
 
     /// Deterministic, fast stub — no Metal decode, no AVAssetWriter hardware encode.
     private static func makeStubSessionFactory(
-        holdFirstFrame: Bool = false
+        holdFirstFrame: Bool = false,
+        capture: AppMovieRequestCapture? = nil
     ) -> ExportSessionFactory {
         { jobID, request, onProgress in
-            ExportSession(
+            capture?.record(request)
+            return ExportSession(
                 id: jobID,
                 request: request,
                 frameProvider: AppStubFrameProvider(holdFirstFrame: holdFirstFrame),
@@ -312,6 +371,23 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
 }
 
 // MARK: - Stub export session pieces (app-test only)
+
+private final class AppMovieRequestCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedRequest: ExportRequest?
+
+    var request: ExportRequest? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedRequest
+    }
+
+    func record(_ request: ExportRequest) {
+        lock.lock()
+        storedRequest = request
+        lock.unlock()
+    }
+}
 
 private final class AppStubFrameProvider: ExportVideoFrameProvider, @unchecked Sendable {
     private let holdFirstFrame: Bool

@@ -257,12 +257,42 @@ struct EditorAjarExportDialogModel: Equatable, Sendable {
         }
     }
 
-    /// Builds validated video export settings from the selected preset.
-    func makeVideoSettings() throws -> ExportSettings {
+    /// Builds validated video export settings from the selected preset and project delivery
+    /// settings.
+    ///
+    /// Presets choose the container, codec, raster, frame rate, and rate control. Color space and
+    /// audio sample rate must follow the project because the export engine deliberately rejects a
+    /// request that would silently reinterpret either timeline setting.
+    func makeVideoSettings(project: Project) throws -> ExportSettings {
         guard let preset = selectedPreset else {
             throw ExportError.stillFrameWriteFailed("no export preset selected")
         }
-        return try preset.makeSettings()
+        let colorSpace = try Self.exportColorSpace(for: project.settings.colorSpace)
+        do {
+            let video = try ExportVideoSettings(
+                codec: preset.videoCodec,
+                resolution: preset.resolution,
+                frameRate: preset.frameRate,
+                averageBitRate: preset.averageBitRate,
+                quality: preset.quality,
+                colorSpace: colorSpace
+            )
+            let audio = try preset.audio.map {
+                try ExportAudioSettings(
+                    codec: $0.codec,
+                    sampleRate: project.settings.audioSampleRate,
+                    channelCount: $0.channelCount,
+                    bitRate: $0.bitRate
+                )
+            }
+            return try ExportSettings(
+                container: preset.container,
+                video: video,
+                audio: audio
+            )
+        } catch let error as ExportSettingsValidationError {
+            throw ExportError.invalidSettings(error)
+        }
     }
 
     /// Builds validated audio-only settings for the dialog format choice.
@@ -288,20 +318,7 @@ struct EditorAjarExportDialogModel: Equatable, Sendable {
 
     /// Builds validated animated-GIF settings from the project canvas and delivery space.
     func makeAnimatedGIFSettings(project: Project) throws -> AnimatedGIFExportSettings {
-        let sourceColorSpace: ExportColorSpace
-        switch project.settings.colorSpace {
-        case .rec709:
-            sourceColorSpace = .rec709
-        case .sRGB:
-            sourceColorSpace = .sRGB
-        case .displayP3:
-            sourceColorSpace = .displayP3
-        case .rec2020, .unspecified, .unknown:
-            throw ExportError.colorSpaceMismatch(
-                project: project.settings.colorSpace,
-                export: .rec709
-            )
-        }
+        let sourceColorSpace = try Self.exportColorSpace(for: project.settings.colorSpace)
         return try AnimatedGIFExportSettings(
             resolution: animatedGIFSizeChoice.dimensions(for: project.settings.resolution),
             frameRate: animatedGIFFrameRateChoice.makeFrameRate(),
@@ -321,6 +338,24 @@ struct EditorAjarExportDialogModel: Equatable, Sendable {
             return stillFormat == .png ? "png" : "jpg"
         case .audioOnly:
             return audioOnlyFormat == .wavPCM ? "wav" : "m4a"
+        }
+    }
+
+    private static func exportColorSpace(
+        for mediaColorSpace: MediaColorSpace
+    ) throws -> ExportColorSpace {
+        switch mediaColorSpace {
+        case .rec709:
+            return .rec709
+        case .sRGB:
+            return .sRGB
+        case .displayP3:
+            return .displayP3
+        case .rec2020, .unspecified, .unknown:
+            throw ExportError.colorSpaceMismatch(
+                project: mediaColorSpace,
+                export: .rec709
+            )
         }
     }
 }

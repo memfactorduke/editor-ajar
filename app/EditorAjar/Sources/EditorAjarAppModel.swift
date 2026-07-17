@@ -869,7 +869,7 @@ final class EditorAjarAppModel: ObservableObject {
         do {
             switch exportDialog.mode {
             case .video:
-                _ = try exportDialog.makeVideoSettings()
+                _ = try exportDialog.makeVideoSettings(project: project)
                 _ = try exportDialog.resolvedRange(
                     sequence: sequence,
                     selectionInFrame: timelineState.selectionInFrame,
@@ -969,7 +969,7 @@ final class EditorAjarAppModel: ObservableObject {
 
             switch exportDialog.mode {
             case .video:
-                let settings = try exportDialog.makeVideoSettings()
+                let settings = try exportDialog.makeVideoSettings(project: snapshot)
                 Task { [weak self] in
                     guard let self else { return }
                     do {
