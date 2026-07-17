@@ -77,7 +77,7 @@ final class EditorAjarLocalizationTests: XCTestCase {
             "export.dialog.addingToQueue": "Adding…",
             "export.dialog.destination.panelTitle": "Choose Export Destination",
             "export.status.destinationAlreadyQueued":
-                "Another export is already queued for %@. Choose a different filename or wait for it to finish.",
+                "An export is already queued or completed for %@. Choose a different filename.",
             "export.mode.animatedGIF": "Animated GIF",
             "export.gif.size.ax": "Animated GIF size",
             "export.gif.size.half": "Half",

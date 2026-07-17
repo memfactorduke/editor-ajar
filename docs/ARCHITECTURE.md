@@ -204,7 +204,7 @@ seek latency (NFR-PERF-005).
   AVAssetWriter handles ProRes/muxing. A separate ImageIO session writes animated GIF frames with
   cumulative centisecond timing and explicit sRGB/binary-alpha conversion. Movie and animated
   sessions share one strictly serial background queue, the render provider, transactional
-  publication, immutable job identities, destination reservations across every nonterminal job,
+  publication, immutable job identities, destination reservations across queued/completed jobs,
   and the same exact-time, original-only graph contract; still/GIF delivery uses its codec-free
   image initializer. Output is converted and tagged per ADR-0010, then atomically published
   (FR-EXP-005/006/007, ADR-0019).

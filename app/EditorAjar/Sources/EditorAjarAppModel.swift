@@ -1029,7 +1029,7 @@ final class EditorAjarAppModel: ObservableObject {
             presentExportDialogError(
                 AppString.localized(
                     "export.status.destinationAlreadyQueued",
-                    "Another export is already queued for \(url.path). Choose a different filename or wait for it to finish."
+                    "An export is already queued or completed for \(url.path). Choose a different filename."
                 )
             )
             return

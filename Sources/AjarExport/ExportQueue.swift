@@ -159,9 +159,15 @@ public actor ExportQueue {
         }
         let destinationKey = ExportDestinationReservation.key(for: job.request.destinationURL)
         let destinationIsReserved = records.values.contains { record in
-            !ExportJobStateMachine.isTerminal(record.state)
+            let retainsReservation = switch record.state {
+            case .cancelled, .failed:
+                false
+            case .pending, .running, .pausedWillRestart, .done:
+                true
+            }
+            return retainsReservation
                 && ExportDestinationReservation.key(for: record.job.request.destinationURL)
-                    == destinationKey
+                == destinationKey
         }
         guard !destinationIsReserved else {
             throw ExportQueueError.destinationAlreadyQueued(job.request.destinationURL)

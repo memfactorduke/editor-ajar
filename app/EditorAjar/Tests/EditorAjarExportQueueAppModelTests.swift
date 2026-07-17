@@ -189,7 +189,7 @@ final class EditorAjarExportQueueAppModelTests: XCTestCase {
         XCTAssertEqual(model.exportQueueController.jobs.count, 1)
         XCTAssertEqual(
             model.exportDialog.statusMessage,
-            "Another export is already queued for \(destination.path). Choose a different filename or wait for it to finish."
+            "An export is already queued or completed for \(destination.path). Choose a different filename."
         )
         model.dismissExportDialog()
 

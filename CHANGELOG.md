@@ -23,8 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   production app-path ImageIO decode are covered. Movie/GIF submission now asks the user to choose a
   visible filename and location, inherits the project's delivery color/audio settings, and rejects
   repeated Return or double-click submission until the queue accepts or rejects the first request.
-  The queue also reserves each normalized output path across every nonterminal movie/GIF job and
-  shows a localized refusal instead of allowing a later job to replace an earlier result. Queue job
+  The queue also reserves each normalized output path across queued and completed movie/GIF jobs
+  and shows a localized refusal instead of allowing a later job to replace an earlier result. Failed
+  or cancelled jobs release their path for retry. Queue job
   identities are immutable, so a duplicate identifier cannot replace an active record or drop its
   reservation. GIF import is still intentionally first-frame-only.
 

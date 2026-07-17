@@ -1789,7 +1789,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Another export is already queued for %@. Choose a different filename or wait for it to finish."
+            "value": "An export is already queued or completed for %@. Choose a different filename."
           }
         }
       }

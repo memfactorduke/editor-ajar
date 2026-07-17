@@ -38,7 +38,7 @@ final class ExportDestinationReservationTests: XCTestCase {
         )
     }
 
-    func testFREXP005FailedAndDoneJobsReleaseDestinationReservation() async throws {
+    func testFREXP005FailedJobReleasesAndDoneJobRetainsDestinationReservation() async throws {
         let directory = try makeDirectory(prefix: "terminal-release")
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -65,14 +65,18 @@ final class ExportDestinationReservationTests: XCTestCase {
         }
         XCTAssertTrue(firstCompleted)
 
-        let secondSuccessID = try await queue.enqueue(
-            request: request,
-            displayName: "after-completion"
-        )
-        let secondCompleted = await ExportQueueFixtures.waitUntil(timeout: 3) {
-            await queue.state(for: secondSuccessID) == .done
+        // Models a Save panel that selected this path before the first success published. Even if
+        // actor scheduling delays enqueue until after completion, the stale selection must not be
+        // allowed to overwrite the just-published result without fresh user consent.
+        do {
+            _ = try await queue.enqueue(
+                request: request,
+                displayName: "stale-selection-after-completion"
+            )
+            XCTFail("a completed output must retain its reservation")
+        } catch let error as ExportQueueError {
+            XCTAssertEqual(error, .destinationAlreadyQueued(destination))
         }
-        XCTAssertTrue(secondCompleted)
     }
 
     private func makeFailureThenSuccessQueue(failedID: UUID) -> ExportQueue {
