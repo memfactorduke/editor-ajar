@@ -7,6 +7,56 @@ import XCTest
 @testable import AjarMedia
 
 final class MediaSourceIdentityVerifierTests: XCTestCase {
+    func testSourceRevisionIsStableUntilAtomicReplacement() throws {
+        let root = try identityTemporaryDirectory(named: "source-revision")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = root.appendingPathComponent("source.bin")
+        try Data("initial bytes".utf8).write(to: sourceURL)
+
+        let first = try MediaSourceIdentityVerifier.sourceRevision(for: sourceURL)
+        let unchanged = try MediaSourceIdentityVerifier.sourceRevision(for: sourceURL)
+        try Data("atomically replaced bytes with a different size".utf8).write(
+            to: sourceURL,
+            options: .atomic
+        )
+        let replaced = try MediaSourceIdentityVerifier.sourceRevision(for: sourceURL)
+
+        XCTAssertEqual(unchanged, first)
+        XCTAssertNotEqual(replaced, first)
+    }
+
+    func testSourceRevisionRejectsNonFileURLWithTypedError() throws {
+        let sourceURL = try XCTUnwrap(URL(string: "https://example.com/source.mov"))
+
+        XCTAssertThrowsError(
+            try MediaSourceIdentityVerifier.sourceRevision(for: sourceURL)
+        ) { error in
+            XCTAssertEqual(
+                error as? MediaSourceIdentityVerificationError,
+                .sourceMustBeFileURL(sourceURL)
+            )
+        }
+    }
+
+    func testSourceRevisionReportsStandardizedUnavailableFile() throws {
+        let root = try identityTemporaryDirectory(named: "missing-revision")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let missingURL =
+            root
+            .appendingPathComponent("unused")
+            .appendingPathComponent("..")
+            .appendingPathComponent("missing.mov")
+
+        XCTAssertThrowsError(
+            try MediaSourceIdentityVerifier.sourceRevision(for: missingURL)
+        ) { error in
+            XCTAssertEqual(
+                error as? MediaSourceIdentityVerificationError,
+                .sourceUnavailable(missingURL.standardizedFileURL)
+            )
+        }
+    }
+
     func testDurableIdentityHashesOffMainCachesRevisionAndRefusesReplacement() async throws {
         let root = try identityTemporaryDirectory(named: "durable")
         defer { try? FileManager.default.removeItem(at: root) }

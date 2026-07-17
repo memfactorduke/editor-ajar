@@ -223,6 +223,47 @@ final class MediaRefTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(MediaRef.self, from: legacy).transcodeProvenance)
     }
 
+    func testPlayableSourceContentHashUsesOriginalBytesForOrdinaryReference() throws {
+        let media = try makeMediaRef(sourceURL: URL(fileURLWithPath: "/media/interview.mov"))
+
+        XCTAssertEqual(media.playableSourceContentHash, media.contentHash)
+    }
+
+    func testPlayableSourceContentHashUsesDurableWorkingTranscodeIdentity() throws {
+        let originalHash = ContentHash.sha256(data: Data("original bytes".utf8))
+        let playableHash = ContentHash.sha256(data: Data("working bytes".utf8))
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: URL(fileURLWithPath: "/Project.ajar/transcodes/working.mov"),
+            contentHash: originalHash,
+            metadata: try makeMetadata(),
+            transcodeProvenance: MediaTranscodeProvenance(
+                originalSourceURL: URL(fileURLWithPath: "/media/original.mkv"),
+                originalContentHash: originalHash,
+                playableContentHash: playableHash
+            )
+        )
+
+        XCTAssertEqual(media.playableSourceContentHash, playableHash)
+        XCTAssertNotEqual(media.playableSourceContentHash, media.contentHash)
+    }
+
+    func testPlayableSourceContentHashLeavesLegacyWorkingTranscodeUnknown() throws {
+        let originalHash = ContentHash.sha256(data: Data("original bytes".utf8))
+        let media = MediaRef(
+            id: UUID(),
+            sourceURL: URL(fileURLWithPath: "/Project.ajar/transcodes/working.mov"),
+            contentHash: originalHash,
+            metadata: try makeMetadata(),
+            transcodeProvenance: MediaTranscodeProvenance(
+                originalSourceURL: URL(fileURLWithPath: "/media/original.mkv"),
+                originalContentHash: originalHash
+            )
+        )
+
+        XCTAssertNil(media.playableSourceContentHash)
+    }
+
     func testFRMED007TranscodedOriginalMatchRequiresTranscodeInsteadOfDirectRelink() throws {
         let hash = ContentHash.sha256(data: Data("original".utf8))
         let media = MediaRef(

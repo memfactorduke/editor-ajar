@@ -55,6 +55,11 @@ transcode can be verified independently of `originalContentHash`. This additive 
 advances ADR-0018 `schemaMinor` to 15. Legacy references decode the field as `nil` and establish a
 session-only baseline after the playable source is verified.
 
+Preview caches follow the identity of the bytes actually played: ordinary references use
+`contentHash`, while durable transcodes use `playableContentHash`. Legacy transcodes without that
+persisted hash use the playable file's session revision so they never alias the unrelated original
+bytes. This changes only regeneratable cache keys and does not require a project-schema bump.
+
 ## Consequences
 
 - Human-readable, diffable, inspectable projects; no lock-in.

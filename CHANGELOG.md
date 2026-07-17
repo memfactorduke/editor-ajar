@@ -76,6 +76,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Media thumbnails, waveforms, and hover frames now follow the bytes actually decoded after a
+  relink or fallback re-transcode (#281, FR-MED-005/007/009). Durable working files use their
+  playable SHA-256 identity; legacy transcodes use a standardized file-revision key without a
+  project-schema change. Cache reads and writes revalidate that identity, concurrent requests
+  coalesce with per-waiter cancellation, and old same-ID work cannot publish over a replacement or
+  erase its restarted task record. Timeline waveforms are cleared before the replacement is
+  scheduled; project swaps and Save As rotate the visible-task cache generation without eagerly
+  decoding offscreen media. Controlled races cover thumbnail, waveform, and hover publication.
+
 - Imported audio now survives the complete editing path instead of disappearing after import.
   Native windowed PCM decoding preserves source rate, channels, timestamps, and absolute frame
   offsets; exact source planning covers retimes, reverses, freezes, remaps, crossfades, and nested
